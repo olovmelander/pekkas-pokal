@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pekkas Pokal - CSV Import Utility</title>
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+            background: #f8fafc;
+        }
+        
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #667eea;
+            margin-bottom: 1rem;
+        }
+        
+        .description {
+            background: #e0e7ff;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 2rem;
+            border-left: 4px solid #667eea;
+        }
+        
+        .button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            cursor: pointer;
+            margin: 0.5rem;
+            transition: transform 0.2s;
+            display: inline-block;
+            text-decoration: none;
+        }
+        
+        .button:hover {
+            transform: translateY(-2px);
+        }
+        
+        .button.secondary {
+            background: #f1f5f9;
+            color: #475569;
+            border: 2px solid #e2e8f0;
+        }
+        
+        .button.success {
+            background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+        }
+        
+        .button.danger {
+            background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+        }
+        
+        .log-container {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.875rem;
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 1rem;
+            white-space: pre-wrap;
+        }
+        
+        .status {
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin: 1rem 0;
+        }
+        
+        .status.success {
+            background: #dcfce7;
+            color: #166534;
+            border: 1px solid #bbf7d0;
+        }
+        
+        .status.error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+        }
+        
+        .status.info {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #bfdbfe;
+        }
+        
+        .file-info {
+            background: #f8fafc;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin: 1rem 0;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .data-preview {
+            max-height: 300px;
+            overflow-y: auto;
+            font-size: 0.875rem;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+        
+        th, td {
+            text-align: left;
+            padding: 0.5rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        th {
+            background: #f1f5f9;
+            font-weight: 600;
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏆 Pekkas Pokal - CSV Import Utility</h1>
+        
+        <div class="description">
+            <strong>Instruktioner:</strong>
+            <p>Detta verktyg importerar data från CSV-filen "Pekkas Pokal Marathontabell Marathontabell 2.csv" 
+            till Pekkas Pokal-applikationen. Verktyget kommer att:</p>
+            <ul>
+                <li>Läsa och tolka CSV-filen</li>
+                <li>Skapa deltagare baserat på kolumnnamnen</li>
+                <li>Konvertera tävlingsdata till applikationens format</li>
+                <li>Importera datan till applikationen eller ladda ner som JSON</li>
+            </ul>
+        </div>
+        
+        <div class="actions">
+            <button id="parseBtn" class="button">📊 Analysera CSV</button>
+            <button id="previewBtn" class="button secondary" disabled>👀 Förhandsgranska Data</button>
+            <button id="downloadBtn" class="button success" disabled>💾 Ladda ner JSON</button>
+            <button id="importBtn" class="button" disabled>🚀 Importera till App</button>
+            <button id="clearBtn" class="button danger">🗑️ Rensa Log</button>
+        </div>
+        
+        <div id="status" class="status hidden"></div>
+        
+        <div id="fileInfo" class="file-info hidden">
+            <h3>CSV-filinformation</h3>
+            <div id="fileDetails"></div>
+        </div>
+        
+        <div id="dataPreview" class="data-preview hidden">
+            <h3>Data Förhandsgranskning</h3>
+            <div id="previewContent"></div>
+        </div>
+        
+        <div id="log" class="log-container">Väntar på att analysera CSV-filen...\n</div>
+    </div>
+
+    <!-- Load required libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.4.1/papaparse.min.js"></script>
+    
+    <script>
+        let parsedData = null;
+        let importData = null;
+        
+        // Log function
+        function log(message, type = 'info') {
+            const logElement = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString('sv-SE');
+            const prefix = type === 'error' ? '❌' : type === 'success' ? '✅' : type === 'warning' ? '⚠️' : 'ℹ️';
+            logElement.textContent += `[${timestamp}] ${prefix} ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+        
+        // Status function
+        function showStatus(message, type = 'info') {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.className = `status ${type}`;
+            statusEl.classList.remove('hidden');
+            
+            if (type === 'success' || type === 'error') {
+                setTimeout(() => {
+                    statusEl.classList.add('hidden');
+                }, 5000);
+            }
+        }
+        
+        // Button handlers
+        document.getElementById('parseBtn').addEventListener('click', parseCSV);
+        document.getElementById('previewBtn').addEventListener('click', previewData);
+        document.getElementById('downloadBtn').addEventListener('click', downloadJSON);
+        document.getElementById('importBtn').addEventListener('click', importToApp);
+        document.getElementById('clearBtn').addEventListener('click', clearLog);
+        
+        async function parseCSV() {
+            try {
+                log('Börjar analysera CSV-filen...');
+                showStatus('Läser CSV-fil...', 'info');
+                
+                // Read CSV file
+                const csvContent = await window.fs.readFile('Pekkas Pokal Marathontabell  Marathontabell 2.csv', { encoding: 'utf8' });
+                log('CSV-fil läst framgångsrikt');
+                
+                // Parse CSV
+                parsedData = Papa.parse(csvContent, {
+                    header: true,
+                    dynamicTyping: false,
+                    skipEmptyLines: true,
+                    delimitersToGuess: [',', '\\t', '|', ';']
+                });
+                
+                if (parsedData.errors.length > 0) {
+                    log('CSV-tolkningsfel: ' + JSON.stringify(parsedData.errors), 'warning');
+                }
+                
+                // Show file info
+                showFileInfo();
+                
+                // Create import data
+                importData = await createImportData();
+                
+                log(`✅ Analys klar: ${importData.participants.length} deltagare, ${importData.competitions.length} tävlingar`);
+                showStatus('CSV-analys slutförd framgångsrikt!', 'success');
+                
+                // Enable buttons
+                document.getElementById('previewBtn').disabled = false;
+                document.getElementById('downloadBtn').disabled = false;
+                document.getElementById('importBtn').disabled = false;
+                
+            } catch (error) {
+                log('Fel vid CSV-analys: ' + error.message, 'error');
+                showStatus('Fel vid CSV-analys: ' + error.message, 'error');
+            }
+        }
+        
+        function showFileInfo() {
+            const fileInfo = document.getElementById('fileInfo');
+            const fileDetails = document.getElementById('fileDetails');
+            
+            const participantColumns = parsedData.meta.fields.slice(3);
+            
+            fileDetails.innerHTML = `
+                <p><strong>Kolumner:</strong> ${parsedData.meta.fields.length}</p>
+                <p><strong>Rader:</strong> ${parsedData.data.length}</p>
+                <p><strong>Deltagare:</strong> ${participantColumns.length}</p>
+                <p><strong>Deltagare:</strong> ${participantColumns.join(', ')}</p>
+            `;
+            
+            fileInfo.classList.remove('hidden');
+        }
+        
+        function previewData() {
+            if (!importData) {
+                showStatus('Ingen data att förhandsgranska', 'error');
+                return;
+            }
+            
+            const preview = document.getElementById('dataPreview');
+            const content = document.getElementById('previewContent');
+            
+            // Create participants table
+            let html = '<h4>Deltagare:</h4><table><thead><tr><th>Namn</th><th>Smeknamn</th><th>Status</th></tr></thead><tbody>';
+            importData.participants.forEach(p => {
+                html += `<tr><td>${p.name}</td><td>${p.nickname || ''}</td><td>${p.status}</td></tr>`;
+            });
+            html += '</tbody></table>';
+            
+            // Create competitions table
+            html += '<h4>Tävlingar:</h4><table><thead><tr><th>År</th><th>Tävling</th><th>Plats</th><th>Vinnare</th><th>Deltagare</th></tr></thead><tbody>';
+            importData.competitions.forEach(c => {
+                const participantCount = Object.keys(c.scores || {}).length;
+                html += `<tr><td>${c.year}</td><td>${c.name}</td><td>${c.location || ''}</td><td>${c.winner || 'TBD'}</td><td>${participantCount}</td></tr>`;
+            });
+            html += '</tbody></table>';
+            
+            content.innerHTML = html;
+            preview.classList.remove('hidden');
+            
+            log('Data förhandsgranskad');
+        }
+        
+        function downloadJSON() {
+            if (!importData) {
+                showStatus('Ingen data att ladda ner', 'error');
+                return;
+            }
+            
+            try {
+                const blob = new Blob([JSON.stringify(importData, null, 2)], { 
+                    type: 'application/json' 
+                });
+                const url = URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `pekkas-pokal-import-${new Date().toISOString().split('T')[0]}.json`;
+                a.click();
+                
+                URL.revokeObjectURL(url);
+                log('JSON-fil nedladdad');
+                showStatus('JSON-fil nedladdad framgångsrikt!', 'success');
+                
+            } catch (error) {
+                log('Fel vid nedladdning: ' + error.message, 'error');
+                showStatus('Fel vid nedladdning', 'error');
+            }
+        }
+        
+        async function importToApp() {
+            if (!importData) {
+                showStatus('Ingen data att importera', 'error');
+                return;
+            }
+            
+            try {
+                // Check if we're in the main app context
+                if (typeof window.dataManager === 'undefined') {
+                    log('Datamanager inte tillgänglig - öppnar huvudapplikationen...');
+                    
+                    // Store data temporarily and redirect
+                    localStorage.setItem('pendingImport', JSON.stringify(importData));
+                    window.location.href = 'index.html';
+                    return;
+                }
+                
+                // Import into the data manager
+                const confirmImport = confirm(
+                    'Vill du importera datan till applikationen? ' +
+                    'Detta kommer att ersätta all befintlig data.'
+                );
+                
+                if (!confirmImport) {
+                    log('Import avbruten av användare');
+                    return;
+                }
+                
+                log('Importerar data till applikationen...');
+                showStatus('Importerar data...', 'info');
+                
+                await window.dataManager.importData(importData);
+                
+                log('Data importerad framgångsrikt!');
+                showStatus('Data importerad till applikationen!', 'success');
+                
+                // Reload the app if available
+                if (window.app) {
+                    await window.app.loadInitialData();
+                }
+                
+            } catch (error) {
+                log('Fel vid import: ' + error.message, 'error');
+                showStatus('Fel vid import: ' + error.message, 'error');
+            }
+        }
+        
+        function clearLog() {
+            document.getElementById('log').textContent = 'Log rensad...\\n';
+        }
+        
+        // Import data creation function (copied from csv-import.js)
+        async function createImportData() {
+            const participantColumns = parsedData.meta.fields.slice(3);
+            
+            // Create participants
+            const participants = participantColumns.map(name => ({
+                id: generateId('participant'),
+                name: name.trim(),
+                nickname: getNameParts(name).nickname,
+                status: 'active',
+                createdAt: new Date().toISOString()
+            }));
+            
+            // Create participant ID map
+            const participantIdMap = {};
+            participants.forEach(p => {
+                participantIdMap[p.name] = p.id;
+            });
+            
+            // Process competitions
+            const competitions = [];
+            
+            for (const row of parsedData.data) {
+                const year = parseInt(row['År']);
+                const name = row['Tävling']?.trim();
+                const location = row['Plats']?.trim() || '';
+                
+                if (!year || !name) {
+                    continue;
+                }
+                
+                const scores = {};
+                let winner = null;
+                let bestPosition = null;
+                
+                participantColumns.forEach(participantName => {
+                    const scoreValue = row[participantName]?.toString()?.trim();
+                    if (scoreValue && scoreValue !== '' && scoreValue !== '-') {
+                        const position = parsePosition(scoreValue);
+                        if (position !== null) {
+                            const participantId = participantIdMap[participantName];
+                            scores[participantId] = position;
+                            
+                            if (position === 1) {
+                                winner = participantName;
+                            }
+                            
+                            if (bestPosition === null || position < bestPosition) {
+                                bestPosition = position;
+                                if (!winner) {
+                                    winner = participantName;
+                                }
+                            }
+                        }
+                    }
+                });
+                
+                competitions.push({
+                    id: generateId('competition'),
+                    year: year,
+                    name: name,
+                    location: location,
+                    winner: winner,
+                    scores: scores,
+                    createdAt: new Date().toISOString()
+                });
+            }
+            
+            // Adjust special positions
+            adjustSpecialPositions(competitions);
+            
+            return {
+                version: '2.0',
+                exportDate: new Date().toISOString(),
+                competitions: competitions,
+                participants: participants,
+                metadata: {
+                    totalCompetitions: competitions.length,
+                    totalParticipants: participants.length,
+                    importSource: 'CSV',
+                    yearRange: {
+                        start: Math.min(...competitions.map(c => c.year)),
+                        end: Math.max(...competitions.map(c => c.year))
+                    }
+                }
+            };
+        }
+        
+        // Helper functions
+        function parsePosition(value) {
+            if (!value || value === '-' || value === '') return null;
+            
+            const numValue = parseInt(value);
+            if (!isNaN(numValue) && numValue > 0) {
+                return numValue;
+            }
+            
+            const textValue = value.toLowerCase().trim();
+            const positionMappings = {
+                'näst sist': 99,
+                'sist': 100,
+                'ej deltagit': null,
+                'ej start': null,
+                'diskad': null,
+                'disqualified': null
+            };
+            
+            return positionMappings[textValue] || null;
+        }
+        
+        function getNameParts(fullName) {
+            const parts = fullName.trim().split(' ');
+            const firstName = parts[0];
+            const lastName = parts[parts.length - 1];
+            
+            return {
+                firstName: firstName,
+                lastName: lastName,
+                nickname: firstName + ' ' + lastName.charAt(0) + '.'
+            };
+        }
+        
+        function generateId(prefix = 'id') {
+            return `${prefix}_${Math.random().toString(36).substr(2, 9)}_${Date.now().toString(36)}`;
+        }
+        
+        function adjustSpecialPositions(competitions) {
+            competitions.forEach(competition => {
+                const positions = Object.values(competition.scores);
+                const participantCount = positions.length;
+                
+                Object.keys(competition.scores).forEach(participantId => {
+                    if (competition.scores[participantId] === 99) {
+                        competition.scores[participantId] = Math.max(2, participantCount - 1);
+                    } else if (competition.scores[participantId] === 100) {
+                        competition.scores[participantId] = participantCount;
+                    }
+                });
+            });
+            
+            return competitions;
+        }
+        
+        // Auto-load if file exists
+        document.addEventListener('DOMContentLoaded', () => {
+            log('CSV Import Utility laddad och redo');
+            
+            // Check for pending import data
+            const pendingImport = localStorage.getItem('pendingImport');
+            if (pendingImport) {
+                try {
+                    importData = JSON.parse(pendingImport);
+                    log('Hittade väntande importdata');
+                    document.getElementById('previewBtn').disabled = false;
+                    document.getElementById('downloadBtn').disabled = false;
+                    document.getElementById('importBtn').disabled = false;
+                    localStorage.removeItem('pendingImport');
+                } catch (error) {
+                    log('Fel vid laddning av väntande importdata: ' + error.message, 'error');
+                }
+            }
+        });
+    </script>
+</body>
+</html>
