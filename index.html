@@ -3,42 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Pekkas Pokal - Årlig tävling för vänner med omfattande statistik och datahantering">
-    <meta name="keywords" content="tävling, pokal, statistik, vänner, competition">
-    <meta name="author" content="Pekka's Competition Team">
-    
-    <!-- PWA Meta Tags -->
-    <meta name="theme-color" content="#667eea">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="apple-mobile-web-app-title" content="Pekkas Pokal">
-    
-    <!-- Manifest -->
-    <link rel="manifest" href="manifest.json">
-    
-    <!-- Favicon -->
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>">
-    
     <title>Pekkas Pokal - Årlig Tävling</title>
     
     <style>
-        /* ===== CSS VARIABLES ===== */
         :root {
-          /* Colors */
           --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          --secondary-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
           --success-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-          --warning-gradient: linear-gradient(135deg, #ffd89b 0%, #19547b 100%);
           --danger-gradient: linear-gradient(135deg, #ff4757 0%, #c44569 100%);
           
           --primary-color: #667eea;
-          --secondary-color: #764ba2;
-          --accent-color: #f093fb;
           --success-color: #4CAF50;
-          --warning-color: #ff9f43;
           --danger-color: #ff4757;
           
-          /* Light Theme */
           --bg-primary: #ffffff;
           --bg-secondary: #f8fafc;
           --bg-tertiary: #e2e8f0;
@@ -50,7 +26,6 @@
           --shadow-medium: 0 4px 6px rgba(0,0,0,0.1);
           --shadow-heavy: 0 10px 15px rgba(0,0,0,0.1);
           
-          /* Typography */
           --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
           --font-size-xs: 0.75rem;
           --font-size-sm: 0.875rem;
@@ -61,7 +36,6 @@
           --font-size-3xl: 1.875rem;
           --font-size-4xl: 2.25rem;
           
-          /* Spacing */
           --spacing-xs: 0.25rem;
           --spacing-sm: 0.5rem;
           --spacing-md: 1rem;
@@ -69,25 +43,17 @@
           --spacing-xl: 2rem;
           --spacing-2xl: 3rem;
           
-          /* Border Radius */
           --radius-sm: 0.25rem;
           --radius-md: 0.5rem;
           --radius-lg: 0.75rem;
           --radius-xl: 1rem;
           --radius-2xl: 1.5rem;
           
-          /* Transitions */
           --transition-fast: 150ms ease;
           --transition-normal: 250ms ease;
           --transition-slow: 350ms ease;
-          
-          /* Z-index */
-          --z-dropdown: 1000;
-          --z-modal: 1050;
-          --z-toast: 1100;
         }
 
-        /* Dark Theme */
         [data-theme="dark"] {
           --bg-primary: #1a202c;
           --bg-secondary: #2d3748;
@@ -96,21 +62,12 @@
           --text-secondary: #e2e8f0;
           --text-muted: #a0aec0;
           --border-color: #4a5568;
-          --shadow-light: 0 1px 3px rgba(0,0,0,0.3);
-          --shadow-medium: 0 4px 6px rgba(0,0,0,0.3);
-          --shadow-heavy: 0 10px 15px rgba(0,0,0,0.3);
         }
 
-        /* ===== RESET & BASE STYLES ===== */
         * {
           margin: 0;
           padding: 0;
           box-sizing: border-box;
-        }
-
-        html {
-          font-size: 16px;
-          scroll-behavior: smooth;
         }
 
         body {
@@ -119,91 +76,19 @@
           line-height: 1.6;
           color: var(--text-primary);
           background: var(--bg-secondary);
-          overflow-x: hidden;
           -webkit-font-smoothing: antialiased;
           -moz-osx-font-smoothing: grayscale;
         }
 
-        /* ===== LOADING SCREEN ===== */
-        .loading-screen {
-          position: fixed;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          background: var(--primary-gradient);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 9999;
-          transition: opacity var(--transition-slow), visibility var(--transition-slow);
-        }
-
-        .loading-screen.hidden {
-          opacity: 0;
-          visibility: hidden;
-        }
-
-        .loading-content {
-          text-align: center;
-          color: white;
-        }
-
-        .trophy-loader {
-          font-size: 4rem;
-          animation: bounce 1.5s infinite;
-          margin-bottom: var(--spacing-lg);
-        }
-
-        .loading-bar {
-          width: 200px;
-          height: 4px;
-          background: rgba(255,255,255,0.3);
-          border-radius: var(--radius-lg);
-          overflow: hidden;
-          margin-top: var(--spacing-lg);
-        }
-
-        .loading-progress {
-          width: 0%;
-          height: 100%;
-          background: white;
-          border-radius: var(--radius-lg);
-          animation: loading 2s ease-in-out infinite;
-        }
-
-        @keyframes bounce {
-          0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
-          40% { transform: translateY(-10px); }
-          60% { transform: translateY(-5px); }
-        }
-
-        @keyframes loading {
-          0% { width: 0%; }
-          50% { width: 70%; }
-          100% { width: 100%; }
-        }
-
-        /* ===== MAIN APP LAYOUT ===== */
         .app {
           min-height: 100vh;
           display: flex;
           flex-direction: column;
-          transition: opacity var(--transition-slow);
         }
 
-        .app.hidden {
-          opacity: 0;
-          visibility: hidden;
-        }
-
-        /* ===== HEADER ===== */
         .header {
           background: var(--bg-primary);
           box-shadow: var(--shadow-light);
-          position: sticky;
-          top: 0;
-          z-index: 100;
           border-bottom: 1px solid var(--border-color);
         }
 
@@ -273,32 +158,9 @@
           transform: translateY(-2px);
         }
 
-        .install-btn {
-          background: var(--success-gradient);
-          color: white;
-          border: none;
-          padding: var(--spacing-sm) var(--spacing-lg);
-          border-radius: var(--radius-lg);
-          font-weight: 600;
-          cursor: pointer;
-          transition: all var(--transition-fast);
-          display: flex;
-          align-items: center;
-          gap: var(--spacing-sm);
-        }
-
-        .install-btn:hover {
-          transform: translateY(-2px);
-          box-shadow: var(--shadow-medium);
-        }
-
-        /* ===== NAVIGATION ===== */
         .navigation {
           background: var(--bg-primary);
           border-bottom: 1px solid var(--border-color);
-          position: sticky;
-          top: 0;
-          z-index: 99;
         }
 
         .nav-container {
@@ -359,7 +221,6 @@
           font-weight: 600;
         }
 
-        /* ===== MAIN CONTENT ===== */
         .main-content {
           flex: 1;
           max-width: 1200px;
@@ -403,7 +264,6 @@
           color: var(--text-primary);
         }
 
-        /* ===== BUTTONS ===== */
         .btn {
           display: inline-flex;
           align-items: center;
@@ -430,18 +290,6 @@
           box-shadow: var(--shadow-medium);
         }
 
-        .btn.secondary {
-          background: var(--bg-primary);
-          color: var(--text-primary);
-          border: 2px solid var(--border-color);
-        }
-
-        .btn.secondary:hover {
-          border-color: var(--primary-color);
-          color: var(--primary-color);
-          transform: translateY(-2px);
-        }
-
         .btn.success {
           background: var(--success-gradient);
           color: white;
@@ -462,7 +310,12 @@
           box-shadow: var(--shadow-medium);
         }
 
-        /* ===== CSV IMPORT SECTION ===== */
+        .btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+          transform: none !important;
+        }
+
         .csv-import-section {
           background: var(--bg-primary);
           padding: var(--spacing-xl);
@@ -510,7 +363,6 @@
           color: var(--primary-color);
         }
 
-        /* ===== UTILITY CLASSES ===== */
         .hidden {
           display: none !important;
         }
@@ -519,7 +371,6 @@
           text-align: center;
         }
 
-        /* ===== RESPONSIVE ===== */
         @media (max-width: 768px) {
           .header-content {
             flex-direction: column;
@@ -538,19 +389,7 @@
     </style>
 </head>
 <body>
-    <!-- Loading Screen -->
-    <div id="loading-screen" class="loading-screen">
-        <div class="loading-content">
-            <div class="trophy-loader">🏆</div>
-            <h2>Laddar Pekkas Pokal...</h2>
-            <div class="loading-bar">
-                <div class="loading-progress"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Main Application -->
-    <div id="app" class="app hidden">
+    <div class="app">
         <!-- Header -->
         <header class="header">
             <div class="header-content">
@@ -564,8 +403,6 @@
                 
                 <div class="header-actions">
                     <button id="theme-toggle" class="icon-btn" title="Växla tema">🌙</button>
-                    <button id="fullscreen-toggle" class="icon-btn" title="Helskärm">⛶</button>
-                    <button id="install-btn" class="install-btn hidden" title="Installera app">📱 Installera</button>
                 </div>
             </div>
         </header>
@@ -575,7 +412,7 @@
             <div class="nav-container">
                 <button class="nav-tab active" data-tab="results">
                     <span class="nav-icon">📊</span>
-                    <span class="nav-text">Årliga Resultat</span>
+                    <span class="nav-text">Resultat</span>
                 </button>
                 <button class="nav-tab" data-tab="statistics">
                     <span class="nav-icon">📈</span>
@@ -592,7 +429,7 @@
             </div>
         </nav>
 
-        <!-- CSV Import Section (shown initially) -->
+        <!-- CSV Import Section -->
         <div id="csv-import-section" class="csv-import-section">
             <h3>🏆 Välkommen till Pekkas Pokal!</h3>
             <p>Importera dina tävlingsdata för att komma igång</p>
@@ -611,9 +448,6 @@
             <section id="results-tab" class="tab-content active">
                 <div class="content-header">
                     <h2>Tävlingsresultat per År</h2>
-                    <button id="add-competition" class="btn primary">
-                        <span>➕</span> Ny Tävling
-                    </button>
                 </div>
                 
                 <div id="results-content">
@@ -626,7 +460,7 @@
             <!-- Statistics Tab -->
             <section id="statistics-tab" class="tab-content">
                 <div class="content-header">
-                    <h2>Omfattande Statistik</h2>
+                    <h2>Statistik</h2>
                 </div>
                 <div id="statistics-content">
                     <div class="text-center">
@@ -638,10 +472,7 @@
             <!-- Participants Tab -->
             <section id="participants-tab" class="tab-content">
                 <div class="content-header">
-                    <h2>Deltagarhantering</h2>
-                    <button id="add-participant" class="btn primary">
-                        <span>➕</span> Lägg till Deltagare
-                    </button>
+                    <h2>Deltagare</h2>
                 </div>
                 <div id="participants-content">
                     <div class="text-center">
@@ -653,7 +484,7 @@
             <!-- Settings Tab -->
             <section id="settings-tab" class="tab-content">
                 <div class="content-header">
-                    <h2>Inställningar & Datahantering</h2>
+                    <h2>Inställningar</h2>
                 </div>
                 <div id="settings-content">
                     <div class="text-center">
@@ -664,50 +495,48 @@
         </main>
     </div>
 
-    <!-- Toast Container for Notifications -->
-    <div id="toast-container" style="position: fixed; top: 20px; right: 20px; z-index: 1100; display: flex; flex-direction: column; gap: 0.5rem; max-width: 400px;"></div>
-
-    <!-- Scripts -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.min.js"></script>
+    <!-- Ladda Papa Parse för CSV-bearbetning -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.4.1/papaparse.min.js"></script>
     
     <script>
-        // Fixed CSV Import and App Initialization
+        // STÄNDIGT SJÄLV - Ingen extern kod eller gamla referenser
         class PekkasPokalkApp {
             constructor() {
                 this.competitions = [];
                 this.participants = [];
-                this.isInitialized = false;
                 this.currentTab = 'results';
                 
+                // Starta direkt
                 this.init();
             }
             
-            async init() {
-                this.showLoadingScreen();
+            init() {
+                console.log('🏆 Startar Pekkas Pokal...');
                 this.setupEventListeners();
                 
-                // Check if data exists
+                // Kontrollera om data redan finns
                 const existingData = localStorage.getItem('pekkas-pokal-data');
                 if (existingData) {
-                    await this.loadExistingData();
+                    this.loadExistingData();
                     this.hideCSVImport();
                 } else {
                     this.showCSVImport();
                 }
-                
-                this.hideLoadingScreen();
             }
             
             setupEventListeners() {
-                // CSV Import - Fixed to use proper file selection
+                console.log('📋 Sätter upp event listeners...');
+                
+                // CSV Import - HELT NY IMPLEMENTATION
                 document.getElementById('import-csv-btn').addEventListener('click', () => {
+                    console.log('🔘 Import knapp klickad');
                     document.getElementById('csv-file-input').click();
                 });
                 
                 document.getElementById('csv-file-input').addEventListener('change', (e) => {
+                    console.log('📄 Fil vald:', e.target.files[0]?.name);
                     if (e.target.files.length > 0) {
-                        this.importCSVData(e.target.files[0]);
+                        this.handleCSVFile(e.target.files[0]);
                     }
                 });
                 
@@ -723,58 +552,57 @@
                 document.getElementById('theme-toggle').addEventListener('click', () => {
                     this.toggleTheme();
                 });
-                
-                // Fullscreen
-                document.getElementById('fullscreen-toggle').addEventListener('click', () => {
-                    this.toggleFullscreen();
-                });
             }
             
-            async importCSVData(file) {
+            // HUVUDFUNKTION FÖR CSV IMPORT - HELT EGEN IMPLEMENTATION
+            async handleCSVFile(file) {
+                console.log('🚀 Börjar bearbeta CSV fil:', file.name);
+                
                 const statusEl = document.getElementById('import-status');
                 const btnEl = document.getElementById('import-csv-btn');
                 
-                if (!file) {
-                    statusEl.textContent = '❌ Ingen fil vald';
-                    statusEl.className = 'import-status error';
-                    return;
-                }
-                
                 try {
-                    statusEl.textContent = 'Läser CSV-fil...';
+                    // Uppdatera UI
+                    statusEl.textContent = 'Läser fil...';
                     statusEl.className = 'import-status info';
-                    btnEl.textContent = '⏳ Importerar...';
+                    btnEl.textContent = '⏳ Bearbetar...';
                     btnEl.disabled = true;
                     
-                    // Read file content using FileReader (browser-compatible)
-                    const csvContent = await this.readFileAsText(file);
+                    // LÄS FILEN MED FILEREADER (inga externa beroenden)
+                    const csvText = await this.readFileContent(file);
+                    console.log('📖 Fil läst, längd:', csvText.length);
                     
-                    statusEl.textContent = 'Bearbetar data...';
+                    statusEl.textContent = 'Tolkar CSV data...';
                     
-                    // Parse CSV
-                    const parsedData = Papa.parse(csvContent, {
+                    // TOLKA CSV MED PAPA PARSE
+                    const csvData = Papa.parse(csvText, {
                         header: true,
-                        dynamicTyping: false,
-                        skipEmptyLines: true
+                        skipEmptyLines: true,
+                        delimiter: ','
                     });
                     
-                    if (parsedData.errors.length > 0) {
-                        console.warn('CSV parsing errors:', parsedData.errors);
+                    console.log('📊 CSV tolkad:', csvData.meta.fields);
+                    
+                    if (csvData.errors.length > 0) {
+                        console.warn('⚠️ CSV fel:', csvData.errors);
                     }
                     
-                    // Convert to app format
-                    await this.convertCSVToAppData(parsedData);
+                    statusEl.textContent = 'Konverterar data...';
                     
-                    // Save data
-                    this.saveData();
+                    // KONVERTERA TILL APPFORMAT
+                    this.convertToAppData(csvData);
                     
-                    // Initialize app with data
-                    this.initializeApp();
+                    // SPARA DATA
+                    this.saveToLocalStorage();
                     
-                    statusEl.textContent = `✅ Import slutförd! ${this.competitions.length} tävlingar och ${this.participants.length} deltagare importerade.`;
+                    // VISA RESULTAT
+                    this.renderAllData();
+                    
+                    // SUCCESS!
+                    statusEl.textContent = `✅ Import klar! ${this.competitions.length} tävlingar, ${this.participants.length} deltagare`;
                     statusEl.className = 'import-status success';
                     
-                    // Hide import section after delay
+                    // Göm import efter 3 sekunder
                     setTimeout(() => {
                         this.hideCSVImport();
                         btnEl.textContent = '📊 Importera Tävlingsdata';
@@ -782,7 +610,7 @@
                     }, 3000);
                     
                 } catch (error) {
-                    console.error('Import failed:', error);
+                    console.error('❌ Import fel:', error);
                     statusEl.textContent = `❌ Import misslyckades: ${error.message}`;
                     statusEl.className = 'import-status error';
                     btnEl.textContent = '📊 Importera Tävlingsdata';
@@ -790,61 +618,77 @@
                 }
             }
             
-            // Fixed FileReader implementation for browser compatibility
-            readFileAsText(file) {
+            // LÄS FIL INNEHÅLL MED FILEREADER
+            readFileContent(file) {
                 return new Promise((resolve, reject) => {
+                    console.log('📖 Läser fil med FileReader...');
                     const reader = new FileReader();
-                    reader.onload = (e) => resolve(e.target.result);
-                    reader.onerror = (e) => reject(new Error('Kunde inte läsa filen'));
+                    
+                    reader.onload = function(event) {
+                        console.log('✅ Fil läst framgångsrikt');
+                        resolve(event.target.result);
+                    };
+                    
+                    reader.onerror = function(event) {
+                        console.error('❌ Fel vid filläsning:', event);
+                        reject(new Error('Kunde inte läsa filen'));
+                    };
+                    
                     reader.readAsText(file, 'UTF-8');
                 });
             }
             
-            async convertCSVToAppData(parsedData) {
-                // Extract participant columns (excluding År, Tävling, Plats)
-                const participantColumns = parsedData.meta.fields.slice(3);
+            // KONVERTERA CSV DATA TILL APP FORMAT
+            convertToAppData(csvData) {
+                console.log('🔄 Konverterar CSV data...');
                 
-                // Create participants
-                this.participants = participantColumns.map(name => ({
+                // Få deltagare från kolumnnamn (hoppa över År, Tävling, Plats)
+                const participantNames = csvData.meta.fields.slice(3);
+                console.log('👥 Hittade deltagare:', participantNames);
+                
+                // Skapa deltagare
+                this.participants = participantNames.map(name => ({
                     id: this.generateId('participant'),
                     name: name.trim(),
-                    nickname: this.getNameParts(name).nickname,
+                    nickname: this.createNickname(name),
                     status: 'active',
                     createdAt: new Date().toISOString()
                 }));
                 
-                // Create participant ID map
-                const participantIdMap = {};
+                // Skapa ID-mappning
+                const nameToId = {};
                 this.participants.forEach(p => {
-                    participantIdMap[p.name] = p.id;
+                    nameToId[p.name] = p.id;
                 });
                 
-                // Process competitions
+                // Bearbeta tävlingar
                 this.competitions = [];
                 
-                for (const row of parsedData.data) {
+                csvData.data.forEach(row => {
                     const year = parseInt(row['År']);
                     const name = row['Tävling']?.trim();
                     const location = row['Plats']?.trim() || '';
                     
-                    if (!year || !name) continue;
+                    if (!year || !name) return;
                     
+                    // Samla poäng
                     const scores = {};
                     let winner = null;
-                    let bestPosition = null;
+                    let bestScore = null;
                     
-                    participantColumns.forEach(participantName => {
-                        const scoreValue = row[participantName]?.toString()?.trim();
-                        if (scoreValue && scoreValue !== '' && scoreValue !== '-') {
-                            const position = this.parsePosition(scoreValue);
+                    participantNames.forEach(participantName => {
+                        const scoreText = row[participantName]?.toString()?.trim();
+                        if (scoreText && scoreText !== '' && scoreText !== '-') {
+                            const position = this.parsePosition(scoreText);
                             if (position !== null) {
-                                const participantId = participantIdMap[participantName];
+                                const participantId = nameToId[participantName];
                                 scores[participantId] = position;
                                 
+                                // Bestäm vinnare (lägst position = bäst)
                                 if (position === 1) {
                                     winner = participantName;
-                                } else if (!winner && (bestPosition === null || position < bestPosition)) {
-                                    bestPosition = position;
+                                } else if (!winner && (bestScore === null || position < bestScore)) {
+                                    bestScore = position;
                                     winner = participantName;
                                 }
                             }
@@ -860,45 +704,51 @@
                         scores: scores,
                         createdAt: new Date().toISOString()
                     });
-                }
+                });
                 
-                // Sort competitions by year
+                // Sortera tävlingar efter år
                 this.competitions.sort((a, b) => b.year - a.year);
+                
+                console.log('✅ Konvertering klar:', {
+                    competitions: this.competitions.length,
+                    participants: this.participants.length
+                });
             }
             
-            parsePosition(value) {
-                if (!value || value === '-' || value === '') return null;
+            // TOLKA POSITIONSTEXT
+            parsePosition(text) {
+                if (!text || text === '-') return null;
                 
-                const numValue = parseInt(value);
-                if (!isNaN(numValue) && numValue > 0) {
-                    return numValue;
+                // Försök nummer först
+                const num = parseInt(text);
+                if (!isNaN(num) && num > 0) {
+                    return num;
                 }
                 
-                // Handle Swedish text
-                const textValue = value.toLowerCase().trim();
-                if (textValue.includes('näst sist')) return 99; // Will be adjusted later
-                if (textValue === 'sist') return 100;
+                // Hantera svensk text
+                const lowerText = text.toLowerCase().trim();
+                if (lowerText.includes('näst sist')) return 99;
+                if (lowerText === 'sist') return 100;
                 
                 return null;
             }
             
-            getNameParts(fullName) {
+            // SKAPA SMEKNAMN
+            createNickname(fullName) {
                 const parts = fullName.trim().split(' ');
-                const firstName = parts[0];
-                const lastName = parts[parts.length - 1];
-                
-                return {
-                    firstName: firstName,
-                    lastName: lastName,
-                    nickname: firstName + ' ' + lastName.charAt(0) + '.'
-                };
+                if (parts.length >= 2) {
+                    return parts[0] + ' ' + parts[parts.length - 1].charAt(0) + '.';
+                }
+                return fullName;
             }
             
+            // GENERERA UNIKT ID
             generateId(prefix = 'id') {
                 return `${prefix}_${Math.random().toString(36).substr(2, 9)}_${Date.now().toString(36)}`;
             }
             
-            saveData() {
+            // SPARA TILL LOCALSTORAGE
+            saveToLocalStorage() {
                 const data = {
                     version: '2.0',
                     timestamp: new Date().toISOString(),
@@ -907,23 +757,31 @@
                 };
                 
                 localStorage.setItem('pekkas-pokal-data', JSON.stringify(data));
+                console.log('💾 Data sparad till localStorage');
             }
             
-            async loadExistingData() {
-                const data = JSON.parse(localStorage.getItem('pekkas-pokal-data'));
-                this.competitions = data.competitions || [];
-                this.participants = data.participants || [];
-                this.initializeApp();
+            // LADDA BEFINTLIG DATA
+            loadExistingData() {
+                try {
+                    const data = JSON.parse(localStorage.getItem('pekkas-pokal-data'));
+                    this.competitions = data.competitions || [];
+                    this.participants = data.participants || [];
+                    this.renderAllData();
+                    console.log('📂 Befintlig data laddad');
+                } catch (error) {
+                    console.error('❌ Fel vid laddning av data:', error);
+                }
             }
             
-            initializeApp() {
+            // RENDERA ALL DATA
+            renderAllData() {
                 this.renderResults();
                 this.renderParticipants();
                 this.renderStatistics();
                 this.renderSettings();
-                this.isInitialized = true;
             }
             
+            // RENDERA RESULTAT
             renderResults() {
                 const content = document.getElementById('results-content');
                 
@@ -934,6 +792,7 @@
                 
                 let html = `
                     <div style="background: var(--bg-primary); padding: var(--spacing-xl); border-radius: var(--radius-xl); box-shadow: var(--shadow-light); border: 1px solid var(--border-color);">
+                        <h3 style="margin-bottom: var(--spacing-lg); color: var(--primary-color);">Alla Tävlingar (${this.competitions.length})</h3>
                         <table style="width: 100%; border-collapse: collapse;">
                             <thead>
                                 <tr style="background: var(--primary-gradient); color: white;">
@@ -960,15 +819,11 @@
                     `;
                 });
                 
-                html += `
-                            </tbody>
-                        </table>
-                    </div>
-                `;
-                
+                html += '</tbody></table></div>';
                 content.innerHTML = html;
             }
             
+            // RENDERA DELTAGARE
             renderParticipants() {
                 const content = document.getElementById('participants-content');
                 
@@ -977,7 +832,9 @@
                     return;
                 }
                 
-                let html = '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: var(--spacing-lg);">';
+                let html = `<div style="background: var(--bg-primary); padding: var(--spacing-xl); border-radius: var(--radius-xl); box-shadow: var(--shadow-light); border: 1px solid var(--border-color);">
+                    <h3 style="margin-bottom: var(--spacing-lg); color: var(--primary-color);">Alla Deltagare (${this.participants.length})</h3>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: var(--spacing-lg);">`;
                 
                 this.participants.forEach(participant => {
                     const participantCompetitions = this.competitions.filter(comp => 
@@ -986,10 +843,10 @@
                     const wins = this.competitions.filter(comp => comp.winner === participant.name).length;
                     
                     html += `
-                        <div style="background: var(--bg-primary); padding: var(--spacing-lg); border-radius: var(--radius-xl); box-shadow: var(--shadow-light); border: 1px solid var(--border-color);">
-                            <h3 style="color: var(--text-primary); margin-bottom: var(--spacing-sm);">${participant.name}</h3>
+                        <div style="background: var(--bg-secondary); padding: var(--spacing-lg); border-radius: var(--radius-lg); border: 1px solid var(--border-color);">
+                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-sm);">${participant.name}</h4>
                             <p style="color: var(--text-secondary); font-size: var(--font-size-sm); margin-bottom: var(--spacing-md);">${participant.nickname}</p>
-                            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--spacing-md);">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md);">
                                 <div style="text-align: center;">
                                     <div style="font-weight: 700; font-size: var(--font-size-lg); color: var(--primary-color);">${participantCompetitions.length}</div>
                                     <div style="font-size: var(--font-size-xs); color: var(--text-muted);">TÄVLINGAR</div>
@@ -1003,10 +860,11 @@
                     `;
                 });
                 
-                html += '</div>';
+                html += '</div></div>';
                 content.innerHTML = html;
             }
             
+            // RENDERA STATISTIK
             renderStatistics() {
                 const content = document.getElementById('statistics-content');
                 
@@ -1015,7 +873,7 @@
                     return;
                 }
                 
-                // Calculate basic statistics
+                // Beräkna statistik
                 const totalCompetitions = this.competitions.length;
                 const totalParticipants = this.participants.length;
                 const yearRange = {
@@ -1023,7 +881,7 @@
                     end: Math.max(...this.competitions.map(c => c.year))
                 };
                 
-                // Winner statistics
+                // Vinnare statistik
                 const winnerStats = {};
                 this.competitions.forEach(comp => {
                     if (comp.winner) {
@@ -1036,17 +894,17 @@
                     .slice(0, 5);
                 
                 let html = `
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--spacing-xl); margin-bottom: var(--spacing-2xl);">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-xl); margin-bottom: var(--spacing-2xl);">
                         <div style="background: var(--bg-primary); padding: var(--spacing-xl); border-radius: var(--radius-xl); text-align: center; box-shadow: var(--shadow-light); border: 1px solid var(--border-color);">
-                            <h3 style="color: var(--text-secondary); font-size: var(--font-size-sm); margin-bottom: var(--spacing-md);">TOTALA TÄVLINGAR</h3>
+                            <h3 style="color: var(--text-secondary); font-size: var(--font-size-sm); margin-bottom: var(--spacing-md);">TÄVLINGAR</h3>
                             <div style="font-size: var(--font-size-4xl); font-weight: 900; color: var(--primary-color); margin: var(--spacing-md) 0;">${totalCompetitions}</div>
-                            <p style="color: var(--text-muted); font-size: var(--font-size-sm);">Genomförda tävlingar</p>
+                            <p style="color: var(--text-muted); font-size: var(--font-size-sm);">Genomförda</p>
                         </div>
                         
                         <div style="background: var(--bg-primary); padding: var(--spacing-xl); border-radius: var(--radius-xl); text-align: center; box-shadow: var(--shadow-light); border: 1px solid var(--border-color);">
                             <h3 style="color: var(--text-secondary); font-size: var(--font-size-sm); margin-bottom: var(--spacing-md);">DELTAGARE</h3>
                             <div style="font-size: var(--font-size-4xl); font-weight: 900; color: var(--primary-color); margin: var(--spacing-md) 0;">${totalParticipants}</div>
-                            <p style="color: var(--text-muted); font-size: var(--font-size-sm);">Totalt antal</p>
+                            <p style="color: var(--text-muted); font-size: var(--font-size-sm);">Totalt</p>
                         </div>
                         
                         <div style="background: var(--bg-primary); padding: var(--spacing-xl); border-radius: var(--radius-xl); text-align: center; box-shadow: var(--shadow-light); border: 1px solid var(--border-color);">
@@ -1074,14 +932,11 @@
                     `;
                 });
                 
-                html += `
-                        </div>
-                    </div>
-                `;
-                
+                html += '</div></div>';
                 content.innerHTML = html;
             }
             
+            // RENDERA INSTÄLLNINGAR
             renderSettings() {
                 const content = document.getElementById('settings-content');
                 
@@ -1089,36 +944,27 @@
                 const formattedSize = this.formatBytes(storageSize);
                 
                 content.innerHTML = `
-                    <div style="display: grid; gap: var(--spacing-2xl);">
-                        <div style="background: var(--bg-primary); padding: var(--spacing-xl); border-radius: var(--radius-xl); box-shadow: var(--shadow-light); border: 1px solid var(--border-color);">
-                            <h3 style="color: var(--text-primary); margin-bottom: var(--spacing-lg);">💾 Datahantering</h3>
-                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-md);">
-                                <button onclick="app.exportData()" class="btn secondary">
-                                    <span>📦</span> Exportera Data
-                                </button>
-                                <button onclick="app.clearData()" class="btn danger">
-                                    <span>🗑️</span> Rensa All Data
-                                </button>
-                            </div>
-                            <div style="margin-top: var(--spacing-lg); padding: var(--spacing-md); background: var(--bg-secondary); border-radius: var(--radius-lg);">
-                                <p><strong>Lagrad data:</strong> ${formattedSize}</p>
-                                <p><strong>Tävlingar:</strong> ${this.competitions.length}</p>
-                                <p><strong>Deltagare:</strong> ${this.participants.length}</p>
-                            </div>
+                    <div style="background: var(--bg-primary); padding: var(--spacing-xl); border-radius: var(--radius-xl); box-shadow: var(--shadow-light); border: 1px solid var(--border-color);">
+                        <h3 style="color: var(--text-primary); margin-bottom: var(--spacing-lg);">💾 Datahantering</h3>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-md); margin-bottom: var(--spacing-lg);">
+                            <button onclick="app.exportData()" class="btn primary">
+                                <span>📦</span> Exportera Data
+                            </button>
+                            <button onclick="app.clearData()" class="btn danger">
+                                <span>🗑️</span> Rensa Data
+                            </button>
                         </div>
-                        
-                        <div style="background: var(--bg-primary); padding: var(--spacing-xl); border-radius: var(--radius-xl); box-shadow: var(--shadow-light); border: 1px solid var(--border-color);">
-                            <h3 style="color: var(--text-primary); margin-bottom: var(--spacing-lg);">ℹ️ Om Appen</h3>
-                            <p><strong>Pekkas Pokal</strong> v2.0</p>
-                            <p>Modern tävlingsspårning för vänner</p>
-                            <p>Utvecklad med ❤️ för fair play och kul tävlingar</p>
+                        <div style="padding: var(--spacing-md); background: var(--bg-secondary); border-radius: var(--radius-lg);">
+                            <p><strong>Lagrad data:</strong> ${formattedSize}</p>
+                            <p><strong>Tävlingar:</strong> ${this.competitions.length}</p>
+                            <p><strong>Deltagare:</strong> ${this.participants.length}</p>
                         </div>
                     </div>
                 `;
             }
             
+            // NAVIGATION
             switchTab(tabName) {
-                // Update navigation
                 document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
                 document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
                 
@@ -1128,6 +974,7 @@
                 this.currentTab = tabName;
             }
             
+            // TEMA
             toggleTheme() {
                 const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
                 const newTheme = currentTheme === 'light' ? 'dark' : 'light';
@@ -1136,25 +983,7 @@
                 document.getElementById('theme-toggle').textContent = newTheme === 'light' ? '🌙' : '☀️';
             }
             
-            toggleFullscreen() {
-                if (!document.fullscreenElement) {
-                    document.documentElement.requestFullscreen();
-                } else {
-                    document.exitFullscreen();
-                }
-            }
-            
-            showLoadingScreen() {
-                document.getElementById('loading-screen').classList.remove('hidden');
-            }
-            
-            hideLoadingScreen() {
-                setTimeout(() => {
-                    document.getElementById('loading-screen').classList.add('hidden');
-                    document.getElementById('app').classList.remove('hidden');
-                }, 1000);
-            }
-            
+            // VISA/GÖMA IMPORT
             showCSVImport() {
                 document.getElementById('csv-import-section').classList.remove('hidden');
             }
@@ -1163,56 +992,8 @@
                 document.getElementById('csv-import-section').classList.add('hidden');
             }
             
-            showNotification(message, type = 'info', duration = 5000) {
-                const container = document.getElementById('toast-container');
-                const toast = document.createElement('div');
-                
-                const icons = {
-                    success: '✅',
-                    error: '❌',
-                    warning: '⚠️',
-                    info: 'ℹ️'
-                };
-                
-                toast.style.cssText = `
-                    background: var(--bg-primary);
-                    color: var(--text-primary);
-                    padding: var(--spacing-lg);
-                    border-radius: var(--radius-lg);
-                    box-shadow: var(--shadow-heavy);
-                    border: 1px solid var(--border-color);
-                    border-left: 4px solid var(--${type === 'success' ? 'success' : type === 'error' ? 'danger' : type === 'warning' ? 'warning' : 'primary'}-color);
-                    transform: translateX(calc(100% + 20px));
-                    transition: transform 0.25s ease;
-                    display: flex;
-                    align-items: center;
-                    gap: var(--spacing-md);
-                `;
-                
-                toast.innerHTML = `
-                    <span style="font-size: var(--font-size-lg);">${icons[type] || icons.info}</span>
-                    <span>${message}</span>
-                `;
-                
-                container.appendChild(toast);
-                
-                // Show with animation
-                setTimeout(() => {
-                    toast.style.transform = 'translateX(0)';
-                }, 100);
-                
-                // Auto remove
-                setTimeout(() => {
-                    toast.style.transform = 'translateX(calc(100% + 20px))';
-                    setTimeout(() => {
-                        if (toast.parentNode) {
-                            toast.parentNode.removeChild(toast);
-                        }
-                    }, 300);
-                }, duration);
-            }
-            
-            async exportData() {
+            // EXPORT DATA
+            exportData() {
                 try {
                     const data = {
                         version: '2.0',
@@ -1230,13 +1011,14 @@
                     a.click();
                     
                     URL.revokeObjectURL(url);
-                    this.showNotification('Data exporterad!', 'success');
+                    alert('Data exporterad!');
                 } catch (error) {
                     console.error('Export failed:', error);
-                    this.showNotification('Fel vid export', 'error');
+                    alert('Fel vid export');
                 }
             }
             
+            // RENSA DATA
             clearData() {
                 if (confirm('Är du säker på att du vill rensa all data? Detta kan inte ångras.')) {
                     localStorage.removeItem('pekkas-pokal-data');
@@ -1244,6 +1026,7 @@
                 }
             }
             
+            // FORMAT BYTES
             formatBytes(bytes, decimals = 2) {
                 if (bytes === 0) return '0 Bytes';
                 
@@ -1257,40 +1040,16 @@
             }
         }
         
-        // Initialize the application
+        // STARTA APPEN
+        console.log('🚀 Initierar Pekkas Pokal...');
         let app;
+        
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => {
                 app = new PekkasPokalkApp();
             });
         } else {
             app = new PekkasPokalkApp();
-        }
-        
-        // PWA Installation
-        let deferredPrompt;
-        window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
-            deferredPrompt = e;
-            
-            const installBtn = document.getElementById('install-btn');
-            installBtn.classList.remove('hidden');
-            
-            installBtn.addEventListener('click', async () => {
-                if (deferredPrompt) {
-                    deferredPrompt.prompt();
-                    const { outcome } = await deferredPrompt.userChoice;
-                    deferredPrompt = null;
-                    installBtn.classList.add('hidden');
-                }
-            });
-        });
-        
-        // Service Worker
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js')
-                .then(() => console.log('Service Worker registered'))
-                .catch(err => console.log('Service Worker registration failed'));
         }
     </script>
 </body>
