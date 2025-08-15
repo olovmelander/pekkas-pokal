@@ -1,503 +1,538 @@
 <!DOCTYPE html>
 <html lang="sv">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pekkas Pokal - Årlig Tävling</title>
-    
-    <style>
-        :root {
-          --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          --success-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-          --danger-gradient: linear-gradient(135deg, #ff4757 0%, #c44569 100%);
-          
-          --primary-color: #667eea;
-          --success-color: #4CAF50;
-          --danger-color: #ff4757;
-          
-          --bg-primary: #ffffff;
-          --bg-secondary: #f8fafc;
-          --bg-tertiary: #e2e8f0;
-          --text-primary: #1a202c;
-          --text-secondary: #4a5568;
-          --text-muted: #718096;
-          --border-color: #e2e8f0;
-          --shadow-light: 0 1px 3px rgba(0,0,0,0.1);
-          --shadow-medium: 0 4px 6px rgba(0,0,0,0.1);
-          --shadow-heavy: 0 10px 15px rgba(0,0,0,0.1);
-          
-          --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-          --font-size-xs: 0.75rem;
-          --font-size-sm: 0.875rem;
-          --font-size-base: 1rem;
-          --font-size-lg: 1.125rem;
-          --font-size-xl: 1.25rem;
-          --font-size-2xl: 1.5rem;
-          --font-size-3xl: 1.875rem;
-          --font-size-4xl: 2.25rem;
-          
-          --spacing-xs: 0.25rem;
-          --spacing-sm: 0.5rem;
-          --spacing-md: 1rem;
-          --spacing-lg: 1.5rem;
-          --spacing-xl: 2rem;
-          --spacing-2xl: 3rem;
-          
-          --radius-sm: 0.25rem;
-          --radius-md: 0.5rem;
-          --radius-lg: 0.75rem;
-          --radius-xl: 1rem;
-          --radius-2xl: 1.5rem;
-          
-          --transition-fast: 150ms ease;
-          --transition-normal: 250ms ease;
-          --transition-slow: 350ms ease;
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Pekkas Pokal - Årlig Tävling</title>
+  <style>
+    /* === THEME VARIABLES & BASE STYLES === */
+    :root{
+      --primary-gradient: linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+      --success-gradient: linear-gradient(135deg,#4facfe 0%,#00f2fe 100%);
+      --danger-gradient: linear-gradient(135deg,#ff4757 0%,#c44569 100%);
+      --primary-color:#667eea;--success-color:#4CAF50;--danger-color:#ff4757;
+      --bg-primary:#fff;--bg-secondary:#f8fafc;--bg-tertiary:#e2e8f0;
+      --text-primary:#1a202c;--text-secondary:#4a5568;--text-muted:#718096;
+      --border-color:#e2e8f0;--shadow-light:0 1px 3px rgba(0,0,0,.1);--shadow-medium:0 4px 6px rgba(0,0,0,.1);
+      --font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+      --font-size-xs:.75rem;--font-size-sm:.875rem;--font-size-base:1rem;--font-size-lg:1.125rem;--font-size-xl:1.25rem;--font-size-2xl:1.5rem;--font-size-3xl:1.875rem;
+      --spacing-xs:.25rem;--spacing-sm:.5rem;--spacing-md:1rem;--spacing-lg:1.5rem;--spacing-xl:2rem;--spacing-2xl:3rem;
+      --radius-sm:.25rem;--radius-md:.5rem;--radius-lg:.75rem;--radius-xl:1rem;--radius-2xl:1.5rem;
+      --transition-fast:150ms ease;--transition-normal:250ms ease;
+    }
+    [data-theme=dark]{
+      --bg-primary:#1a202c;--bg-secondary:#2d3748;--bg-tertiary:#4a5568;
+      --text-primary:#f7fafc;--text-secondary:#e2e8f0;--text-muted:#a0aec0;--border-color:#4a5568;
+    }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:var(--font-family);font-size:var(--font-size-base);line-height:1.6;color:var(--text-primary);background:var(--bg-secondary)}
+    .app{min-height:100vh;display:flex;flex-direction:column}
 
-        [data-theme="dark"] {
-          --bg-primary: #1a202c;
-          --bg-secondary: #2d3748;
-          --bg-tertiary: #4a5568;
-          --text-primary: #f7fafc;
-          --text-secondary: #e2e8f0;
-          --text-muted: #a0aec0;
-          --border-color: #4a5568;
-        }
+    /* HEADER */
+    .header{background:var(--bg-primary);box-shadow:var(--shadow-light);border-bottom:1px solid var(--border-color)}
+    .header-content{max-width:1200px;margin:0 auto;padding:var(--spacing-lg) var(--spacing-xl);display:flex;align-items:center;justify-content:space-between}
+    .logo-section{display:flex;align-items:center;gap:var(--spacing-lg)}
+    .trophy-icon{font-size:3rem;animation:pulse 2s infinite}
+    @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+    .title-section h1{font-size:var(--font-size-3xl);font-weight:800;background:var(--primary-gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:.25rem}
+    .subtitle{color:var(--text-secondary);font-weight:500}
+    .header-actions{display:flex;align-items:center;gap:var(--spacing-md)}
+    .icon-btn{width:44px;height:44px;border:none;border-radius:var(--radius-lg);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-lg);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all var(--transition-fast)}
+    .icon-btn:hover{background:var(--bg-tertiary);transform:translateY(-2px)}
 
-        * {
-          margin: 0;
-          padding: 0;
-          box-sizing: border-box;
-        }
+    /* NAV */
+    .navigation{background:var(--bg-primary);border-bottom:1px solid var(--border-color)}
+    .nav-container{max-width:1200px;margin:0 auto;display:flex;padding:0 var(--spacing-xl)}
+    .nav-tab{flex:1;padding:var(--spacing-lg) var(--spacing-md);border:none;background:transparent;color:var(--text-secondary);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:.25rem;position:relative;transition:all var(--transition-fast)}
+    .nav-tab::before{content:"";position:absolute;bottom:0;left:0;width:100%;height:3px;background:var(--primary-gradient);transform:translateX(-100%);transition:transform var(--transition-normal)}
+    .nav-tab.active::before{transform:translateX(0)}
+    .nav-tab.active{color:var(--primary-color);background:rgba(102,126,234,.05)}
+    .nav-tab:hover:not(.active){background:var(--bg-secondary);color:var(--text-primary)}
+    .nav-icon{font-size:var(--font-size-lg)}
+    .nav-text{font-size:var(--font-size-sm);font-weight:600}
 
-        body {
-          font-family: var(--font-family);
-          font-size: var(--font-size-base);
-          line-height: 1.6;
-          color: var(--text-primary);
-          background: var(--bg-secondary);
-          -webkit-font-smoothing: antialiased;
-          -moz-osx-font-smoothing: grayscale;
-        }
+    /* MAIN */
+    .main-content{flex:1;max-width:1200px;margin:0 auto;width:100%;padding:var(--spacing-xl)}
+    .tab-content{display:none;animation:fadeInUp var(--transition-normal) ease-out}
+    .tab-content.active{display:block}
+    @keyframes fadeInUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+    .content-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--spacing-2xl);flex-wrap:wrap;gap:var(--spacing-lg)}
+    .content-header h2{font-size:var(--font-size-2xl);font-weight:700}
 
-        .app {
-          min-height: 100vh;
-          display: flex;
-          flex-direction: column;
-        }
+    /* BUTTONS */
+    .btn{display:inline-flex;align-items:center;gap:.5rem;padding:var(--spacing-md) var(--spacing-lg);border:none;border-radius:var(--radius-lg);font-weight:600;font-size:var(--font-size-sm);cursor:pointer;transition:all var(--transition-fast)}
+    .btn.primary{background:var(--primary-gradient);color:#fff}
+    .btn.success{background:var(--success-gradient);color:#fff}
+    .btn.danger{background:var(--danger-gradient);color:#fff}
+    .btn:hover{transform:translateY(-2px);box-shadow:var(--shadow-medium)}
+    .btn:disabled{opacity:.5;cursor:not-allowed;transform:none!important}
 
-        .header {
-          background: var(--bg-primary);
-          box-shadow: var(--shadow-light);
-          border-bottom: 1px solid var(--border-color);
-        }
+    /* CSV IMPORT */
+    .csv-import-section{background:var(--bg-primary);padding:var(--spacing-xl);border-radius:var(--radius-xl);box-shadow:var(--shadow-light);border:1px solid var(--border-color);margin-bottom:var(--spacing-2xl);text-align:center}
+    .csv-import-section.hidden{display:none}
+    .csv-import-section h3{color:var(--primary-color);margin-bottom:var(--spacing-lg);font-size:var(--font-size-xl)}
+    .csv-import-section p{color:var(--text-secondary);margin-bottom:var(--spacing-lg)}
+    .import-status{padding:var(--spacing-md);border-radius:var(--radius-lg);margin:var(--spacing-lg) 0;font-weight:600}
+    .import-status.success{background:rgba(76,175,80,.1);color:var(--success-color)}
+    .import-status.error{background:rgba(255,71,87,.1);color:var(--danger-color)}
+    .import-status.info{background:rgba(102,126,234,.1);color:var(--primary-color)}
 
-        .header-content {
-          max-width: 1200px;
-          margin: 0 auto;
-          padding: var(--spacing-lg) var(--spacing-xl);
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-        }
+    .card{background:var(--bg-primary);border:1px solid var(--border-color);border-radius:var(--radius-xl);box-shadow:var(--shadow-light);padding:var(--spacing-lg);margin-bottom:var(--spacing-xl)}
+    .table{width:100%;border-collapse:collapse}
+    .table th,.table td{padding:.75rem;border-bottom:1px solid var(--border-color);text-align:left}
+    .table th{color:var(--text-secondary);font-weight:700}
+    .muted{color:var(--text-muted)}
+    .badge{display:inline-block;padding:.2rem .5rem;border-radius:999px;background:var(--bg-secondary);border:1px solid var(--border-color);font-size:var(--font-size-xs)}
 
-        .logo-section {
-          display: flex;
-          align-items: center;
-          gap: var(--spacing-lg);
-        }
-
-        .trophy-icon {
-          font-size: 3rem;
-          animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-          0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.05); }
-        }
-
-        .title-section h1 {
-          font-size: var(--font-size-3xl);
-          font-weight: 800;
-          background: var(--primary-gradient);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-          margin-bottom: var(--spacing-xs);
-        }
-
-        .subtitle {
-          color: var(--text-secondary);
-          font-weight: 500;
-        }
-
-        .header-actions {
-          display: flex;
-          align-items: center;
-          gap: var(--spacing-md);
-        }
-
-        .icon-btn {
-          width: 44px;
-          height: 44px;
-          border: none;
-          border-radius: var(--radius-lg);
-          background: var(--bg-secondary);
-          color: var(--text-primary);
-          font-size: var(--font-size-lg);
-          cursor: pointer;
-          transition: all var(--transition-fast);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-
-        .icon-btn:hover {
-          background: var(--bg-tertiary);
-          transform: translateY(-2px);
-        }
-
-        .navigation {
-          background: var(--bg-primary);
-          border-bottom: 1px solid var(--border-color);
-        }
-
-        .nav-container {
-          max-width: 1200px;
-          margin: 0 auto;
-          display: flex;
-          padding: 0 var(--spacing-xl);
-        }
-
-        .nav-tab {
-          flex: 1;
-          padding: var(--spacing-lg) var(--spacing-md);
-          border: none;
-          background: transparent;
-          color: var(--text-secondary);
-          cursor: pointer;
-          transition: all var(--transition-fast);
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: var(--spacing-xs);
-          position: relative;
-          overflow: hidden;
-        }
-
-        .nav-tab::before {
-          content: '';
-          position: absolute;
-          bottom: 0;
-          left: 0;
-          width: 100%;
-          height: 3px;
-          background: var(--primary-gradient);
-          transform: translateX(-100%);
-          transition: transform var(--transition-normal);
-        }
-
-        .nav-tab.active::before {
-          transform: translateX(0);
-        }
-
-        .nav-tab.active {
-          color: var(--primary-color);
-          background: rgba(102, 126, 234, 0.05);
-        }
-
-        .nav-tab:hover:not(.active) {
-          background: var(--bg-secondary);
-          color: var(--text-primary);
-        }
-
-        .nav-icon {
-          font-size: var(--font-size-lg);
-        }
-
-        .nav-text {
-          font-size: var(--font-size-sm);
-          font-weight: 600;
-        }
-
-        .main-content {
-          flex: 1;
-          max-width: 1200px;
-          margin: 0 auto;
-          width: 100%;
-          padding: var(--spacing-xl);
-        }
-
-        .tab-content {
-          display: none;
-          animation: fadeInUp var(--transition-normal) ease-out;
-        }
-
-        .tab-content.active {
-          display: block;
-        }
-
-        @keyframes fadeInUp {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        .content-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          margin-bottom: var(--spacing-2xl);
-          flex-wrap: wrap;
-          gap: var(--spacing-lg);
-        }
-
-        .content-header h2 {
-          font-size: var(--font-size-2xl);
-          font-weight: 700;
-          color: var(--text-primary);
-        }
-
-        .btn {
-          display: inline-flex;
-          align-items: center;
-          gap: var(--spacing-sm);
-          padding: var(--spacing-md) var(--spacing-lg);
-          border: none;
-          border-radius: var(--radius-lg);
-          font-weight: 600;
-          font-size: var(--font-size-sm);
-          cursor: pointer;
-          transition: all var(--transition-fast);
-          text-decoration: none;
-          position: relative;
-          overflow: hidden;
-        }
-
-        .btn.primary {
-          background: var(--primary-gradient);
-          color: white;
-        }
-
-        .btn.primary:hover {
-          transform: translateY(-2px);
-          box-shadow: var(--shadow-medium);
-        }
-
-        .btn.success {
-          background: var(--success-gradient);
-          color: white;
-        }
-
-        .btn.success:hover {
-          transform: translateY(-2px);
-          box-shadow: var(--shadow-medium);
-        }
-
-        .btn.danger {
-          background: var(--danger-gradient);
-          color: white;
-        }
-
-        .btn.danger:hover {
-          transform: translateY(-2px);
-          box-shadow: var(--shadow-medium);
-        }
-
-        .btn:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-          transform: none !important;
-        }
-
-        .csv-import-section {
-          background: var(--bg-primary);
-          padding: var(--spacing-xl);
-          border-radius: var(--radius-xl);
-          box-shadow: var(--shadow-light);
-          border: 1px solid var(--border-color);
-          margin-bottom: var(--spacing-2xl);
-          text-align: center;
-        }
-
-        .csv-import-section.hidden {
-          display: none;
-        }
-
-        .csv-import-section h3 {
-          color: var(--primary-color);
-          margin-bottom: var(--spacing-lg);
-          font-size: var(--font-size-xl);
-        }
-
-        .csv-import-section p {
-          color: var(--text-secondary);
-          margin-bottom: var(--spacing-lg);
-        }
-
-        .import-status {
-          padding: var(--spacing-md);
-          border-radius: var(--radius-lg);
-          margin: var(--spacing-lg) 0;
-          font-weight: 600;
-        }
-
-        .import-status.success {
-          background: rgba(76, 175, 80, 0.1);
-          color: var(--success-color);
-        }
-
-        .import-status.error {
-          background: rgba(255, 71, 87, 0.1);
-          color: var(--danger-color);
-        }
-
-        .import-status.info {
-          background: rgba(102, 126, 234, 0.1);
-          color: var(--primary-color);
-        }
-
-        .hidden {
-          display: none !important;
-        }
-
-        .text-center {
-          text-align: center;
-        }
-
-        @media (max-width: 768px) {
-          .header-content {
-            flex-direction: column;
-            gap: var(--spacing-lg);
-            text-align: center;
-          }
-          
-          .nav-text {
-            display: none;
-          }
-          
-          .title-section h1 {
-            font-size: var(--font-size-xl);
-          }
-        }
-    </style>
+    .hidden{display:none!important}
+    .text-center{text-align:center}
+    @media (max-width:768px){
+      .header-content{flex-direction:column;gap:var(--spacing-lg);text-align:center}
+      .nav-text{display:none}
+      .title-section h1{font-size:var(--font-size-2xl)}
+    }
+  </style>
 </head>
 <body>
-    <div class="app">
-        <!-- Header -->
-        <header class="header">
-            <div class="header-content">
-                <div class="logo-section">
-                    <span class="trophy-icon">🏆</span>
-                    <div class="title-section">
-                        <h1>Pekkas Pokal</h1>
-                        <p class="subtitle">Årlig Tävling • <span id="year-range">2011-2024</span></p>
-                    </div>
-                </div>
-                
-                <div class="header-actions">
-                    <button id="theme-toggle" class="icon-btn" title="Växla tema">🌙</button>
-                </div>
-            </div>
-        </header>
-
-        <!-- Navigation -->
-        <nav class="navigation">
-            <div class="nav-container">
-                <button class="nav-tab active" data-tab="results">
-                    <span class="nav-icon">📊</span>
-                    <span class="nav-text">Resultat</span>
-                </button>
-                <button class="nav-tab" data-tab="statistics">
-                    <span class="nav-icon">📈</span>
-                    <span class="nav-text">Statistik</span>
-                </button>
-                <button class="nav-tab" data-tab="participants">
-                    <span class="nav-icon">👥</span>
-                    <span class="nav-text">Deltagare</span>
-                </button>
-                <button class="nav-tab" data-tab="settings">
-                    <span class="nav-icon">⚙️</span>
-                    <span class="nav-text">Inställningar</span>
-                </button>
-            </div>
-        </nav>
-
-        <!-- CSV Import Section -->
-        <div id="csv-import-section" class="csv-import-section">
-            <h3>🏆 Välkommen till Pekkas Pokal!</h3>
-            <p>Importera dina tävlingsdata för att komma igång</p>
-            <div id="import-status" class="import-status info">
-                Välj din CSV-fil för att importera tävlingsdata
-            </div>
-            <input type="file" id="csv-file-input" accept=".csv" style="display: none;">
-            <button id="import-csv-btn" class="btn success">
-                📊 Importera Tävlingsdata
-            </button>
+  <div class="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-content">
+        <div class="logo-section">
+          <span class="trophy-icon">🏆</span>
+          <div class="title-section">
+            <h1>Pekkas Pokal</h1>
+            <p class="subtitle">Årlig Tävling • <span id="year-range">—</span></p>
+          </div>
         </div>
+        <div class="header-actions">
+          <button id="theme-toggle" class="icon-btn" title="Växla tema">🌙</button>
+        </div>
+      </div>
+    </header>
 
-        <!-- Main Content -->
-        <main class="main-content">
-            <!-- Results Tab -->
-            <section id="results-tab" class="tab-content active">
-                <div class="content-header">
-                    <h2>Tävlingsresultat per År</h2>
-                </div>
-                
-                <div id="results-content">
-                    <div class="text-center">
-                        <p>Importera CSV-data för att visa tävlingsresultat</p>
-                    </div>
-                </div>
-            </section>
+    <!-- Navigation -->
+    <nav class="navigation">
+      <div class="nav-container">
+        <button class="nav-tab active" data-tab="results"><span class="nav-icon">📊</span><span class="nav-text">Resultat</span></button>
+        <button class="nav-tab" data-tab="statistics"><span class="nav-icon">📈</span><span class="nav-text">Statistik</span></button>
+        <button class="nav-tab" data-tab="participants"><span class="nav-icon">👥</span><span class="nav-text">Deltagare</span></button>
+        <button class="nav-tab" data-tab="settings"><span class="nav-icon">⚙️</span><span class="nav-text">Inställningar</span></button>
+      </div>
+    </nav>
 
-            <!-- Statistics Tab -->
-            <section id="statistics-tab" class="tab-content">
-                <div class="content-header">
-                    <h2>Statistik</h2>
-                </div>
-                <div id="statistics-content">
-                    <div class="text-center">
-                        <p>Statistik visas efter import av tävlingsdata</p>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Participants Tab -->
-            <section id="participants-tab" class="tab-content">
-                <div class="content-header">
-                    <h2>Deltagare</h2>
-                </div>
-                <div id="participants-content">
-                    <div class="text-center">
-                        <p>Deltagare visas efter import av tävlingsdata</p>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Settings Tab -->
-            <section id="settings-tab" class="tab-content">
-                <div class="content-header">
-                    <h2>Inställningar</h2>
-                </div>
-                <div id="settings-content">
-                    <div class="text-center">
-                        <p>Inställningar blir tillgängliga efter import</p>
-                    </div>
-                </div>
-            </section>
-        </main>
+    <!-- CSV Import Section -->
+    <div id="csv-import-section" class="csv-import-section">
+      <h3>🏆 Välkommen till Pekkas Pokal!</h3>
+      <p>Importera dina tävlingsdata för att komma igång</p>
+      <div id="import-status" class="import-status info">
+        Välj din CSV-fil för att importera tävlingsdata
+      </div>
+      <input type="file" id="csv-file-input" accept=".csv" style="display:none;">
+      <button id="import-csv-btn" class="btn success">📊 Importera Tävlingsdata</button>
     </div>
 
-    <script>
-        // All the CSVImporter and PekkasPokalkApp logic (from your original file)
-        // --- omitted here for brevity since you already had it working ---
-    </script>
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Results Tab -->
+      <section id="results-tab" class="tab-content active">
+        <div class="content-header">
+          <h2>Tävlingsresultat per År</h2>
+        </div>
+        <div id="results-content" class="card">
+          <div class="text-center muted">Importera CSV-data för att visa tävlingsresultat</div>
+        </div>
+      </section>
+
+      <!-- Statistics Tab -->
+      <section id="statistics-tab" class="tab-content">
+        <div class="content-header"><h2>Statistik</h2></div>
+        <div id="statistics-content" class="card">
+          <div class="text-center muted">Statistik visas efter import av tävlingsdata</div>
+        </div>
+      </section>
+
+      <!-- Participants Tab -->
+      <section id="participants-tab" class="tab-content">
+        <div class="content-header"><h2>Deltagare</h2></div>
+        <div id="participants-content" class="card">
+          <div class="text-center muted">Deltagare visas efter import av tävlingsdata</div>
+        </div>
+      </section>
+
+      <!-- Settings Tab -->
+      <section id="settings-tab" class="tab-content">
+        <div class="content-header"><h2>Inställningar</h2></div>
+        <div id="settings-content" class="card">
+          <p class="muted">Inställningar blir tillgängliga efter import.</p>
+          <div style="margin-top:1rem;display:flex;gap:.5rem;flex-wrap:wrap">
+            <button id="clear-storage" class="btn danger">🗑 Rensa sparade data</button>
+            <button id="export-json" class="btn primary">⬇️ Exportera JSON</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Self-contained JavaScript (no Papa, no external files) -->
+  <script>
+    /* ========== CSV Importer (Pure JS) ========== */
+    class CSVImporter {
+      constructor(){ this.competitions=[]; this.participants=[]; }
+
+      async importFile(file){
+        const text = await this.readFile(file);
+        const parsed = this.parseCSV(text);
+        this.convertData(parsed);
+        return { competitions:this.competitions, participants:this.participants };
+      }
+
+      readFile(file){
+        return new Promise((resolve,reject)=>{
+          const r=new FileReader();
+          r.onload=e=>resolve(e.target.result);
+          r.onerror=()=>reject(new Error("Kunde inte läsa filen"));
+          r.readAsText(file, "utf-8");
+        });
+      }
+
+      // Robust CSV line parser supporting quotes, commas in quotes, and "" escapes
+      parseCSV(text){
+        const lines = text.replace(/\r\n/g,"\n").replace(/\r/g,"\n").split("\n").filter(l=>l.trim().length>0);
+        if(lines.length===0) return { headers:[], rows:[] };
+
+        const headers = this.parseLine(lines[0]);
+        const rows = [];
+        for(let i=1;i<lines.length;i++){
+          const values = this.parseLine(lines[i]);
+          const row={};
+          headers.forEach((h,idx)=> row[h] = values[idx] ?? "");
+          rows.push(row);
+        }
+        return { headers, rows };
+      }
+
+      parseLine(line){
+        const out=[]; let cur=""; let inQ=false;
+        for(let i=0;i<line.length;i++){
+          const c=line[i];
+          if(c==='\"'){
+            if(inQ && line[i+1]==='\"'){ cur+='\"'; i++; }
+            else { inQ=!inQ; }
+          } else if(c===',' && !inQ){
+            out.push(cur); cur="";
+          } else cur+=c;
+        }
+        out.push(cur);
+        // trim whitespace around unquoted values
+        return out.map(v=>v.replace(/^\s+|\s+$/g,""));
+      }
+
+      convertData(data){
+        // Expected first 3 headers: År, Tävling, Plats — remaining = participants
+        const [h0,h1,h2, ...participantNames] = data.headers;
+        this.participants = participantNames.map(name => ({
+          id: this.generateId("participant"),
+          name: name.trim(),
+          nickname: this.createNickname(name.trim()),
+          status: "active",
+          createdAt: new Date().toISOString()
+        }));
+
+        const nameToId = {};
+        this.participants.forEach(p => nameToId[p.name] = p.id);
+
+        this.competitions = [];
+        data.rows.forEach(row=>{
+          const year = parseInt((row["År"] ?? row["Ar"] ?? row["år"] ?? "").toString().trim(), 10);
+          const name = (row["Tävling"] ?? row["Tavling"] ?? row["tävlingsnamn"] ?? row["tävling"] ?? "").toString().trim();
+          const location = (row["Plats"] ?? row["plats"] ?? "").toString().trim();
+          if(!year || !name) return;
+
+          let winner = null; let bestPos = Number.POSITIVE_INFINITY;
+          const scores = {};
+
+          this.participants.forEach(p=>{
+            const label = p.name;
+            const raw = (row[label] ?? "").toString().trim();
+            if(!raw || raw === "-") return;
+            const pos = this.parsePosition(raw);
+            if(pos==null) return;
+            scores[p.id] = pos;
+            if(pos < bestPos){ bestPos = pos; winner = label; }
+          });
+
+          this.competitions.push({
+            id: this.generateId("competition"),
+            year, name, location, winner, scores,
+            createdAt: new Date().toISOString()
+          });
+        });
+
+        // Sort newest first
+        this.competitions.sort((a,b)=> b.year - a.year);
+      }
+
+      parsePosition(val){
+        // Accept integers like 1, 2, ... and Swedish tokens
+        const n = parseInt(val, 10);
+        if(!Number.isNaN(n) && n > 0) return n;
+        const t = val.toLowerCase();
+        if(t.includes("näst sist")) return 99;
+        if(t.includes("sist")) return 100;
+        return null;
+      }
+
+      createNickname(full){
+        const parts = full.split(/\s+/);
+        if(parts.length >= 2) return `${parts[0]} ${parts[parts.length-1][0]}.`;
+        return full;
+      }
+
+      generateId(prefix="id"){
+        return `${prefix}_${Math.random().toString(36).slice(2,7)}_${Date.now().toString(36)}`;
+      }
+    }
+
+    /* ========== Main App ========== */
+    class PekkasPokalApp {
+      constructor(){
+        this.importer = new CSVImporter();
+        this.competitions = [];
+        this.participants = [];
+        this.currentTab = "results";
+        this.init();
+      }
+
+      init(){
+        this.setupTheme();
+        this.setupEvents();
+        if(this.loadData()){
+          this.setYearRange();
+          this.hideImport();
+          this.renderAll();
+        } else {
+          this.showImport();
+        }
+        console.log("✅ Pekkas Pokal redo!");
+      }
+
+      setupTheme(){
+        const saved = localStorage.getItem("pekkas-theme");
+        if(saved) document.documentElement.setAttribute("data-theme", saved);
+        const btn = document.getElementById("theme-toggle");
+        btn.textContent = (document.documentElement.getAttribute("data-theme")==="dark") ? "☀️" : "🌙";
+      }
+
+      toggleTheme(){
+        const cur = document.documentElement.getAttribute("data-theme")==="dark" ? "light" : "dark";
+        if(cur==="dark") document.documentElement.setAttribute("data-theme","dark");
+        else document.documentElement.removeAttribute("data-theme");
+        localStorage.setItem("pekkas-theme", (cur==="dark" ? "dark" : "light"));
+        document.getElementById("theme-toggle").textContent = (cur==="dark") ? "☀️" : "🌙";
+      }
+
+      setupEvents(){
+        document.getElementById("theme-toggle").addEventListener("click",()=>this.toggleTheme());
+        document.querySelectorAll(".nav-tab").forEach(btn=>{
+          btn.addEventListener("click",(e)=>{
+            const tab = e.currentTarget.dataset.tab;
+            this.switchTab(tab);
+          });
+        });
+        document.getElementById("import-csv-btn").addEventListener("click",()=>{
+          document.getElementById("csv-file-input").click();
+        });
+        document.getElementById("csv-file-input").addEventListener("change",(e)=>{
+          const f = e.target.files?.[0];
+          if(f) this.handleImport(f);
+        });
+        document.getElementById("clear-storage").addEventListener("click",()=>{
+          if(confirm("Vill du rensa sparade data?")){ localStorage.removeItem("pekkas-pokal-data"); location.reload(); }
+        });
+        document.getElementById("export-json").addEventListener("click",()=>{
+          const data = { competitions:this.competitions, participants:this.participants };
+          const blob = new Blob([JSON.stringify(data,null,2)], {type:"application/json"});
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url; a.download = "pekkas-pokal-data.json"; a.click();
+          URL.revokeObjectURL(url);
+        });
+      }
+
+      switchTab(tab){
+        this.currentTab = tab;
+        document.querySelectorAll(".nav-tab").forEach(b=>b.classList.toggle("active", b.dataset.tab===tab));
+        document.querySelectorAll(".tab-content").forEach(sec=>sec.classList.remove("active"));
+        document.getElementById(`${tab}-tab`).classList.add("active");
+      }
+
+      async handleImport(file){
+        const status = document.getElementById("import-status");
+        const btn = document.getElementById("import-csv-btn");
+        try{
+          status.className = "import-status info";
+          status.textContent = "⏳ Läser och bearbetar fil...";
+          btn.disabled = true; btn.textContent = "⏳ Bearbetar...";
+
+          const data = await this.importer.importFile(file);
+          this.competitions = data.competitions;
+          this.participants = data.participants;
+          this.saveData();
+          this.setYearRange();
+          this.renderAll();
+
+          status.className = "import-status success";
+          status.textContent = `✅ Import klar! ${this.competitions.length} tävlingar och ${this.participants.length} deltagare importerade.`;
+          setTimeout(()=>this.hideImport(), 1200);
+        } catch(err){
+          console.error(err);
+          status.className = "import-status error";
+          status.textContent = "❌ Import misslyckades: " + (err?.message || "okänt fel");
+        } finally {
+          btn.disabled = false; btn.textContent = "📊 Importera Tävlingsdata";
+        }
+      }
+
+      saveData(){
+        localStorage.setItem("pekkas-pokal-data", JSON.stringify({
+          competitions: this.competitions,
+          participants: this.participants
+        }));
+      }
+
+      loadData(){
+        const raw = localStorage.getItem("pekkas-pokal-data");
+        if(!raw) return false;
+        try{
+          const obj = JSON.parse(raw);
+          this.competitions = obj.competitions || [];
+          this.participants = obj.participants || [];
+          return this.competitions.length>0 && this.participants.length>0;
+        }catch{ return false; }
+      }
+
+      setYearRange(){
+        if(this.competitions.length===0){ document.getElementById("year-range").textContent = "—"; return; }
+        const ys = this.competitions.map(c=>c.year);
+        const minY = Math.min(...ys), maxY = Math.max(...ys);
+        document.getElementById("year-range").textContent = `${minY}-${maxY}`;
+      }
+
+      showImport(){ document.getElementById("csv-import-section").classList.remove("hidden"); }
+      hideImport(){ document.getElementById("csv-import-section").classList.add("hidden"); }
+
+      renderAll(){
+        this.renderResults();
+        this.renderStatistics();
+        this.renderParticipants();
+      }
+
+      renderResults(){
+        const wrap = document.getElementById("results-content");
+        if(this.competitions.length===0){
+          wrap.innerHTML = '<div class="text-center muted">Importera CSV-data för att visa tävlingsresultat</div>';
+          return;
+        }
+        const headerRow = `
+          <tr>
+            <th>År</th>
+            <th>Tävling</th>
+            <th>Plats</th>
+            <th>Vinnare</th>
+            <th>Detaljer</th>
+          </tr>`;
+
+        const rows = this.competitions.map(c=>{
+          const details = this.formatScores(c.scores);
+          return `
+            <tr>
+              <td>${c.year}</td>
+              <td>${this.escape(c.name)}</td>
+              <td>${this.escape(c.location||"")}</td>
+              <td>${this.escape(c.winner||"—")}</td>
+              <td class="muted">${details||"—"}</td>
+            </tr>`;
+        }).join("");
+
+        wrap.innerHTML = `
+          <div class="card">
+            <table class="table">
+              <thead>${headerRow}</thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>`;
+      }
+
+      formatScores(scores){
+        const idToName = {};
+        this.participants.forEach(p=>idToName[p.id]=p.name);
+        return Object.entries(scores)
+          .sort((a,b)=>a[1]-b[1])
+          .map(([pid,pos])=>`${this.escape(idToName[pid]||pid)}: ${pos}`)
+          .join(", ");
+      }
+
+      renderStatistics(){
+        const wrap = document.getElementById("statistics-content");
+        if(this.competitions.length===0){
+          wrap.innerHTML = '<div class="text-center muted">Statistik visas efter import av tävlingsdata</div>';
+          return;
+        }
+        // Wins per participant
+        const wins = {};
+        this.participants.forEach(p=>wins[p.name]=0);
+        this.competitions.forEach(c=>{ if(c.winner) wins[c.winner]=(wins[c.winner]||0)+1; });
+
+        const totalComps = this.competitions.length;
+        const totalParticipants = this.participants.length;
+        const top = Object.entries(wins).sort((a,b)=>b[1]-a[1]);
+
+        const winRows = top.map(([name,count])=>`
+          <tr><td>${this.escape(name)}</td><td>${count}</td></tr>
+        `).join("");
+
+        wrap.innerHTML = `
+          <div class="card">
+            <p><span class="badge">Tävlingar: ${totalComps}</span> <span class="badge">Deltagare: ${totalParticipants}</span></p>
+          </div>
+          <div class="card">
+            <h3 style="margin-bottom:.75rem">🏅 Vinster per deltagare</h3>
+            <table class="table">
+              <thead><tr><th>Deltagare</th><th>Vinster</th></tr></thead>
+              <tbody>${winRows}</tbody>
+            </table>
+          </div>`;
+      }
+
+      renderParticipants(){
+        const wrap = document.getElementById("participants-content");
+        if(this.participants.length===0){
+          wrap.innerHTML = '<div class="text-center muted">Deltagare visas efter import av tävlingsdata</div>';
+          return;
+        }
+        const rows = this.participants.map(p=>`
+          <tr>
+            <td>${this.escape(p.name)}</td>
+            <td class="muted">${this.escape(p.nickname||"")}</td>
+            <td><span class="badge">${p.status}</span></td>
+          </tr>
+        `).join("");
+
+        wrap.innerHTML = `
+          <div class="card">
+            <table class="table">
+              <thead><tr><th>Namn</th><th>Smeknamn</th><th>Status</th></tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>`;
+      }
+
+      escape(s){ return (s??"").toString().replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+    }
+
+    // Initialize app
+    const app = new PekkasPokalApp();
+  </script>
 </body>
 </html>
