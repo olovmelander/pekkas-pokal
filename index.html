@@ -595,12 +595,13 @@
         <!-- CSV Import Section (shown initially) -->
         <div id="csv-import-section" class="csv-import-section">
             <h3>🏆 Välkommen till Pekkas Pokal!</h3>
-            <p>Importera dina tävlingsdata för att komma igång</p>
+            <p>Välj din CSV-fil för att importera tävlingsdata</p>
             <div id="import-status" class="import-status info">
-                Klicka på knappen för att importera CSV-data automatiskt
+                Välj filen "Pekkas Pokal Marathontabell Marathontabell.csv"
             </div>
+            <input type="file" id="csv-file-input" accept=".csv" style="display: none;">
             <button id="import-csv-btn" class="btn success">
-                📊 Importera Tävlingsdata
+                📊 Välj CSV-fil
             </button>
         </div>
 
@@ -698,7 +699,13 @@
             setupEventListeners() {
                 // CSV Import
                 document.getElementById('import-csv-btn').addEventListener('click', () => {
-                    this.importCSVData();
+                    document.getElementById('csv-file-input').click();
+                });
+                
+                document.getElementById('csv-file-input').addEventListener('change', (e) => {
+                    if (e.target.files.length > 0) {
+                        this.importCSVData(e.target.files[0]);
+                    }
                 });
                 
                 // Navigation
@@ -720,17 +727,32 @@
                 });
             }
             
-            async importCSVData() {
+            async importCSVData(file) {
                 const statusEl = document.getElementById('import-status');
                 const btnEl = document.getElementById('import-csv-btn');
+                
+                if (!file) {
+                    statusEl.textContent = '❌ Ingen fil vald';
+                    statusEl.className = 'import-status error';
+                    return;
+                }
+                
+                // Check file name
+                const expectedName = 'Pekkas Pokal Marathontabell Marathontabell.csv';
+                if (file.name !== expectedName) {
+                    statusEl.textContent = `⚠️ Filnamn måste vara: "${expectedName}"`;
+                    statusEl.className = 'import-status error';
+                    return;
+                }
                 
                 try {
                     statusEl.textContent = 'Läser CSV-fil...';
                     statusEl.className = 'import-status info';
+                    btnEl.textContent = '⏳ Importerar...';
                     btnEl.disabled = true;
                     
-                    // Read CSV file
-                    const csvContent = await window.fs.readFile('Pekkas Pokal Marathontabell  Marathontabell.csv', { encoding: 'utf8' });
+                    // Read file content
+                    const csvContent = await this.readFileAsText(file);
                     
                     statusEl.textContent = 'Bearbetar data...';
                     
@@ -740,6 +762,10 @@
                         dynamicTyping: false,
                         skipEmptyLines: true
                     });
+                    
+                    if (parsedData.errors.length > 0) {
+                        console.warn('CSV parsing errors:', parsedData.errors);
+                    }
                     
                     // Convert to app format
                     await this.convertCSVToAppData(parsedData);
@@ -756,14 +782,26 @@
                     // Hide import section after delay
                     setTimeout(() => {
                         this.hideCSVImport();
-                    }, 2000);
+                        btnEl.textContent = '📊 Välj CSV-fil';
+                        btnEl.disabled = false;
+                    }, 3000);
                     
                 } catch (error) {
                     console.error('Import failed:', error);
                     statusEl.textContent = `❌ Import misslyckades: ${error.message}`;
                     statusEl.className = 'import-status error';
+                    btnEl.textContent = '📊 Välj CSV-fil';
                     btnEl.disabled = false;
                 }
+            }
+            
+            readFileAsText(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => resolve(e.target.result);
+                    reader.onerror = (e) => reject(new Error('Kunde inte läsa filen'));
+                    reader.readAsText(file, 'UTF-8');
+                });
             }
             
             async convertCSVToAppData(parsedData) {
