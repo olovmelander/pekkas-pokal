@@ -595,13 +595,13 @@
         <!-- CSV Import Section (shown initially) -->
         <div id="csv-import-section" class="csv-import-section">
             <h3>🏆 Välkommen till Pekkas Pokal!</h3>
-            <p>Välj din CSV-fil för att importera tävlingsdata</p>
+            <p>Importera dina tävlingsdata för att komma igång</p>
             <div id="import-status" class="import-status info">
-                Välj filen "Pekkas Pokal Marathontabell Marathontabell.csv"
+                Välj din CSV-fil för att importera tävlingsdata
             </div>
             <input type="file" id="csv-file-input" accept=".csv" style="display: none;">
             <button id="import-csv-btn" class="btn success">
-                📊 Välj CSV-fil
+                📊 Importera Tävlingsdata
             </button>
         </div>
 
@@ -664,12 +664,15 @@
         </main>
     </div>
 
+    <!-- Toast Container for Notifications -->
+    <div id="toast-container" style="position: fixed; top: 20px; right: 20px; z-index: 1100; display: flex; flex-direction: column; gap: 0.5rem; max-width: 400px;"></div>
+
     <!-- Scripts -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.4.1/papaparse.min.js"></script>
     
     <script>
-        // Simple CSV Import and App Initialization
+        // Fixed CSV Import and App Initialization
         class PekkasPokalkApp {
             constructor() {
                 this.competitions = [];
@@ -697,7 +700,7 @@
             }
             
             setupEventListeners() {
-                // CSV Import
+                // CSV Import - Fixed to use proper file selection
                 document.getElementById('import-csv-btn').addEventListener('click', () => {
                     document.getElementById('csv-file-input').click();
                 });
@@ -737,21 +740,13 @@
                     return;
                 }
                 
-                // Check file name
-                const expectedName = 'Pekkas Pokal Marathontabell Marathontabell.csv';
-                if (file.name !== expectedName) {
-                    statusEl.textContent = `⚠️ Filnamn måste vara: "${expectedName}"`;
-                    statusEl.className = 'import-status error';
-                    return;
-                }
-                
                 try {
                     statusEl.textContent = 'Läser CSV-fil...';
                     statusEl.className = 'import-status info';
                     btnEl.textContent = '⏳ Importerar...';
                     btnEl.disabled = true;
                     
-                    // Read file content
+                    // Read file content using FileReader (browser-compatible)
                     const csvContent = await this.readFileAsText(file);
                     
                     statusEl.textContent = 'Bearbetar data...';
@@ -782,7 +777,7 @@
                     // Hide import section after delay
                     setTimeout(() => {
                         this.hideCSVImport();
-                        btnEl.textContent = '📊 Välj CSV-fil';
+                        btnEl.textContent = '📊 Importera Tävlingsdata';
                         btnEl.disabled = false;
                     }, 3000);
                     
@@ -790,11 +785,12 @@
                     console.error('Import failed:', error);
                     statusEl.textContent = `❌ Import misslyckades: ${error.message}`;
                     statusEl.className = 'import-status error';
-                    btnEl.textContent = '📊 Välj CSV-fil';
+                    btnEl.textContent = '📊 Importera Tävlingsdata';
                     btnEl.disabled = false;
                 }
             }
             
+            // Fixed FileReader implementation for browser compatibility
             readFileAsText(file) {
                 return new Promise((resolve, reject) => {
                     const reader = new FileReader();
@@ -1167,23 +1163,78 @@
                 document.getElementById('csv-import-section').classList.add('hidden');
             }
             
-            exportData() {
-                const data = {
-                    version: '2.0',
-                    exportDate: new Date().toISOString(),
-                    competitions: this.competitions,
-                    participants: this.participants
+            showNotification(message, type = 'info', duration = 5000) {
+                const container = document.getElementById('toast-container');
+                const toast = document.createElement('div');
+                
+                const icons = {
+                    success: '✅',
+                    error: '❌',
+                    warning: '⚠️',
+                    info: 'ℹ️'
                 };
                 
-                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
+                toast.style.cssText = `
+                    background: var(--bg-primary);
+                    color: var(--text-primary);
+                    padding: var(--spacing-lg);
+                    border-radius: var(--radius-lg);
+                    box-shadow: var(--shadow-heavy);
+                    border: 1px solid var(--border-color);
+                    border-left: 4px solid var(--${type === 'success' ? 'success' : type === 'error' ? 'danger' : type === 'warning' ? 'warning' : 'primary'}-color);
+                    transform: translateX(calc(100% + 20px));
+                    transition: transform 0.25s ease;
+                    display: flex;
+                    align-items: center;
+                    gap: var(--spacing-md);
+                `;
                 
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `pekkas-pokal-backup-${new Date().toISOString().split('T')[0]}.json`;
-                a.click();
+                toast.innerHTML = `
+                    <span style="font-size: var(--font-size-lg);">${icons[type] || icons.info}</span>
+                    <span>${message}</span>
+                `;
                 
-                URL.revokeObjectURL(url);
+                container.appendChild(toast);
+                
+                // Show with animation
+                setTimeout(() => {
+                    toast.style.transform = 'translateX(0)';
+                }, 100);
+                
+                // Auto remove
+                setTimeout(() => {
+                    toast.style.transform = 'translateX(calc(100% + 20px))';
+                    setTimeout(() => {
+                        if (toast.parentNode) {
+                            toast.parentNode.removeChild(toast);
+                        }
+                    }, 300);
+                }, duration);
+            }
+            
+            async exportData() {
+                try {
+                    const data = {
+                        version: '2.0',
+                        exportDate: new Date().toISOString(),
+                        competitions: this.competitions,
+                        participants: this.participants
+                    };
+                    
+                    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `pekkas-pokal-backup-${new Date().toISOString().split('T')[0]}.json`;
+                    a.click();
+                    
+                    URL.revokeObjectURL(url);
+                    this.showNotification('Data exporterad!', 'success');
+                } catch (error) {
+                    console.error('Export failed:', error);
+                    this.showNotification('Fel vid export', 'error');
+                }
             }
             
             clearData() {
@@ -1206,7 +1257,7 @@
             }
         }
         
-        // Initialize app when DOM is ready
+        // Initialize the application
         let app;
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => {
