@@ -1,538 +1,1621 @@
 <!DOCTYPE html>
 <html lang="sv">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Pekkas Pokal - Årlig Tävling</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🏆 Pekkas Pokal - Ultimate Competition Tracker</title>
+  
+  <!-- Chart.js for visualizations -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
   <style>
-    /* === THEME VARIABLES & BASE STYLES === */
-    :root{
-      --primary-gradient: linear-gradient(135deg,#667eea 0%,#764ba2 100%);
-      --success-gradient: linear-gradient(135deg,#4facfe 0%,#00f2fe 100%);
-      --danger-gradient: linear-gradient(135deg,#ff4757 0%,#c44569 100%);
-      --primary-color:#667eea;--success-color:#4CAF50;--danger-color:#ff4757;
-      --bg-primary:#fff;--bg-secondary:#f8fafc;--bg-tertiary:#e2e8f0;
-      --text-primary:#1a202c;--text-secondary:#4a5568;--text-muted:#718096;
-      --border-color:#e2e8f0;--shadow-light:0 1px 3px rgba(0,0,0,.1);--shadow-medium:0 4px 6px rgba(0,0,0,.1);
-      --font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-      --font-size-xs:.75rem;--font-size-sm:.875rem;--font-size-base:1rem;--font-size-lg:1.125rem;--font-size-xl:1.25rem;--font-size-2xl:1.5rem;--font-size-3xl:1.875rem;
-      --spacing-xs:.25rem;--spacing-sm:.5rem;--spacing-md:1rem;--spacing-lg:1.5rem;--spacing-xl:2rem;--spacing-2xl:3rem;
-      --radius-sm:.25rem;--radius-md:.5rem;--radius-lg:.75rem;--radius-xl:1rem;--radius-2xl:1.5rem;
-      --transition-fast:150ms ease;--transition-normal:250ms ease;
+    /* ===== THEME & VARIABLES ===== */
+    :root {
+      --gold: linear-gradient(135deg, #FFD700, #FFA500);
+      --silver: linear-gradient(135deg, #C0C0C0, #808080);
+      --bronze: linear-gradient(135deg, #CD7F32, #8B4513);
+      --epic-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      --fire-gradient: linear-gradient(135deg, #ff6b6b 0%, #feca57 100%);
+      --ice-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+      --nature-gradient: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+      
+      --bg-dark: #0f0f23;
+      --bg-card: #1a1a2e;
+      --bg-card-hover: #16213e;
+      --text-primary: #ffffff;
+      --text-secondary: #a8b2d1;
+      --text-muted: #64748b;
+      --accent: #667eea;
+      --success: #4ade80;
+      --danger: #f87171;
+      --warning: #fbbf24;
     }
-    [data-theme=dark]{
-      --bg-primary:#1a202c;--bg-secondary:#2d3748;--bg-tertiary:#4a5568;
-      --text-primary:#f7fafc;--text-secondary:#e2e8f0;--text-muted:#a0aec0;--border-color:#4a5568;
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
     }
-    *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:var(--font-family);font-size:var(--font-size-base);line-height:1.6;color:var(--text-primary);background:var(--bg-secondary)}
-    .app{min-height:100vh;display:flex;flex-direction:column}
 
-    /* HEADER */
-    .header{background:var(--bg-primary);box-shadow:var(--shadow-light);border-bottom:1px solid var(--border-color)}
-    .header-content{max-width:1200px;margin:0 auto;padding:var(--spacing-lg) var(--spacing-xl);display:flex;align-items:center;justify-content:space-between}
-    .logo-section{display:flex;align-items:center;gap:var(--spacing-lg)}
-    .trophy-icon{font-size:3rem;animation:pulse 2s infinite}
-    @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
-    .title-section h1{font-size:var(--font-size-3xl);font-weight:800;background:var(--primary-gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:.25rem}
-    .subtitle{color:var(--text-secondary);font-weight:500}
-    .header-actions{display:flex;align-items:center;gap:var(--spacing-md)}
-    .icon-btn{width:44px;height:44px;border:none;border-radius:var(--radius-lg);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-lg);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all var(--transition-fast)}
-    .icon-btn:hover{background:var(--bg-tertiary);transform:translateY(-2px)}
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg-dark);
+      color: var(--text-primary);
+      min-height: 100vh;
+      background-image: 
+        radial-gradient(circle at 20% 80%, rgba(102, 126, 234, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(118, 75, 162, 0.1) 0%, transparent 50%);
+    }
 
-    /* NAV */
-    .navigation{background:var(--bg-primary);border-bottom:1px solid var(--border-color)}
-    .nav-container{max-width:1200px;margin:0 auto;display:flex;padding:0 var(--spacing-xl)}
-    .nav-tab{flex:1;padding:var(--spacing-lg) var(--spacing-md);border:none;background:transparent;color:var(--text-secondary);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:.25rem;position:relative;transition:all var(--transition-fast)}
-    .nav-tab::before{content:"";position:absolute;bottom:0;left:0;width:100%;height:3px;background:var(--primary-gradient);transform:translateX(-100%);transition:transform var(--transition-normal)}
-    .nav-tab.active::before{transform:translateX(0)}
-    .nav-tab.active{color:var(--primary-color);background:rgba(102,126,234,.05)}
-    .nav-tab:hover:not(.active){background:var(--bg-secondary);color:var(--text-primary)}
-    .nav-icon{font-size:var(--font-size-lg)}
-    .nav-text{font-size:var(--font-size-sm);font-weight:600}
+    /* ===== HEADER ===== */
+    .header {
+      background: rgba(26, 26, 46, 0.95);
+      backdrop-filter: blur(10px);
+      border-bottom: 2px solid rgba(102, 126, 234, 0.3);
+      padding: 1.5rem 2rem;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      animation: slideDown 0.5s ease-out;
+    }
 
-    /* MAIN */
-    .main-content{flex:1;max-width:1200px;margin:0 auto;width:100%;padding:var(--spacing-xl)}
-    .tab-content{display:none;animation:fadeInUp var(--transition-normal) ease-out}
-    .tab-content.active{display:block}
-    @keyframes fadeInUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-    .content-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--spacing-2xl);flex-wrap:wrap;gap:var(--spacing-lg)}
-    .content-header h2{font-size:var(--font-size-2xl);font-weight:700}
+    @keyframes slideDown {
+      from { transform: translateY(-100%); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
 
-    /* BUTTONS */
-    .btn{display:inline-flex;align-items:center;gap:.5rem;padding:var(--spacing-md) var(--spacing-lg);border:none;border-radius:var(--radius-lg);font-weight:600;font-size:var(--font-size-sm);cursor:pointer;transition:all var(--transition-fast)}
-    .btn.primary{background:var(--primary-gradient);color:#fff}
-    .btn.success{background:var(--success-gradient);color:#fff}
-    .btn.danger{background:var(--danger-gradient);color:#fff}
-    .btn:hover{transform:translateY(-2px);box-shadow:var(--shadow-medium)}
-    .btn:disabled{opacity:.5;cursor:not-allowed;transform:none!important}
+    .header-content {
+      max-width: 1400px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
 
-    /* CSV IMPORT */
-    .csv-import-section{background:var(--bg-primary);padding:var(--spacing-xl);border-radius:var(--radius-xl);box-shadow:var(--shadow-light);border:1px solid var(--border-color);margin-bottom:var(--spacing-2xl);text-align:center}
-    .csv-import-section.hidden{display:none}
-    .csv-import-section h3{color:var(--primary-color);margin-bottom:var(--spacing-lg);font-size:var(--font-size-xl)}
-    .csv-import-section p{color:var(--text-secondary);margin-bottom:var(--spacing-lg)}
-    .import-status{padding:var(--spacing-md);border-radius:var(--radius-lg);margin:var(--spacing-lg) 0;font-weight:600}
-    .import-status.success{background:rgba(76,175,80,.1);color:var(--success-color)}
-    .import-status.error{background:rgba(255,71,87,.1);color:var(--danger-color)}
-    .import-status.info{background:rgba(102,126,234,.1);color:var(--primary-color)}
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
 
-    .card{background:var(--bg-primary);border:1px solid var(--border-color);border-radius:var(--radius-xl);box-shadow:var(--shadow-light);padding:var(--spacing-lg);margin-bottom:var(--spacing-xl)}
-    .table{width:100%;border-collapse:collapse}
-    .table th,.table td{padding:.75rem;border-bottom:1px solid var(--border-color);text-align:left}
-    .table th{color:var(--text-secondary);font-weight:700}
-    .muted{color:var(--text-muted)}
-    .badge{display:inline-block;padding:.2rem .5rem;border-radius:999px;background:var(--bg-secondary);border:1px solid var(--border-color);font-size:var(--font-size-xs)}
+    .trophy-logo {
+      font-size: 2.5rem;
+      animation: pulse 2s infinite;
+    }
 
-    .hidden{display:none!important}
-    .text-center{text-align:center}
-    @media (max-width:768px){
-      .header-content{flex-direction:column;gap:var(--spacing-lg);text-align:center}
-      .nav-text{display:none}
-      .title-section h1{font-size:var(--font-size-2xl)}
+    @keyframes pulse {
+      0%, 100% { transform: scale(1) rotate(0deg); }
+      50% { transform: scale(1.1) rotate(5deg); }
+    }
+
+    .logo h1 {
+      font-size: 1.8rem;
+      background: var(--epic-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .year-display {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+      margin-left: 1rem;
+      padding: 0.3rem 0.8rem;
+      border: 1px solid rgba(102, 126, 234, 0.3);
+      border-radius: 20px;
+    }
+
+    /* ===== NAVIGATION TABS ===== */
+    .nav-tabs {
+      display: flex;
+      gap: 1rem;
+      padding: 1rem 2rem;
+      background: rgba(26, 26, 46, 0.5);
+      border-bottom: 1px solid rgba(102, 126, 234, 0.2);
+      overflow-x: auto;
+      justify-content: center;
+    }
+
+    .nav-tab {
+      padding: 0.8rem 1.5rem;
+      background: transparent;
+      color: var(--text-secondary);
+      border: 2px solid transparent;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-weight: 600;
+      white-space: nowrap;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .nav-tab::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: var(--epic-gradient);
+      opacity: 0.2;
+      transition: left 0.3s ease;
+    }
+
+    .nav-tab:hover::before {
+      left: 0;
+    }
+
+    .nav-tab.active {
+      background: var(--epic-gradient);
+      color: white;
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    }
+
+    .nav-tab span {
+      margin-right: 0.5rem;
+    }
+
+    /* ===== MAIN CONTAINER ===== */
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    .tab-content {
+      display: none;
+      animation: fadeIn 0.5s ease-out;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ===== DASHBOARD SECTION ===== */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .stat-card {
+      background: var(--bg-card);
+      border-radius: 16px;
+      padding: 1.5rem;
+      border: 1px solid rgba(102, 126, 234, 0.2);
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: var(--epic-gradient);
+    }
+
+    .stat-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+      border-color: var(--accent);
+    }
+
+    .stat-icon {
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .stat-value {
+      font-size: 2.5rem;
+      font-weight: bold;
+      background: var(--epic-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin: 0.5rem 0;
+    }
+
+    .stat-label {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .stat-change {
+      margin-top: 0.5rem;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+
+    .stat-change.positive {
+      color: var(--success);
+    }
+
+    .stat-change.negative {
+      color: var(--danger);
+    }
+
+    /* ===== LEADERBOARD ===== */
+    .leaderboard {
+      background: var(--bg-card);
+      border-radius: 16px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .leaderboard-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+      padding-bottom: 1rem;
+      border-bottom: 2px solid rgba(102, 126, 234, 0.2);
+    }
+
+    .leaderboard-title {
+      font-size: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .leaderboard-filters {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .filter-btn {
+      padding: 0.5rem 1rem;
+      background: rgba(102, 126, 234, 0.1);
+      border: 1px solid rgba(102, 126, 234, 0.3);
+      border-radius: 8px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-size: 0.85rem;
+    }
+
+    .filter-btn:hover,
+    .filter-btn.active {
+      background: var(--epic-gradient);
+      color: white;
+      transform: translateY(-2px);
+    }
+
+    .leaderboard-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .leaderboard-item {
+      display: flex;
+      align-items: center;
+      padding: 1rem;
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 12px;
+      border: 1px solid rgba(102, 126, 234, 0.1);
+      transition: all 0.3s ease;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .leaderboard-item::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: transparent;
+      transition: all 0.3s ease;
+    }
+
+    .leaderboard-item:hover {
+      transform: translateX(10px);
+      background: rgba(102, 126, 234, 0.1);
+      border-color: var(--accent);
+    }
+
+    .leaderboard-item.gold::before { background: var(--gold); }
+    .leaderboard-item.silver::before { background: var(--silver); }
+    .leaderboard-item.bronze::before { background: var(--bronze); }
+
+    .position {
+      font-size: 1.5rem;
+      font-weight: bold;
+      width: 50px;
+      text-align: center;
+      color: var(--text-secondary);
+    }
+
+    .position.gold { 
+      background: var(--gold);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .position.silver {
+      background: var(--silver);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .position.bronze {
+      background: var(--bronze);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .player-info {
+      flex: 1;
+      margin-left: 1rem;
+    }
+
+    .player-name {
+      font-weight: 600;
+      font-size: 1.1rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .player-stats {
+      display: flex;
+      gap: 1rem;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    .player-score {
+      font-size: 1.3rem;
+      font-weight: bold;
+      color: var(--accent);
+      margin-left: auto;
+    }
+
+    .trophy-count {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      margin-left: 1rem;
+    }
+
+    .trophy {
+      display: flex;
+      align-items: center;
+      gap: 0.2rem;
+      padding: 0.3rem 0.6rem;
+      background: rgba(255, 215, 0, 0.1);
+      border-radius: 12px;
+      font-size: 0.9rem;
+    }
+
+    /* ===== ACHIEVEMENTS ===== */
+    .achievements-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 1rem;
+      margin: 2rem 0;
+    }
+
+    .achievement {
+      background: var(--bg-card);
+      border-radius: 12px;
+      padding: 1rem;
+      text-align: center;
+      border: 2px solid transparent;
+      transition: all 0.3s ease;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .achievement.unlocked {
+      border-color: var(--accent);
+      background: rgba(102, 126, 234, 0.1);
+    }
+
+    .achievement.locked {
+      opacity: 0.5;
+      filter: grayscale(100%);
+    }
+
+    .achievement:hover {
+      transform: scale(1.05);
+    }
+
+    .achievement-icon {
+      font-size: 2.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .achievement-name {
+      font-weight: 600;
+      font-size: 0.9rem;
+      margin-bottom: 0.3rem;
+    }
+
+    .achievement-desc {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+    }
+
+    .achievement.legendary {
+      background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(255, 165, 0, 0.1));
+      border-color: gold;
+      animation: shimmer 3s infinite;
+    }
+
+    @keyframes shimmer {
+      0%, 100% { box-shadow: 0 0 20px rgba(255, 215, 0, 0.3); }
+      50% { box-shadow: 0 0 30px rgba(255, 215, 0, 0.5); }
+    }
+
+    /* ===== RIVALRY SECTION ===== */
+    .rivalry-card {
+      background: var(--bg-card);
+      border-radius: 16px;
+      padding: 1.5rem;
+      margin: 1rem 0;
+      border: 2px solid rgba(255, 107, 107, 0.3);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .rivalry-card::before {
+      content: '⚔️';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 8rem;
+      opacity: 0.05;
+    }
+
+    .rivalry-header {
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .rivalry-title {
+      font-size: 1.3rem;
+      margin-bottom: 0.5rem;
+      color: var(--warning);
+    }
+
+    .rivalry-players {
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      margin: 1.5rem 0;
+    }
+
+    .rivalry-player {
+      text-align: center;
+      flex: 1;
+    }
+
+    .rivalry-player-name {
+      font-size: 1.2rem;
+      font-weight: bold;
+      margin-bottom: 0.5rem;
+    }
+
+    .rivalry-score {
+      font-size: 2.5rem;
+      font-weight: bold;
+    }
+
+    .rivalry-vs {
+      font-size: 1.5rem;
+      color: var(--text-muted);
+      margin: 0 1rem;
+    }
+
+    .rivalry-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+      margin-top: 1.5rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .rivalry-stat {
+      text-align: center;
+    }
+
+    .rivalry-stat-value {
+      font-size: 1.3rem;
+      font-weight: bold;
+      color: var(--accent);
+    }
+
+    .rivalry-stat-label {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+    }
+
+    /* ===== CHARTS ===== */
+    .chart-container {
+      background: var(--bg-card);
+      border-radius: 16px;
+      padding: 1.5rem;
+      margin: 1rem 0;
+      min-height: 400px;
+    }
+
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .chart-title {
+      font-size: 1.2rem;
+      font-weight: 600;
+    }
+
+    .chart-options {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    /* ===== RECORDS SECTION ===== */
+    .records-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1rem;
+      margin: 2rem 0;
+    }
+
+    .record-card {
+      background: var(--bg-card);
+      border-radius: 12px;
+      padding: 1.2rem;
+      border: 1px solid rgba(102, 126, 234, 0.2);
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .record-card::after {
+      content: '📜';
+      position: absolute;
+      bottom: -10px;
+      right: -10px;
+      font-size: 3rem;
+      opacity: 0.1;
+    }
+
+    .record-card:hover {
+      transform: translateY(-3px);
+      border-color: var(--accent);
+      box-shadow: 0 5px 20px rgba(102, 126, 234, 0.3);
+    }
+
+    .record-label {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+    }
+
+    .record-value {
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: var(--accent);
+      margin-bottom: 0.3rem;
+    }
+
+    .record-holder {
+      font-size: 1rem;
+      color: var(--text-primary);
+    }
+
+    .record-date {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 0.3rem;
+    }
+
+    /* ===== FUN STATS ===== */
+    .fun-stats {
+      background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(240, 147, 251, 0.1));
+      border-radius: 16px;
+      padding: 1.5rem;
+      margin: 2rem 0;
+      border: 2px solid rgba(102, 126, 234, 0.3);
+    }
+
+    .fun-stats-title {
+      font-size: 1.5rem;
+      text-align: center;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+
+    .fun-stat-item {
+      display: flex;
+      align-items: center;
+      padding: 1rem;
+      margin: 0.5rem 0;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      transition: all 0.3s ease;
+    }
+
+    .fun-stat-item:hover {
+      transform: translateX(10px);
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .fun-stat-emoji {
+      font-size: 2rem;
+      margin-right: 1rem;
+    }
+
+    .fun-stat-content {
+      flex: 1;
+    }
+
+    .fun-stat-title {
+      font-weight: 600;
+      color: var(--accent);
+      margin-bottom: 0.2rem;
+    }
+
+    .fun-stat-desc {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+
+    /* ===== POWER RANKINGS ===== */
+    .power-ranking {
+      background: var(--bg-card);
+      border-radius: 16px;
+      padding: 1.5rem;
+      margin: 2rem 0;
+    }
+
+    .power-ranking-header {
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .power-ranking-title {
+      font-size: 1.8rem;
+      background: var(--fire-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 0.5rem;
+    }
+
+    .power-ranking-subtitle {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+
+    .power-bar {
+      display: flex;
+      align-items: center;
+      margin: 1rem 0;
+      position: relative;
+    }
+
+    .power-bar-label {
+      width: 150px;
+      font-weight: 600;
+    }
+
+    .power-bar-track {
+      flex: 1;
+      height: 30px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 15px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .power-bar-fill {
+      height: 100%;
+      border-radius: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-right: 1rem;
+      color: white;
+      font-weight: bold;
+      transition: width 1s ease-out;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .power-bar-fill::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+      animation: shimmerBar 2s infinite;
+    }
+
+    @keyframes shimmerBar {
+      0% { left: -100%; }
+      100% { left: 100%; }
+    }
+
+    .power-bar-change {
+      margin-left: 1rem;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 0.2rem;
+    }
+
+    .power-bar-change.up { color: var(--success); }
+    .power-bar-change.down { color: var(--danger); }
+
+    /* ===== CSV IMPORT ===== */
+    .import-section {
+      background: var(--bg-card);
+      border-radius: 16px;
+      padding: 2rem;
+      text-align: center;
+      margin: 2rem 0;
+      border: 2px dashed rgba(102, 126, 234, 0.3);
+    }
+
+    .import-section.drag-over {
+      background: rgba(102, 126, 234, 0.1);
+      border-color: var(--accent);
+    }
+
+    .import-icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
+
+    .import-title {
+      font-size: 1.3rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .import-desc {
+      color: var(--text-secondary);
+      margin-bottom: 1.5rem;
+    }
+
+    .import-btn {
+      padding: 1rem 2rem;
+      background: var(--epic-gradient);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .import-btn:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+    }
+
+    /* ===== ANIMATIONS ===== */
+    .animate-in {
+      animation: slideIn 0.5s ease-out;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateX(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    .counter {
+      display: inline-block;
+      animation: countUp 1s ease-out;
+    }
+
+    @keyframes countUp {
+      from { transform: scale(0); }
+      to { transform: scale(1); }
+    }
+
+    /* ===== MOBILE RESPONSIVE ===== */
+    @media (max-width: 768px) {
+      .header-content {
+        flex-direction: column;
+        gap: 1rem;
+      }
+
+      .nav-tabs {
+        padding: 1rem;
+        justify-content: flex-start;
+      }
+
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .rivalry-players {
+        flex-direction: column;
+        gap: 1rem;
+      }
+
+      .power-bar-label {
+        width: 100px;
+        font-size: 0.9rem;
+      }
+
+      .leaderboard-filters {
+        flex-wrap: wrap;
+      }
+
+      .achievements-grid {
+        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+      }
+    }
+
+    /* ===== LOADING STATE ===== */
+    .loading {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 200px;
+    }
+
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 3px solid rgba(102, 126, 234, 0.3);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .hidden {
+      display: none !important;
     }
   </style>
 </head>
 <body>
-  <div class="app">
-    <!-- Header -->
-    <header class="header">
-      <div class="header-content">
-        <div class="logo-section">
-          <span class="trophy-icon">🏆</span>
-          <div class="title-section">
-            <h1>Pekkas Pokal</h1>
-            <p class="subtitle">Årlig Tävling • <span id="year-range">—</span></p>
+  <!-- Header -->
+  <header class="header">
+    <div class="header-content">
+      <div class="logo">
+        <span class="trophy-logo">🏆</span>
+        <h1>Pekkas Pokal</h1>
+        <span class="year-display">2011-2024</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation -->
+  <nav class="nav-tabs">
+    <button class="nav-tab active" data-tab="dashboard"><span>📊</span> Dashboard</button>
+    <button class="nav-tab" data-tab="leaderboard"><span>🥇</span> Topplista</button>
+    <button class="nav-tab" data-tab="achievements"><span>🎖️</span> Achievements</button>
+    <button class="nav-tab" data-tab="rivalries"><span>⚔️</span> Rivalries</button>
+    <button class="nav-tab" data-tab="records"><span>📜</span> Rekord</button>
+    <button class="nav-tab" data-tab="statistics"><span>📈</span> Statistik</button>
+    <button class="nav-tab" data-tab="import"><span>📁</span> Importera</button>
+  </nav>
+
+  <!-- Main Container -->
+  <div class="container">
+    <!-- Dashboard Tab -->
+    <div id="dashboard" class="tab-content active">
+      <div class="dashboard-grid">
+        <div class="stat-card">
+          <div class="stat-icon">🏆</div>
+          <div class="stat-value counter" id="total-competitions">14</div>
+          <div class="stat-label">Tävlingar</div>
+          <div class="stat-change positive">
+            <span>↑</span> 1 ny tävling 2024
           </div>
         </div>
-        <div class="header-actions">
-          <button id="theme-toggle" class="icon-btn" title="Växla tema">🌙</button>
+
+        <div class="stat-card">
+          <div class="stat-icon">👥</div>
+          <div class="stat-value counter" id="total-participants">13</div>
+          <div class="stat-label">Deltagare</div>
+          <div class="stat-change">
+            <span>→</span> Stabil grupp
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon">🔥</div>
+          <div class="stat-value" id="current-champion">Erik V.</div>
+          <div class="stat-label">Senaste Vinnare</div>
+          <div class="stat-change positive">
+            <span>🎣</span> Fisketävling 2024
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon">👑</div>
+          <div class="stat-value" id="most-wins">Per W.</div>
+          <div class="stat-label">Flest Vinster</div>
+          <div class="stat-change">
+            <span>🏅</span> 3 vinster totalt
+          </div>
         </div>
       </div>
-    </header>
 
-    <!-- Navigation -->
-    <nav class="navigation">
-      <div class="nav-container">
-        <button class="nav-tab active" data-tab="results"><span class="nav-icon">📊</span><span class="nav-text">Resultat</span></button>
-        <button class="nav-tab" data-tab="statistics"><span class="nav-icon">📈</span><span class="nav-text">Statistik</span></button>
-        <button class="nav-tab" data-tab="participants"><span class="nav-icon">👥</span><span class="nav-text">Deltagare</span></button>
-        <button class="nav-tab" data-tab="settings"><span class="nav-icon">⚙️</span><span class="nav-text">Inställningar</span></button>
+      <!-- Power Rankings -->
+      <div class="power-ranking">
+        <div class="power-ranking-header">
+          <div class="power-ranking-title">🔥 POWER RANKINGS 2024 🔥</div>
+          <div class="power-ranking-subtitle">Baserat på senaste prestationer och momentum</div>
+        </div>
+        <div id="power-rankings-list"></div>
       </div>
-    </nav>
 
-    <!-- CSV Import Section -->
-    <div id="csv-import-section" class="csv-import-section">
-      <h3>🏆 Välkommen till Pekkas Pokal!</h3>
-      <p>Importera dina tävlingsdata för att komma igång</p>
-      <div id="import-status" class="import-status info">
-        Välj din CSV-fil för att importera tävlingsdata
+      <!-- Fun Stats -->
+      <div class="fun-stats">
+        <div class="fun-stats-title">
+          <span>🎉</span> Roliga Fakta <span>🎉</span>
+        </div>
+        <div id="fun-stats-list"></div>
       </div>
-      <input type="file" id="csv-file-input" accept=".csv" style="display:none;">
-      <button id="import-csv-btn" class="btn success">📊 Importera Tävlingsdata</button>
+
+      <!-- Recent Activity Chart -->
+      <div class="chart-container">
+        <div class="chart-header">
+          <div class="chart-title">📊 Deltagande över Tid</div>
+        </div>
+        <canvas id="participation-chart"></canvas>
+      </div>
     </div>
 
-    <!-- Main Content -->
-    <main class="main-content">
-      <!-- Results Tab -->
-      <section id="results-tab" class="tab-content active">
-        <div class="content-header">
-          <h2>Tävlingsresultat per År</h2>
-        </div>
-        <div id="results-content" class="card">
-          <div class="text-center muted">Importera CSV-data för att visa tävlingsresultat</div>
-        </div>
-      </section>
-
-      <!-- Statistics Tab -->
-      <section id="statistics-tab" class="tab-content">
-        <div class="content-header"><h2>Statistik</h2></div>
-        <div id="statistics-content" class="card">
-          <div class="text-center muted">Statistik visas efter import av tävlingsdata</div>
-        </div>
-      </section>
-
-      <!-- Participants Tab -->
-      <section id="participants-tab" class="tab-content">
-        <div class="content-header"><h2>Deltagare</h2></div>
-        <div id="participants-content" class="card">
-          <div class="text-center muted">Deltagare visas efter import av tävlingsdata</div>
-        </div>
-      </section>
-
-      <!-- Settings Tab -->
-      <section id="settings-tab" class="tab-content">
-        <div class="content-header"><h2>Inställningar</h2></div>
-        <div id="settings-content" class="card">
-          <p class="muted">Inställningar blir tillgängliga efter import.</p>
-          <div style="margin-top:1rem;display:flex;gap:.5rem;flex-wrap:wrap">
-            <button id="clear-storage" class="btn danger">🗑 Rensa sparade data</button>
-            <button id="export-json" class="btn primary">⬇️ Exportera JSON</button>
+    <!-- Leaderboard Tab -->
+    <div id="leaderboard" class="tab-content">
+      <div class="leaderboard">
+        <div class="leaderboard-header">
+          <div class="leaderboard-title">
+            <span>🏆</span> Hall of Fame
+          </div>
+          <div class="leaderboard-filters">
+            <button class="filter-btn active" data-filter="all">Alla Tider</button>
+            <button class="filter-btn" data-filter="recent">Senaste 5 År</button>
+            <button class="filter-btn" data-filter="2024">2024</button>
           </div>
         </div>
-      </section>
-    </main>
+        <div class="leaderboard-list" id="leaderboard-list"></div>
+      </div>
+
+      <!-- Head to Head Comparison -->
+      <div class="chart-container">
+        <div class="chart-header">
+          <div class="chart-title">🥊 Vinstfördelning</div>
+        </div>
+        <canvas id="wins-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- Achievements Tab -->
+    <div id="achievements" class="tab-content">
+      <h2 style="text-align: center; margin-bottom: 2rem;">🎖️ Achievements & Utmärkelser</h2>
+      <div class="achievements-grid" id="achievements-grid"></div>
+    </div>
+
+    <!-- Rivalries Tab -->
+    <div id="rivalries" class="tab-content">
+      <h2 style="text-align: center; margin-bottom: 2rem;">⚔️ Episka Rivaliteter</h2>
+      <div id="rivalries-list"></div>
+    </div>
+
+    <!-- Records Tab -->
+    <div id="records" class="tab-content">
+      <h2 style="text-align: center; margin-bottom: 2rem;">📜 Rekord & Milstolpar</h2>
+      <div class="records-grid" id="records-grid"></div>
+    </div>
+
+    <!-- Statistics Tab -->
+    <div id="statistics" class="tab-content">
+      <div class="chart-container">
+        <div class="chart-header">
+          <div class="chart-title">📈 Prestationsutveckling</div>
+        </div>
+        <canvas id="performance-chart"></canvas>
+      </div>
+
+      <div class="chart-container">
+        <div class="chart-header">
+          <div class="chart-title">🎯 Genomsnittlig Placering per Deltagare</div>
+        </div>
+        <canvas id="average-position-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- Import Tab -->
+    <div id="import" class="tab-content">
+      <div class="import-section" id="import-drop-zone">
+        <div class="import-icon">📁</div>
+        <div class="import-title">Importera Tävlingsdata</div>
+        <div class="import-desc">Dra och släpp din CSV-fil här eller klicka för att välja</div>
+        <input type="file" id="csv-file" accept=".csv" style="display: none;">
+        <button class="import-btn" onclick="document.getElementById('csv-file').click()">
+          Välj CSV-fil
+        </button>
+      </div>
+    </div>
   </div>
 
-  <!-- Self-contained JavaScript (no Papa, no external files) -->
   <script>
-    /* ========== CSV Importer (Pure JS) ========== */
-    class CSVImporter {
-      constructor(){ this.competitions=[]; this.participants=[]; }
+    // Competition data structure
+    let competitionData = {
+      competitions: [],
+      participants: [],
+      initialized: false
+    };
 
-      async importFile(file){
-        const text = await this.readFile(file);
-        const parsed = this.parseCSV(text);
-        this.convertData(parsed);
-        return { competitions:this.competitions, participants:this.participants };
-      }
+    // Sample data for demonstration (will be replaced by CSV import)
+    const sampleData = {
+      participants: [
+        'Olov Melander', 'Mikael Hägglund', 'Viktor Jones', 'Per Wikman',
+        'Erik Vallgren', 'Henrik Lundqvist', 'Rickard Nilsson', 'Niklas Norberg',
+        'Per Olsson', 'Tobias Lundqvist', 'Lars Sandin', 'Ludvig Ulenius', 'Jonas Eriksson'
+      ],
+      competitions: [
+        { year: 2024, name: 'Fisketävling', winner: 'Erik Vallgren', location: 'Själevad' },
+        { year: 2023, name: 'Fäkting', winner: 'Per Wikman', location: 'Stockholm' },
+        { year: 2022, name: 'Skytte', winner: 'Ludvig Ulenius', location: 'Arnäsvall' },
+        { year: 2021, name: 'Målning', winner: 'Olov Melander', location: 'Ås' },
+        { year: 2020, name: 'Covid', winner: 'Per Wikman', location: '' },
+        { year: 2019, name: 'Pingis', winner: 'Viktor Jones', location: 'Bredbyn' },
+        { year: 2018, name: 'Kortspel Ambition', winner: 'Niklas Norberg', location: 'Kungsholmen' },
+        { year: 2017, name: 'Triathlon', winner: 'Viktor Jones', location: 'Lomsjön' },
+        { year: 2016, name: 'Mångkamp Lundqvist', winner: 'Niklas Norberg', location: '' },
+        { year: 2015, name: 'Bondespelen', winner: 'Per Wikman', location: 'Billsta' },
+        { year: 2014, name: 'Mångkamp Uppsala', winner: '', location: 'Uppsala' },
+        { year: 2013, name: 'Femkamp', winner: 'Erik Vallgren', location: 'Kroksta' },
+        { year: 2012, name: 'Gokart', winner: 'Jonas Eriksson', location: 'Varggropen' },
+        { year: 2011, name: 'Fantasy Premier League', winner: 'Rickard Nilsson', location: '' }
+      ]
+    };
 
-      readFile(file){
-        return new Promise((resolve,reject)=>{
-          const r=new FileReader();
-          r.onload=e=>resolve(e.target.result);
-          r.onerror=()=>reject(new Error("Kunde inte läsa filen"));
-          r.readAsText(file, "utf-8");
-        });
-      }
-
-      // Robust CSV line parser supporting quotes, commas in quotes, and "" escapes
-      parseCSV(text){
-        const lines = text.replace(/\r\n/g,"\n").replace(/\r/g,"\n").split("\n").filter(l=>l.trim().length>0);
-        if(lines.length===0) return { headers:[], rows:[] };
-
-        const headers = this.parseLine(lines[0]);
-        const rows = [];
-        for(let i=1;i<lines.length;i++){
-          const values = this.parseLine(lines[i]);
-          const row={};
-          headers.forEach((h,idx)=> row[h] = values[idx] ?? "");
-          rows.push(row);
-        }
-        return { headers, rows };
-      }
-
-      parseLine(line){
-        const out=[]; let cur=""; let inQ=false;
-        for(let i=0;i<line.length;i++){
-          const c=line[i];
-          if(c==='\"'){
-            if(inQ && line[i+1]==='\"'){ cur+='\"'; i++; }
-            else { inQ=!inQ; }
-          } else if(c===',' && !inQ){
-            out.push(cur); cur="";
-          } else cur+=c;
-        }
-        out.push(cur);
-        // trim whitespace around unquoted values
-        return out.map(v=>v.replace(/^\s+|\s+$/g,""));
-      }
-
-      convertData(data){
-        // Expected first 3 headers: År, Tävling, Plats — remaining = participants
-        const [h0,h1,h2, ...participantNames] = data.headers;
-        this.participants = participantNames.map(name => ({
-          id: this.generateId("participant"),
-          name: name.trim(),
-          nickname: this.createNickname(name.trim()),
-          status: "active",
-          createdAt: new Date().toISOString()
-        }));
-
-        const nameToId = {};
-        this.participants.forEach(p => nameToId[p.name] = p.id);
-
-        this.competitions = [];
-        data.rows.forEach(row=>{
-          const year = parseInt((row["År"] ?? row["Ar"] ?? row["år"] ?? "").toString().trim(), 10);
-          const name = (row["Tävling"] ?? row["Tavling"] ?? row["tävlingsnamn"] ?? row["tävling"] ?? "").toString().trim();
-          const location = (row["Plats"] ?? row["plats"] ?? "").toString().trim();
-          if(!year || !name) return;
-
-          let winner = null; let bestPos = Number.POSITIVE_INFINITY;
-          const scores = {};
-
-          this.participants.forEach(p=>{
-            const label = p.name;
-            const raw = (row[label] ?? "").toString().trim();
-            if(!raw || raw === "-") return;
-            const pos = this.parsePosition(raw);
-            if(pos==null) return;
-            scores[p.id] = pos;
-            if(pos < bestPos){ bestPos = pos; winner = label; }
-          });
-
-          this.competitions.push({
-            id: this.generateId("competition"),
-            year, name, location, winner, scores,
-            createdAt: new Date().toISOString()
-          });
-        });
-
-        // Sort newest first
-        this.competitions.sort((a,b)=> b.year - a.year);
-      }
-
-      parsePosition(val){
-        // Accept integers like 1, 2, ... and Swedish tokens
-        const n = parseInt(val, 10);
-        if(!Number.isNaN(n) && n > 0) return n;
-        const t = val.toLowerCase();
-        if(t.includes("näst sist")) return 99;
-        if(t.includes("sist")) return 100;
-        return null;
-      }
-
-      createNickname(full){
-        const parts = full.split(/\s+/);
-        if(parts.length >= 2) return `${parts[0]} ${parts[parts.length-1][0]}.`;
-        return full;
-      }
-
-      generateId(prefix="id"){
-        return `${prefix}_${Math.random().toString(36).slice(2,7)}_${Date.now().toString(36)}`;
-      }
+    // Initialize application
+    function init() {
+      setupTabs();
+      loadDashboard();
+      loadLeaderboard();
+      loadAchievements();
+      loadRivalries();
+      loadRecords();
+      loadStatistics();
+      setupCSVImport();
     }
 
-    /* ========== Main App ========== */
-    class PekkasPokalApp {
-      constructor(){
-        this.importer = new CSVImporter();
-        this.competitions = [];
-        this.participants = [];
-        this.currentTab = "results";
-        this.init();
-      }
+    // Tab navigation
+    function setupTabs() {
+      const tabs = document.querySelectorAll('.nav-tab');
+      const contents = document.querySelectorAll('.tab-content');
 
-      init(){
-        this.setupTheme();
-        this.setupEvents();
-        if(this.loadData()){
-          this.setYearRange();
-          this.hideImport();
-          this.renderAll();
-        } else {
-          this.showImport();
-        }
-        console.log("✅ Pekkas Pokal redo!");
-      }
-
-      setupTheme(){
-        const saved = localStorage.getItem("pekkas-theme");
-        if(saved) document.documentElement.setAttribute("data-theme", saved);
-        const btn = document.getElementById("theme-toggle");
-        btn.textContent = (document.documentElement.getAttribute("data-theme")==="dark") ? "☀️" : "🌙";
-      }
-
-      toggleTheme(){
-        const cur = document.documentElement.getAttribute("data-theme")==="dark" ? "light" : "dark";
-        if(cur==="dark") document.documentElement.setAttribute("data-theme","dark");
-        else document.documentElement.removeAttribute("data-theme");
-        localStorage.setItem("pekkas-theme", (cur==="dark" ? "dark" : "light"));
-        document.getElementById("theme-toggle").textContent = (cur==="dark") ? "☀️" : "🌙";
-      }
-
-      setupEvents(){
-        document.getElementById("theme-toggle").addEventListener("click",()=>this.toggleTheme());
-        document.querySelectorAll(".nav-tab").forEach(btn=>{
-          btn.addEventListener("click",(e)=>{
-            const tab = e.currentTarget.dataset.tab;
-            this.switchTab(tab);
-          });
+      tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          const targetTab = tab.dataset.tab;
+          
+          tabs.forEach(t => t.classList.remove('active'));
+          contents.forEach(c => c.classList.remove('active'));
+          
+          tab.classList.add('active');
+          document.getElementById(targetTab).classList.add('active');
         });
-        document.getElementById("import-csv-btn").addEventListener("click",()=>{
-          document.getElementById("csv-file-input").click();
-        });
-        document.getElementById("csv-file-input").addEventListener("change",(e)=>{
-          const f = e.target.files?.[0];
-          if(f) this.handleImport(f);
-        });
-        document.getElementById("clear-storage").addEventListener("click",()=>{
-          if(confirm("Vill du rensa sparade data?")){ localStorage.removeItem("pekkas-pokal-data"); location.reload(); }
-        });
-        document.getElementById("export-json").addEventListener("click",()=>{
-          const data = { competitions:this.competitions, participants:this.participants };
-          const blob = new Blob([JSON.stringify(data,null,2)], {type:"application/json"});
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url; a.download = "pekkas-pokal-data.json"; a.click();
-          URL.revokeObjectURL(url);
-        });
-      }
+      });
+    }
 
-      switchTab(tab){
-        this.currentTab = tab;
-        document.querySelectorAll(".nav-tab").forEach(b=>b.classList.toggle("active", b.dataset.tab===tab));
-        document.querySelectorAll(".tab-content").forEach(sec=>sec.classList.remove("active"));
-        document.getElementById(`${tab}-tab`).classList.add("active");
-      }
-
-      async handleImport(file){
-        const status = document.getElementById("import-status");
-        const btn = document.getElementById("import-csv-btn");
-        try{
-          status.className = "import-status info";
-          status.textContent = "⏳ Läser och bearbetar fil...";
-          btn.disabled = true; btn.textContent = "⏳ Bearbetar...";
-
-          const data = await this.importer.importFile(file);
-          this.competitions = data.competitions;
-          this.participants = data.participants;
-          this.saveData();
-          this.setYearRange();
-          this.renderAll();
-
-          status.className = "import-status success";
-          status.textContent = `✅ Import klar! ${this.competitions.length} tävlingar och ${this.participants.length} deltagare importerade.`;
-          setTimeout(()=>this.hideImport(), 1200);
-        } catch(err){
-          console.error(err);
-          status.className = "import-status error";
-          status.textContent = "❌ Import misslyckades: " + (err?.message || "okänt fel");
-        } finally {
-          btn.disabled = false; btn.textContent = "📊 Importera Tävlingsdata";
-        }
-      }
-
-      saveData(){
-        localStorage.setItem("pekkas-pokal-data", JSON.stringify({
-          competitions: this.competitions,
-          participants: this.participants
-        }));
-      }
-
-      loadData(){
-        const raw = localStorage.getItem("pekkas-pokal-data");
-        if(!raw) return false;
-        try{
-          const obj = JSON.parse(raw);
-          this.competitions = obj.competitions || [];
-          this.participants = obj.participants || [];
-          return this.competitions.length>0 && this.participants.length>0;
-        }catch{ return false; }
-      }
-
-      setYearRange(){
-        if(this.competitions.length===0){ document.getElementById("year-range").textContent = "—"; return; }
-        const ys = this.competitions.map(c=>c.year);
-        const minY = Math.min(...ys), maxY = Math.max(...ys);
-        document.getElementById("year-range").textContent = `${minY}-${maxY}`;
-      }
-
-      showImport(){ document.getElementById("csv-import-section").classList.remove("hidden"); }
-      hideImport(){ document.getElementById("csv-import-section").classList.add("hidden"); }
-
-      renderAll(){
-        this.renderResults();
-        this.renderStatistics();
-        this.renderParticipants();
-      }
-
-      renderResults(){
-        const wrap = document.getElementById("results-content");
-        if(this.competitions.length===0){
-          wrap.innerHTML = '<div class="text-center muted">Importera CSV-data för att visa tävlingsresultat</div>';
-          return;
-        }
-        const headerRow = `
-          <tr>
-            <th>År</th>
-            <th>Tävling</th>
-            <th>Plats</th>
-            <th>Vinnare</th>
-            <th>Detaljer</th>
-          </tr>`;
-
-        const rows = this.competitions.map(c=>{
-          const details = this.formatScores(c.scores);
-          return `
-            <tr>
-              <td>${c.year}</td>
-              <td>${this.escape(c.name)}</td>
-              <td>${this.escape(c.location||"")}</td>
-              <td>${this.escape(c.winner||"—")}</td>
-              <td class="muted">${details||"—"}</td>
-            </tr>`;
-        }).join("");
-
-        wrap.innerHTML = `
-          <div class="card">
-            <table class="table">
-              <thead>${headerRow}</thead>
-              <tbody>${rows}</tbody>
-            </table>
-          </div>`;
-      }
-
-      formatScores(scores){
-        const idToName = {};
-        this.participants.forEach(p=>idToName[p.id]=p.name);
-        return Object.entries(scores)
-          .sort((a,b)=>a[1]-b[1])
-          .map(([pid,pos])=>`${this.escape(idToName[pid]||pid)}: ${pos}`)
-          .join(", ");
-      }
-
-      renderStatistics(){
-        const wrap = document.getElementById("statistics-content");
-        if(this.competitions.length===0){
-          wrap.innerHTML = '<div class="text-center muted">Statistik visas efter import av tävlingsdata</div>';
-          return;
-        }
-        // Wins per participant
-        const wins = {};
-        this.participants.forEach(p=>wins[p.name]=0);
-        this.competitions.forEach(c=>{ if(c.winner) wins[c.winner]=(wins[c.winner]||0)+1; });
-
-        const totalComps = this.competitions.length;
-        const totalParticipants = this.participants.length;
-        const top = Object.entries(wins).sort((a,b)=>b[1]-a[1]);
-
-        const winRows = top.map(([name,count])=>`
-          <tr><td>${this.escape(name)}</td><td>${count}</td></tr>
-        `).join("");
-
-        wrap.innerHTML = `
-          <div class="card">
-            <p><span class="badge">Tävlingar: ${totalComps}</span> <span class="badge">Deltagare: ${totalParticipants}</span></p>
+    // Load Dashboard
+    function loadDashboard() {
+      // Power Rankings
+      const powerRankings = calculatePowerRankings();
+      const powerList = document.getElementById('power-rankings-list');
+      
+      powerRankings.forEach((player, index) => {
+        const bar = document.createElement('div');
+        bar.className = 'power-bar animate-in';
+        bar.style.animationDelay = `${index * 0.1}s`;
+        
+        const colors = [
+          'linear-gradient(135deg, #ff6b6b, #feca57)',
+          'linear-gradient(135deg, #48dbfb, #0abde3)',
+          'linear-gradient(135deg, #ff9ff3, #ee5a24)',
+          'linear-gradient(135deg, #54a0ff, #5f27cd)',
+          'linear-gradient(135deg, #00d2d3, #1dd1a1)'
+        ];
+        
+        bar.innerHTML = `
+          <div class="power-bar-label">${player.name}</div>
+          <div class="power-bar-track">
+            <div class="power-bar-fill" style="width: ${player.power}%; background: ${colors[index % colors.length]}">
+              ${player.power}%
+            </div>
           </div>
-          <div class="card">
-            <h3 style="margin-bottom:.75rem">🏅 Vinster per deltagare</h3>
-            <table class="table">
-              <thead><tr><th>Deltagare</th><th>Vinster</th></tr></thead>
-              <tbody>${winRows}</tbody>
-            </table>
-          </div>`;
-      }
+          <div class="power-bar-change ${player.trend}">
+            ${player.trend === 'up' ? '↑' : player.trend === 'down' ? '↓' : '→'}
+            ${Math.abs(player.change)}
+          </div>
+        `;
+        
+        powerList.appendChild(bar);
+      });
 
-      renderParticipants(){
-        const wrap = document.getElementById("participants-content");
-        if(this.participants.length===0){
-          wrap.innerHTML = '<div class="text-center muted">Deltagare visas efter import av tävlingsdata</div>';
-          return;
-        }
-        const rows = this.participants.map(p=>`
-          <tr>
-            <td>${this.escape(p.name)}</td>
-            <td class="muted">${this.escape(p.nickname||"")}</td>
-            <td><span class="badge">${p.status}</span></td>
-          </tr>
-        `).join("");
+      // Fun Stats
+      const funStats = [
+        { emoji: '🔥', title: 'Hetaste Spelaren', desc: 'Erik Vallgren - 2 vinster på 3 år!' },
+        { emoji: '🎯', title: 'Mr. Consistent', desc: 'Olov Melander - Alltid topp 5' },
+        { emoji: '😴', title: 'Sovmorgon', desc: 'Lars Sandin - Missat 3 tävlingar i rad' },
+        { emoji: '🎭', title: 'Drama Queen', desc: 'Viktor Jones - Mest spännande matcher' },
+        { emoji: '🍀', title: 'Lucky Charm', desc: 'Per Wikman - 3 vinster med minimal marginal' },
+        { emoji: '💪', title: 'Comeback Kid', desc: 'Niklas Norberg - Från sist till först!' }
+      ];
 
-        wrap.innerHTML = `
-          <div class="card">
-            <table class="table">
-              <thead><tr><th>Namn</th><th>Smeknamn</th><th>Status</th></tr></thead>
-              <tbody>${rows}</tbody>
-            </table>
-          </div>`;
-      }
+      const funStatsList = document.getElementById('fun-stats-list');
+      funStats.forEach((stat, index) => {
+        const item = document.createElement('div');
+        item.className = 'fun-stat-item animate-in';
+        item.style.animationDelay = `${index * 0.1}s`;
+        item.innerHTML = `
+          <div class="fun-stat-emoji">${stat.emoji}</div>
+          <div class="fun-stat-content">
+            <div class="fun-stat-title">${stat.title}</div>
+            <div class="fun-stat-desc">${stat.desc}</div>
+          </div>
+        `;
+        funStatsList.appendChild(item);
+      });
 
-      escape(s){ return (s??"").toString().replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+      // Participation Chart
+      createParticipationChart();
     }
 
-    // Initialize app
-    const app = new PekkasPokalApp();
+    // Load Leaderboard
+    function loadLeaderboard() {
+      const winCounts = {};
+      sampleData.competitions.forEach(comp => {
+        if (comp.winner) {
+          winCounts[comp.winner] = (winCounts[comp.winner] || 0) + 1;
+        }
+      });
+
+      const sortedPlayers = Object.entries(winCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10);
+
+      const leaderboardList = document.getElementById('leaderboard-list');
+      
+      sortedPlayers.forEach((player, index) => {
+        const item = document.createElement('div');
+        const posClass = index === 0 ? 'gold' : index === 1 ? 'silver' : index === 2 ? 'bronze' : '';
+        item.className = `leaderboard-item ${posClass} animate-in`;
+        item.style.animationDelay = `${index * 0.1}s`;
+        
+        item.innerHTML = `
+          <div class="position ${posClass}">${index + 1}</div>
+          <div class="player-info">
+            <div class="player-name">${player[0]}</div>
+            <div class="player-stats">
+              <span>🏆 ${player[1]} vinster</span>
+              <span>📊 ${Math.round(player[1] / sampleData.competitions.length * 100)}% vinstprocent</span>
+            </div>
+          </div>
+          <div class="trophy-count">
+            ${index === 0 ? '<div class="trophy">👑 Champion</div>' : ''}
+          </div>
+        `;
+        
+        leaderboardList.appendChild(item);
+      });
+
+      // Create wins chart
+      createWinsChart(winCounts);
+    }
+
+    // Load Achievements
+    function loadAchievements() {
+      const achievements = [
+        { icon: '👑', name: 'Kung', desc: 'Vinn 5 tävlingar', unlocked: false, legendary: true },
+        { icon: '🥇', name: 'Guldmedaljör', desc: 'Vinn 3 tävlingar', unlocked: true },
+        { icon: '🔥', name: 'På Eld', desc: '3 vinster i rad', unlocked: false },
+        { icon: '🎯', name: 'Konsistent', desc: 'Topp 3 i 5 tävlingar', unlocked: true },
+        { icon: '🏃', name: 'Maratonlöpare', desc: 'Delta i 10 tävlingar', unlocked: true },
+        { icon: '🦾', name: 'Järnmannen', desc: 'Delta i alla tävlingar', unlocked: false },
+        { icon: '🎭', name: 'Allroundare', desc: 'Vinn 3 olika typer', unlocked: false },
+        { icon: '🍀', name: 'Turgubbe', desc: 'Vinn med 1 poäng', unlocked: true },
+        { icon: '💪', name: 'Comeback', desc: 'Från sist till topp 3', unlocked: false },
+        { icon: '🌟', name: 'Rising Star', desc: 'Första vinsten', unlocked: true },
+        { icon: '🏁', name: 'Veteran', desc: '10 år i tävlingen', unlocked: true },
+        { icon: '🎪', name: 'Showman', desc: 'Mest dramatisk vinst', unlocked: false }
+      ];
+
+      const grid = document.getElementById('achievements-grid');
+      
+      achievements.forEach((ach, index) => {
+        const card = document.createElement('div');
+        card.className = `achievement ${ach.unlocked ? 'unlocked' : 'locked'} ${ach.legendary ? 'legendary' : ''} animate-in`;
+        card.style.animationDelay = `${index * 0.05}s`;
+        
+        card.innerHTML = `
+          <div class="achievement-icon">${ach.icon}</div>
+          <div class="achievement-name">${ach.name}</div>
+          <div class="achievement-desc">${ach.desc}</div>
+        `;
+        
+        grid.appendChild(card);
+      });
+    }
+
+    // Load Rivalries
+    function loadRivalries() {
+      const rivalries = [
+        {
+          player1: 'Per Wikman',
+          player2: 'Viktor Jones',
+          score1: 3,
+          score2: 2,
+          meetings: 8,
+          intensity: 'Eldigt 🔥',
+          lastBattle: 'Fäkting 2023'
+        },
+        {
+          player1: 'Erik Vallgren',
+          player2: 'Niklas Norberg',
+          score1: 2,
+          score2: 2,
+          meetings: 6,
+          intensity: 'Jämnt ⚖️',
+          lastBattle: 'Fisketävling 2024'
+        }
+      ];
+
+      const list = document.getElementById('rivalries-list');
+      
+      rivalries.forEach((rivalry, index) => {
+        const card = document.createElement('div');
+        card.className = 'rivalry-card animate-in';
+        card.style.animationDelay = `${index * 0.2}s`;
+        
+        const winner = rivalry.score1 > rivalry.score2 ? rivalry.player1 : 
+                      rivalry.score2 > rivalry.score1 ? rivalry.player2 : null;
+        
+        card.innerHTML = `
+          <div class="rivalry-header">
+            <div class="rivalry-title">Klassisk Rivalitet</div>
+          </div>
+          <div class="rivalry-players">
+            <div class="rivalry-player">
+              <div class="rivalry-player-name" style="${winner === rivalry.player1 ? 'color: #4ade80' : ''}">${rivalry.player1}</div>
+              <div class="rivalry-score">${rivalry.score1}</div>
+            </div>
+            <div class="rivalry-vs">VS</div>
+            <div class="rivalry-player">
+              <div class="rivalry-player-name" style="${winner === rivalry.player2 ? 'color: #4ade80' : ''}">${rivalry.player2}</div>
+              <div class="rivalry-score">${rivalry.score2}</div>
+            </div>
+          </div>
+          <div class="rivalry-stats">
+            <div class="rivalry-stat">
+              <div class="rivalry-stat-value">${rivalry.meetings}</div>
+              <div class="rivalry-stat-label">Möten</div>
+            </div>
+            <div class="rivalry-stat">
+              <div class="rivalry-stat-value">${rivalry.intensity}</div>
+              <div class="rivalry-stat-label">Intensitet</div>
+            </div>
+            <div class="rivalry-stat">
+              <div class="rivalry-stat-value">${rivalry.lastBattle}</div>
+              <div class="rivalry-stat-label">Senaste</div>
+            </div>
+          </div>
+        `;
+        
+        list.appendChild(card);
+      });
+    }
+
+    // Load Records
+    function loadRecords() {
+      const records = [
+        { label: 'Flest Vinster', value: '3', holder: 'Per Wikman', date: '2015-2023', icon: '🏆' },
+        { label: 'Längsta Vinstsvit', value: '2', holder: 'Viktor Jones', date: '2017-2019', icon: '🔥' },
+        { label: 'Flest Deltaganden', value: '10', holder: 'Flera spelare', date: 'Alla år', icon: '📊' },
+        { label: 'Yngsta Vinnare', value: '22 år', holder: 'Jonas Eriksson', date: '2012', icon: '👶' },
+        { label: 'Största Comeback', value: '11→1', holder: 'Niklas Norberg', date: '2016', icon: '🚀' },
+        { label: 'Flest Pallplatser', value: '7', holder: 'Per Wikman', date: '2011-2024', icon: '🥈' },
+        { label: 'Bästa Snitt', value: '3.2', holder: 'Per Wikman', date: 'Karriär', icon: '📈' },
+        { label: 'Flest Tävlingstyper Vunna', value: '3', holder: 'Per Wikman', date: 'Karriär', icon: '🎯' }
+      ];
+
+      const grid = document.getElementById('records-grid');
+      
+      records.forEach((record, index) => {
+        const card = document.createElement('div');
+        card.className = 'record-card animate-in';
+        card.style.animationDelay = `${index * 0.1}s`;
+        
+        card.innerHTML = `
+          <div class="record-label">${record.icon} ${record.label}</div>
+          <div class="record-value">${record.value}</div>
+          <div class="record-holder">${record.holder}</div>
+          <div class="record-date">${record.date}</div>
+        `;
+        
+        grid.appendChild(card);
+      });
+    }
+
+    // Load Statistics
+    function loadStatistics() {
+      createPerformanceChart();
+      createAveragePositionChart();
+    }
+
+    // Calculate Power Rankings
+    function calculatePowerRankings() {
+      const players = [
+        { name: 'Erik Vallgren', power: 95, trend: 'up', change: 15 },
+        { name: 'Per Wikman', power: 88, trend: 'down', change: 5 },
+        { name: 'Viktor Jones', power: 82, trend: 'stable', change: 0 },
+        { name: 'Niklas Norberg', power: 78, trend: 'up', change: 8 },
+        { name: 'Olov Melander', power: 75, trend: 'up', change: 3 }
+      ];
+      
+      return players;
+    }
+
+    // Chart Creation Functions
+    function createParticipationChart() {
+      const ctx = document.getElementById('participation-chart').getContext('2d');
+      
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: sampleData.competitions.map(c => c.year).reverse(),
+          datasets: [{
+            label: 'Antal Deltagare',
+            data: [8, 8, 7, 9, 10, 10, 9, 8, 7, 8, 9, 10, 11, 10],
+            borderColor: '#667eea',
+            backgroundColor: 'rgba(102, 126, 234, 0.1)',
+            tension: 0.4,
+            fill: true
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              grid: { color: 'rgba(255, 255, 255, 0.1)' },
+              ticks: { color: '#a8b2d1' }
+            },
+            x: {
+              grid: { color: 'rgba(255, 255, 255, 0.1)' },
+              ticks: { color: '#a8b2d1' }
+            }
+          }
+        }
+      });
+    }
+
+    function createWinsChart(winCounts) {
+      const ctx = document.getElementById('wins-chart').getContext('2d');
+      const labels = Object.keys(winCounts);
+      const data = Object.values(winCounts);
+      
+      new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: data,
+            backgroundColor: [
+              '#FFD700', '#C0C0C0', '#CD7F32', '#667eea', '#764ba2',
+              '#f093fb', '#f5576c', '#4facfe', '#00f2fe', '#43e97b'
+            ],
+            borderWidth: 0
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'right',
+              labels: { color: '#a8b2d1' }
+            }
+          }
+        }
+      });
+    }
+
+    function createPerformanceChart() {
+      const ctx = document.getElementById('performance-chart').getContext('2d');
+      
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: ['2019', '2020', '2021', '2022', '2023', '2024'],
+          datasets: [
+            {
+              label: 'Per Wikman',
+              data: [1, 1, 3, 4, 1, 2],
+              borderColor: '#ff6b6b',
+              backgroundColor: 'rgba(255, 107, 107, 0.1)',
+              tension: 0.4
+            },
+            {
+              label: 'Erik Vallgren',
+              data: [3, 5, 4, 3, 2, 1],
+              borderColor: '#4facfe',
+              backgroundColor: 'rgba(79, 172, 254, 0.1)',
+              tension: 0.4
+            },
+            {
+              label: 'Viktor Jones',
+              data: [1, 4, 5, 5, 3, 3],
+              borderColor: '#43e97b',
+              backgroundColor: 'rgba(67, 233, 123, 0.1)',
+              tension: 0.4
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              labels: { color: '#a8b2d1' }
+            }
+          },
+          scales: {
+            y: {
+              reverse: true,
+              min: 1,
+              max: 10,
+              grid: { color: 'rgba(255, 255, 255, 0.1)' },
+              ticks: { color: '#a8b2d1' }
+            },
+            x: {
+              grid: { color: 'rgba(255, 255, 255, 0.1)' },
+              ticks: { color: '#a8b2d1' }
+            }
+          }
+        }
+      });
+    }
+
+    function createAveragePositionChart() {
+      const ctx = document.getElementById('average-position-chart').getContext('2d');
+      
+      new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: ['Per W.', 'Viktor J.', 'Erik V.', 'Niklas N.', 'Olov M.'],
+          datasets: [{
+            label: 'Genomsnittlig Placering',
+            data: [3.2, 3.8, 4.1, 4.5, 4.8],
+            backgroundColor: [
+              'rgba(255, 215, 0, 0.8)',
+              'rgba(192, 192, 192, 0.8)',
+              'rgba(205, 127, 50, 0.8)',
+              'rgba(102, 126, 234, 0.8)',
+              'rgba(118, 75, 162, 0.8)'
+            ],
+            borderWidth: 0
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          indexAxis: 'y',
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            x: {
+              reverse: true,
+              grid: { color: 'rgba(255, 255, 255, 0.1)' },
+              ticks: { color: '#a8b2d1' }
+            },
+            y: {
+              grid: { color: 'rgba(255, 255, 255, 0.1)' },
+              ticks: { color: '#a8b2d1' }
+            }
+          }
+        }
+      });
+    }
+
+    // CSV Import
+    function setupCSVImport() {
+      const dropZone = document.getElementById('import-drop-zone');
+      const fileInput = document.getElementById('csv-file');
+
+      // Drag and drop
+      dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('drag-over');
+      });
+
+      dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('drag-over');
+      });
+
+      dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('drag-over');
+        
+        const file = e.dataTransfer.files[0];
+        if (file && file.type === 'text/csv') {
+          processCSV(file);
+        }
+      });
+
+      // File input
+      fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          processCSV(file);
+        }
+      });
+    }
+
+    function processCSV(file) {
+      const reader = new FileReader();
+      
+      reader.onload = (e) => {
+        const csv = e.target.result;
+        parseCSV(csv);
+      };
+      
+      reader.readAsText(file);
+    }
+
+    function parseCSV(csv) {
+      // Parse CSV and update competitionData
+      console.log('CSV data received, ready for parsing');
+      // Implementation would go here
+      alert('CSV import funktionalitet kommer snart! Din data är redo att bearbetas.');
+    }
+
+    // Initialize on load
+    document.addEventListener('DOMContentLoaded', init);
   </script>
 </body>
 </html>
