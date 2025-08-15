@@ -3,1158 +3,386 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Pekkas Pokal - Årlig tävling för vänner med omfattande statistik och datahantering">
+    <meta name="keywords" content="tävling, pokal, statistik, vänner, competition">
+    <meta name="author" content="Pekka's Competition Team">
+    
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#667eea">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Pekkas Pokal">
+    
+    <!-- Manifest -->
+    <link rel="manifest" href="manifest.json">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>">
+    
     <title>Pekkas Pokal - Årlig Tävling</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-        
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-        
-        .header {
-            text-align: center;
-            background: rgba(255, 255, 255, 0.15);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            color: white;
-            padding: 40px;
-            border-radius: 25px;
-            margin-bottom: 30px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
-        }
-        
-        .header h1 {
-            font-size: 3.5em;
-            font-weight: 800;
-            text-shadow: 0 4px 8px rgba(0,0,0,0.3);
-            margin-bottom: 10px;
-            background: linear-gradient(45deg, #FFD700, #FFA500);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        
-        .header p {
-            font-size: 1.3em;
-            opacity: 0.9;
-            font-weight: 500;
-        }
-        
-        .trophy-icon {
-            font-size: 4em;
-            margin-bottom: 20px;
-            display: block;
-            animation: bounce 2s infinite;
-        }
-        
-        @keyframes bounce {
-            0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
-            40% { transform: translateY(-10px); }
-            60% { transform: translateY(-5px); }
-        }
-        
-        .tabs {
-            display: flex;
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(15px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 20px;
-            margin-bottom: 30px;
-            overflow: hidden;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-        }
-        
-        .tab {
-            flex: 1;
-            padding: 18px 25px;
-            text-align: center;
-            cursor: pointer;
-            background: transparent;
-            border: none;
-            font-weight: 600;
-            font-size: 16px;
-            color: rgba(255, 255, 255, 0.8);
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .tab::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
-            transition: left 0.5s;
-        }
-        
-        .tab:hover::before {
-            left: 100%;
-        }
-        
-        .tab.active {
-            background: rgba(255, 255, 255, 0.2);
-            color: white;
-            transform: scale(1.05);
-            box-shadow: inset 0 2px 8px rgba(255,255,255,0.1);
-        }
-        
-        .content {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            border-radius: 25px;
-            padding: 40px;
-            box-shadow: 0 12px 40px rgba(0,0,0,0.15);
-            animation: slideUp 0.6s ease-out;
-        }
-        
-        @keyframes slideUp {
-            from { opacity: 0; transform: translateY(30px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .table-container {
-            overflow-x: auto;
-            margin-top: 30px;
-            border-radius: 20px;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
-        }
-        
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 13px;
-            background: white;
-            border-radius: 20px;
-            overflow: hidden;
-        }
-        
-        th {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 16px 10px;
-            text-align: center;
-            font-weight: 700;
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            position: sticky;
-            top: 0;
-            z-index: 10;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-        
-        th:first-child {
-            border-radius: 20px 0 0 0;
-        }
-        
-        th:last-child {
-            border-radius: 0 20px 0 0;
-        }
-        
-        td {
-            padding: 14px 10px;
-            text-align: center;
-            border-bottom: 1px solid rgba(0,0,0,0.05);
-            transition: all 0.3s ease;
-            font-weight: 500;
-        }
-        
-        tr:nth-child(even) {
-            background-color: rgba(102, 126, 234, 0.02);
-        }
-        
-        tr:hover td {
-            background-color: rgba(102, 126, 234, 0.08);
-            transform: scale(1.01);
-        }
-        
-        .year-col {
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            color: white;
-            font-weight: 700;
-            font-size: 14px;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.3);
-        }
-        
-        .competition-col {
-            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
-            font-weight: 600;
-            color: #8b4513;
-            max-width: 120px;
-        }
-        
-        .location-col {
-            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
-            font-size: 11px;
-            font-weight: 600;
-            color: #2c5aa0;
-        }
-        
-        .winner {
-            background: linear-gradient(135deg, #d4edda 0%, #a3d977 100%);
-            font-weight: 700;
-            color: #155724;
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
-        }
-        
-        .participant-score {
-            min-width: 50px;
-            position: relative;
-        }
-        
-        .participant-score.empty {
-            background-color: rgba(108, 117, 125, 0.1);
-            color: #6c757d;
-            font-style: italic;
-        }
-        
-        .participant-score.winner-score {
-            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
-            color: #8B4513;
-            font-weight: 800;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.2);
-            position: relative;
-        }
-        
-        .participant-score.winner-score::after {
-            content: '👑';
-            position: absolute;
-            top: -5px;
-            right: -5px;
-            font-size: 12px;
-        }
-        
-        .summary-stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 25px;
-            margin-top: 40px;
-        }
-        
-        .stat-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 25px;
-            border-radius: 20px;
-            text-align: center;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
-            transition: transform 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .stat-card::before {
-            content: '';
-            position: absolute;
-            top: -2px;
-            left: -2px;
-            right: -2px;
-            bottom: -2px;
-            background: linear-gradient(45deg, #FFD700, #FFA500, #FF6B6B, #4ECDC4);
-            border-radius: 22px;
-            z-index: -1;
-            animation: rotate 4s linear infinite;
-        }
-        
-        @keyframes rotate {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        .stat-card:hover {
-            transform: translateY(-5px) scale(1.02);
-        }
-        
-        .stat-card h3 {
-            margin-bottom: 15px;
-            font-size: 1.1em;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        
-        .stat-card .number {
-            font-size: 2.8em;
-            font-weight: 900;
-            margin: 15px 0;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
-        }
-        
-        .improvements {
-            background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
-            border-left: 6px solid #2196f3;
-            padding: 30px;
-            margin-top: 30px;
-            border-radius: 0 20px 20px 0;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
-        
-        .improvements h3 {
-            color: #1976d2;
-            margin-bottom: 20px;
-            font-size: 1.4em;
-            font-weight: 700;
-        }
-        
-        .improvements ul {
-            margin: 20px 0;
-            padding-left: 25px;
-        }
-        
-        .improvements li {
-            margin: 12px 0;
-            line-height: 1.6;
-            font-weight: 500;
-        }
-        
-        .improvements li strong {
-            color: #1565c0;
-        }
-        
-        .hidden {
-            display: none;
-        }
-        
-        .section-title {
-            font-size: 2.2em;
-            font-weight: 800;
-            color: #2c3e50;
-            margin-bottom: 20px;
-            text-align: center;
-            background: linear-gradient(45deg, #667eea, #764ba2);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        
-        .editable-cell {
-            cursor: pointer;
-            transition: all 0.2s ease;
-            position: relative;
-        }
-        
-        .editable-cell:hover {
-            background-color: rgba(102, 126, 234, 0.1) !important;
-            box-shadow: inset 0 0 0 2px rgba(102, 126, 234, 0.3);
-        }
-        
-        .editable-cell:focus {
-            outline: none;
-            background-color: rgba(102, 126, 234, 0.15) !important;
-            box-shadow: inset 0 0 0 2px #667eea;
-        }
-        
-        .editable-cell::after {
-            content: '✏️';
-            position: absolute;
-            top: 2px;
-            right: 2px;
-            font-size: 10px;
-            opacity: 0;
-            transition: opacity 0.2s ease;
-        }
-        
-        .editable-cell:hover::after {
-            opacity: 0.6;
-        }
-        
-        .toolbar {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
-        
-        .toolbar button {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 12px 20px;
-            border-radius: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
-        
-        .toolbar button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
-        }
-        
-        .toolbar input[type="file"] {
-            display: none;
-        }
-        
-        .file-input-label {
-            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
-            color: white;
-            border: none;
-            padding: 12px 20px;
-            border-radius: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            display: inline-block;
-        }
-        
-        .file-input-label:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
-        }
-        
-        .notification {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
-            color: white;
-            padding: 15px 25px;
-            border-radius: 12px;
-            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
-            transform: translateX(400px);
-            transition: transform 0.3s ease;
-            z-index: 1000;
-            font-weight: 600;
-        }
-        
-        .notification.show {
-            transform: translateX(0);
-        }
-    </style>
+    
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="styles/main.css">
+    <link rel="stylesheet" href="styles/components.css">
+    <link rel="stylesheet" href="styles/responsive.css">
+    
+    <!-- Charts.js for statistics -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.min.js"></script>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <span class="trophy-icon">🏆</span>
-            <h1>Pekkas Pokal</h1>
-            <p>Årlig Tävling • 2011-2024</p>
-        </div>
-    
-    <div class="tabs">
-        <button class="tab active" onclick="showTab('results')">Årliga Resultat</button>
-        <button class="tab" onclick="showTab('participants')">Deltagare</button>
-        <button class="tab" onclick="showTab('improvements')">Förbättringar</button>
-    </div>
-    
-    <div id="results" class="content">
-        <h2 class="section-title">Tävlingsresultat per År</h2>
-        
-        <div class="toolbar">
-            <button onclick="addNewYear()">➕ Lägg till År</button>
-            <button onclick="exportData()">💾 Exportera CSV</button>
-            <label for="importFile" class="file-input-label">📁 Importera CSV</label>
-            <input type="file" id="importFile" accept=".csv" onchange="importData(event)">
-            <button onclick="clearAllData()">🗑️ Rensa Data</button>
-            <button onclick="fillSampleData()">🎯 Exempeldata</button>
-        </div>
-        
-        <div class="table-container">
-            <table id="marathonTable">
-                <thead>
-                    <tr>
-                        <th>År</th>
-                        <th>Tävling</th>
-                        <th>Plats</th>
-                        <th>Vinnare</th>
-                        <th>Olov M.</th>
-                        <th>Mikael H.</th>
-                        <th>Viktor J.</th>
-                        <th>Per V.</th>
-                        <th>Erik V.</th>
-                        <th>Henrik L.</th>
-                        <th>Rickard N.</th>
-                        <th>Niklas N.</th>
-                        <th>Per O.</th>
-                        <th>Tobias L.</th>
-                        <th>Lars S.</th>
-                        <th>Ludwig U.</th>
-                        <th>Åtgärder</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr data-year="2024">
-                        <td class="year-col">2024</td>
-                        <td class="competition-col editable-cell" contenteditable="true">Fisketävling</td>
-                        <td class="location-col editable-cell" contenteditable="true">Själevad</td>
-                        <td class="winner editable-cell" contenteditable="true">TBD</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td><button onclick="deleteRow(this)" style="background:#ff4757;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;">🗑️</button></td>
-                    </tr>
-                    <tr data-year="2023">
-                        <td class="year-col">2023</td>
-                        <td class="competition-col editable-cell" contenteditable="true">Fäktning</td>
-                        <td class="location-col editable-cell" contenteditable="true">Stockholm</td>
-                        <td class="winner editable-cell" contenteditable="true">TBD</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td><button onclick="deleteRow(this)" style="background:#ff4757;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;">🗑️</button></td>
-                    </tr>
-                    <tr data-year="2022">
-                        <td class="year-col">2022</td>
-                        <td class="competition-col editable-cell" contenteditable="true">TBD</td>
-                        <td class="location-col editable-cell" contenteditable="true">TBD</td>
-                        <td class="winner editable-cell" contenteditable="true">TBD</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td><button onclick="deleteRow(this)" style="background:#ff4757;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;">🗑️</button></td>
-                    </tr>
-                    <tr data-year="2021">
-                        <td class="year-col">2021</td>
-                        <td class="competition-col editable-cell" contenteditable="true">Målning</td>
-                        <td class="location-col editable-cell" contenteditable="true">Ås</td>
-                        <td class="winner editable-cell" contenteditable="true">TBD</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td><button onclick="deleteRow(this)" style="background:#ff4757;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;">🗑️</button></td>
-                    </tr>
-                    <tr data-year="2020">
-                        <td class="year-col">2020</td>
-                        <td class="competition-col editable-cell" contenteditable="true">Covid</td>
-                        <td class="location-col editable-cell" contenteditable="true">Hemma</td>
-                        <td class="winner editable-cell" contenteditable="true">Ingen</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td><button onclick="deleteRow(this)" style="background:#ff4757;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;">🗑️</button></td>
-                    </tr>
-                    <tr data-year="2019">
-                        <td class="year-col">2019</td>
-                        <td class="competition-col editable-cell" contenteditable="true">TBD</td>
-                        <td class="location-col editable-cell" contenteditable="true">TBD</td>
-                        <td class="winner editable-cell" contenteditable="true">TBD</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td><button onclick="deleteRow(this)" style="background:#ff4757;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;">🗑️</button></td>
-                    </tr>
-                    <tr data-year="2018">
-                        <td class="year-col">2018</td>
-                        <td class="competition-col editable-cell" contenteditable="true">TBD</td>
-                        <td class="location-col editable-cell" contenteditable="true">TBD</td>
-                        <td class="winner editable-cell" contenteditable="true">TBD</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td><button onclick="deleteRow(this)" style="background:#ff4757;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;">🗑️</button></td>
-                    </tr>
-                    <tr data-year="2017">
-                        <td class="year-col">2017</td>
-                        <td class="competition-col editable-cell" contenteditable="true">TBD</td>
-                        <td class="location-col editable-cell" contenteditable="true">TBD</td>
-                        <td class="winner editable-cell" contenteditable="true">TBD</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td><button onclick="deleteRow(this)" style="background:#ff4757;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;">🗑️</button></td>
-                    </tr>
-                    <tr data-year="2016">
-                        <td class="year-col">2016</td>
-                        <td class="competition-col editable-cell" contenteditable="true">TBD</td>
-                        <td class="location-col editable-cell" contenteditable="true">TBD</td>
-                        <td class="winner editable-cell" contenteditable="true">TBD</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td><button onclick="deleteRow(this)" style="background:#ff4757;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;">🗑️</button></td>
-                    </tr>
-                    <tr data-year="2015">
-                        <td class="year-col">2015</td>
-                        <td class="competition-col editable-cell" contenteditable="true">TBD</td>
-                        <td class="location-col editable-cell" contenteditable="true">TBD</td>
-                        <td class="winner editable-cell" contenteditable="true">TBD</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td><button onclick="deleteRow(this)" style="background:#ff4757;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;">🗑️</button></td>
-                    </tr>
-                    <tr data-year="2014">
-                        <td class="year-col">2014</td>
-                        <td class="competition-col editable-cell" contenteditable="true">TBD</td>
-                        <td class="location-col editable-cell" contenteditable="true">TBD</td>
-                        <td class="winner editable-cell" contenteditable="true">TBD</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td><button onclick="deleteRow(this)" style="background:#ff4757;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;">🗑️</button></td>
-                    </tr>
-                    <tr data-year="2013">
-                        <td class="year-col">2013</td>
-                        <td class="competition-col editable-cell" contenteditable="true">TBD</td>
-                        <td class="location-col editable-cell" contenteditable="true">TBD</td>
-                        <td class="winner editable-cell" contenteditable="true">TBD</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td><button onclick="deleteRow(this)" style="background:#ff4757;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;">🗑️</button></td>
-                    </tr>
-                    <tr data-year="2012">
-                        <td class="year-col">2012</td>
-                        <td class="competition-col editable-cell" contenteditable="true">TBD</td>
-                        <td class="location-col editable-cell" contenteditable="true">TBD</td>
-                        <td class="winner editable-cell" contenteditable="true">TBD</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td><button onclick="deleteRow(this)" style="background:#ff4757;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;">🗑️</button></td>
-                    </tr>
-                    <tr data-year="2011">
-                        <td class="year-col">2011</td>
-                        <td class="competition-col editable-cell" contenteditable="true">TBD</td>
-                        <td class="location-col editable-cell" contenteditable="true">TBD</td>
-                        <td class="winner editable-cell" contenteditable="true">TBD</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td class="participant-score editable-cell" contenteditable="true">-</td>
-                        <td><button onclick="deleteRow(this)" style="background:#ff4757;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;">🗑️</button></td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-        
-        <div class="summary-stats">
-            <div class="stat-card">
-                <h3>Total År</h3>
-                <div class="number">14</div>
-                <p>2011-2024</p>
-            </div>
-            <div class="stat-card">
-                <h3>Deltagare</h3>
-                <div class="number">12</div>
-                <p>Aktiva tävlande</p>
-            </div>
-            <div class="stat-card">
-                <h3>Genomförda</h3>
-                <div class="number">4</div>
-                <p>Kända tävlingar</p>
-            </div>
-            <div class="stat-card">
-                <h3>Nästa</h3>
-                <div class="number">2025</div>
-                <p>Kommande år</p>
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="loading-screen">
+        <div class="loading-content">
+            <div class="trophy-loader">🏆</div>
+            <h2>Laddar Pekkas Pokal...</h2>
+            <div class="loading-bar">
+                <div class="loading-progress"></div>
             </div>
         </div>
     </div>
-    
-    <div id="participants" class="content hidden">
-        <h2 class="section-title">Deltagarstatistik</h2>
-        <div class="table-container">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Deltagare</th>
-                        <th>Antal Tävlingar</th>
-                        <th>Vinster</th>
-                        <th>Procent Vinster</th>
-                        <th>Senaste Deltagande</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr><td><strong>Olov Melander</strong></td><td>0</td><td>0</td><td>0%</td><td>-</td><td>⏸️ Inaktiv</td></tr>
-                    <tr><td><strong>Mikael Hägglund</strong></td><td>0</td><td>0</td><td>0%</td><td>-</td><td>⏸️ Inaktiv</td></tr>
-                    <tr><td><strong>Viktor Jones</strong></td><td>0</td><td>0</td><td>0%</td><td>-</td><td>⏸️ Inaktiv</td></tr>
-                    <tr><td><strong>Per Vikman</strong></td><td>0</td><td>0</td><td>0%</td><td>-</td><td>⏸️ Inaktiv</td></tr>
-                    <tr><td><strong>Erik Vallgren</strong></td><td>0</td><td>0</td><td>0%</td><td>-</td><td>⏸️ Inaktiv</td></tr>
-                    <tr><td><strong>Henrik Lundqvist</strong></td><td>0</td><td>0</td><td>0%</td><td>-</td><td>⏸️ Inaktiv</td></tr>
-                    <tr><td><strong>Rickard Nilsson</strong></td><td>0</td><td>0</td><td>0%</td><td>-</td><td>⏸️ Inaktiv</td></tr>
-                    <tr><td><strong>Niklas Norberg</strong></td><td>0</td><td>0</td><td>0%</td><td>-</td><td>⏸️ Inaktiv</td></tr>
-                    <tr><td><strong>Per Olsson</strong></td><td>0</td><td>0</td><td>0%</td><td>-</td><td>⏸️ Inaktiv</td></tr>
-                    <tr><td><strong>Tobias Lundqvist</strong></td><td>0</td><td>0</td><td>0%</td><td>-</td><td>⏸️ Inaktiv</td></tr>
-                    <tr><td><strong>Lars Sandin</strong></td><td>0</td><td>0</td><td>0%</td><td>-</td><td>⏸️ Inaktiv</td></tr>
-                    <tr><td><strong>Ludwig Ulenius</strong></td><td>0</td><td>0</td><td>0%</td><td>-</td><td>⏸️ Inaktiv</td></tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
-    
-    <div id="improvements" class="content hidden">
-        <h2 class="section-title">Rekommenderade Förbättringar</h2>
-        
-        <div class="improvements">
-            <h3>🎯 Struktur & Organisation</h3>
-            <ul>
-                <li><strong>Använd flera flikar/sheets:</strong> Separera årliga resultat, deltagarstatistik, tävlingsregler och sammanställningar</li>
-                <li><strong>Standardiserat poängsystem:</strong> Skapa ett enhetligt sätt att mäta prestationer oavsett tävlingstyp</li>
-                <li><strong>Tydlig vinnardefinition:</strong> Definiera hur vinnare utses för varje typ av tävling</li>
-            </ul>
-        </div>
-        
-        <div class="improvements">
-            <h3>📊 Data & Mätning</h3>
-            <ul>
-                <li><strong>Fyll i historisk data:</strong> Lägg till resultat från tidigare år (2011-2019, 2022)</li>
-                <li><strong>Mer detaljerad information:</strong> Lägg till placeringar, poäng, särskilda prestationer</li>
-                <li><strong>Deltagande-tracking:</strong> Spåra vilka som deltog varje år</li>
-                <li><strong>Statistik över tid:</strong> Beräkna trender och förbättringar för varje deltagare</li>
-            </ul>
-        </div>
-        
-        <div class="improvements">
-            <h3>🏆 Tävlingsformat</h3>
-            <ul>
-                <li><strong>Roterande tävlingar:</strong> Planera framtida års aktiviteter i förväg</li>
-                <li><strong>Multipla events:</strong> Överväg att ha flera mindre tävlingar per år</li>
-                <li><strong>Lag-element:</strong> Lägg till lagindelningar för vissa tävlingar</li>
-                <li><strong>Handicap-system:</strong> Balansera för olika färdighetsnivåer</li>
-            </ul>
-        </div>
-        
-        <div class="improvements">
-            <h3>📱 Tekniska Uppgraderingar</h3>
-            <ul>
-                <li><strong>Automatiska beräkningar:</strong> Lägg till formler för rangordning och statistik</li>
-                <li><strong>Conditional formatting:</strong> Färgkoda vinnare, toppresteringar, etc.</li>
-                <li><strong>Fotografier:</strong> Lägg till bilder från varje års tävling</li>
-                <li><strong>QR-koder:</strong> Länka till detaljerade resultat eller videor</li>
-            </ul>
-        </div>
-        
-        <div class="improvements">
-            <h3>🎉 Engagemang & Tradition</h3>
-            <ul>
-                <li><strong>Hall of Fame:</strong> Hedra återkommande vinnare och särskilda prestationer</li>
-                <li><strong>Årlig sammanfattning:</strong> Skapa en "årsbok" för varje års tävling</li>
-                <li><strong>Priser & utmärkelser:</strong> Inför olika kategorier (mest förbättrad, bästa sportmannaskap, etc.)</li>
-                <li><strong>Deltagarundersökning:</strong> Låt deltagarna rösta om nästa års tävling</li>
-            </ul>
-        </div>
-    </div>
-    
-    <script>
-        let currentYear = 2025;
-        
-        function showTab(tabName) {
-            // Hide all content
-            document.querySelectorAll('.content').forEach(content => {
-                content.classList.add('hidden');
-            });
-            
-            // Remove active class from all tabs
-            document.querySelectorAll('.tab').forEach(tab => {
-                tab.classList.remove('active');
-            });
-            
-            // Show selected content
-            document.getElementById(tabName).classList.remove('hidden');
-            
-            // Add active class to clicked tab
-            event.target.classList.add('active');
-        }
-        
-        function addNewYear() {
-            const tbody = document.querySelector('#marathonTable tbody');
-            const newRow = document.createElement('tr');
-            newRow.setAttribute('data-year', currentYear);
-            
-            newRow.innerHTML = `
-                <td class="year-col">${currentYear}</td>
-                <td class="competition-col editable-cell" contenteditable="true">TBD</td>
-                <td class="location-col editable-cell" contenteditable="true">TBD</td>
-                <td class="winner editable-cell" contenteditable="true">TBD</td>
-                <td class="participant-score editable-cell" contenteditable="true">-</td>
-                <td class="participant-score editable-cell" contenteditable="true">-</td>
-                <td class="participant-score editable-cell" contenteditable="true">-</td>
-                <td class="participant-score editable-cell" contenteditable="true">-</td>
-                <td class="participant-score editable-cell" contenteditable="true">-</td>
-                <td class="participant-score editable-cell" contenteditable="true">-</td>
-                <td class="participant-score editable-cell" contenteditable="true">-</td>
-                <td class="participant-score editable-cell" contenteditable="true">-</td>
-                <td class="participant-score editable-cell" contenteditable="true">-</td>
-                <td class="participant-score editable-cell" contenteditable="true">-</td>
-                <td class="participant-score editable-cell" contenteditable="true">-</td>
-                <td class="participant-score editable-cell" contenteditable="true">-</td>
-                <td><button onclick="deleteRow(this)" style="background:#ff4757;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;">🗑️</button></td>
-            `;
-            
-            tbody.insertBefore(newRow, tbody.firstChild);
-            currentYear++;
-            showNotification('Nytt år tillagt!');
-        }
-        
-        function deleteRow(button) {
-            if (confirm('Är du säker på att du vill ta bort detta år?')) {
-                button.closest('tr').remove();
-                showNotification('År borttaget!');
-            }
-        }
-        
-        function exportData() {
-            const table = document.getElementById('marathonTable');
-            const rows = table.querySelectorAll('tr');
-            let csvContent = '';
-            
-            // Add headers
-            const headers = [];
-            rows[0].querySelectorAll('th').forEach((th, index) => {
-                if (index < rows[0].querySelectorAll('th').length - 1) { // Skip actions column
-                    headers.push('"' + th.textContent.trim() + '"');
-                }
-            });
-            csvContent += headers.join(',') + '\\n';
-            
-            // Add data rows
-            for (let i = 1; i < rows.length; i++) {
-                const row = rows[i];
-                const cells = row.querySelectorAll('td');
-                const rowData = [];
+
+    <!-- Main Application -->
+    <div id="app" class="app hidden">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo-section">
+                    <span class="trophy-icon">🏆</span>
+                    <div class="title-section">
+                        <h1>Pekkas Pokal</h1>
+                        <p class="subtitle">Årlig Tävling • <span id="year-range">2011-2024</span></p>
+                    </div>
+                </div>
                 
-                for (let j = 0; j < cells.length - 1; j++) { // Skip actions column
-                    let cellText = cells[j].textContent.trim();
-                    rowData.push('"' + cellText + '"');
-                }
-                csvContent += rowData.join(',') + '\\n';
-            }
-            
-            // Download CSV
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            const url = URL.createObjectURL(blob);
-            link.setAttribute('href', url);
-            link.setAttribute('download', 'pekkas_pokal_' + new Date().toISOString().split('T')[0] + '.csv');
-            link.style.visibility = 'hidden';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            
-            showNotification('Data exporterad!');
-        }
-        
-        function importData(event) {
-            const file = event.target.files[0];
-            if (file && file.type === 'text/csv') {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    const csv = e.target.result;
-                    const lines = csv.split('\\n');
-                    const tbody = document.querySelector('#marathonTable tbody');
-                    
-                    // Clear existing data
-                    tbody.innerHTML = '';
-                    
-                    // Skip header row and process data
-                    for (let i = 1; i < lines.length; i++) {
-                        const line = lines[i].trim();
-                        if (line) {
-                            const values = parseCSVLine(line);
-                            if (values.length >= 4) {
-                                const row = document.createElement('tr');
-                                row.setAttribute('data-year', values[0]);
-                                
-                                row.innerHTML = `
-                                    <td class="year-col">${values[0] || ''}</td>
-                                    <td class="competition-col editable-cell" contenteditable="true">${values[1] || 'TBD'}</td>
-                                    <td class="location-col editable-cell" contenteditable="true">${values[2] || 'TBD'}</td>
-                                    <td class="winner editable-cell" contenteditable="true">${values[3] || 'TBD'}</td>
-                                    <td class="participant-score editable-cell" contenteditable="true">${values[4] || '-'}</td>
-                                    <td class="participant-score editable-cell" contenteditable="true">${values[5] || '-'}</td>
-                                    <td class="participant-score editable-cell" contenteditable="true">${values[6] || '-'}</td>
-                                    <td class="participant-score editable-cell" contenteditable="true">${values[7] || '-'}</td>
-                                    <td class="participant-score editable-cell" contenteditable="true">${values[8] || '-'}</td>
-                                    <td class="participant-score editable-cell" contenteditable="true">${values[9] || '-'}</td>
-                                    <td class="participant-score editable-cell" contenteditable="true">${values[10] || '-'}</td>
-                                    <td class="participant-score editable-cell" contenteditable="true">${values[11] || '-'}</td>
-                                    <td class="participant-score editable-cell" contenteditable="true">${values[12] || '-'}</td>
-                                    <td class="participant-score editable-cell" contenteditable="true">${values[13] || '-'}</td>
-                                    <td class="participant-score editable-cell" contenteditable="true">${values[14] || '-'}</td>
-                                    <td class="participant-score editable-cell" contenteditable="true">${values[15] || '-'}</td>
-                                    <td><button onclick="deleteRow(this)" style="background:#ff4757;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;">🗑️</button></td>
-                                `;
-                                tbody.appendChild(row);
-                            }
-                        }
-                    }
-                    
-                    showNotification('Data importerad!');
-                };
-                reader.readAsText(file);
-            } else {
-                alert('Vänligen välj en CSV-fil.');
-            }
-            
-            // Reset file input
-            event.target.value = '';
-        }
-        
-        function parseCSVLine(line) {
-            const result = [];
-            let current = '';
-            let inQuotes = false;
-            
-            for (let i = 0; i < line.length; i++) {
-                const char = line[i];
+                <div class="header-actions">
+                    <button id="theme-toggle" class="icon-btn" title="Växla tema">🌙</button>
+                    <button id="fullscreen-toggle" class="icon-btn" title="Helskärm">⛶</button>
+                    <button id="install-btn" class="install-btn hidden" title="Installera app">📱 Installera</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Navigation -->
+        <nav class="navigation">
+            <div class="nav-container">
+                <button class="nav-tab active" data-tab="results">
+                    <span class="nav-icon">📊</span>
+                    <span class="nav-text">Årliga Resultat</span>
+                </button>
+                <button class="nav-tab" data-tab="statistics">
+                    <span class="nav-icon">📈</span>
+                    <span class="nav-text">Statistik</span>
+                </button>
+                <button class="nav-tab" data-tab="participants">
+                    <span class="nav-icon">👥</span>
+                    <span class="nav-text">Deltagare</span>
+                </button>
+                <button class="nav-tab" data-tab="settings">
+                    <span class="nav-icon">⚙️</span>
+                    <span class="nav-text">Inställningar</span>
+                </button>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Results Tab -->
+            <section id="results-tab" class="tab-content active">
+                <div class="content-header">
+                    <h2>Tävlingsresultat per År</h2>
+                    <div class="search-container">
+                        <input type="text" id="search-input" placeholder="Sök år, tävling, plats eller deltagare..." class="search-input">
+                        <button id="search-clear" class="search-clear" title="Rensa sökning">✕</button>
+                    </div>
+                </div>
                 
-                if (char === '"') {
-                    inQuotes = !inQuotes;
-                } else if (char === ',' && !inQuotes) {
-                    result.push(current.trim());
-                    current = '';
-                } else {
-                    current += char;
-                }
-            }
-            
-            result.push(current.trim());
-            return result;
-        }
-        
-        function clearAllData() {
-            if (confirm('Är du säker på att du vill rensa all data? Detta kan inte ångras.')) {
-                const tbody = document.querySelector('#marathonTable tbody');
-                tbody.innerHTML = '';
-                showNotification('All data rensad!');
-            }
-        }
-        
-        function fillSampleData() {
-            if (confirm('Detta kommer att ersätta nuvarande data med exempeldata. Fortsätt?')) {
-                const tbody = document.querySelector('#marathonTable tbody');
-                tbody.innerHTML = `
-                    <tr data-year="2024">
-                        <td class="year-col">2024</td>
-                        <td class="competition-col editable-cell" contenteditable="true">Fisketävling</td>
-                        <td class="location-col editable-cell" contenteditable="true">Själevad</td>
-                        <td class="winner editable-cell" contenteditable="true">Viktor</td>
-                        <td class="participant-score editable-cell" contenteditable="true">3</td>
-                        <td class="participant-score editable-cell" contenteditable="true">7</td>
-                        <td class="participant-score winner-score editable-cell" contenteditable="true">1</td>
-                        <td class="participant-score editable-cell" contenteditable="true">5</td>
-                        <td class="participant-score editable-cell" contenteditable="true">8</td>
-                        <td class="participant-score editable-cell" contenteditable="true">4</td>
-                        <td class="participant-score editable-cell" contenteditable="true">6</td>
-                        <td class="participant-score editable-cell" contenteditable="true">9</td>
-                        <td class="participant-score editable-cell" contenteditable="true">2</td>
-                        <td class="participant-score editable-cell" contenteditable="true">10</td>
-                        <td class="participant-score editable-cell" contenteditable="true">11</td>
-                        <td class="participant-score editable-cell" contenteditable="true">12</td>
-                        <td><button onclick="deleteRow(this)" style="background:#ff4757;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;">🗑️</button></td>
-                    </tr>
-                    <tr data-year="2023">
-                        <td class="year-col">2023</td>
-                        <td class="competition-col editable-cell" contenteditable="true">Fäktning</td>
-                        <td class="location-col editable-cell" contenteditable="true">Stockholm</td>
-                        <td class="winner editable-cell" contenteditable="true">Erik</td>
-                        <td class="participant-score editable-cell" contenteditable="true">5</td>
-                        <td class="participant-score editable-cell" contenteditable="true">3</td>
-                        <td class="participant-score editable-cell" contenteditable="true">8</td>
-                        <td class="participant-score editable-cell" contenteditable="true">7</td>
-                        <td class="participant-score winner-score editable-cell" contenteditable="true">1</td>
-                        <td class="participant-score editable-cell" contenteditable="true">2</td>
-                        <td class="participant-score editable-cell" contenteditable="true">4</td>
-                        <td class="participant-score editable-cell" contenteditable="true">6</td>
-                        <td class="participant-score editable-cell" contenteditable="true">9</td>
-                        <td class="participant-score editable-cell" contenteditable="true">10</td>
-                        <td class="participant-score editable-cell" contenteditable="true">11</td>
-                        <td class="participant-score editable-cell" contenteditable="true">12</td>
-                        <td><button onclick="deleteRow(this)" style="background:#ff4757;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;">🗑️</button></td>
-                    </tr>
-                    <tr data-year="2022">
-                        <td class="year-col">2022</td>
-                        <td class="competition-col editable-cell" contenteditable="true">Bowling</td>
-                        <td class="location-col editable-cell" contenteditable="true">Göteborg</td>
-                        <td class="winner editable-cell" contenteditable="true">Henrik</td>
-                        <td class="participant-score editable-cell" contenteditable="true">4</td>
-                        <td class="participant-score editable-cell" contenteditable="true">6</td>
-                        <td class="participant-score editable-cell" contenteditable="true">3</td>
-                        <td class="participant-score editable-cell" contenteditable="true">2</td>
-                        <td class="participant-score editable-cell" contenteditable="true">7</td>
-                        <td class="participant-score winner-score editable-cell" contenteditable="true">1</td>
-                        <td class="participant-score editable-cell" contenteditable="true">5</td>
-                        <td class="participant-score editable-cell" contenteditable="true">8</td>
-                        <td class="participant-score editable-cell" contenteditable="true">9</td>
-                        <td class="participant-score editable-cell" contenteditable="true">10</td>
-                        <td class="participant-score editable-cell" contenteditable="true">11</td>
-                        <td class="participant-score editable-cell" contenteditable="true">12</td>
-                        <td><button onclick="deleteRow(this)" style="background:#ff4757;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;">🗑️</button></td>
-                    </tr>
-                `;
-                showNotification('Exempeldata tillagd!');
-            }
-        }
-        
-        function showNotification(message) {
-            // Remove existing notification
-            const existing = document.querySelector('.notification');
-            if (existing) {
-                existing.remove();
-            }
-            
-            // Create new notification
-            const notification = document.createElement('div');
-            notification.className = 'notification';
-            notification.textContent = message;
-            document.body.appendChild(notification);
-            
-            // Show notification
-            setTimeout(() => {
-                notification.classList.add('show');
-            }, 100);
-            
-            // Hide notification after 3 seconds
-            setTimeout(() => {
-                notification.classList.remove('show');
-                setTimeout(() => {
-                    if (notification.parentNode) {
-                        notification.parentNode.removeChild(notification);
-                    }
-                }, 300);
-            }, 3000);
-        }
-        
-        // Add responsive design styles
-        const mediaQuery = '@media (max-width: 768px) { .header h1 { font-size: 2.5em; } .tabs { flex-direction: column; } .tab { margin: 2px; border-radius: 10px; } .content { padding: 20px; } table { font-size: 11px; } th, td { padding: 8px 5px; } }';
-        const style = document.createElement('style');
-        style.textContent = mediaQuery;
-        document.head.appendChild(style);
-    </script>
+                <div class="toolbar">
+                    <button id="add-competition" class="btn primary">
+                        <span>➕</span> Ny Tävling
+                    </button>
+                    <button id="export-data" class="btn secondary">
+                        <span>💾</span> Exportera
+                    </button>
+                    <button id="import-trigger" class="btn secondary">
+                        <span>📁</span> Importera
+                    </button>
+                    <input type="file" id="import-file" accept=".csv,.json" class="hidden">
+                    <button id="bulk-edit" class="btn secondary">
+                        <span>✏️</span> Massredigering
+                    </button>
+                </div>
+                
+                <div class="table-container">
+                    <div class="table-wrapper">
+                        <table id="results-table" class="data-table">
+                            <thead>
+                                <tr>
+                                    <th data-sort="year" class="sortable">År <span class="sort-indicator">↕️</span></th>
+                                    <th data-sort="competition" class="sortable">Tävling <span class="sort-indicator">↕️</span></th>
+                                    <th data-sort="location" class="sortable">Plats <span class="sort-indicator">↕️</span></th>
+                                    <th data-sort="winner" class="sortable">Vinnare <span class="sort-indicator">↕️</span></th>
+                                    <th id="participants-header">Deltagare & Placeringar</th>
+                                    <th class="actions-col">Åtgärder</th>
+                                </tr>
+                            </thead>
+                            <tbody id="results-tbody">
+                                <!-- Dynamic content -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="summary-cards">
+                    <div class="stat-card">
+                        <h3>Total År</h3>
+                        <div class="number" id="total-years">0</div>
+                        <p>Genomförda tävlingar</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Aktiva Deltagare</h3>
+                        <div class="number" id="active-participants">0</div>
+                        <p>Nuvarande säsong</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Genomsnittlig Deltagning</h3>
+                        <div class="number" id="avg-participation">0%</div>
+                        <p>Per tävling</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Statistics Tab -->
+            <section id="statistics-tab" class="tab-content">
+                <div class="content-header">
+                    <h2>Omfattande Statistik</h2>
+                    <div class="stats-controls">
+                        <select id="stats-timeframe" class="select-input">
+                            <option value="all">Alla år</option>
+                            <option value="recent">Senaste 5 åren</option>
+                            <option value="decade">Senaste 10 åren</option>
+                        </select>
+                        <button id="refresh-stats" class="btn secondary">🔄 Uppdatera</button>
+                    </div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="chart-container">
+                        <h3>Vinster per Deltagare</h3>
+                        <canvas id="wins-chart"></canvas>
+                    </div>
+                    
+                    <div class="chart-container">
+                        <h3>Deltagning över Tid</h3>
+                        <canvas id="participation-chart"></canvas>
+                    </div>
+                    
+                    <div class="chart-container">
+                        <h3>Genomsnittlig Placering</h3>
+                        <canvas id="avg-placement-chart"></canvas>
+                    </div>
+                    
+                    <div class="chart-container">
+                        <h3>Tävlingstyper</h3>
+                        <canvas id="competition-types-chart"></canvas>
+                    </div>
+                </div>
+
+                <div class="detailed-stats">
+                    <h3>Detaljerad Analys</h3>
+                    <div id="detailed-stats-content">
+                        <!-- Dynamic detailed statistics -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Participants Tab -->
+            <section id="participants-tab" class="tab-content">
+                <div class="content-header">
+                    <h2>Deltagarhantering</h2>
+                    <button id="add-participant" class="btn primary">
+                        <span>➕</span> Lägg till Deltagare
+                    </button>
+                </div>
+
+                <div class="participants-grid">
+                    <div class="participant-list">
+                        <h3>Aktiva Deltagare</h3>
+                        <div id="active-participants-list" class="participant-cards">
+                            <!-- Dynamic participant cards -->
+                        </div>
+                    </div>
+                    
+                    <div class="participant-stats">
+                        <h3>Individuell Statistik</h3>
+                        <div id="participant-details" class="participant-details">
+                            <p class="placeholder">Välj en deltagare för att se detaljerad statistik</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Settings Tab -->
+            <section id="settings-tab" class="tab-content">
+                <div class="content-header">
+                    <h2>Inställningar & Datahantering</h2>
+                </div>
+
+                <div class="settings-sections">
+                    <div class="settings-section">
+                        <h3>🎯 App-inställningar</h3>
+                        <div class="setting-item">
+                            <label for="auto-save">Automatisk sparning</label>
+                            <input type="checkbox" id="auto-save" class="toggle-switch" checked>
+                        </div>
+                        <div class="setting-item">
+                            <label for="notifications">Notifikationer</label>
+                            <input type="checkbox" id="notifications" class="toggle-switch" checked>
+                        </div>
+                        <div class="setting-item">
+                            <label for="animation">Animationer</label>
+                            <input type="checkbox" id="animation" class="toggle-switch" checked>
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <h3>💾 Datahantering</h3>
+                        <div class="data-actions">
+                            <button id="backup-data" class="btn secondary">
+                                <span>📦</span> Skapa Backup
+                            </button>
+                            <button id="restore-data" class="btn secondary">
+                                <span>🔄</span> Återställ Data
+                            </button>
+                            <button id="clear-data" class="btn danger">
+                                <span>🗑️</span> Rensa All Data
+                            </button>
+                            <button id="sample-data" class="btn secondary">
+                                <span>🎯</span> Ladda Exempeldata
+                            </button>
+                        </div>
+                        <input type="file" id="restore-file" accept=".json,.csv" class="hidden">
+                    </div>
+
+                    <div class="settings-section">
+                        <h3>📊 Scoring & Regler</h3>
+                        <div class="scoring-settings">
+                            <div class="setting-item">
+                                <label for="scoring-system">Poängsystem</label>
+                                <select id="scoring-system" class="select-input">
+                                    <option value="placement">Placering (1=bäst)</option>
+                                    <option value="points">Poäng (högst=bäst)</option>
+                                    <option value="time">Tid (lägst=bäst)</option>
+                                </select>
+                            </div>
+                            <div class="setting-item">
+                                <label for="tie-breaker">Vid lika resultat</label>
+                                <select id="tie-breaker" class="select-input">
+                                    <option value="shared">Delad placering</option>
+                                    <option value="recent">Senaste tävling avgör</option>
+                                    <option value="total">Total poäng avgör</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <h3>ℹ️ Om Appen</h3>
+                        <div class="about-info">
+                            <p><strong>Pekkas Pokal</strong> v2.0</p>
+                            <p>Modern tävlingsspårning för vänner</p>
+                            <p>Utvecklad med ❤️ för fair play och kul tävlingar</p>
+                            <div class="app-stats">
+                                <span>Sparad data: <span id="storage-usage">0 KB</span></span>
+                                <span>Senast uppdaterad: <span id="last-updated">Aldrig</span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <div id="modal-overlay" class="modal-overlay hidden">
+        <div class="modal" id="competition-modal">
+            <div class="modal-header">
+                <h2 id="modal-title">Lägg till Ny Tävling</h2>
+                <button id="modal-close" class="modal-close">✕</button>
+            </div>
+            <div class="modal-body">
+                <form id="competition-form">
+                    <div class="form-group">
+                        <label for="comp-year">År</label>
+                        <input type="number" id="comp-year" min="2000" max="2030" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="comp-name">Tävling</label>
+                        <input type="text" id="comp-name" placeholder="t.ex. Fisketävling" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="comp-location">Plats</label>
+                        <input type="text" id="comp-location" placeholder="t.ex. Själevad" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="comp-date">Datum (valfritt)</label>
+                        <input type="date" id="comp-date">
+                    </div>
+                    <div class="form-group">
+                        <label for="comp-notes">Anteckningar (valfritt)</label>
+                        <textarea id="comp-notes" placeholder="Beskrivning, regler, eller andra anteckningar..."></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="modal-cancel" class="btn secondary">Avbryt</button>
+                <button type="submit" form="competition-form" id="modal-save" class="btn primary">Spara</button>
+            </div>
+        </div>
+
+        <div class="modal" id="participant-modal">
+            <div class="modal-header">
+                <h2>Lägg till Deltagare</h2>
+                <button class="modal-close">✕</button>
+            </div>
+            <div class="modal-body">
+                <form id="participant-form">
+                    <div class="form-group">
+                        <label for="participant-name">Namn</label>
+                        <input type="text" id="participant-name" placeholder="Förnamn Efternamn" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="participant-nickname">Smeknamn (valfritt)</label>
+                        <input type="text" id="participant-nickname" placeholder="Kallas även...">
+                    </div>
+                    <div class="form-group">
+                        <label for="participant-email">E-post (valfritt)</label>
+                        <input type="email" id="participant-email" placeholder="namn@exempel.se">
+                    </div>
+                    <div class="form-group">
+                        <label for="participant-status">Status</label>
+                        <select id="participant-status" class="select-input">
+                            <option value="active">Aktiv</option>
+                            <option value="inactive">Inaktiv</option>
+                            <option value="retired">Pensionerad</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn secondary modal-cancel">Avbryt</button>
+                <button type="submit" form="participant-form" class="btn primary">Lägg till</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Scripts -->
+    <script src="scripts/utils.js"></script>
+    <script src="scripts/data-manager.js"></script>
+    <script src="scripts/statistics.js"></script>
+    <script src="scripts/chart-manager.js"></script>
+    <script src="scripts/main.js"></script>
 </body>
 </html>
