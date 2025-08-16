@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>🏆 Pekkas Pokal - Ultimate Competition Tracker</title>
   
+  <!-- PWA Meta Tags -->
+  <meta name="theme-color" content="#667eea">
+  <meta name="description" content="Årlig tävling för vänner med omfattande statistik och datahantering">
+  <link rel="manifest" href="manifest.json">
+  
+  <!-- Icons -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>">
+  
   <!-- Chart.js for visualizations -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   
@@ -45,6 +53,60 @@
       background-image: 
         radial-gradient(circle at 20% 80%, rgba(102, 126, 234, 0.1) 0%, transparent 50%),
         radial-gradient(circle at 80% 20%, rgba(118, 75, 162, 0.1) 0%, transparent 50%);
+    }
+
+    /* ===== LOADING SCREEN ===== */
+    .loading-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: var(--epic-gradient);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      transition: opacity 0.5s ease, visibility 0.5s ease;
+    }
+
+    .loading-screen.hidden {
+      opacity: 0;
+      visibility: hidden;
+    }
+
+    .loading-content {
+      text-align: center;
+      color: white;
+    }
+
+    .trophy-loader {
+      font-size: 4rem;
+      animation: bounce 1.5s infinite;
+      margin-bottom: 1rem;
+    }
+
+    .loading-bar {
+      width: 200px;
+      height: 4px;
+      background: rgba(255,255,255,0.3);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: 1rem;
+    }
+
+    .loading-progress {
+      width: 0%;
+      height: 100%;
+      background: white;
+      border-radius: 2px;
+      transition: width 0.3s ease;
+    }
+
+    @keyframes bounce {
+      0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+      40% { transform: translateY(-10px); }
+      60% { transform: translateY(-5px); }
     }
 
     /* ===== HEADER ===== */
@@ -102,6 +164,32 @@
       padding: 0.3rem 0.8rem;
       border: 1px solid rgba(102, 126, 234, 0.3);
       border-radius: 20px;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .icon-btn {
+      width: 44px;
+      height: 44px;
+      border: none;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-primary);
+      font-size: 1.2rem;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .icon-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+      transform: translateY(-2px);
     }
 
     /* ===== NAVIGATION TABS ===== */
@@ -248,453 +336,7 @@
       color: var(--danger);
     }
 
-    /* ===== LEADERBOARD ===== */
-    .leaderboard {
-      background: var(--bg-card);
-      border-radius: 16px;
-      padding: 1.5rem;
-      margin-bottom: 2rem;
-    }
-
-    .leaderboard-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 1.5rem;
-      padding-bottom: 1rem;
-      border-bottom: 2px solid rgba(102, 126, 234, 0.2);
-    }
-
-    .leaderboard-title {
-      font-size: 1.5rem;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    .leaderboard-filters {
-      display: flex;
-      gap: 0.5rem;
-    }
-
-    .filter-btn {
-      padding: 0.5rem 1rem;
-      background: rgba(102, 126, 234, 0.1);
-      border: 1px solid rgba(102, 126, 234, 0.3);
-      border-radius: 8px;
-      color: var(--text-secondary);
-      cursor: pointer;
-      transition: all 0.3s ease;
-      font-size: 0.85rem;
-    }
-
-    .filter-btn:hover,
-    .filter-btn.active {
-      background: var(--epic-gradient);
-      color: white;
-      transform: translateY(-2px);
-    }
-
-    .leaderboard-list {
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-    }
-
-    .leaderboard-item {
-      display: flex;
-      align-items: center;
-      padding: 1rem;
-      background: rgba(255, 255, 255, 0.02);
-      border-radius: 12px;
-      border: 1px solid rgba(102, 126, 234, 0.1);
-      transition: all 0.3s ease;
-      cursor: pointer;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .leaderboard-item::before {
-      content: '';
-      position: absolute;
-      left: 0;
-      top: 0;
-      bottom: 0;
-      width: 4px;
-      background: transparent;
-      transition: all 0.3s ease;
-    }
-
-    .leaderboard-item:hover {
-      transform: translateX(10px);
-      background: rgba(102, 126, 234, 0.1);
-      border-color: var(--accent);
-    }
-
-    .leaderboard-item.gold::before { background: var(--gold); }
-    .leaderboard-item.silver::before { background: var(--silver); }
-    .leaderboard-item.bronze::before { background: var(--bronze); }
-
-    .position {
-      font-size: 1.5rem;
-      font-weight: bold;
-      width: 50px;
-      text-align: center;
-      color: var(--text-secondary);
-    }
-
-    .position.gold { 
-      background: var(--gold);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    .position.silver {
-      background: var(--silver);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    .position.bronze {
-      background: var(--bronze);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    .player-info {
-      flex: 1;
-      margin-left: 1rem;
-    }
-
-    .player-name {
-      font-weight: 600;
-      font-size: 1.1rem;
-      margin-bottom: 0.25rem;
-    }
-
-    .player-stats {
-      display: flex;
-      gap: 1rem;
-      font-size: 0.85rem;
-      color: var(--text-secondary);
-    }
-
-    .player-score {
-      font-size: 1.3rem;
-      font-weight: bold;
-      color: var(--accent);
-      margin-left: auto;
-    }
-
-    .trophy-count {
-      display: flex;
-      gap: 0.5rem;
-      align-items: center;
-      margin-left: 1rem;
-    }
-
-    .trophy {
-      display: flex;
-      align-items: center;
-      gap: 0.2rem;
-      padding: 0.3rem 0.6rem;
-      background: rgba(255, 215, 0, 0.1);
-      border-radius: 12px;
-      font-size: 0.9rem;
-    }
-
-    /* ===== ACHIEVEMENTS ===== */
-    .achievements-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-      gap: 1rem;
-      margin: 2rem 0;
-    }
-
-    .achievement {
-      background: var(--bg-card);
-      border-radius: 12px;
-      padding: 1rem;
-      text-align: center;
-      border: 2px solid transparent;
-      transition: all 0.3s ease;
-      cursor: pointer;
-      position: relative;
-    }
-
-    .achievement.unlocked {
-      border-color: var(--accent);
-      background: rgba(102, 126, 234, 0.1);
-    }
-
-    .achievement.locked {
-      opacity: 0.5;
-      filter: grayscale(100%);
-    }
-
-    .achievement:hover {
-      transform: scale(1.05);
-    }
-
-    .achievement-icon {
-      font-size: 2.5rem;
-      margin-bottom: 0.5rem;
-    }
-
-    .achievement-name {
-      font-weight: 600;
-      font-size: 0.9rem;
-      margin-bottom: 0.3rem;
-    }
-
-    .achievement-desc {
-      font-size: 0.75rem;
-      color: var(--text-secondary);
-    }
-
-    .achievement.legendary {
-      background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(255, 165, 0, 0.1));
-      border-color: gold;
-      animation: shimmer 3s infinite;
-    }
-
-    @keyframes shimmer {
-      0%, 100% { box-shadow: 0 0 20px rgba(255, 215, 0, 0.3); }
-      50% { box-shadow: 0 0 30px rgba(255, 215, 0, 0.5); }
-    }
-
-    /* ===== CHARTS ===== */
-    .chart-container {
-      background: var(--bg-card);
-      border-radius: 16px;
-      padding: 1.5rem;
-      margin: 1rem 0;
-      height: 400px;
-      position: relative;
-    }
-
-    .chart-container canvas {
-      max-height: 350px !important;
-    }
-
-    .chart-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 1.5rem;
-    }
-
-    .chart-title {
-      font-size: 1.2rem;
-      font-weight: 600;
-    }
-
-    .chart-options {
-      display: flex;
-      gap: 0.5rem;
-    }
-
-    /* ===== RECORDS SECTION ===== */
-    .records-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 1rem;
-      margin: 2rem 0;
-    }
-
-    .record-card {
-      background: var(--bg-card);
-      border-radius: 12px;
-      padding: 1.2rem;
-      border: 1px solid rgba(102, 126, 234, 0.2);
-      transition: all 0.3s ease;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .record-card::after {
-      content: '📜';
-      position: absolute;
-      bottom: -10px;
-      right: -10px;
-      font-size: 3rem;
-      opacity: 0.1;
-    }
-
-    .record-card:hover {
-      transform: translateY(-3px);
-      border-color: var(--accent);
-      box-shadow: 0 5px 20px rgba(102, 126, 234, 0.3);
-    }
-
-    .record-label {
-      font-size: 0.85rem;
-      color: var(--text-secondary);
-      text-transform: uppercase;
-      margin-bottom: 0.5rem;
-    }
-
-    .record-value {
-      font-size: 1.5rem;
-      font-weight: bold;
-      color: var(--accent);
-      margin-bottom: 0.3rem;
-    }
-
-    .record-holder {
-      font-size: 1rem;
-      color: var(--text-primary);
-    }
-
-    .record-date {
-      font-size: 0.8rem;
-      color: var(--text-muted);
-      margin-top: 0.3rem;
-    }
-
-    /* ===== FUN STATS ===== */
-    .fun-stats {
-      background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(240, 147, 251, 0.1));
-      border-radius: 16px;
-      padding: 1.5rem;
-      margin: 2rem 0;
-      border: 2px solid rgba(102, 126, 234, 0.3);
-    }
-
-    .fun-stats-title {
-      font-size: 1.5rem;
-      text-align: center;
-      margin-bottom: 1.5rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.5rem;
-    }
-
-    .fun-stat-item {
-      display: flex;
-      align-items: center;
-      padding: 1rem;
-      margin: 0.5rem 0;
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 12px;
-      transition: all 0.3s ease;
-    }
-
-    .fun-stat-item:hover {
-      transform: translateX(10px);
-      background: rgba(255, 255, 255, 0.1);
-    }
-
-    .fun-stat-emoji {
-      font-size: 2rem;
-      margin-right: 1rem;
-    }
-
-    .fun-stat-content {
-      flex: 1;
-    }
-
-    .fun-stat-title {
-      font-weight: 600;
-      color: var(--accent);
-      margin-bottom: 0.2rem;
-    }
-
-    .fun-stat-desc {
-      color: var(--text-secondary);
-      font-size: 0.9rem;
-    }
-
-    /* ===== POWER RANKINGS ===== */
-    .power-ranking {
-      background: var(--bg-card);
-      border-radius: 16px;
-      padding: 1.5rem;
-      margin: 2rem 0;
-    }
-
-    .power-ranking-header {
-      text-align: center;
-      margin-bottom: 1.5rem;
-    }
-
-    .power-ranking-title {
-      font-size: 1.8rem;
-      background: var(--fire-gradient);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      margin-bottom: 0.5rem;
-    }
-
-    .power-ranking-subtitle {
-      color: var(--text-secondary);
-      font-size: 0.9rem;
-    }
-
-    .power-bar {
-      display: flex;
-      align-items: center;
-      margin: 1rem 0;
-      position: relative;
-    }
-
-    .power-bar-label {
-      width: 150px;
-      font-weight: 600;
-    }
-
-    .power-bar-track {
-      flex: 1;
-      height: 30px;
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 15px;
-      overflow: hidden;
-      position: relative;
-    }
-
-    .power-bar-fill {
-      height: 100%;
-      border-radius: 15px;
-      display: flex;
-      align-items: center;
-      justify-content: flex-end;
-      padding-right: 1rem;
-      color: white;
-      font-weight: bold;
-      transition: width 1s ease-out;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .power-bar-fill::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-      animation: shimmerBar 2s infinite;
-    }
-
-    @keyframes shimmerBar {
-      0% { left: -100%; }
-      100% { left: 100%; }
-    }
-
-    .power-bar-change {
-      margin-left: 1rem;
-      font-size: 0.9rem;
-      display: flex;
-      align-items: center;
-      gap: 0.2rem;
-    }
-
-    .power-bar-change.up { color: var(--success); }
-    .power-bar-change.down { color: var(--danger); }
-
-    /* ===== CSV IMPORT ===== */
+    /* ===== IMPORT SECTION ===== */
     .import-section {
       background: var(--bg-card);
       border-radius: 16px;
@@ -702,6 +344,7 @@
       text-align: center;
       margin: 2rem 0;
       border: 2px dashed rgba(102, 126, 234, 0.3);
+      transition: all 0.3s ease;
     }
 
     .import-section.drag-over {
@@ -717,11 +360,19 @@
     .import-title {
       font-size: 1.3rem;
       margin-bottom: 0.5rem;
+      color: var(--text-primary);
     }
 
     .import-desc {
       color: var(--text-secondary);
       margin-bottom: 1.5rem;
+    }
+
+    .import-actions {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      flex-wrap: wrap;
     }
 
     .import-btn {
@@ -734,6 +385,9 @@
       font-weight: 600;
       cursor: pointer;
       transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
     }
 
     .import-btn:hover {
@@ -741,38 +395,33 @@
       box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
     }
 
-    .import-success {
-      background: rgba(74, 222, 128, 0.1);
-      border-color: var(--success);
+    .import-btn.secondary {
+      background: rgba(255, 255, 255, 0.1);
+      border: 2px solid rgba(102, 126, 234, 0.3);
+    }
+
+    .import-btn.secondary:hover {
+      background: rgba(102, 126, 234, 0.2);
+      border-color: var(--accent);
+    }
+
+    .import-status {
       margin-top: 1rem;
       padding: 1rem;
       border-radius: 12px;
+      display: none;
     }
 
-    /* ===== ANIMATIONS ===== */
-    .animate-in {
-      animation: slideIn 0.5s ease-out;
+    .import-status.success {
+      background: rgba(74, 222, 128, 0.1);
+      border: 1px solid var(--success);
+      color: var(--success);
     }
 
-    @keyframes slideIn {
-      from {
-        opacity: 0;
-        transform: translateX(-20px);
-      }
-      to {
-        opacity: 1;
-        transform: translateX(0);
-      }
-    }
-
-    .counter {
-      display: inline-block;
-      animation: countUp 1s ease-out;
-    }
-
-    @keyframes countUp {
-      from { transform: scale(0); }
-      to { transform: scale(1); }
+    .import-status.error {
+      background: rgba(248, 113, 113, 0.1);
+      border: 1px solid var(--danger);
+      color: var(--danger);
     }
 
     /* ===== MOBILE RESPONSIVE ===== */
@@ -791,17 +440,18 @@
         grid-template-columns: 1fr;
       }
 
-      .power-bar-label {
-        width: 100px;
-        font-size: 0.9rem;
+      .import-actions {
+        flex-direction: column;
+        align-items: stretch;
       }
 
-      .leaderboard-filters {
-        flex-wrap: wrap;
+      .import-btn {
+        width: 100%;
+        justify-content: center;
       }
 
-      .achievements-grid {
-        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+      .container {
+        padding: 1rem;
       }
     }
 
@@ -829,167 +479,283 @@
     .hidden {
       display: none !important;
     }
+
+    /* ===== TOAST NOTIFICATIONS ===== */
+    .toast-container {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 10001;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      max-width: 400px;
+    }
+
+    .toast {
+      background: var(--bg-card);
+      color: var(--text-primary);
+      padding: 1rem;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+      border-left: 4px solid var(--success);
+      transform: translateX(calc(100% + 20px));
+      transition: transform 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .toast.show {
+      transform: translateX(0);
+    }
+
+    .toast.success { border-left-color: var(--success); }
+    .toast.warning { border-left-color: var(--warning); }
+    .toast.error { border-left-color: var(--danger); }
+    .toast.info { border-left-color: var(--accent); }
+
+    .toast-content {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+
+    .toast-icon {
+      font-size: 1.2rem;
+      flex-shrink: 0;
+    }
+
+    .toast-message {
+      flex: 1;
+    }
+
+    .toast-close {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 0.25rem;
+      border-radius: 4px;
+      transition: all 0.3s ease;
+      flex-shrink: 0;
+    }
+
+    .toast-close:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-primary);
+    }
   </style>
 </head>
 <body>
-  <!-- Header -->
-  <header class="header">
-    <div class="header-content">
-      <div class="logo">
-        <span class="trophy-logo">🏆</span>
-        <h1>Pekkas Pokal</h1>
-        <span class="year-display" id="year-range">2011-2024</span>
-      </div>
-    </div>
-  </header>
-
-  <!-- Navigation -->
-  <nav class="nav-tabs">
-    <button class="nav-tab active" data-tab="dashboard"><span>📊</span> Dashboard</button>
-    <button class="nav-tab" data-tab="leaderboard"><span>🥇</span> Topplista</button>
-    <button class="nav-tab" data-tab="achievements"><span>🎖️</span> Achievements</button>
-    <button class="nav-tab" data-tab="records"><span>📜</span> Rekord</button>
-    <button class="nav-tab" data-tab="statistics"><span>📈</span> Statistik</button>
-    <button class="nav-tab" data-tab="import"><span>📁</span> Importera</button>
-  </nav>
-
-  <!-- Main Container -->
-  <div class="container">
-    <!-- Dashboard Tab -->
-    <div id="dashboard" class="tab-content active">
-      <div class="dashboard-grid">
-        <div class="stat-card">
-          <div class="stat-icon">🏆</div>
-          <div class="stat-value counter" id="total-competitions">0</div>
-          <div class="stat-label">Tävlingar</div>
-          <div class="stat-change" id="comp-change">
-            <span>→</span> Laddar data...
-          </div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-icon">👥</div>
-          <div class="stat-value counter" id="total-participants">0</div>
-          <div class="stat-label">Deltagare</div>
-          <div class="stat-change" id="part-change">
-            <span>→</span> Laddar data...
-          </div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-icon">🔥</div>
-          <div class="stat-value" id="current-champion">—</div>
-          <div class="stat-label">Senaste Vinnare</div>
-          <div class="stat-change" id="champ-change">
-            <span>🎯</span> Laddar...
-          </div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-icon">👑</div>
-          <div class="stat-value" id="most-wins">—</div>
-          <div class="stat-label">Flest Vinster</div>
-          <div class="stat-change" id="wins-change">
-            <span>🏅</span> Laddar...
-          </div>
-        </div>
-      </div>
-
-      <!-- Power Rankings -->
-      <div class="power-ranking">
-        <div class="power-ranking-header">
-          <div class="power-ranking-title">🔥 POWER RANKINGS 2024 🔥</div>
-          <div class="power-ranking-subtitle">Baserat på senaste prestationer och momentum</div>
-        </div>
-        <div id="power-rankings-list"></div>
-      </div>
-
-      <!-- Fun Stats -->
-      <div class="fun-stats">
-        <div class="fun-stats-title">
-          <span>🎉</span> Roliga Fakta <span>🎉</span>
-        </div>
-        <div id="fun-stats-list"></div>
-      </div>
-
-      <!-- Recent Activity Chart -->
-      <div class="chart-container">
-        <div class="chart-header">
-          <div class="chart-title">📊 Deltagande över Tid</div>
-        </div>
-        <canvas id="participation-chart"></canvas>
-      </div>
-    </div>
-
-    <!-- Leaderboard Tab -->
-    <div id="leaderboard" class="tab-content">
-      <div class="leaderboard">
-        <div class="leaderboard-header">
-          <div class="leaderboard-title">
-            <span>🏆</span> Hall of Fame
-          </div>
-          <div class="leaderboard-filters">
-            <button class="filter-btn active" data-filter="all">Alla Tider</button>
-            <button class="filter-btn" data-filter="recent">Senaste 5 År</button>
-            <button class="filter-btn" data-filter="2024">2024</button>
-          </div>
-        </div>
-        <div class="leaderboard-list" id="leaderboard-list"></div>
-      </div>
-
-      <!-- Head to Head Comparison -->
-      <div class="chart-container">
-        <div class="chart-header">
-          <div class="chart-title">🥊 Vinstfördelning</div>
-        </div>
-        <canvas id="wins-chart"></canvas>
-      </div>
-    </div>
-
-    <!-- Achievements Tab -->
-    <div id="achievements" class="tab-content">
-      <h2 style="text-align: center; margin-bottom: 2rem;">🎖️ Achievements & Utmärkelser</h2>
-      <div class="achievements-grid" id="achievements-grid"></div>
-    </div>
-
-    <!-- Records Tab -->
-    <div id="records" class="tab-content">
-      <h2 style="text-align: center; margin-bottom: 2rem;">📜 Rekord & Milstolpar</h2>
-      <div class="records-grid" id="records-grid"></div>
-    </div>
-
-    <!-- Statistics Tab -->
-    <div id="statistics" class="tab-content">
-      <div class="chart-container">
-        <div class="chart-header">
-          <div class="chart-title">📈 Prestationsutveckling</div>
-        </div>
-        <canvas id="performance-chart"></canvas>
-      </div>
-
-      <div class="chart-container">
-        <div class="chart-header">
-          <div class="chart-title">🎯 Genomsnittlig Placering per Deltagare</div>
-        </div>
-        <canvas id="average-position-chart"></canvas>
-      </div>
-    </div>
-
-    <!-- Import Tab -->
-    <div id="import" class="tab-content">
-      <div class="import-section" id="import-drop-zone">
-        <div class="import-icon">📁</div>
-        <div class="import-title">Importera Tävlingsdata</div>
-        <div class="import-desc">Dra och släpp din CSV-fil här eller klicka för att välja</div>
-        <input type="file" id="csv-file" accept=".csv" style="display: none;">
-        <button class="import-btn" onclick="document.getElementById('csv-file').click()">
-          Välj CSV-fil
-        </button>
-        <div id="import-status"></div>
+  <!-- Loading Screen -->
+  <div id="loading-screen" class="loading-screen">
+    <div class="loading-content">
+      <div class="trophy-loader">🏆</div>
+      <h2>Pekkas Pokal</h2>
+      <p>Laddar tävlingsdata...</p>
+      <div class="loading-bar">
+        <div class="loading-progress"></div>
       </div>
     </div>
   </div>
 
+  <!-- Main App -->
+  <div id="app" class="app hidden">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-content">
+        <div class="logo">
+          <span class="trophy-logo">🏆</span>
+          <h1>Pekkas Pokal</h1>
+          <span class="year-display" id="year-range">2011-2024</span>
+        </div>
+        
+        <div class="header-actions">
+          <button id="cache-control-btn" class="icon-btn" title="Cache Control (Ctrl+Shift+C)">🔧</button>
+          <button id="theme-toggle" class="icon-btn" title="Växla tema">🌙</button>
+          <button id="fullscreen-toggle" class="icon-btn" title="Fullskärm">⛶</button>
+          <button id="install-btn" class="icon-btn hidden" title="Installera app">📱</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="nav-tabs">
+      <button class="nav-tab active" data-tab="dashboard"><span>📊</span> Dashboard</button>
+      <button class="nav-tab" data-tab="import"><span>📁</span> Importera</button>
+      <button class="nav-tab" data-tab="statistics"><span>📈</span> Statistik</button>
+      <button class="nav-tab" data-tab="settings"><span>⚙️</span> Inställningar</button>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="container">
+      <!-- Dashboard Tab -->
+      <div id="dashboard" class="tab-content active">
+        <div class="dashboard-grid">
+          <div class="stat-card">
+            <div class="stat-icon">🏆</div>
+            <div class="stat-value counter" id="total-competitions">0</div>
+            <div class="stat-label">Tävlingar</div>
+            <div class="stat-change" id="comp-change">
+              <span>→</span> Laddar data...
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-icon">👥</div>
+            <div class="stat-value counter" id="total-participants">0</div>
+            <div class="stat-label">Deltagare</div>
+            <div class="stat-change" id="part-change">
+              <span>→</span> Laddar data...
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-icon">🔥</div>
+            <div class="stat-value" id="current-champion">—</div>
+            <div class="stat-label">Senaste Vinnare</div>
+            <div class="stat-change" id="champ-change">
+              <span>🎯</span> Laddar...
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-icon">👑</div>
+            <div class="stat-value" id="most-wins">—</div>
+            <div class="stat-label">Flest Vinster</div>
+            <div class="stat-change" id="wins-change">
+              <span>🏅</span> Laddar...
+            </div>
+          </div>
+        </div>
+
+        <!-- Welcome message for new users -->
+        <div id="welcome-section" class="import-section">
+          <div class="import-icon">🎉</div>
+          <h2 class="import-title">Välkommen till Pekkas Pokal!</h2>
+          <p class="import-desc">
+            För att komma igång, välj ett av alternativen nedan för att ladda tävlingsdata.
+          </p>
+          <div class="import-actions">
+            <button id="load-default-btn" class="import-btn">
+              <span>🏆</span> Ladda Standarddata
+            </button>
+            <button id="go-to-import-btn" class="import-btn secondary">
+              <span>📁</span> Importera CSV
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Import Tab -->
+      <div id="import" class="tab-content">
+        <div class="import-section" id="import-drop-zone">
+          <div class="import-icon">📁</div>
+          <div class="import-title">Importera Tävlingsdata</div>
+          <div class="import-desc">
+            Dra och släpp din CSV-fil här eller välj en av alternativen nedan
+          </div>
+          
+          <div class="import-actions">
+            <button class="import-btn" onclick="document.getElementById('csv-file').click()">
+              <span>📄</span> Välj CSV-fil
+            </button>
+            <button id="load-google-sheets-btn" class="import-btn secondary">
+              <span>📊</span> Ladda från Google Sheets
+            </button>
+            <button id="load-default-data-btn" class="import-btn secondary">
+              <span>🏆</span> Ladda Standarddata
+            </button>
+          </div>
+          
+          <input type="file" id="csv-file" accept=".csv" style="display: none;">
+          
+          <div id="import-status" class="import-status"></div>
+          
+          <div style="margin-top: 2rem; padding-top: 2rem; border-top: 2px solid rgba(102, 126, 234, 0.2); text-align: left;">
+            <h3 style="color: var(--text-primary); margin-bottom: 1rem;">📋 Instruktioner:</h3>
+            <div style="color: var(--text-secondary); line-height: 1.6;">
+              <p><strong>CSV-format:</strong> Filen ska ha kolumnerna År, Tävling, Plats, följt av deltagarnamn.</p>
+              <p><strong>Google Sheets:</strong> Gör ditt sheet publikt och använd Sheet ID från URL:en.</p>
+              <p><strong>Standarddata:</strong> Laddar exempel-tävlingar för att komma igång snabbt.</p>
+              <p><strong>Felsökning:</strong> Tryck Ctrl+Shift+C för cache-kontroll om något inte fungerar.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Statistics Tab -->
+      <div id="statistics" class="tab-content">
+        <div class="loading">
+          <div class="spinner"></div>
+        </div>
+        <p style="text-align: center; color: var(--text-secondary); margin-top: 1rem;">
+          Statistik kommer att visas när data har laddats
+        </p>
+      </div>
+
+      <!-- Settings Tab -->
+      <div id="settings" class="tab-content">
+        <div class="import-section">
+          <div class="import-icon">⚙️</div>
+          <h2 class="import-title">Inställningar & Verktyg</h2>
+          
+          <div class="import-actions">
+            <button id="settings-cache-control" class="import-btn">
+              <span>🔧</span> Cache Control
+            </button>
+            <button id="settings-hard-refresh" class="import-btn secondary">
+              <span>🔄</span> Hard Refresh
+            </button>
+            <button id="settings-clear-data" class="import-btn secondary">
+              <span>🗑️</span> Rensa All Data
+            </button>
+          </div>
+          
+          <div style="margin-top: 2rem; padding-top: 2rem; border-top: 2px solid rgba(102, 126, 234, 0.2); text-align: left;">
+            <h3 style="color: var(--text-primary); margin-bottom: 1rem;">⌨️ Kortkommandon:</h3>
+            <div style="color: var(--text-secondary); line-height: 1.8;">
+              <p><code>Ctrl+Shift+C</code> - Öppna cache control panel</p>
+              <p><code>Ctrl+Shift+R</code> - Hard refresh (kringgår cache)</p>
+              <p><code>F11</code> - Fullskärmsläge</p>
+            </div>
+            
+            <h3 style="color: var(--text-primary); margin: 2rem 0 1rem 0;">🛠️ Utvecklarverktyg:</h3>
+            <div style="color: var(--text-secondary); line-height: 1.8;">
+              <p>Öppna browser console (F12) för avancerade funktioner:</p>
+              <p><code>loadDefaultData()</code> - Ladda standarddata</p>
+              <p><code>importCSVIntoApp()</code> - Importera CSV</p>
+              <p><code>clearAllCaches()</code> - Rensa alla caches</p>
+              <p><code>setGoogleSheetsId('SHEET_ID')</code> - Konfigurera Google Sheets</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Scripts -->
+  <!-- Papa Parse for CSV processing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.4.1/papaparse.min.js"></script>
+  
+  <!-- Our Core Scripts -->
+  <script src="scripts/utils.js"></script>
+  <script src="scripts/data-manager.js"></script>
+  <script src="scripts/statistics.js"></script>
+  <script src="scripts/chart-manager.js"></script>
+  
+  <!-- New Enhanced Scripts -->
+  <script src="cache-manager.js"></script>
+  <script src="csv-import.js"></script>
+  <script src="default-data.js"></script>
+  
+  <!-- Main Application Script -->
+  <script src="scripts/main.js"></script>
+
+  <!-- Application Logic -->
   <script>
     // Global competition data
     let competitionData = {
@@ -1003,13 +769,19 @@
     function init() {
       setupTabs();
       setupCSVImport();
+      setupEventListeners();
       
       // Check for saved data
       const savedData = localStorage.getItem('pekkas-pokal-data');
       if (savedData) {
-        competitionData = JSON.parse(savedData);
-        if (competitionData.initialized) {
-          updateAllViews();
+        try {
+          competitionData = JSON.parse(savedData);
+          if (competitionData.initialized) {
+            updateAllViews();
+            hideWelcomeSection();
+          }
+        } catch (error) {
+          console.error('Failed to load saved data:', error);
         }
       }
     }
@@ -1032,7 +804,45 @@
       });
     }
 
-    // CSV Import with actual parsing
+    // Setup event listeners
+    function setupEventListeners() {
+      // Header buttons
+      document.getElementById('cache-control-btn')?.addEventListener('click', () => {
+        if (window.showCacheControl) {
+          window.showCacheControl();
+        }
+      });
+
+      document.getElementById('theme-toggle')?.addEventListener('click', toggleTheme);
+      document.getElementById('fullscreen-toggle')?.addEventListener('click', toggleFullscreen);
+
+      // Dashboard buttons
+      document.getElementById('load-default-btn')?.addEventListener('click', loadDefaultDataHandler);
+      document.getElementById('go-to-import-btn')?.addEventListener('click', () => {
+        document.querySelector('[data-tab="import"]').click();
+      });
+
+      // Import buttons
+      document.getElementById('load-google-sheets-btn')?.addEventListener('click', loadGoogleSheetsHandler);
+      document.getElementById('load-default-data-btn')?.addEventListener('click', loadDefaultDataHandler);
+
+      // Settings buttons
+      document.getElementById('settings-cache-control')?.addEventListener('click', () => {
+        if (window.showCacheControl) {
+          window.showCacheControl();
+        }
+      });
+
+      document.getElementById('settings-hard-refresh')?.addEventListener('click', () => {
+        if (window.hardRefresh) {
+          window.hardRefresh();
+        }
+      });
+
+      document.getElementById('settings-clear-data')?.addEventListener('click', clearAllDataHandler);
+    }
+
+    // CSV Import setup
     function setupCSVImport() {
       const dropZone = document.getElementById('import-drop-zone');
       const fileInput = document.getElementById('csv-file');
@@ -1053,7 +863,7 @@
         
         const file = e.dataTransfer.files[0];
         if (file) {
-          processCSV(file);
+          processCSVFile(file);
         }
       });
 
@@ -1061,169 +871,123 @@
       fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (file) {
-          processCSV(file);
+          processCSVFile(file);
         }
       });
     }
 
-    function processCSV(file) {
-      const reader = new FileReader();
+    // Process CSV file
+    async function processCSVFile(file) {
+      showImportStatus('Bearbetar CSV-fil...', 'info');
       
-      reader.onload = (e) => {
-        const csv = e.target.result;
-        parseCSV(csv);
-      };
-      
-      reader.readAsText(file, 'UTF-8');
-    }
-
-    function parseCSV(csvText) {
-      const lines = csvText.split('\n').filter(line => line.trim());
-      if (lines.length < 2) {
-        showImportStatus('Fel: Tom CSV-fil', 'error');
-        return;
-      }
-
-      // Parse header
-      const headers = parseCSVLine(lines[0]);
-      
-      // Extract participant names (skip År, Tävling, Plats)
-      const participantNames = headers.slice(3);
-      
-      // Reset data
-      competitionData = {
-        competitions: [],
-        participants: participantNames.map(name => ({
-          name: name.trim(),
-          id: name.trim().toLowerCase().replace(/\s+/g, '_')
-        })),
-        scores: {},
-        initialized: true
-      };
-
-      // Parse each competition row
-      for (let i = 1; i < lines.length; i++) {
-        const values = parseCSVLine(lines[i]);
-        if (values.length < 4) continue;
-
-        const year = parseInt(values[0]);
-        const competitionName = values[1];
-        const location = values[2];
-
-        if (!year || !competitionName) continue;
-
-        const competition = {
-          year,
-          name: competitionName,
-          location,
-          scores: {},
-          winner: null
-        };
-
-        // Parse scores for each participant
-        let bestScore = null;
-        let winnerName = null;
-
-        participantNames.forEach((participant, idx) => {
-          const scoreValue = values[idx + 3]?.trim();
-          if (scoreValue && scoreValue !== '-' && scoreValue !== '') {
-            const score = parseScore(scoreValue);
-            if (score !== null) {
-              const participantId = participant.trim().toLowerCase().replace(/\s+/g, '_');
-              competition.scores[participantId] = score;
-              
-              // Track winner (position 1)
-              if (score === 1) {
-                competition.winner = participant.trim();
-                winnerName = participant.trim();
-              }
-              
-              // For determining winner if no explicit "1"
-              if (bestScore === null || score < bestScore) {
-                bestScore = score;
-                if (!competition.winner) {
-                  competition.winner = participant.trim();
-                }
-              }
-            }
-          }
-        });
-
-        competitionData.competitions.push(competition);
-      }
-
-      // Sort competitions by year
-      competitionData.competitions.sort((a, b) => a.year - b.year);
-
-      // Save to localStorage
-      localStorage.setItem('pekkas-pokal-data', JSON.stringify(competitionData));
-
-      // Update all views
-      updateAllViews();
-      
-      showImportStatus(`✅ Import lyckades! ${competitionData.competitions.length} tävlingar och ${competitionData.participants.length} deltagare importerade.`, 'success');
-    }
-
-    function parseCSVLine(line) {
-      const result = [];
-      let current = '';
-      let inQuotes = false;
-      
-      for (let i = 0; i < line.length; i++) {
-        const char = line[i];
-        
-        if (char === '"') {
-          inQuotes = !inQuotes;
-        } else if (char === ',' && !inQuotes) {
-          result.push(current.trim());
-          current = '';
-        } else {
-          current += char;
+      try {
+        if (!window.csvImporter) {
+          throw new Error('CSV importer inte tillgänglig');
         }
+
+        const data = await window.csvImporter.importCSVData(file);
+        await window.csvImporter.importIntoApp(data);
+        
+        competitionData = data;
+        updateAllViews();
+        hideWelcomeSection();
+        
+        showImportStatus(
+          `✅ Import lyckades! ${data.competitions.length} tävlingar och ${data.participants.length} deltagare importerade.`,
+          'success'
+        );
+
+      } catch (error) {
+        console.error('CSV import failed:', error);
+        showImportStatus(`❌ Import misslyckades: ${error.message}`, 'error');
       }
-      
-      result.push(current.trim());
-      return result;
     }
 
-    function parseScore(value) {
-      // Handle numeric scores
-      const num = parseInt(value);
-      if (!isNaN(num)) return num;
+    // Load default data handler
+    async function loadDefaultDataHandler() {
+      showImportStatus('Laddar standarddata...', 'info');
       
-      // Handle Swedish text
-      const lower = value.toLowerCase();
-      if (lower.includes('näst sist')) return 99;
-      if (lower.includes('sist')) return 100;
-      
-      return null;
+      try {
+        if (!window.loadDefaultData) {
+          throw new Error('Default data loader inte tillgänglig');
+        }
+
+        await window.loadDefaultData();
+        
+        // Reload data
+        const savedData = localStorage.getItem('pekkas-pokal-data');
+        if (savedData) {
+          competitionData = JSON.parse(savedData);
+          updateAllViews();
+          hideWelcomeSection();
+        }
+        
+        showImportStatus('✅ Standarddata laddad framgångsrikt!', 'success');
+
+      } catch (error) {
+        console.error('Default data load failed:', error);
+        showImportStatus(`❌ Kunde inte ladda standarddata: ${error.message}`, 'error');
+      }
     }
 
-    function showImportStatus(message, type) {
-      const statusEl = document.getElementById('import-status');
-      statusEl.className = type === 'success' ? 'import-success' : 'import-error';
-      statusEl.innerHTML = `<div style="margin-top: 1rem; padding: 1rem; border-radius: 8px; background: ${type === 'success' ? 'rgba(74, 222, 128, 0.1)' : 'rgba(248, 113, 113, 0.1)'}; color: ${type === 'success' ? '#4ade80' : '#f87171'}">${message}</div>`;
+    // Load Google Sheets handler
+    async function loadGoogleSheetsHandler() {
+      const sheetId = prompt(
+        'Ange Google Sheets ID från din URL:\n\n' +
+        'Exempel: https://docs.google.com/spreadsheets/d/DENNA_STRÄNG/edit\n\n' +
+        'Sheet ID:'
+      );
+      
+      if (!sheetId) return;
+      
+      showImportStatus('Laddar från Google Sheets...', 'info');
+      
+      try {
+        if (!window.setGoogleSheetsId || !window.loadDefaultData) {
+          throw new Error('Google Sheets funktioner inte tillgängliga');
+        }
+
+        window.setGoogleSheetsId(sheetId);
+        await window.loadDefaultData();
+        
+        // Reload data
+        const savedData = localStorage.getItem('pekkas-pokal-data');
+        if (savedData) {
+          competitionData = JSON.parse(savedData);
+          updateAllViews();
+          hideWelcomeSection();
+        }
+        
+        showImportStatus('✅ Google Sheets data laddad framgångsrikt!', 'success');
+
+      } catch (error) {
+        console.error('Google Sheets load failed:', error);
+        showImportStatus(`❌ Google Sheets laddning misslyckades: ${error.message}`, 'error');
+      }
     }
 
+    // Clear all data handler
+    function clearAllDataHandler() {
+      if (confirm('Är du säker på att du vill radera all data? Detta kan inte ångras.')) {
+        localStorage.removeItem('pekkas-pokal-data');
+        competitionData = { competitions: [], participants: [], scores: {}, initialized: false };
+        updateAllViews();
+        showWelcomeSection();
+        showNotification('All data rensad', 'success');
+      }
+    }
+
+    // Update all views
     function updateAllViews() {
       if (!competitionData.initialized) return;
       
-      loadDashboard();
-      loadLeaderboard();
-      loadAchievements();
-      loadRecords();
-      loadStatistics();
-    }
-
-    // Load Dashboard with real data
-    function loadDashboard() {
       // Update stats cards
       document.getElementById('total-competitions').textContent = competitionData.competitions.length;
       document.getElementById('total-participants').textContent = competitionData.participants.length;
       
       // Find latest winner
-      const latestComp = competitionData.competitions[competitionData.competitions.length - 1];
-      if (latestComp) {
+      if (competitionData.competitions.length > 0) {
+        const latestComp = competitionData.competitions[competitionData.competitions.length - 1];
         document.getElementById('current-champion').textContent = latestComp.winner || '—';
         document.getElementById('champ-change').innerHTML = `<span>🎯</span> ${latestComp.name} ${latestComp.year}`;
       }
@@ -1247,623 +1011,133 @@
         const years = competitionData.competitions.map(c => c.year);
         document.getElementById('year-range').textContent = `${Math.min(...years)}-${Math.max(...years)}`;
       }
-
-      // Power Rankings
-      calculateAndDisplayPowerRankings();
-      
-      // Fun Stats
-      displayFunStats();
-      
-      // Participation Chart
-      createParticipationChart();
     }
 
-    function calculateAndDisplayPowerRankings() {
-      const recentComps = competitionData.competitions.slice(-5);
-      const playerScores = {};
-      
-      competitionData.participants.forEach(p => {
-        playerScores[p.name] = { total: 0, count: 0, recent: [] };
-      });
-      
-      recentComps.forEach(comp => {
-        Object.entries(comp.scores).forEach(([pId, score]) => {
-          const participant = competitionData.participants.find(p => p.id === pId);
-          if (participant) {
-            playerScores[participant.name].total += (11 - Math.min(score, 10));
-            playerScores[participant.name].count++;
-            playerScores[participant.name].recent.push(score);
-          }
-        });
-      });
-      
-      const rankings = Object.entries(playerScores)
-        .filter(([_, data]) => data.count > 0)
-        .map(([name, data]) => ({
-          name,
-          power: Math.round((data.total / (data.count * 10)) * 100),
-          trend: data.recent.length > 1 && data.recent[data.recent.length-1] < data.recent[0] ? 'up' : 'stable',
-          change: Math.abs(data.recent.length > 1 ? data.recent[0] - data.recent[data.recent.length-1] : 0)
-        }))
-        .sort((a, b) => b.power - a.power)
-        .slice(0, 5);
-      
-      const powerList = document.getElementById('power-rankings-list');
-      powerList.innerHTML = '';
-      
-      const colors = [
-        'linear-gradient(135deg, #ff6b6b, #feca57)',
-        'linear-gradient(135deg, #48dbfb, #0abde3)',
-        'linear-gradient(135deg, #ff9ff3, #ee5a24)',
-        'linear-gradient(135deg, #54a0ff, #5f27cd)',
-        'linear-gradient(135deg, #00d2d3, #1dd1a1)'
-      ];
-      
-      rankings.forEach((player, index) => {
-        const bar = document.createElement('div');
-        bar.className = 'power-bar animate-in';
-        bar.style.animationDelay = `${index * 0.1}s`;
-        
-        bar.innerHTML = `
-          <div class="power-bar-label">${player.name}</div>
-          <div class="power-bar-track">
-            <div class="power-bar-fill" style="width: ${player.power}%; background: ${colors[index % colors.length]}">
-              ${player.power}%
-            </div>
-          </div>
-          <div class="power-bar-change ${player.trend}">
-            ${player.trend === 'up' ? '↑' : '→'} ${player.change}
-          </div>
-        `;
-        
-        powerList.appendChild(bar);
-      });
-    }
-
-    function displayFunStats() {
-      const stats = calculateFunStats();
-      const funStatsList = document.getElementById('fun-stats-list');
-      funStatsList.innerHTML = '';
-      
-      stats.forEach((stat, index) => {
-        const item = document.createElement('div');
-        item.className = 'fun-stat-item animate-in';
-        item.style.animationDelay = `${index * 0.1}s`;
-        item.innerHTML = `
-          <div class="fun-stat-emoji">${stat.emoji}</div>
-          <div class="fun-stat-content">
-            <div class="fun-stat-title">${stat.title}</div>
-            <div class="fun-stat-desc">${stat.desc}</div>
-          </div>
-        `;
-        funStatsList.appendChild(item);
-      });
-    }
-
-    function calculateFunStats() {
-      const stats = [];
-      
-      // Most consistent (lowest standard deviation)
-      const avgPositions = {};
-      competitionData.participants.forEach(p => {
-        const positions = [];
-        competitionData.competitions.forEach(comp => {
-          if (comp.scores[p.id]) positions.push(comp.scores[p.id]);
-        });
-        if (positions.length > 3) {
-          const avg = positions.reduce((a, b) => a + b, 0) / positions.length;
-          const variance = positions.reduce((sum, pos) => sum + Math.pow(pos - avg, 2), 0) / positions.length;
-          avgPositions[p.name] = { avg, stdDev: Math.sqrt(variance), count: positions.length };
-        }
-      });
-      
-      const mostConsistent = Object.entries(avgPositions)
-        .sort((a, b) => a[1].stdDev - b[1].stdDev)[0];
-      
-      if (mostConsistent) {
-        stats.push({
-          emoji: '🎯',
-          title: 'Mr. Consistent',
-          desc: `${mostConsistent[0]} - Mest stabil prestation`
-        });
+    // Show/hide welcome section
+    function hideWelcomeSection() {
+      const welcomeSection = document.getElementById('welcome-section');
+      if (welcomeSection) {
+        welcomeSection.style.display = 'none';
       }
-      
-      // Comeback kid
-      const comebacks = [];
-      competitionData.participants.forEach(p => {
-        const positions = [];
-        competitionData.competitions.forEach(comp => {
-          if (comp.scores[p.id]) positions.push({ year: comp.year, pos: comp.scores[p.id] });
-        });
-        if (positions.length > 4) {
-          const firstHalf = positions.slice(0, Math.floor(positions.length/2));
-          const secondHalf = positions.slice(Math.floor(positions.length/2));
-          const firstAvg = firstHalf.reduce((a, b) => a + b.pos, 0) / firstHalf.length;
-          const secondAvg = secondHalf.reduce((a, b) => a + b.pos, 0) / secondHalf.length;
-          if (firstAvg > secondAvg && firstAvg - secondAvg > 2) {
-            comebacks.push({ name: p.name, improvement: firstAvg - secondAvg });
-          }
-        }
-      });
-      
-      if (comebacks.length > 0) {
-        const best = comebacks.sort((a, b) => b.improvement - a.improvement)[0];
-        stats.push({
-          emoji: '💪',
-          title: 'Comeback Kid',
-          desc: `${best.name} - Mest förbättring över tid`
-        });
+    }
+
+    function showWelcomeSection() {
+      const welcomeSection = document.getElementById('welcome-section');
+      if (welcomeSection) {
+        welcomeSection.style.display = 'block';
       }
+    }
+
+    // Show import status
+    function showImportStatus(message, type) {
+      const statusEl = document.getElementById('import-status');
+      statusEl.className = `import-status ${type}`;
+      statusEl.textContent = message;
+      statusEl.style.display = 'block';
       
-      // Lucky winner (won with minimal margin)
-      const closeWins = competitionData.competitions.filter(c => {
-        const scores = Object.values(c.scores).sort((a, b) => a - b);
-        return scores.length > 1 && scores[0] === 1 && scores[1] === 2;
-      });
-      
-      if (closeWins.length > 0) {
-        const luckyWinners = {};
-        closeWins.forEach(c => {
-          luckyWinners[c.winner] = (luckyWinners[c.winner] || 0) + 1;
-        });
-        const luckiest = Object.entries(luckyWinners).sort((a, b) => b[1] - a[1])[0];
-        if (luckiest) {
-          stats.push({
-            emoji: '🍀',
-            title: 'Lucky Charm',
-            desc: `${luckiest[0]} - ${luckiest[1]} knappa vinster`
-          });
-        }
+      if (type === 'success' || type === 'error') {
+        setTimeout(() => {
+          statusEl.style.display = 'none';
+        }, 5000);
       }
+    }
+
+    // Theme toggle
+    function toggleTheme() {
+      const currentTheme = document.documentElement.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
       
-      // Veteran
-      const participationCounts = {};
-      competitionData.participants.forEach(p => {
-        let count = 0;
-        competitionData.competitions.forEach(comp => {
-          if (comp.scores[p.id] !== undefined) count++;
-        });
-        participationCounts[p.name] = count;
-      });
+      document.documentElement.setAttribute('data-theme', newTheme);
+      document.getElementById('theme-toggle').textContent = newTheme === 'light' ? '🌙' : '☀️';
       
-      const veteran = Object.entries(participationCounts).sort((a, b) => b[1] - a[1])[0];
-      if (veteran) {
-        stats.push({
-          emoji: '🏅',
-          title: 'Järnmannen',
-          desc: `${veteran[0]} - ${veteran[1]} tävlingar`
-        });
+      localStorage.setItem('pekkas-pokal-theme', newTheme);
+      showNotification(`${newTheme === 'light' ? 'Ljust' : 'Mörkt'} tema aktiverat`, 'info');
+    }
+
+    // Fullscreen toggle
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen();
+      } else {
+        document.exitFullscreen();
       }
-      
-      // Hot streak
-      const recentWinner = competitionData.competitions.slice(-3)
-        .map(c => c.winner)
-        .filter(w => w);
-      
-      const streakCounts = {};
-      recentWinner.forEach(w => {
-        streakCounts[w] = (streakCounts[w] || 0) + 1;
-      });
-      
-      const hotPlayer = Object.entries(streakCounts).sort((a, b) => b[1] - a[1])[0];
-      if (hotPlayer && hotPlayer[1] > 1) {
-        stats.push({
-          emoji: '🔥',
-          title: 'På Eld',
-          desc: `${hotPlayer[0]} - ${hotPlayer[1]} vinster på senaste 3`
-        });
-      }
-      
-      return stats;
     }
 
-    // Load Leaderboard
-    function loadLeaderboard() {
-      const winCounts = {};
-      const participations = {};
-      const podiums = {};
+    // Show notification
+    function showNotification(message, type = 'info', duration = 5000) {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
       
-      competitionData.competitions.forEach(comp => {
-        if (comp.winner) {
-          winCounts[comp.winner] = (winCounts[comp.winner] || 0) + 1;
+      const icons = {
+        success: '✅',
+        error: '❌',
+        warning: '⚠️',
+        info: 'ℹ️'
+      };
+      
+      toast.innerHTML = `
+        <div class="toast-content">
+          <span class="toast-icon">${icons[type] || icons.info}</span>
+          <div class="toast-message">${message}</div>
+          <button class="toast-close">✕</button>
+        </div>
+      `;
+      
+      // Close button
+      toast.querySelector('.toast-close').addEventListener('click', () => {
+        removeToast(toast);
+      });
+      
+      container.appendChild(toast);
+      
+      // Show with animation
+      setTimeout(() => toast.classList.add('show'), 100);
+      
+      // Auto remove
+      setTimeout(() => removeToast(toast), duration);
+    }
+
+    // Remove toast notification
+    function removeToast(toast) {
+      toast.classList.remove('show');
+      setTimeout(() => {
+        if (toast.parentNode) {
+          toast.parentNode.removeChild(toast);
         }
-        
-        Object.entries(comp.scores).forEach(([pId, score]) => {
-          const participant = competitionData.participants.find(p => p.id === pId);
-          if (participant) {
-            participations[participant.name] = (participations[participant.name] || 0) + 1;
-            if (score <= 3) {
-              podiums[participant.name] = (podiums[participant.name] || 0) + 1;
-            }
-          }
-        });
-      });
-
-      const leaderboardData = competitionData.participants.map(p => ({
-        name: p.name,
-        wins: winCounts[p.name] || 0,
-        participations: participations[p.name] || 0,
-        podiums: podiums[p.name] || 0,
-        winRate: participations[p.name] ? ((winCounts[p.name] || 0) / participations[p.name] * 100) : 0
-      })).sort((a, b) => b.wins - a.wins || b.winRate - a.winRate);
-
-      const leaderboardList = document.getElementById('leaderboard-list');
-      leaderboardList.innerHTML = '';
-      
-      leaderboardData.slice(0, 10).forEach((player, index) => {
-        const item = document.createElement('div');
-        const posClass = index === 0 ? 'gold' : index === 1 ? 'silver' : index === 2 ? 'bronze' : '';
-        item.className = `leaderboard-item ${posClass} animate-in`;
-        item.style.animationDelay = `${index * 0.1}s`;
-        
-        item.innerHTML = `
-          <div class="position ${posClass}">${index + 1}</div>
-          <div class="player-info">
-            <div class="player-name">${player.name}</div>
-            <div class="player-stats">
-              <span>🏆 ${player.wins} vinster</span>
-              <span>🥇 ${player.podiums} pallplatser</span>
-              <span>📊 ${player.winRate.toFixed(1)}% vinstprocent</span>
-            </div>
-          </div>
-          ${index === 0 ? '<div class="trophy-count"><div class="trophy">👑 Champion</div></div>' : ''}
-        `;
-        
-        leaderboardList.appendChild(item);
-      });
-
-      // Create wins chart
-      createWinsChart(winCounts);
+      }, 300);
     }
 
-    // Load Achievements
-    function loadAchievements() {
-      const achievements = calculateAchievements();
-      const grid = document.getElementById('achievements-grid');
-      grid.innerHTML = '';
+    // Hide loading screen and show app
+    function hideLoadingScreen() {
+      const loadingScreen = document.getElementById('loading-screen');
+      const app = document.getElementById('app');
       
-      achievements.forEach((ach, index) => {
-        const card = document.createElement('div');
-        card.className = `achievement ${ach.unlocked ? 'unlocked' : 'locked'} ${ach.legendary ? 'legendary' : ''} animate-in`;
-        card.style.animationDelay = `${index * 0.05}s`;
-        
-        card.innerHTML = `
-          <div class="achievement-icon">${ach.icon}</div>
-          <div class="achievement-name">${ach.name}</div>
-          <div class="achievement-desc">${ach.desc}</div>
-        `;
-        
-        grid.appendChild(card);
-      });
-    }
-
-    function calculateAchievements() {
-      const achievements = [];
-      const winCounts = {};
-      const participations = {};
-      
-      competitionData.competitions.forEach(comp => {
-        if (comp.winner) winCounts[comp.winner] = (winCounts[comp.winner] || 0) + 1;
-        Object.entries(comp.scores).forEach(([pId, _]) => {
-          const p = competitionData.participants.find(part => part.id === pId);
-          if (p) participations[p.name] = (participations[p.name] || 0) + 1;
-        });
-      });
-      
-      // Check various achievement conditions
-      const hasThreeWins = Object.values(winCounts).some(w => w >= 3);
-      const hasFiveWins = Object.values(winCounts).some(w => w >= 5);
-      const hasTenParticipations = Object.values(participations).some(p => p >= 10);
-      const hasFullParticipation = Object.values(participations).some(p => p === competitionData.competitions.length);
-      
-      achievements.push(
-        { icon: '👑', name: 'Kung', desc: 'Vinn 5 tävlingar', unlocked: hasFiveWins, legendary: true },
-        { icon: '🥇', name: 'Guldmedaljör', desc: 'Vinn 3 tävlingar', unlocked: hasThreeWins },
-        { icon: '🏃', name: 'Maratonlöpare', desc: 'Delta i 10 tävlingar', unlocked: hasTenParticipations },
-        { icon: '🦾', name: 'Järnmannen', desc: 'Delta i alla tävlingar', unlocked: hasFullParticipation },
-        { icon: '🌟', name: 'Rising Star', desc: 'Första vinsten', unlocked: Object.keys(winCounts).length > 0 },
-        { icon: '🏁', name: 'Veteran', desc: '10 år i tävlingen', unlocked: competitionData.competitions.length >= 10 }
-      );
-      
-      return achievements;
-    }
-
-    // Load Records
-    function loadRecords() {
-      const records = calculateRecords();
-      const grid = document.getElementById('records-grid');
-      grid.innerHTML = '';
-      
-      records.forEach((record, index) => {
-        const card = document.createElement('div');
-        card.className = 'record-card animate-in';
-        card.style.animationDelay = `${index * 0.1}s`;
-        
-        card.innerHTML = `
-          <div class="record-label">${record.icon} ${record.label}</div>
-          <div class="record-value">${record.value}</div>
-          <div class="record-holder">${record.holder}</div>
-          <div class="record-date">${record.date}</div>
-        `;
-        
-        grid.appendChild(card);
-      });
-    }
-
-    function calculateRecords() {
-      const records = [];
-      const winCounts = {};
-      const streaks = {};
-      const participations = {};
-      const avgPositions = {};
-      
-      competitionData.competitions.forEach(comp => {
-        if (comp.winner) winCounts[comp.winner] = (winCounts[comp.winner] || 0) + 1;
-        
-        Object.entries(comp.scores).forEach(([pId, score]) => {
-          const p = competitionData.participants.find(part => part.id === pId);
-          if (p) {
-            participations[p.name] = (participations[p.name] || 0) + 1;
-            if (!avgPositions[p.name]) avgPositions[p.name] = [];
-            avgPositions[p.name].push(score);
-          }
-        });
-      });
-      
-      // Calculate averages
-      Object.entries(avgPositions).forEach(([name, positions]) => {
-        avgPositions[name] = positions.reduce((a, b) => a + b, 0) / positions.length;
-      });
-      
-      // Most wins
-      const topWinner = Object.entries(winCounts).sort((a, b) => b[1] - a[1])[0];
-      if (topWinner) {
-        records.push({
-          label: 'Flest Vinster',
-          value: topWinner[1].toString(),
-          holder: topWinner[0],
-          date: 'Totalt',
-          icon: '🏆'
-        });
-      }
-      
-      // Most participations
-      const topParticipant = Object.entries(participations).sort((a, b) => b[1] - a[1])[0];
-      if (topParticipant) {
-        records.push({
-          label: 'Flest Deltaganden',
-          value: topParticipant[1].toString(),
-          holder: topParticipant[0],
-          date: 'Totalt',
-          icon: '📊'
-        });
-      }
-      
-      // Best average
-      const bestAvg = Object.entries(avgPositions).sort((a, b) => a[1] - b[1])[0];
-      if (bestAvg) {
-        records.push({
-          label: 'Bästa Snitt',
-          value: bestAvg[1].toFixed(2),
-          holder: bestAvg[0],
-          date: 'Karriär',
-          icon: '📈'
-        });
-      }
-      
-      // Years active
-      if (competitionData.competitions.length > 0) {
-        const years = competitionData.competitions.map(c => c.year);
-        records.push({
-          label: 'År Aktiv',
-          value: `${Math.max(...years) - Math.min(...years) + 1} år`,
-          holder: 'Pekkas Pokal',
-          date: `${Math.min(...years)}-${Math.max(...years)}`,
-          icon: '📅'
-        });
-      }
-      
-      return records;
-    }
-
-    // Load Statistics
-    function loadStatistics() {
-      createPerformanceChart();
-      createAveragePositionChart();
-    }
-
-    // Chart Creation Functions
-    function createParticipationChart() {
-      const ctx = document.getElementById('participation-chart');
-      if (!ctx) return;
-      
-      const years = competitionData.competitions.map(c => c.year);
-      const participantCounts = competitionData.competitions.map(c => Object.keys(c.scores).length);
-      
-      new Chart(ctx.getContext('2d'), {
-        type: 'line',
-        data: {
-          labels: years,
-          datasets: [{
-            label: 'Antal Deltagare',
-            data: participantCounts,
-            borderColor: '#667eea',
-            backgroundColor: 'rgba(102, 126, 234, 0.1)',
-            tension: 0.4,
-            fill: true
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false }
-          },
-          scales: {
-            y: {
-              beginAtZero: true,
-              grid: { color: 'rgba(255, 255, 255, 0.1)' },
-              ticks: { color: '#a8b2d1' }
-            },
-            x: {
-              grid: { color: 'rgba(255, 255, 255, 0.1)' },
-              ticks: { color: '#a8b2d1' }
-            }
-          }
-        }
-      });
-    }
-
-    function createWinsChart(winCounts) {
-      const ctx = document.getElementById('wins-chart');
-      if (!ctx) return;
-      
-      const labels = Object.keys(winCounts);
-      const data = Object.values(winCounts);
-      
-      new Chart(ctx.getContext('2d'), {
-        type: 'doughnut',
-        data: {
-          labels: labels,
-          datasets: [{
-            data: data,
-            backgroundColor: [
-              '#FFD700', '#C0C0C0', '#CD7F32', '#667eea', '#764ba2',
-              '#f093fb', '#f5576c', '#4facfe', '#00f2fe', '#43e97b'
-            ],
-            borderWidth: 0
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              position: 'right',
-              labels: { color: '#a8b2d1' }
-            }
-          }
-        }
-      });
-    }
-
-    function createPerformanceChart() {
-      const ctx = document.getElementById('performance-chart');
-      if (!ctx) return;
-      
-      // Get top 3 performers
-      const playerData = {};
-      competitionData.competitions.slice(-6).forEach(comp => {
-        Object.entries(comp.scores).forEach(([pId, score]) => {
-          const p = competitionData.participants.find(part => part.id === pId);
-          if (p) {
-            if (!playerData[p.name]) playerData[p.name] = [];
-            playerData[p.name].push({ year: comp.year, score });
-          }
-        });
-      });
-      
-      const datasets = Object.entries(playerData)
-        .slice(0, 3)
-        .map((player, idx) => ({
-          label: player[0],
-          data: player[1].map(d => d.score),
-          borderColor: ['#ff6b6b', '#4facfe', '#43e97b'][idx],
-          backgroundColor: ['rgba(255, 107, 107, 0.1)', 'rgba(79, 172, 254, 0.1)', 'rgba(67, 233, 123, 0.1)'][idx],
-          tension: 0.4
-        }));
-      
-      new Chart(ctx.getContext('2d'), {
-        type: 'line',
-        data: {
-          labels: competitionData.competitions.slice(-6).map(c => c.year),
-          datasets: datasets
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              labels: { color: '#a8b2d1' }
-            }
-          },
-          scales: {
-            y: {
-              reverse: true,
-              min: 1,
-              max: 10,
-              grid: { color: 'rgba(255, 255, 255, 0.1)' },
-              ticks: { color: '#a8b2d1' }
-            },
-            x: {
-              grid: { color: 'rgba(255, 255, 255, 0.1)' },
-              ticks: { color: '#a8b2d1' }
-            }
-          }
-        }
-      });
-    }
-
-    function createAveragePositionChart() {
-      const ctx = document.getElementById('average-position-chart');
-      if (!ctx) return;
-      
-      const avgPositions = {};
-      competitionData.participants.forEach(p => {
-        const positions = [];
-        competitionData.competitions.forEach(comp => {
-          if (comp.scores[p.id]) positions.push(comp.scores[p.id]);
-        });
-        if (positions.length > 0) {
-          avgPositions[p.name] = positions.reduce((a, b) => a + b, 0) / positions.length;
-        }
-      });
-      
-      const sorted = Object.entries(avgPositions)
-        .sort((a, b) => a[1] - b[1])
-        .slice(0, 5);
-      
-      new Chart(ctx.getContext('2d'), {
-        type: 'bar',
-        data: {
-          labels: sorted.map(s => s[0]),
-          datasets: [{
-            label: 'Genomsnittlig Placering',
-            data: sorted.map(s => s[1]),
-            backgroundColor: [
-              'rgba(255, 215, 0, 0.8)',
-              'rgba(192, 192, 192, 0.8)',
-              'rgba(205, 127, 50, 0.8)',
-              'rgba(102, 126, 234, 0.8)',
-              'rgba(118, 75, 162, 0.8)'
-            ],
-            borderWidth: 0
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          indexAxis: 'y',
-          plugins: {
-            legend: { display: false }
-          },
-          scales: {
-            x: {
-              reverse: true,
-              grid: { color: 'rgba(255, 255, 255, 0.1)' },
-              ticks: { color: '#a8b2d1' }
-            },
-            y: {
-              grid: { color: 'rgba(255, 255, 255, 0.1)' },
-              ticks: { color: '#a8b2d1' }
-            }
-          }
-        }
-      });
+      loadingScreen.classList.add('hidden');
+      app.classList.remove('hidden');
     }
 
     // Initialize on load
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', () => {
+      // Load saved theme
+      const savedTheme = localStorage.getItem('pekkas-pokal-theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+      document.getElementById('theme-toggle').textContent = savedTheme === 'light' ? '🌙' : '☀️';
+
+      // Initialize app
+      init();
+      
+      // Hide loading screen after delay
+      setTimeout(() => {
+        hideLoadingScreen();
+        showNotification('Välkommen till Pekkas Pokal! 🏆', 'success');
+      }, 1500);
+    });
+
+    // Make functions globally available
+    window.showNotification = showNotification;
+    window.updateAllViews = updateAllViews;
+    window.competitionData = competitionData;
   </script>
 </body>
 </html>
