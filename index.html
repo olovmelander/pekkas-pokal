@@ -859,8 +859,366 @@
       to { transform: rotate(360deg); }
     }
 
-    .hidden {
-      display: none !important;
+    /* ===== STATISTICS ENHANCEMENTS ===== */
+    .stats-controls {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      margin-bottom: 2rem;
+      padding: 1rem;
+      background: var(--bg-card);
+      border-radius: 12px;
+      border: 1px solid rgba(102, 126, 234, 0.2);
+      flex-wrap: wrap;
+    }
+
+    .filter-select {
+      padding: 0.5rem 1rem;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(102, 126, 234, 0.3);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      min-width: 150px;
+    }
+
+    .filter-select:hover,
+    .filter-select:focus {
+      border-color: var(--accent);
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    .competitor-stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .competitor-card {
+      background: var(--bg-card);
+      border-radius: 16px;
+      padding: 1.5rem;
+      border: 1px solid rgba(102, 126, 234, 0.2);
+      transition: all 0.3s ease;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .competitor-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: var(--epic-gradient);
+      transform: scaleX(0);
+      transition: transform 0.3s ease;
+    }
+
+    .competitor-card:hover::before {
+      transform: scaleX(1);
+    }
+
+    .competitor-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+      border-color: var(--accent);
+    }
+
+    .competitor-card.selected {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+      transform: translateY(-3px);
+    }
+
+    .competitor-card.selected::before {
+      transform: scaleX(1);
+    }
+
+    .competitor-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .competitor-avatar {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: var(--epic-gradient);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: white;
+      margin-right: 1rem;
+    }
+
+    .competitor-info h4 {
+      font-size: 1.1rem;
+      margin-bottom: 0.2rem;
+      color: var(--text-primary);
+    }
+
+    .competitor-info .status {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .competitor-stats {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1rem;
+    }
+
+    .stat-item {
+      text-align: center;
+    }
+
+    .stat-item .value {
+      font-size: 1.8rem;
+      font-weight: bold;
+      color: var(--accent);
+      margin-bottom: 0.2rem;
+    }
+
+    .stat-item .label {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .competitor-badges {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      padding: 0.2rem 0.6rem;
+      border-radius: 12px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .badge.champion {
+      background: linear-gradient(135deg, #FFD700, #FFA500);
+      color: #8B4513;
+    }
+
+    .badge.podium {
+      background: linear-gradient(135deg, #C0C0C0, #808080);
+      color: #333;
+    }
+
+    .badge.veteran {
+      background: rgba(102, 126, 234, 0.2);
+      color: var(--accent);
+    }
+
+    .badge.rookie {
+      background: rgba(67, 233, 123, 0.2);
+      color: #43e97b;
+    }
+
+    /* Individual Competitor Details */
+    .individual-details {
+      background: var(--bg-card);
+      border-radius: 16px;
+      padding: 2rem;
+      margin-bottom: 2rem;
+      border: 1px solid rgba(102, 126, 234, 0.2);
+      position: relative;
+    }
+
+    .competitor-detail-header {
+      display: flex;
+      justify-content: between;
+      align-items: center;
+      margin-bottom: 2rem;
+      padding-bottom: 1rem;
+      border-bottom: 2px solid rgba(102, 126, 234, 0.2);
+    }
+
+    .competitor-detail-header h3 {
+      font-size: 1.5rem;
+      background: var(--epic-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .close-btn {
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      margin-left: auto;
+    }
+
+    .close-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+      color: var(--text-primary);
+      transform: scale(1.1);
+    }
+
+    .competitor-summary-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .summary-stat {
+      text-align: center;
+      padding: 1rem;
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 12px;
+      border: 1px solid rgba(102, 126, 234, 0.1);
+    }
+
+    .summary-value {
+      font-size: 2rem;
+      font-weight: bold;
+      color: var(--accent);
+      margin-bottom: 0.5rem;
+    }
+
+    .summary-label {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .competitor-charts {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+      gap: 2rem;
+      margin-bottom: 2rem;
+    }
+
+    .competition-history h4 {
+      color: var(--text-primary);
+      margin-bottom: 1rem;
+      font-size: 1.2rem;
+    }
+
+    .competition-list {
+      display: grid;
+      gap: 0.5rem;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .competition-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.8rem 1rem;
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 8px;
+      border: 1px solid rgba(102, 126, 234, 0.1);
+      transition: all 0.3s ease;
+    }
+
+    .competition-item:hover {
+      background: rgba(102, 126, 234, 0.1);
+      transform: translateX(5px);
+    }
+
+    .competition-info {
+      flex: 1;
+    }
+
+    .competition-name {
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 0.2rem;
+    }
+
+    .competition-details {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+
+    .competition-position {
+      font-size: 1.2rem;
+      font-weight: bold;
+      padding: 0.3rem 0.8rem;
+      border-radius: 20px;
+      min-width: 40px;
+      text-align: center;
+    }
+
+    .competition-position.first {
+      background: linear-gradient(135deg, #FFD700, #FFA500);
+      color: #8B4513;
+    }
+
+    .competition-position.podium {
+      background: linear-gradient(135deg, #C0C0C0, #808080);
+      color: #333;
+    }
+
+    .competition-position.regular {
+      background: rgba(102, 126, 234, 0.2);
+      color: var(--accent);
+    }
+
+    .overall-charts {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+      gap: 2rem;
+    }
+
+    /* Mobile responsive for statistics */
+    @media (max-width: 768px) {
+      .stats-controls {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .filter-select {
+        min-width: auto;
+        width: 100%;
+      }
+
+      .competitor-stats-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .competitor-summary-stats {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .competitor-charts {
+        grid-template-columns: 1fr;
+      }
+
+      .overall-charts {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
@@ -999,18 +1357,117 @@
 
     <!-- Statistics Tab -->
     <div id="statistics" class="tab-content">
-      <div class="chart-container">
-        <div class="chart-header">
-          <div class="chart-title">📈 Prestationsutveckling</div>
-        </div>
-        <canvas id="performance-chart"></canvas>
+      <!-- Statistics Controls -->
+      <div class="stats-controls">
+        <select id="competitor-filter" class="filter-select">
+          <option value="all">Alla Deltagare</option>
+        </select>
+        <select id="timeframe-filter" class="filter-select">
+          <option value="all">Alla År</option>
+          <option value="recent">Senaste 5 År</option>
+          <option value="2024">2024</option>
+          <option value="2023">2023</option>
+          <option value="2022">2022</option>
+        </select>
+        <button id="export-stats-btn" class="import-btn" style="margin-left: auto;">
+          📊 Exportera Statistik
+        </button>
       </div>
 
-      <div class="chart-container">
-        <div class="chart-header">
-          <div class="chart-title">🎯 Genomsnittlig Placering per Deltagare</div>
+      <!-- Competitor Cards Grid -->
+      <div class="competitor-stats-grid" id="competitor-stats-grid">
+        <!-- Competitor cards will be populated here -->
+      </div>
+
+      <!-- Individual Competitor Details -->
+      <div id="individual-competitor-details" class="individual-details hidden">
+        <div class="competitor-detail-header">
+          <h3 id="selected-competitor-name">Välj en deltagare</h3>
+          <button id="close-individual-view" class="close-btn">✕</button>
         </div>
-        <canvas id="average-position-chart"></canvas>
+        
+        <div class="competitor-detail-content">
+          <div class="competitor-summary-stats">
+            <div class="summary-stat">
+              <div class="summary-value" id="individual-competitions">0</div>
+              <div class="summary-label">Tävlingar</div>
+            </div>
+            <div class="summary-stat">
+              <div class="summary-value" id="individual-wins">0</div>
+              <div class="summary-label">Vinster</div>
+            </div>
+            <div class="summary-stat">
+              <div class="summary-value" id="individual-podiums">0</div>
+              <div class="summary-label">Pallplatser</div>
+            </div>
+            <div class="summary-stat">
+              <div class="summary-value" id="individual-avg">0.0</div>
+              <div class="summary-label">Snittplacering</div>
+            </div>
+            <div class="summary-stat">
+              <div class="summary-value" id="individual-best">-</div>
+              <div class="summary-label">Bästa Placering</div>
+            </div>
+            <div class="summary-stat">
+              <div class="summary-value" id="individual-winrate">0%</div>
+              <div class="summary-label">Vinstprocent</div>
+            </div>
+          </div>
+
+          <div class="competitor-charts">
+            <div class="chart-container">
+              <div class="chart-header">
+                <div class="chart-title">📈 Prestationer över Tid</div>
+              </div>
+              <canvas id="individual-performance-chart"></canvas>
+            </div>
+
+            <div class="chart-container">
+              <div class="chart-header">
+                <div class="chart-title">🏆 Placeringsfördelning</div>
+              </div>
+              <canvas id="individual-position-distribution"></canvas>
+            </div>
+          </div>
+
+          <div class="competition-history">
+            <h4>Tävlingshistorik</h4>
+            <div id="individual-competition-list" class="competition-list">
+              <!-- Competition history will be populated here -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Overall Statistics Charts -->
+      <div class="overall-charts">
+        <div class="chart-container">
+          <div class="chart-header">
+            <div class="chart-title">📈 Prestationsutveckling</div>
+          </div>
+          <canvas id="performance-chart"></canvas>
+        </div>
+
+        <div class="chart-container">
+          <div class="chart-header">
+            <div class="chart-title">🎯 Genomsnittlig Placering per Deltagare</div>
+          </div>
+          <canvas id="average-position-chart"></canvas>
+        </div>
+
+        <div class="chart-container">
+          <div class="chart-header">
+            <div class="chart-title">📊 Deltagande över Tid</div>
+          </div>
+          <canvas id="participation-stats-chart"></canvas>
+        </div>
+
+        <div class="chart-container">
+          <div class="chart-header">
+            <div class="chart-title">🥇 Vinstfördelning</div>
+          </div>
+          <canvas id="wins-distribution-chart"></canvas>
+        </div>
       </div>
     </div>
 
@@ -1658,8 +2115,707 @@
 
     // Load Statistics
     function loadStatistics() {
+      populateCompetitorFilter();
+      setupStatisticsEventListeners();
+      renderCompetitorCards();
+      createOverallCharts();
+    }
+
+    // Populate competitor filter dropdown
+    function populateCompetitorFilter() {
+      const competitorFilter = document.getElementById('competitor-filter');
+      if (!competitorFilter) return;
+
+      // Clear existing options (except "Alla Deltagare")
+      competitorFilter.innerHTML = '<option value="all">Alla Deltagare</option>';
+
+      // Add competitors
+      competitionData.participants
+        .sort((a, b) => a.name.localeCompare(b.name, 'sv'))
+        .forEach(participant => {
+          const option = document.createElement('option');
+          option.value = participant.id;
+          option.textContent = participant.name;
+          competitorFilter.appendChild(option);
+        });
+    }
+
+    // Setup statistics event listeners
+    function setupStatisticsEventListeners() {
+      const competitorFilter = document.getElementById('competitor-filter');
+      const timeframeFilter = document.getElementById('timeframe-filter');
+      const exportBtn = document.getElementById('export-stats-btn');
+      const closeBtn = document.getElementById('close-individual-view');
+
+      competitorFilter?.addEventListener('change', () => {
+        renderCompetitorCards();
+        updateIndividualView();
+      });
+
+      timeframeFilter?.addEventListener('change', () => {
+        renderCompetitorCards();
+        updateIndividualView();
+        createOverallCharts();
+      });
+
+      exportBtn?.addEventListener('click', exportStatistics);
+      closeBtn?.addEventListener('click', closeIndividualView);
+    }
+
+    // Render competitor cards
+    function renderCompetitorCards() {
+      const grid = document.getElementById('competitor-stats-grid');
+      const competitorFilter = document.getElementById('competitor-filter');
+      const timeframeFilter = document.getElementById('timeframe-filter');
+      
+      if (!grid) return;
+
+      const selectedCompetitor = competitorFilter?.value || 'all';
+      const selectedTimeframe = timeframeFilter?.value || 'all';
+
+      // Filter competitions by timeframe
+      let filteredCompetitions = competitionData.competitions;
+      if (selectedTimeframe !== 'all') {
+        const currentYear = new Date().getFullYear();
+        if (selectedTimeframe === 'recent') {
+          filteredCompetitions = competitionData.competitions.filter(c => c.year >= currentYear - 5);
+        } else {
+          filteredCompetitions = competitionData.competitions.filter(c => c.year.toString() === selectedTimeframe);
+        }
+      }
+
+      // Filter participants
+      let participants = competitionData.participants;
+      if (selectedCompetitor !== 'all') {
+        participants = participants.filter(p => p.id === selectedCompetitor);
+      }
+
+      grid.innerHTML = '';
+
+      participants.forEach(participant => {
+        const stats = calculateCompetitorStats(participant, filteredCompetitions);
+        const card = createCompetitorCard(participant, stats);
+        grid.appendChild(card);
+      });
+    }
+
+    // Calculate competitor statistics
+    function calculateCompetitorStats(participant, competitions) {
+      const participantCompetitions = competitions.filter(comp => 
+        comp.scores && comp.scores[participant.id] !== undefined
+      );
+
+      const stats = {
+        totalCompetitions: participantCompetitions.length,
+        wins: 0,
+        podiums: 0,
+        averagePosition: 0,
+        bestPosition: null,
+        worstPosition: null,
+        winRate: 0,
+        positions: [],
+        recentForm: []
+      };
+
+      if (participantCompetitions.length === 0) return stats;
+
+      let totalPosition = 0;
+      participantCompetitions.forEach(comp => {
+        const position = comp.scores[participant.id];
+        stats.positions.push(position);
+        totalPosition += position;
+
+        if (position === 1) stats.wins++;
+        if (position <= 3) stats.podiums++;
+
+        if (stats.bestPosition === null || position < stats.bestPosition) {
+          stats.bestPosition = position;
+        }
+        if (stats.worstPosition === null || position > stats.worstPosition) {
+          stats.worstPosition = position;
+        }
+      });
+
+      stats.averagePosition = totalPosition / participantCompetitions.length;
+      stats.winRate = (stats.wins / participantCompetitions.length) * 100;
+
+      // Recent form (last 3 competitions)
+      stats.recentForm = participantCompetitions
+        .sort((a, b) => b.year - a.year)
+        .slice(0, 3)
+        .map(comp => ({
+          competition: comp.name,
+          year: comp.year,
+          position: comp.scores[participant.id]
+        }));
+
+      return stats;
+    }
+
+    // Create competitor card
+    function createCompetitorCard(participant, stats) {
+      const card = document.createElement('div');
+      card.className = 'competitor-card';
+      card.dataset.participantId = participant.id;
+
+      // Determine badges
+      const badges = [];
+      if (stats.wins > 0) badges.push({ type: 'champion', text: `${stats.wins} Vinst${stats.wins > 1 ? 'er' : ''}` });
+      if (stats.podiums > stats.wins) badges.push({ type: 'podium', text: `${stats.podiums} Pallpl.` });
+      if (stats.totalCompetitions >= 10) badges.push({ type: 'veteran', text: 'Veteran' });
+      if (stats.totalCompetitions <= 3 && stats.totalCompetitions > 0) badges.push({ type: 'rookie', text: 'Rookie' });
+
+      card.innerHTML = `
+        <div class="competitor-header">
+          <div class="competitor-avatar">
+            ${participant.name.split(' ').map(n => n[0]).join('').substring(0, 2)}
+          </div>
+          <div class="competitor-info">
+            <h4>${participant.name}</h4>
+            <div class="status">${participant.status || 'Aktiv'}</div>
+          </div>
+        </div>
+        
+        <div class="competitor-stats">
+          <div class="stat-item">
+            <div class="value">${stats.totalCompetitions}</div>
+            <div class="label">Tävlingar</div>
+          </div>
+          <div class="stat-item">
+            <div class="value">${stats.wins}</div>
+            <div class="label">Vinster</div>
+          </div>
+          <div class="stat-item">
+            <div class="value">${stats.podiums}</div>
+            <div class="label">Pallplatser</div>
+          </div>
+          <div class="stat-item">
+            <div class="value">${stats.averagePosition.toFixed(1)}</div>
+            <div class="label">Snitt</div>
+          </div>
+        </div>
+
+        <div class="competitor-badges">
+          ${badges.map(badge => `<span class="badge ${badge.type}">${badge.text}</span>`).join('')}
+        </div>
+      `;
+
+      // Add click handler for individual view
+      card.addEventListener('click', () => {
+        // Remove selected class from all cards
+        document.querySelectorAll('.competitor-card').forEach(c => c.classList.remove('selected'));
+        // Add selected class to clicked card
+        card.classList.add('selected');
+        // Show individual details
+        showIndividualView(participant, stats);
+      });
+
+      return card;
+    }
+
+    // Show individual competitor view
+    function showIndividualView(participant, stats) {
+      const detailsContainer = document.getElementById('individual-competitor-details');
+      if (!detailsContainer) return;
+
+      // Update header
+      document.getElementById('selected-competitor-name').textContent = participant.name;
+
+      // Update summary stats
+      document.getElementById('individual-competitions').textContent = stats.totalCompetitions;
+      document.getElementById('individual-wins').textContent = stats.wins;
+      document.getElementById('individual-podiums').textContent = stats.podiums;
+      document.getElementById('individual-avg').textContent = stats.averagePosition.toFixed(1);
+      document.getElementById('individual-best').textContent = stats.bestPosition || '-';
+      document.getElementById('individual-winrate').textContent = stats.winRate.toFixed(1) + '%';
+
+      // Show the container
+      detailsContainer.classList.remove('hidden');
+
+      // Create individual charts
+      createIndividualCharts(participant, stats);
+      renderCompetitionHistory(participant);
+
+      // Scroll to the individual view
+      detailsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // Close individual view
+    function closeIndividualView() {
+      const detailsContainer = document.getElementById('individual-competitor-details');
+      if (detailsContainer) {
+        detailsContainer.classList.add('hidden');
+      }
+
+      // Remove selected class from all cards
+      document.querySelectorAll('.competitor-card').forEach(c => c.classList.remove('selected'));
+    }
+
+    // Update individual view when filters change
+    function updateIndividualView() {
+      const selectedCard = document.querySelector('.competitor-card.selected');
+      if (selectedCard) {
+        const participantId = selectedCard.dataset.participantId;
+        const participant = competitionData.participants.find(p => p.id === participantId);
+        if (participant) {
+          const timeframeFilter = document.getElementById('timeframe-filter');
+          const selectedTimeframe = timeframeFilter?.value || 'all';
+          
+          let filteredCompetitions = competitionData.competitions;
+          if (selectedTimeframe !== 'all') {
+            const currentYear = new Date().getFullYear();
+            if (selectedTimeframe === 'recent') {
+              filteredCompetitions = competitionData.competitions.filter(c => c.year >= currentYear - 5);
+            } else {
+              filteredCompetitions = competitionData.competitions.filter(c => c.year.toString() === selectedTimeframe);
+            }
+          }
+
+          const stats = calculateCompetitorStats(participant, filteredCompetitions);
+          showIndividualView(participant, stats);
+        }
+      }
+    }
+
+    // Create individual competitor charts
+    function createIndividualCharts(participant, stats) {
+      createIndividualPerformanceChart(participant);
+      createIndividualPositionDistribution(participant, stats);
+    }
+
+    // Create individual performance chart
+    function createIndividualPerformanceChart(participant) {
+      const ctx = document.getElementById('individual-performance-chart');
+      if (!ctx) return;
+
+      // Destroy existing chart
+      if (window.individualPerformanceChart) {
+        window.individualPerformanceChart.destroy();
+      }
+
+      const timeframeFilter = document.getElementById('timeframe-filter');
+      const selectedTimeframe = timeframeFilter?.value || 'all';
+      
+      let filteredCompetitions = competitionData.competitions;
+      if (selectedTimeframe !== 'all') {
+        const currentYear = new Date().getFullYear();
+        if (selectedTimeframe === 'recent') {
+          filteredCompetitions = competitionData.competitions.filter(c => c.year >= currentYear - 5);
+        } else {
+          filteredCompetitions = competitionData.competitions.filter(c => c.year.toString() === selectedTimeframe);
+        }
+      }
+
+      const participantCompetitions = filteredCompetitions
+        .filter(comp => comp.scores && comp.scores[participant.id] !== undefined)
+        .sort((a, b) => a.year - b.year);
+
+      const data = {
+        labels: participantCompetitions.map(comp => `${comp.year} - ${comp.name.substring(0, 15)}${comp.name.length > 15 ? '...' : ''}`),
+        datasets: [{
+          label: 'Placering',
+          data: participantCompetitions.map(comp => comp.scores[participant.id]),
+          borderColor: '#667eea',
+          backgroundColor: 'rgba(102, 126, 234, 0.1)',
+          borderWidth: 3,
+          fill: true,
+          tension: 0.4,
+          pointBackgroundColor: participantCompetitions.map(comp => {
+            const pos = comp.scores[participant.id];
+            return pos === 1 ? '#FFD700' : pos <= 3 ? '#C0C0C0' : '#667eea';
+          }),
+          pointBorderColor: '#ffffff',
+          pointBorderWidth: 2,
+          pointRadius: 6,
+          pointHoverRadius: 8
+        }]
+      };
+
+      window.individualPerformanceChart = new Chart(ctx.getContext('2d'), {
+        type: 'line',
+        data: data,
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  const position = context.parsed.y;
+                  const competition = participantCompetitions[context.dataIndex];
+                  return [
+                    `Placering: ${position}`,
+                    `Tävling: ${competition.name}`,
+                    `År: ${competition.year}`
+                  ];
+                }
+              }
+            }
+          },
+          scales: {
+            y: {
+              reverse: true,
+              beginAtZero: false,
+              title: {
+                display: true,
+                text: 'Placering (Lägre = Bättre)',
+                color: '#a8b2d1'
+              },
+              ticks: {
+                stepSize: 1,
+                color: '#a8b2d1'
+              },
+              grid: { color: 'rgba(255, 255, 255, 0.1)' }
+            },
+            x: {
+              title: {
+                display: true,
+                text: 'Tävlingar',
+                color: '#a8b2d1'
+              },
+              ticks: {
+                maxRotation: 45,
+                color: '#a8b2d1'
+              },
+              grid: { color: 'rgba(255, 255, 255, 0.1)' }
+            }
+          }
+        }
+      });
+    }
+
+    // Create individual position distribution chart
+    function createIndividualPositionDistribution(participant, stats) {
+      const ctx = document.getElementById('individual-position-distribution');
+      if (!ctx) return;
+
+      // Destroy existing chart
+      if (window.individualPositionChart) {
+        window.individualPositionChart.destroy();
+      }
+
+      // Group positions into ranges
+      const positionGroups = {
+        '1:a plats': 0,
+        '2-3 plats': 0,
+        '4-5 plats': 0,
+        '6-10 plats': 0,
+        '11+ plats': 0
+      };
+
+      stats.positions.forEach(pos => {
+        if (pos === 1) positionGroups['1:a plats']++;
+        else if (pos <= 3) positionGroups['2-3 plats']++;
+        else if (pos <= 5) positionGroups['4-5 plats']++;
+        else if (pos <= 10) positionGroups['6-10 plats']++;
+        else positionGroups['11+ plats']++;
+      });
+
+      const data = {
+        labels: Object.keys(positionGroups),
+        datasets: [{
+          data: Object.values(positionGroups),
+          backgroundColor: [
+            '#FFD700', // Gold
+            '#C0C0C0', // Silver
+            '#CD7F32', // Bronze
+            '#667eea', // Blue
+            '#f87171'  // Red
+          ],
+          borderColor: '#ffffff',
+          borderWidth: 2
+        }]
+      };
+
+      window.individualPositionChart = new Chart(ctx.getContext('2d'), {
+        type: 'doughnut',
+        data: data,
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { 
+                color: '#a8b2d1',
+                padding: 15,
+                usePointStyle: true
+              }
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                  const percentage = total > 0 ? ((context.parsed / total) * 100).toFixed(1) : 0;
+                  return `${context.label}: ${context.parsed} (${percentage}%)`;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    // Render competition history
+    function renderCompetitionHistory(participant) {
+      const listContainer = document.getElementById('individual-competition-list');
+      if (!listContainer) return;
+
+      const timeframeFilter = document.getElementById('timeframe-filter');
+      const selectedTimeframe = timeframeFilter?.value || 'all';
+      
+      let filteredCompetitions = competitionData.competitions;
+      if (selectedTimeframe !== 'all') {
+        const currentYear = new Date().getFullYear();
+        if (selectedTimeframe === 'recent') {
+          filteredCompetitions = competitionData.competitions.filter(c => c.year >= currentYear - 5);
+        } else {
+          filteredCompetitions = competitionData.competitions.filter(c => c.year.toString() === selectedTimeframe);
+        }
+      }
+
+      const participantCompetitions = filteredCompetitions
+        .filter(comp => comp.scores && comp.scores[participant.id] !== undefined)
+        .sort((a, b) => b.year - a.year); // Most recent first
+
+      listContainer.innerHTML = '';
+
+      participantCompetitions.forEach(comp => {
+        const position = comp.scores[participant.id];
+        const item = document.createElement('div');
+        item.className = 'competition-item';
+
+        const positionClass = position === 1 ? 'first' : position <= 3 ? 'podium' : 'regular';
+
+        item.innerHTML = `
+          <div class="competition-info">
+            <div class="competition-name">${comp.name}</div>
+            <div class="competition-details">${comp.year} • ${comp.location || 'Okänd plats'}</div>
+          </div>
+          <div class="competition-position ${positionClass}">
+            ${position}
+          </div>
+        `;
+
+        listContainer.appendChild(item);
+      });
+
+      if (participantCompetitions.length === 0) {
+        listContainer.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 2rem;">Inga tävlingar funna för vald tidsperiod</p>';
+      }
+    }
+
+    // Create overall charts
+    function createOverallCharts() {
       createPerformanceChart();
       createAveragePositionChart();
+      createParticipationStatsChart();
+      createWinsDistributionChart();
+    }
+
+    // Create participation stats chart
+    function createParticipationStatsChart() {
+      const ctx = document.getElementById('participation-stats-chart');
+      if (!ctx) return;
+
+      // Destroy existing chart
+      if (window.participationStatsChart) {
+        window.participationStatsChart.destroy();
+      }
+
+      const timeframeFilter = document.getElementById('timeframe-filter');
+      const selectedTimeframe = timeframeFilter?.value || 'all';
+      
+      let filteredCompetitions = competitionData.competitions;
+      if (selectedTimeframe !== 'all') {
+        const currentYear = new Date().getFullYear();
+        if (selectedTimeframe === 'recent') {
+          filteredCompetitions = competitionData.competitions.filter(c => c.year >= currentYear - 5);
+        } else {
+          filteredCompetitions = competitionData.competitions.filter(c => c.year.toString() === selectedTimeframe);
+        }
+      }
+
+      const years = filteredCompetitions.map(c => c.year);
+      const participantCounts = filteredCompetitions.map(c => Object.keys(c.scores || {}).length);
+
+      const data = {
+        labels: years,
+        datasets: [{
+          label: 'Antal Deltagare',
+          data: participantCounts,
+          borderColor: '#667eea',
+          backgroundColor: 'rgba(102, 126, 234, 0.1)',
+          borderWidth: 3,
+          fill: true,
+          tension: 0.4,
+          pointBackgroundColor: '#667eea',
+          pointBorderColor: '#ffffff',
+          pointBorderWidth: 2,
+          pointRadius: 6,
+          pointHoverRadius: 8
+        }]
+      };
+
+      window.participationStatsChart = new Chart(ctx.getContext('2d'), {
+        type: 'line',
+        data: data,
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            title: {
+              display: false
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: {
+                display: true,
+                text: 'Antal Deltagare',
+                color: '#a8b2d1'
+              },
+              ticks: { color: '#a8b2d1' },
+              grid: { color: 'rgba(255, 255, 255, 0.1)' }
+            },
+            x: {
+              title: {
+                display: true,
+                text: 'År',
+                color: '#a8b2d1'
+              },
+              ticks: { color: '#a8b2d1' },
+              grid: { color: 'rgba(255, 255, 255, 0.1)' }
+            }
+          }
+        }
+      });
+    }
+
+    // Create wins distribution chart
+    function createWinsDistributionChart() {
+      const ctx = document.getElementById('wins-distribution-chart');
+      if (!ctx) return;
+
+      // Destroy existing chart
+      if (window.winsDistributionChart) {
+        window.winsDistributionChart.destroy();
+      }
+
+      const timeframeFilter = document.getElementById('timeframe-filter');
+      const selectedTimeframe = timeframeFilter?.value || 'all';
+      
+      let filteredCompetitions = competitionData.competitions;
+      if (selectedTimeframe !== 'all') {
+        const currentYear = new Date().getFullYear();
+        if (selectedTimeframe === 'recent') {
+          filteredCompetitions = competitionData.competitions.filter(c => c.year >= currentYear - 5);
+        } else {
+          filteredCompetitions = competitionData.competitions.filter(c => c.year.toString() === selectedTimeframe);
+        }
+      }
+
+      const winCounts = {};
+      filteredCompetitions.forEach(comp => {
+        if (comp.winner) {
+          winCounts[comp.winner] = (winCounts[comp.winner] || 0) + 1;
+        }
+      });
+
+      const sortedWins = Object.entries(winCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8); // Top 8 winners
+
+      const data = {
+        labels: sortedWins.map(([name]) => name),
+        datasets: [{
+          data: sortedWins.map(([, wins]) => wins),
+          backgroundColor: [
+            '#FFD700', '#C0C0C0', '#CD7F32', '#667eea', '#764ba2',
+            '#f093fb', '#f5576c', '#4facfe'
+          ],
+          borderColor: '#ffffff',
+          borderWidth: 2
+        }]
+      };
+
+      window.winsDistributionChart = new Chart(ctx.getContext('2d'), {
+        type: 'pie',
+        data: data,
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { 
+                color: '#a8b2d1',
+                padding: 15,
+                usePointStyle: true
+              }
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                  const percentage = total > 0 ? ((context.parsed / total) * 100).toFixed(1) : 0;
+                  return `${context.label}: ${context.parsed} vinster (${percentage}%)`;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    // Export statistics
+    function exportStatistics() {
+      const timeframeFilter = document.getElementById('timeframe-filter');
+      const selectedTimeframe = timeframeFilter?.value || 'all';
+      
+      let filteredCompetitions = competitionData.competitions;
+      if (selectedTimeframe !== 'all') {
+        const currentYear = new Date().getFullYear();
+        if (selectedTimeframe === 'recent') {
+          filteredCompetitions = competitionData.competitions.filter(c => c.year >= currentYear - 5);
+        } else {
+          filteredCompetitions = competitionData.competitions.filter(c => c.year.toString() === selectedTimeframe);
+        }
+      }
+
+      const statsData = competitionData.participants.map(participant => {
+        const stats = calculateCompetitorStats(participant, filteredCompetitions);
+        return {
+          'Namn': participant.name,
+          'Tävlingar': stats.totalCompetitions,
+          'Vinster': stats.wins,
+          'Pallplatser': stats.podiums,
+          'Genomsnittlig Placering': stats.averagePosition.toFixed(2),
+          'Bästa Placering': stats.bestPosition || 'N/A',
+          'Sämsta Placering': stats.worstPosition || 'N/A',
+          'Vinstprocent': stats.winRate.toFixed(1) + '%'
+        };
+      });
+
+      // Convert to CSV
+      const headers = Object.keys(statsData[0]);
+      const csvContent = [
+        headers.join(','),
+        ...statsData.map(row => headers.map(header => `"${row[header]}"`).join(','))
+      ].join('\n');
+
+      // Download
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `pekkas-pokal-statistik-${selectedTimeframe}-${new Date().toISOString().split('T')[0]}.csv`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+
+      showImportStatus('📊 Statistik exporterad som CSV-fil!', 'success');
     }
 
     // Chart Creation Functions
