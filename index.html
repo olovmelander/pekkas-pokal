@@ -109,7 +109,6 @@
       border-radius: 20px;
     }
 
-    /* Add Cache Control Button */
     .header-actions {
       display: flex;
       gap: 0.5rem;
@@ -280,165 +279,136 @@
       color: var(--danger);
     }
 
-    /* ===== LEADERBOARD ===== */
-    .leaderboard {
+    /* ===== OLYMPIC MEDAL TALLY ===== */
+    .medal-tally {
       background: var(--bg-card);
       border-radius: 16px;
       padding: 1.5rem;
       margin-bottom: 2rem;
+      border: 2px solid rgba(255, 215, 0, 0.3);
+      position: relative;
+      overflow: hidden;
     }
 
-    .leaderboard-header {
+    .medal-tally::before {
+      content: '🏅';
+      position: absolute;
+      right: -20px;
+      top: -20px;
+      font-size: 8rem;
+      opacity: 0.05;
+      transform: rotate(-15deg);
+    }
+
+    .medal-tally-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       margin-bottom: 1.5rem;
       padding-bottom: 1rem;
-      border-bottom: 2px solid rgba(102, 126, 234, 0.2);
+      border-bottom: 2px solid rgba(255, 215, 0, 0.2);
     }
 
-    .leaderboard-title {
+    .medal-tally-title {
       font-size: 1.5rem;
       display: flex;
       align-items: center;
       gap: 0.5rem;
-    }
-
-    .leaderboard-filters {
-      display: flex;
-      gap: 0.5rem;
-    }
-
-    .filter-btn {
-      padding: 0.5rem 1rem;
-      background: rgba(102, 126, 234, 0.1);
-      border: 1px solid rgba(102, 126, 234, 0.3);
-      border-radius: 8px;
-      color: var(--text-secondary);
-      cursor: pointer;
-      transition: all 0.3s ease;
-      font-size: 0.85rem;
-    }
-
-    .filter-btn:hover,
-    .filter-btn.active {
-      background: var(--epic-gradient);
-      color: white;
-      transform: translateY(-2px);
-    }
-
-    .leaderboard-list {
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-    }
-
-    .leaderboard-item {
-      display: flex;
-      align-items: center;
-      padding: 1rem;
-      background: rgba(255, 255, 255, 0.02);
-      border-radius: 12px;
-      border: 1px solid rgba(102, 126, 234, 0.1);
-      transition: all 0.3s ease;
-      cursor: pointer;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .leaderboard-item::before {
-      content: '';
-      position: absolute;
-      left: 0;
-      top: 0;
-      bottom: 0;
-      width: 4px;
-      background: transparent;
-      transition: all 0.3s ease;
-    }
-
-    .leaderboard-item:hover {
-      transform: translateX(10px);
-      background: rgba(102, 126, 234, 0.1);
-      border-color: var(--accent);
-    }
-
-    .leaderboard-item.gold::before { background: var(--gold); }
-    .leaderboard-item.silver::before { background: var(--silver); }
-    .leaderboard-item.bronze::before { background: var(--bronze); }
-
-    .position {
-      font-size: 1.5rem;
-      font-weight: bold;
-      width: 50px;
-      text-align: center;
-      color: var(--text-secondary);
-    }
-
-    .position.gold { 
       background: var(--gold);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
 
-    .position.silver {
+    .medal-row {
+      display: flex;
+      align-items: center;
+      padding: 1rem;
+      margin: 0.5rem 0;
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 12px;
+      transition: all 0.3s ease;
+      position: relative;
+    }
+
+    .medal-row:hover {
+      background: rgba(102, 126, 234, 0.1);
+      transform: translateX(10px);
+    }
+
+    .medal-position {
+      font-size: 1.5rem;
+      font-weight: bold;
+      width: 50px;
+      text-align: center;
+    }
+
+    .medal-position.first { 
+      background: var(--gold);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .medal-position.second {
       background: var(--silver);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
 
-    .position.bronze {
+    .medal-position.third {
       background: var(--bronze);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
 
-    .player-info {
+    .medal-name {
       flex: 1;
+      font-weight: 600;
       margin-left: 1rem;
     }
 
-    .player-name {
-      font-weight: 600;
-      font-size: 1.1rem;
-      margin-bottom: 0.25rem;
-    }
-
-    .player-stats {
+    .medal-counts {
       display: flex;
-      gap: 1rem;
-      font-size: 0.85rem;
-      color: var(--text-secondary);
+      gap: 1.5rem;
+      align-items: center;
     }
 
-    .player-score {
-      font-size: 1.3rem;
+    .medal-count {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.3rem 0.8rem;
+      border-radius: 20px;
+      font-weight: 600;
+    }
+
+    .medal-count.gold {
+      background: rgba(255, 215, 0, 0.2);
+      color: #FFD700;
+    }
+
+    .medal-count.silver {
+      background: rgba(192, 192, 192, 0.2);
+      color: #C0C0C0;
+    }
+
+    .medal-count.bronze {
+      background: rgba(205, 127, 50, 0.2);
+      color: #CD7F32;
+    }
+
+    .medal-total {
+      font-size: 1.2rem;
       font-weight: bold;
       color: var(--accent);
-      margin-left: auto;
-    }
-
-    .trophy-count {
-      display: flex;
-      gap: 0.5rem;
-      align-items: center;
-      margin-left: 1rem;
-    }
-
-    .trophy {
-      display: flex;
-      align-items: center;
-      gap: 0.2rem;
-      padding: 0.3rem 0.6rem;
-      background: rgba(255, 215, 0, 0.1);
-      border-radius: 12px;
-      font-size: 0.9rem;
+      padding: 0.3rem 0.8rem;
+      background: rgba(102, 126, 234, 0.1);
+      border-radius: 20px;
     }
 
     /* ===== ACHIEVEMENTS ===== */
     .achievements-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
       gap: 1rem;
       margin: 2rem 0;
     }
@@ -446,12 +416,13 @@
     .achievement {
       background: var(--bg-card);
       border-radius: 12px;
-      padding: 1rem;
+      padding: 1.2rem;
       text-align: center;
       border: 2px solid transparent;
       transition: all 0.3s ease;
       cursor: pointer;
       position: relative;
+      overflow: hidden;
     }
 
     .achievement.unlocked {
@@ -477,6 +448,7 @@
       font-weight: 600;
       font-size: 0.9rem;
       margin-bottom: 0.3rem;
+      color: var(--text-primary);
     }
 
     .achievement-desc {
@@ -493,6 +465,44 @@
     @keyframes shimmer {
       0%, 100% { box-shadow: 0 0 20px rgba(255, 215, 0, 0.3); }
       50% { box-shadow: 0 0 30px rgba(255, 215, 0, 0.5); }
+    }
+
+    /* ===== STATISTICS FILTERS ===== */
+    .stats-controls {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      margin-bottom: 2rem;
+      padding: 1rem;
+      background: var(--bg-card);
+      border-radius: 12px;
+      border: 1px solid rgba(102, 126, 234, 0.2);
+      flex-wrap: wrap;
+    }
+
+    .filter-select {
+      padding: 0.5rem 1rem;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(102, 126, 234, 0.3);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      min-width: 150px;
+    }
+
+    /* Fix dropdown text color */
+    .filter-select option {
+      background: var(--bg-card);
+      color: var(--text-primary);
+    }
+
+    .filter-select:hover,
+    .filter-select:focus {
+      border-color: var(--accent);
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
     }
 
     /* ===== CHARTS ===== */
@@ -521,67 +531,86 @@
       font-weight: 600;
     }
 
-    .chart-options {
-      display: flex;
-      gap: 0.5rem;
-    }
-
-    /* ===== RECORDS SECTION ===== */
-    .records-grid {
+    /* ===== COMPETITOR CARDS ===== */
+    .competitor-stats-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 1rem;
-      margin: 2rem 0;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
     }
 
-    .record-card {
+    .competitor-card {
       background: var(--bg-card);
-      border-radius: 12px;
-      padding: 1.2rem;
+      border-radius: 16px;
+      padding: 1.5rem;
       border: 1px solid rgba(102, 126, 234, 0.2);
       transition: all 0.3s ease;
+      cursor: pointer;
       position: relative;
       overflow: hidden;
     }
 
-    .record-card::after {
-      content: '📜';
+    .competitor-card::before {
+      content: '';
       position: absolute;
-      bottom: -10px;
-      right: -10px;
-      font-size: 3rem;
-      opacity: 0.1;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: var(--epic-gradient);
+      transform: scaleX(0);
+      transition: transform 0.3s ease;
     }
 
-    .record-card:hover {
-      transform: translateY(-3px);
+    .competitor-card:hover::before {
+      transform: scaleX(1);
+    }
+
+    .competitor-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
       border-color: var(--accent);
-      box-shadow: 0 5px 20px rgba(102, 126, 234, 0.3);
     }
 
-    .record-label {
-      font-size: 0.85rem;
-      color: var(--text-secondary);
-      text-transform: uppercase;
-      margin-bottom: 0.5rem;
+    .competitor-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 1rem;
     }
 
-    .record-value {
+    .competitor-avatar {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: var(--epic-gradient);
+      display: flex;
+      align-items: center;
+      justify-content: center;
       font-size: 1.5rem;
       font-weight: bold;
-      color: var(--accent);
-      margin-bottom: 0.3rem;
+      color: white;
+      margin-right: 1rem;
     }
 
-    .record-holder {
-      font-size: 1rem;
+    .competitor-info h4 {
+      font-size: 1.1rem;
+      margin-bottom: 0.2rem;
       color: var(--text-primary);
     }
 
-    .record-date {
-      font-size: 0.8rem;
-      color: var(--text-muted);
-      margin-top: 0.3rem;
+    .competitor-medals {
+      display: flex;
+      gap: 0.8rem;
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid rgba(102, 126, 234, 0.1);
+    }
+
+    .medal-badge {
+      display: flex;
+      align-items: center;
+      gap: 0.2rem;
+      font-weight: 600;
     }
 
     /* ===== FUN STATS ===== */
@@ -638,207 +667,7 @@
       font-size: 0.9rem;
     }
 
-    /* ===== POWER RANKINGS ===== */
-    .power-ranking {
-      background: var(--bg-card);
-      border-radius: 16px;
-      padding: 1.5rem;
-      margin: 2rem 0;
-    }
-
-    .power-ranking-header {
-      text-align: center;
-      margin-bottom: 1.5rem;
-    }
-
-    .power-ranking-title {
-      font-size: 1.8rem;
-      background: var(--fire-gradient);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      margin-bottom: 0.5rem;
-    }
-
-    .power-ranking-subtitle {
-      color: var(--text-secondary);
-      font-size: 0.9rem;
-    }
-
-    .power-bar {
-      display: flex;
-      align-items: center;
-      margin: 1rem 0;
-      position: relative;
-    }
-
-    .power-bar-label {
-      width: 150px;
-      font-weight: 600;
-    }
-
-    .power-bar-track {
-      flex: 1;
-      height: 30px;
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 15px;
-      overflow: hidden;
-      position: relative;
-    }
-
-    .power-bar-fill {
-      height: 100%;
-      border-radius: 15px;
-      display: flex;
-      align-items: center;
-      justify-content: flex-end;
-      padding-right: 1rem;
-      color: white;
-      font-weight: bold;
-      transition: width 1s ease-out;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .power-bar-fill::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-      animation: shimmerBar 2s infinite;
-    }
-
-    @keyframes shimmerBar {
-      0% { left: -100%; }
-      100% { left: 100%; }
-    }
-
-    .power-bar-change {
-      margin-left: 1rem;
-      font-size: 0.9rem;
-      display: flex;
-      align-items: center;
-      gap: 0.2rem;
-    }
-
-    .power-bar-change.up { color: var(--success); }
-    .power-bar-change.down { color: var(--danger); }
-
-    /* ===== CSV IMPORT ===== */
-    .import-section {
-      background: var(--bg-card);
-      border-radius: 16px;
-      padding: 2rem;
-      text-align: center;
-      margin: 2rem 0;
-      border: 2px dashed rgba(102, 126, 234, 0.3);
-    }
-
-    .import-section.drag-over {
-      background: rgba(102, 126, 234, 0.1);
-      border-color: var(--accent);
-    }
-
-    .import-icon {
-      font-size: 3rem;
-      margin-bottom: 1rem;
-    }
-
-    .import-title {
-      font-size: 1.3rem;
-      margin-bottom: 0.5rem;
-    }
-
-    .import-desc {
-      color: var(--text-secondary);
-      margin-bottom: 1.5rem;
-    }
-
-    .import-btn {
-      padding: 1rem 2rem;
-      background: var(--epic-gradient);
-      color: white;
-      border: none;
-      border-radius: 12px;
-      font-size: 1rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      margin: 0.5rem;
-    }
-
-    .import-btn:hover {
-      transform: translateY(-3px);
-      box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
-    }
-
-    .import-success {
-      background: rgba(74, 222, 128, 0.1);
-      border-color: var(--success);
-      margin-top: 1rem;
-      padding: 1rem;
-      border-radius: 12px;
-    }
-
-    /* ===== ANIMATIONS ===== */
-    .animate-in {
-      animation: slideIn 0.5s ease-out;
-    }
-
-    @keyframes slideIn {
-      from {
-        opacity: 0;
-        transform: translateX(-20px);
-      }
-      to {
-        opacity: 1;
-        transform: translateX(0);
-      }
-    }
-
-    .counter {
-      display: inline-block;
-      animation: countUp 1s ease-out;
-    }
-
-    @keyframes countUp {
-      from { transform: scale(0); }
-      to { transform: scale(1); }
-    }
-
-    /* ===== MOBILE RESPONSIVE ===== */
-    @media (max-width: 768px) {
-      .header-content {
-        flex-direction: column;
-        gap: 1rem;
-      }
-
-      .nav-tabs {
-        padding: 1rem;
-        justify-content: flex-start;
-      }
-
-      .dashboard-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .power-bar-label {
-        width: 100px;
-        font-size: 0.9rem;
-      }
-
-      .leaderboard-filters {
-        flex-wrap: wrap;
-      }
-
-      .achievements-grid {
-        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-      }
-    }
-
-    /* ===== LOADING STATE ===== */
+    /* ===== LOADING STATE FIX ===== */
     .loading {
       display: flex;
       justify-content: center;
@@ -859,365 +688,37 @@
       to { transform: rotate(360deg); }
     }
 
-    /* ===== STATISTICS ENHANCEMENTS ===== */
-    .stats-controls {
-      display: flex;
-      gap: 1rem;
-      align-items: center;
-      margin-bottom: 2rem;
-      padding: 1rem;
-      background: var(--bg-card);
-      border-radius: 12px;
-      border: 1px solid rgba(102, 126, 234, 0.2);
-      flex-wrap: wrap;
-    }
-
-    .filter-select {
-      padding: 0.5rem 1rem;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(102, 126, 234, 0.3);
-      border-radius: 8px;
-      color: var(--text-primary);
-      font-size: 0.9rem;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      min-width: 150px;
-    }
-
-    .filter-select:hover,
-    .filter-select:focus {
-      border-color: var(--accent);
-      outline: none;
-      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-    }
-
-    .competitor-stats-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 1.5rem;
-      margin-bottom: 2rem;
-    }
-
-    .competitor-card {
-      background: var(--bg-card);
-      border-radius: 16px;
-      padding: 1.5rem;
-      border: 1px solid rgba(102, 126, 234, 0.2);
-      transition: all 0.3s ease;
-      cursor: pointer;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .competitor-card::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 4px;
-      background: var(--epic-gradient);
-      transform: scaleX(0);
-      transition: transform 0.3s ease;
-    }
-
-    .competitor-card:hover::before {
-      transform: scaleX(1);
-    }
-
-    .competitor-card:hover {
-      transform: translateY(-5px);
-      box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
-      border-color: var(--accent);
-    }
-
-    .competitor-card.selected {
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
-      transform: translateY(-3px);
-    }
-
-    .competitor-card.selected::before {
-      transform: scaleX(1);
-    }
-
-    .competitor-header {
-      display: flex;
-      align-items: center;
-      margin-bottom: 1rem;
-    }
-
-    .competitor-avatar {
-      width: 50px;
-      height: 50px;
-      border-radius: 50%;
-      background: var(--epic-gradient);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.5rem;
-      font-weight: bold;
-      color: white;
-      margin-right: 1rem;
-    }
-
-    .competitor-info h4 {
-      font-size: 1.1rem;
-      margin-bottom: 0.2rem;
-      color: var(--text-primary);
-    }
-
-    .competitor-info .status {
-      font-size: 0.8rem;
-      color: var(--text-secondary);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .competitor-stats {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 1rem;
-    }
-
-    .stat-item {
-      text-align: center;
-    }
-
-    .stat-item .value {
-      font-size: 1.8rem;
-      font-weight: bold;
-      color: var(--accent);
-      margin-bottom: 0.2rem;
-    }
-
-    .stat-item .label {
-      font-size: 0.8rem;
-      color: var(--text-secondary);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .competitor-badges {
-      display: flex;
-      gap: 0.5rem;
-      margin-top: 1rem;
-      flex-wrap: wrap;
-    }
-
-    .badge {
-      padding: 0.2rem 0.6rem;
-      border-radius: 12px;
-      font-size: 0.7rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .badge.champion {
-      background: linear-gradient(135deg, #FFD700, #FFA500);
-      color: #8B4513;
-    }
-
-    .badge.podium {
-      background: linear-gradient(135deg, #C0C0C0, #808080);
-      color: #333;
-    }
-
-    .badge.veteran {
-      background: rgba(102, 126, 234, 0.2);
-      color: var(--accent);
-    }
-
-    .badge.rookie {
-      background: rgba(67, 233, 123, 0.2);
-      color: #43e97b;
-    }
-
-    /* Individual Competitor Details */
-    .individual-details {
-      background: var(--bg-card);
-      border-radius: 16px;
-      padding: 2rem;
-      margin-bottom: 2rem;
-      border: 1px solid rgba(102, 126, 234, 0.2);
-      position: relative;
-    }
-
-    .competitor-detail-header {
-      display: flex;
-      justify-content: between;
-      align-items: center;
-      margin-bottom: 2rem;
-      padding-bottom: 1rem;
-      border-bottom: 2px solid rgba(102, 126, 234, 0.2);
-    }
-
-    .competitor-detail-header h3 {
-      font-size: 1.5rem;
-      background: var(--epic-gradient);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    .close-btn {
-      background: rgba(255, 255, 255, 0.1);
-      border: none;
-      border-radius: 50%;
-      width: 40px;
-      height: 40px;
-      color: var(--text-secondary);
-      cursor: pointer;
-      transition: all 0.3s ease;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.2rem;
-      margin-left: auto;
-    }
-
-    .close-btn:hover {
-      background: rgba(255, 255, 255, 0.2);
-      color: var(--text-primary);
-      transform: scale(1.1);
-    }
-
-    .competitor-summary-stats {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-      gap: 1rem;
-      margin-bottom: 2rem;
-    }
-
-    .summary-stat {
-      text-align: center;
-      padding: 1rem;
-      background: rgba(255, 255, 255, 0.02);
-      border-radius: 12px;
-      border: 1px solid rgba(102, 126, 234, 0.1);
-    }
-
-    .summary-value {
-      font-size: 2rem;
-      font-weight: bold;
-      color: var(--accent);
-      margin-bottom: 0.5rem;
-    }
-
-    .summary-label {
-      font-size: 0.8rem;
-      color: var(--text-secondary);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .competitor-charts {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-      gap: 2rem;
-      margin-bottom: 2rem;
-    }
-
-    .competition-history h4 {
-      color: var(--text-primary);
-      margin-bottom: 1rem;
-      font-size: 1.2rem;
-    }
-
-    .competition-list {
-      display: grid;
-      gap: 0.5rem;
-      max-height: 300px;
-      overflow-y: auto;
-    }
-
-    .competition-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 0.8rem 1rem;
-      background: rgba(255, 255, 255, 0.02);
-      border-radius: 8px;
-      border: 1px solid rgba(102, 126, 234, 0.1);
-      transition: all 0.3s ease;
-    }
-
-    .competition-item:hover {
-      background: rgba(102, 126, 234, 0.1);
-      transform: translateX(5px);
-    }
-
-    .competition-info {
-      flex: 1;
-    }
-
-    .competition-name {
-      font-weight: 600;
-      color: var(--text-primary);
-      margin-bottom: 0.2rem;
-    }
-
-    .competition-details {
-      font-size: 0.8rem;
-      color: var(--text-secondary);
-    }
-
-    .competition-position {
-      font-size: 1.2rem;
-      font-weight: bold;
-      padding: 0.3rem 0.8rem;
-      border-radius: 20px;
-      min-width: 40px;
-      text-align: center;
-    }
-
-    .competition-position.first {
-      background: linear-gradient(135deg, #FFD700, #FFA500);
-      color: #8B4513;
-    }
-
-    .competition-position.podium {
-      background: linear-gradient(135deg, #C0C0C0, #808080);
-      color: #333;
-    }
-
-    .competition-position.regular {
-      background: rgba(102, 126, 234, 0.2);
-      color: var(--accent);
-    }
-
-    .overall-charts {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-      gap: 2rem;
-    }
-
-    /* Mobile responsive for statistics */
+    /* ===== MOBILE RESPONSIVE ===== */
     @media (max-width: 768px) {
+      .header-content {
+        flex-direction: column;
+        gap: 1rem;
+      }
+
+      .nav-tabs {
+        padding: 1rem;
+        justify-content: flex-start;
+      }
+
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .medal-counts {
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+
+      .achievements-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      }
+
       .stats-controls {
         flex-direction: column;
-        align-items: stretch;
       }
 
       .filter-select {
-        min-width: auto;
         width: 100%;
-      }
-
-      .competitor-stats-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .competitor-summary-stats {
-        grid-template-columns: repeat(2, 1fr);
-      }
-
-      .competitor-charts {
-        grid-template-columns: 1fr;
-      }
-
-      .overall-charts {
-        grid-template-columns: 1fr;
       }
     }
   </style>
@@ -1229,13 +730,12 @@
       <div class="logo">
         <span class="trophy-logo">🏆</span>
         <h1>Pekkas Pokal</h1>
-        <span class="year-display" id="year-range">2011-2024</span>
+        <span class="year-display" id="year-range">2011-2025</span>
       </div>
       
-      <!-- Add Cache Control Button -->
       <div class="header-actions">
-        <button id="cache-control-btn" class="icon-btn" title="Cache Control (Ctrl+Shift+C)">🔧</button>
-        <button id="load-default-btn" class="icon-btn" title="Ladda Standarddata">🏆</button>
+        <button id="cache-control-btn" class="icon-btn" title="Cache Control">🔧</button>
+        <button id="load-default-btn" class="icon-btn" title="Ladda Data">📊</button>
       </div>
     </div>
   </header>
@@ -1243,9 +743,8 @@
   <!-- Navigation -->
   <nav class="nav-tabs">
     <button class="nav-tab active" data-tab="dashboard"><span>📊</span> Dashboard</button>
-    <button class="nav-tab" data-tab="leaderboard"><span>🥇</span> Topplista</button>
+    <button class="nav-tab" data-tab="medals"><span>🥇</span> Medaljliga</button>
     <button class="nav-tab" data-tab="achievements"><span>🎖️</span> Achievements</button>
-    <button class="nav-tab" data-tab="records"><span>📜</span> Rekord</button>
     <button class="nav-tab" data-tab="statistics"><span>📈</span> Statistik</button>
     <button class="nav-tab" data-tab="import"><span>📁</span> Importera</button>
   </nav>
@@ -1260,7 +759,7 @@
           <div class="stat-value counter" id="total-competitions">0</div>
           <div class="stat-label">Tävlingar</div>
           <div class="stat-change" id="comp-change">
-            <span>→</span> Laddar data...
+            <span>📈</span> <span id="comp-trend">14 totalt</span>
           </div>
         </div>
 
@@ -1269,16 +768,16 @@
           <div class="stat-value counter" id="total-participants">0</div>
           <div class="stat-label">Deltagare</div>
           <div class="stat-change" id="part-change">
-            <span>→</span> Laddar data...
+            <span>✅</span> <span id="part-trend">Alla aktiva</span>
           </div>
         </div>
 
         <div class="stat-card">
-          <div class="stat-icon">🔥</div>
+          <div class="stat-icon">🥇</div>
           <div class="stat-value" id="current-champion">—</div>
           <div class="stat-label">Senaste Vinnare</div>
           <div class="stat-change" id="champ-change">
-            <span>🎯</span> Laddar...
+            <span>🎯</span> <span id="champ-comp">2025 Flipper</span>
           </div>
         </div>
 
@@ -1287,18 +786,9 @@
           <div class="stat-value" id="most-wins">—</div>
           <div class="stat-label">Flest Vinster</div>
           <div class="stat-change" id="wins-change">
-            <span>🏅</span> Laddar...
+            <span>🏅</span> <span id="wins-count">0 vinster</span>
           </div>
         </div>
-      </div>
-
-      <!-- Power Rankings -->
-      <div class="power-ranking">
-        <div class="power-ranking-header">
-          <div class="power-ranking-title">🔥 POWER RANKINGS 2024 🔥</div>
-          <div class="power-ranking-subtitle">Baserat på senaste prestationer och momentum</div>
-        </div>
-        <div id="power-rankings-list"></div>
       </div>
 
       <!-- Fun Stats -->
@@ -1309,237 +799,120 @@
         <div id="fun-stats-list"></div>
       </div>
 
-      <!-- Recent Activity Chart -->
+      <!-- Charts -->
       <div class="chart-container">
         <div class="chart-header">
-          <div class="chart-title">📊 Deltagande över Tid</div>
+          <div class="chart-title">📊 Prestationsutveckling över Tid</div>
         </div>
-        <canvas id="participation-chart"></canvas>
+        <canvas id="performance-trend-chart"></canvas>
       </div>
     </div>
 
-    <!-- Leaderboard Tab -->
-    <div id="leaderboard" class="tab-content">
-      <div class="leaderboard">
-        <div class="leaderboard-header">
-          <div class="leaderboard-title">
-            <span>🏆</span> Hall of Fame
-          </div>
-          <div class="leaderboard-filters">
-            <button class="filter-btn active" data-filter="all">Alla Tider</button>
-            <button class="filter-btn" data-filter="recent">Senaste 5 År</button>
-            <button class="filter-btn" data-filter="2024">2024</button>
+    <!-- Medal Tally Tab -->
+    <div id="medals" class="tab-content">
+      <div class="medal-tally">
+        <div class="medal-tally-header">
+          <div class="medal-tally-title">
+            <span>🏅</span> Olympisk Medaljliga
           </div>
         </div>
-        <div class="leaderboard-list" id="leaderboard-list"></div>
+        <div id="medal-tally-list"></div>
       </div>
 
-      <!-- Head to Head Comparison -->
       <div class="chart-container">
         <div class="chart-header">
-          <div class="chart-title">🥊 Vinstfördelning</div>
+          <div class="chart-title">🥇 Medaljfördelning</div>
         </div>
-        <canvas id="wins-chart"></canvas>
+        <canvas id="medal-distribution-chart"></canvas>
       </div>
     </div>
 
     <!-- Achievements Tab -->
     <div id="achievements" class="tab-content">
-      <h2 style="text-align: center; margin-bottom: 2rem;">🎖️ Achievements & Utmärkelser</h2>
+      <h2 style="text-align: center; margin-bottom: 2rem; color: var(--text-primary);">🎖️ Achievements & Utmärkelser</h2>
       <div class="achievements-grid" id="achievements-grid"></div>
-    </div>
-
-    <!-- Records Tab -->
-    <div id="records" class="tab-content">
-      <h2 style="text-align: center; margin-bottom: 2rem;">📜 Rekord & Milstolpar</h2>
-      <div class="records-grid" id="records-grid"></div>
     </div>
 
     <!-- Statistics Tab -->
     <div id="statistics" class="tab-content">
-      <!-- Statistics Controls -->
+      <!-- Enhanced Filters -->
       <div class="stats-controls">
         <select id="competitor-filter" class="filter-select">
           <option value="all">Alla Deltagare</option>
         </select>
         <select id="timeframe-filter" class="filter-select">
           <option value="all">Alla År</option>
-          <option value="recent">Senaste 5 År</option>
+          <option value="recent5">Senaste 5 År</option>
+          <option value="recent3">Senaste 3 År</option>
+          <option value="2025">2025</option>
           <option value="2024">2024</option>
           <option value="2023">2023</option>
           <option value="2022">2022</option>
+          <option value="2021">2021</option>
         </select>
-        <button id="export-stats-btn" class="import-btn" style="margin-left: auto;">
-          📊 Exportera Statistik
+        <select id="competition-type-filter" class="filter-select">
+          <option value="all">Alla Tävlingar</option>
+        </select>
+        <button id="reset-filters-btn" class="icon-btn" style="margin-left: auto;">
+          🔄 Återställ
         </button>
       </div>
 
-      <!-- Competitor Cards Grid -->
-      <div class="competitor-stats-grid" id="competitor-stats-grid">
-        <!-- Competitor cards will be populated here -->
-      </div>
+      <!-- Competitor Cards -->
+      <div class="competitor-stats-grid" id="competitor-stats-grid"></div>
 
-      <!-- Individual Competitor Details -->
-      <div id="individual-competitor-details" class="individual-details hidden">
-        <div class="competitor-detail-header">
-          <h3 id="selected-competitor-name">Välj en deltagare</h3>
-          <button id="close-individual-view" class="close-btn">✕</button>
-        </div>
-        
-        <div class="competitor-detail-content">
-          <div class="competitor-summary-stats">
-            <div class="summary-stat">
-              <div class="summary-value" id="individual-competitions">0</div>
-              <div class="summary-label">Tävlingar</div>
-            </div>
-            <div class="summary-stat">
-              <div class="summary-value" id="individual-wins">0</div>
-              <div class="summary-label">Vinster</div>
-            </div>
-            <div class="summary-stat">
-              <div class="summary-value" id="individual-podiums">0</div>
-              <div class="summary-label">Pallplatser</div>
-            </div>
-            <div class="summary-stat">
-              <div class="summary-value" id="individual-avg">0.0</div>
-              <div class="summary-label">Snittplacering</div>
-            </div>
-            <div class="summary-stat">
-              <div class="summary-value" id="individual-best">-</div>
-              <div class="summary-label">Bästa Placering</div>
-            </div>
-            <div class="summary-stat">
-              <div class="summary-value" id="individual-winrate">0%</div>
-              <div class="summary-label">Vinstprocent</div>
-            </div>
-          </div>
-
-          <div class="competitor-charts">
-            <div class="chart-container">
-              <div class="chart-header">
-                <div class="chart-title">📈 Prestationer över Tid</div>
-              </div>
-              <canvas id="individual-performance-chart"></canvas>
-            </div>
-
-            <div class="chart-container">
-              <div class="chart-header">
-                <div class="chart-title">🏆 Placeringsfördelning</div>
-              </div>
-              <canvas id="individual-position-distribution"></canvas>
-            </div>
-          </div>
-
-          <div class="competition-history">
-            <h4>Tävlingshistorik</h4>
-            <div id="individual-competition-list" class="competition-list">
-              <!-- Competition history will be populated here -->
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Overall Statistics Charts -->
-      <div class="overall-charts">
+      <!-- Charts -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 2rem;">
         <div class="chart-container">
           <div class="chart-header">
-            <div class="chart-title">📈 Prestationsutveckling</div>
+            <div class="chart-title">📈 Snittplacering per År</div>
           </div>
-          <canvas id="performance-chart"></canvas>
+          <canvas id="avg-position-chart"></canvas>
         </div>
 
         <div class="chart-container">
           <div class="chart-header">
-            <div class="chart-title">🎯 Genomsnittlig Placering per Deltagare</div>
+            <div class="chart-title">🎯 Deltagande över Tid</div>
           </div>
-          <canvas id="average-position-chart"></canvas>
-        </div>
-
-        <div class="chart-container">
-          <div class="chart-header">
-            <div class="chart-title">📊 Deltagande över Tid</div>
-          </div>
-          <canvas id="participation-stats-chart"></canvas>
-        </div>
-
-        <div class="chart-container">
-          <div class="chart-header">
-            <div class="chart-title">🥇 Vinstfördelning</div>
-          </div>
-          <canvas id="wins-distribution-chart"></canvas>
+          <canvas id="participation-chart"></canvas>
         </div>
       </div>
     </div>
 
     <!-- Import Tab -->
     <div id="import" class="tab-content">
-      <div class="import-section" id="import-drop-zone">
-        <div class="import-icon">📁</div>
-        <div class="import-title">Importera Tävlingsdata</div>
-        <div class="import-desc">Dra och släpp din CSV-fil här eller klicka för att välja</div>
+      <div style="background: var(--bg-card); border-radius: 16px; padding: 2rem; text-align: center; border: 2px dashed rgba(102, 126, 234, 0.3);">
+        <div style="font-size: 3rem; margin-bottom: 1rem;">📁</div>
+        <h3 style="color: var(--text-primary); margin-bottom: 1rem;">Importera Tävlingsdata</h3>
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Dra och släpp din CSV-fil här eller klicka för att välja</p>
         <input type="file" id="csv-file" accept=".csv" style="display: none;">
-        <button class="import-btn" onclick="document.getElementById('csv-file').click()">
+        <button onclick="document.getElementById('csv-file').click()" style="padding: 1rem 2rem; background: var(--epic-gradient); color: white; border: none; border-radius: 12px; font-weight: 600; cursor: pointer;">
           Välj CSV-fil
         </button>
-        <button class="import-btn" onclick="loadDefaultDataFromButton()">
-          Ladda Standarddata
-        </button>
-        <div id="import-status"></div>
+        <div id="import-status" style="margin-top: 1rem;"></div>
       </div>
     </div>
   </div>
 
-  <!-- Scripts - Keep your original scripts but add the new ones -->
-  
-  <!-- Papa Parse for CSV processing -->
+  <!-- Scripts -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.4.1/papaparse.min.js"></script>
   
-  <!-- New Cache Management Script -->
-  <script src="cache-manager.js"></script>
-  
-  <!-- Enhanced CSV Import Script -->
-  <script src="csv-import.js"></script>
-  
-  <!-- Default Data Loader Script -->
-  <script src="default-data.js"></script>
-
-  <!-- Your Original Application Script (Modified) -->
   <script>
     // Global competition data
     let competitionData = {
       competitions: [],
       participants: [],
-      scores: {},
+      medals: {},
+      achievements: [],
       initialized: false
     };
 
     // Initialize application
     function init() {
       setupTabs();
-      setupCSVImport();
-      setupHeaderButtons();
-      
-      // Check for saved data
-      const savedData = localStorage.getItem('pekkas-pokal-data');
-      if (savedData) {
-        competitionData = JSON.parse(savedData);
-        if (competitionData.initialized) {
-          updateAllViews();
-        }
-      }
-    }
-
-    // Setup header buttons
-    function setupHeaderButtons() {
-      // Cache control button
-      document.getElementById('cache-control-btn')?.addEventListener('click', () => {
-        if (window.showCacheControl) {
-          window.showCacheControl();
-        }
-      });
-
-      // Load default data button
-      document.getElementById('load-default-btn')?.addEventListener('click', loadDefaultDataFromButton);
+      setupFilters();
+      loadMockData(); // Load mock data for demonstration
+      updateAllViews();
     }
 
     // Tab navigation
@@ -1556,126 +929,189 @@
           
           tab.classList.add('active');
           document.getElementById(targetTab).classList.add('active');
+          
+          // Load specific tab data
+          if (targetTab === 'medals') loadMedalTally();
+          if (targetTab === 'achievements') loadAchievements();
+          if (targetTab === 'statistics') loadStatistics();
         });
       });
     }
 
-    // CSV Import with actual parsing
-    function setupCSVImport() {
-      const dropZone = document.getElementById('import-drop-zone');
-      const fileInput = document.getElementById('csv-file');
+    // Setup enhanced filters
+    function setupFilters() {
+      // Competitor filter
+      const competitorFilter = document.getElementById('competitor-filter');
+      const timeframeFilter = document.getElementById('timeframe-filter');
+      const competitionTypeFilter = document.getElementById('competition-type-filter');
+      const resetBtn = document.getElementById('reset-filters-btn');
 
-      // Drag and drop
-      dropZone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dropZone.classList.add('drag-over');
+      [competitorFilter, timeframeFilter, competitionTypeFilter].forEach(filter => {
+        filter?.addEventListener('change', () => applyFilters());
       });
 
-      dropZone.addEventListener('dragleave', () => {
-        dropZone.classList.remove('drag-over');
-      });
-
-      dropZone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dropZone.classList.remove('drag-over');
-        
-        const file = e.dataTransfer.files[0];
-        if (file) {
-          processCSV(file);
-        }
-      });
-
-      // File input
-      fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (file) {
-          processCSV(file);
-        }
+      resetBtn?.addEventListener('click', () => {
+        competitorFilter.value = 'all';
+        timeframeFilter.value = 'all';
+        competitionTypeFilter.value = 'all';
+        applyFilters();
       });
     }
 
-    // Process CSV with enhanced importer
-    async function processCSV(file) {
-      showImportStatus('Bearbetar CSV-fil...', 'info');
-      
-      try {
-        if (!window.csvImporter) {
-          throw new Error('CSV importer inte tillgänglig');
+    // Apply all filters
+    function applyFilters() {
+      const competitor = document.getElementById('competitor-filter').value;
+      const timeframe = document.getElementById('timeframe-filter').value;
+      const competitionType = document.getElementById('competition-type-filter').value;
+
+      const filteredData = filterCompetitionData(competitor, timeframe, competitionType);
+      updateStatisticsView(filteredData);
+    }
+
+    // Filter competition data based on all criteria
+    function filterCompetitionData(competitor, timeframe, competitionType) {
+      let filtered = [...competitionData.competitions];
+
+      // Filter by timeframe
+      if (timeframe !== 'all') {
+        const currentYear = 2025;
+        if (timeframe === 'recent5') {
+          filtered = filtered.filter(c => c.year >= currentYear - 4);
+        } else if (timeframe === 'recent3') {
+          filtered = filtered.filter(c => c.year >= currentYear - 2);
+        } else {
+          filtered = filtered.filter(c => c.year === parseInt(timeframe));
         }
-
-        const data = await window.csvImporter.importCSVData(file);
-        await window.csvImporter.importIntoApp(data);
-        
-        competitionData = data;
-        updateAllViews();
-        
-        showImportStatus(
-          `✅ Import lyckades! ${data.competitions.length} tävlingar och ${data.participants.length} deltagare importerade.`,
-          'success'
-        );
-
-      } catch (error) {
-        console.error('CSV import failed:', error);
-        showImportStatus(`❌ Import misslyckades: ${error.message}`, 'error');
       }
-    }
 
-    // Load default data
-    async function loadDefaultDataFromButton() {
-      showImportStatus('Laddar standarddata...', 'info');
-      
-      try {
-        if (!window.loadDefaultData) {
-          throw new Error('Default data loader inte tillgänglig');
-        }
-
-        await window.loadDefaultData();
-        
-        // Reload data
-        const savedData = localStorage.getItem('pekkas-pokal-data');
-        if (savedData) {
-          competitionData = JSON.parse(savedData);
-          updateAllViews();
-        }
-        
-        showImportStatus('✅ Standarddata laddad framgångsrikt!', 'success');
-
-      } catch (error) {
-        console.error('Default data load failed:', error);
-        showImportStatus(`❌ Kunde inte ladda standarddata: ${error.message}`, 'error');
+      // Filter by competition type
+      if (competitionType !== 'all') {
+        filtered = filtered.filter(c => c.name === competitionType);
       }
+
+      // Filter by competitor
+      if (competitor !== 'all') {
+        filtered = filtered.map(comp => ({
+          ...comp,
+          scores: Object.fromEntries(
+            Object.entries(comp.scores).filter(([pId]) => pId === competitor)
+          )
+        }));
+      }
+
+      return filtered;
     }
 
-    function showImportStatus(message, type) {
-      const statusEl = document.getElementById('import-status');
-      statusEl.className = type === 'success' ? 'import-success' : 'import-error';
-      statusEl.innerHTML = `<div style="margin-top: 1rem; padding: 1rem; border-radius: 8px; background: ${type === 'success' ? 'rgba(74, 222, 128, 0.1)' : 'rgba(248, 113, 113, 0.1)'}; color: ${type === 'success' ? '#4ade80' : '#f87171'}">${message}</div>`;
+    // Load mock data for demonstration
+    function loadMockData() {
+      // Sample participants based on CSV
+      const participants = [
+        { id: 'p1', name: 'Olov Melander', nickname: 'Olov M.' },
+        { id: 'p2', name: 'Mikael Hägglund', nickname: 'Mikael H.' },
+        { id: 'p3', name: 'Viktor Jones', nickname: 'Viktor J.' },
+        { id: 'p4', name: 'Per Wikman', nickname: 'Per W.' },
+        { id: 'p5', name: 'Erik Vallgren', nickname: 'Erik V.' },
+        { id: 'p6', name: 'Henrik Lundqvist', nickname: 'Henrik L.' },
+        { id: 'p7', name: 'Rickard Nilsson', nickname: 'Rickard N.' },
+        { id: 'p8', name: 'Niklas Norberg', nickname: 'Niklas N.' },
+        { id: 'p9', name: 'Per Olsson', nickname: 'Per O.' },
+        { id: 'p10', name: 'Tobias Lundqvist', nickname: 'Tobias L.' },
+        { id: 'p11', name: 'Lars Sandin', nickname: 'Lars S.' },
+        { id: 'p12', name: 'Ludvig Ulenius', nickname: 'Ludvig U.' },
+        { id: 'p13', name: 'Jonas Eriksson', nickname: 'Jonas E.' }
+      ];
+
+      // Sample competitions based on CSV
+      const competitions = [
+        {
+          id: 'c1',
+          year: 2025,
+          name: 'Flipper',
+          location: 'Eskilstuna/Västerås',
+          winner: 'Viktor Jones',
+          scores: { p3: 1, p1: 2, p9: 3, p11: 4, p5: 5, p10: 6, p2: 7, p12: 8, p6: 9, p4: 10, p8: 11, p7: 12 }
+        },
+        {
+          id: 'c2',
+          year: 2024,
+          name: 'Fisketävling',
+          location: 'Själevad',
+          winner: 'Erik Vallgren',
+          scores: { p5: 1, p6: 2, p9: 3, p3: 4, p8: 5, p12: 6, p1: 7, p11: 8, p4: 9, p2: 10, p10: 11, p7: 12 }
+        },
+        {
+          id: 'c3',
+          year: 2023,
+          name: 'Fäktning',
+          location: 'Stockholm',
+          winner: 'Per Wikman',
+          scores: { p4: 1, p6: 2, p1: 3, p9: 4, p8: 9, p3: 10 }
+        },
+        {
+          id: 'c4',
+          year: 2022,
+          name: 'Skytte',
+          location: 'Arnäsvall',
+          winner: 'Ludvig Ulenius',
+          scores: { p12: 1, p10: 2, p3: 3, p7: 4, p1: 5, p11: 6, p5: 7, p8: 8, p2: 9, p4: 10 }
+        },
+        {
+          id: 'c5',
+          year: 2021,
+          name: 'Målning',
+          location: 'Ås',
+          winner: 'Olov Melander',
+          scores: { p1: 1, p10: 2, p12: 3, p9: 4, p4: 5, p3: 6, p5: 7, p8: 8, p6: 9, p7: 10 }
+        }
+      ];
+
+      competitionData = {
+        participants,
+        competitions,
+        initialized: true
+      };
+
+      // Populate filters
+      populateFilters();
     }
 
+    // Populate filter dropdowns
+    function populateFilters() {
+      // Competitor filter
+      const competitorFilter = document.getElementById('competitor-filter');
+      competitorFilter.innerHTML = '<option value="all">Alla Deltagare</option>';
+      competitionData.participants.forEach(p => {
+        const option = document.createElement('option');
+        option.value = p.id;
+        option.textContent = p.name;
+        competitorFilter.appendChild(option);
+      });
+
+      // Competition type filter
+      const competitionTypes = [...new Set(competitionData.competitions.map(c => c.name))];
+      const typeFilter = document.getElementById('competition-type-filter');
+      typeFilter.innerHTML = '<option value="all">Alla Tävlingar</option>';
+      competitionTypes.forEach(type => {
+        const option = document.createElement('option');
+        option.value = type;
+        option.textContent = type;
+        typeFilter.appendChild(option);
+      });
+    }
+
+    // Update all views
     function updateAllViews() {
-      if (!competitionData.initialized) return;
-      
       loadDashboard();
-      loadLeaderboard();
-      loadAchievements();
-      loadRecords();
-      loadStatistics();
+      updateCharts();
     }
 
-    // Load Dashboard with real data
+    // Load Dashboard
     function loadDashboard() {
-      // Update stats cards
+      // Update stats
       document.getElementById('total-competitions').textContent = competitionData.competitions.length;
       document.getElementById('total-participants').textContent = competitionData.participants.length;
       
-      // Find latest winner
-      const latestComp = competitionData.competitions[competitionData.competitions.length - 1];
-      if (latestComp) {
-        document.getElementById('current-champion').textContent = latestComp.winner || '—';
-        document.getElementById('champ-change').innerHTML = `<span>🎯</span> ${latestComp.name} ${latestComp.year}`;
-      }
-      
-      // Calculate most wins
+      // Calculate winner stats
       const winCounts = {};
       competitionData.competitions.forEach(comp => {
         if (comp.winner) {
@@ -1686,293 +1122,103 @@
       const topWinner = Object.entries(winCounts).sort((a, b) => b[1] - a[1])[0];
       if (topWinner) {
         document.getElementById('most-wins').textContent = topWinner[0];
-        document.getElementById('wins-change').innerHTML = `<span>🏅</span> ${topWinner[1]} vinster totalt`;
+        document.getElementById('wins-count').textContent = `${topWinner[1]} vinster`;
+      }
+      
+      // Latest winner
+      const latestComp = competitionData.competitions[0];
+      if (latestComp) {
+        document.getElementById('current-champion').textContent = latestComp.winner || '—';
+        document.getElementById('champ-comp').textContent = `${latestComp.year} ${latestComp.name}`;
       }
 
-      // Update year range
-      if (competitionData.competitions.length > 0) {
-        const years = competitionData.competitions.map(c => c.year);
-        document.getElementById('year-range').textContent = `${Math.min(...years)}-${Math.max(...years)}`;
-      }
-
-      // Power Rankings
-      calculateAndDisplayPowerRankings();
-      
-      // Fun Stats
-      displayFunStats();
-      
-      // Participation Chart
-      createParticipationChart();
+      // Load fun stats
+      loadFunStats();
     }
 
-    function calculateAndDisplayPowerRankings() {
-      const recentComps = competitionData.competitions.slice(-5);
-      const playerScores = {};
+    // Load Olympic-style Medal Tally
+    function loadMedalTally() {
+      const medalCounts = calculateMedalCounts();
+      const tallyList = document.getElementById('medal-tally-list');
       
-      competitionData.participants.forEach(p => {
-        playerScores[p.name] = { total: 0, count: 0, recent: [] };
-      });
+      if (!tallyList) return;
       
-      recentComps.forEach(comp => {
-        Object.entries(comp.scores).forEach(([pId, score]) => {
-          const participant = competitionData.participants.find(p => p.id === pId);
-          if (participant) {
-            playerScores[participant.name].total += (11 - Math.min(score, 10));
-            playerScores[participant.name].count++;
-            playerScores[participant.name].recent.push(score);
-          }
+      tallyList.innerHTML = '';
+      
+      const sortedTally = Object.entries(medalCounts)
+        .sort((a, b) => {
+          // Sort by gold, then silver, then bronze, then total
+          if (b[1].gold !== a[1].gold) return b[1].gold - a[1].gold;
+          if (b[1].silver !== a[1].silver) return b[1].silver - a[1].silver;
+          if (b[1].bronze !== a[1].bronze) return b[1].bronze - a[1].bronze;
+          return b[1].total - a[1].total;
         });
-      });
-      
-      const rankings = Object.entries(playerScores)
-        .filter(([_, data]) => data.count > 0)
-        .map(([name, data]) => ({
-          name,
-          power: Math.round((data.total / (data.count * 10)) * 100),
-          trend: data.recent.length > 1 && data.recent[data.recent.length-1] < data.recent[0] ? 'up' : 'stable',
-          change: Math.abs(data.recent.length > 1 ? data.recent[0] - data.recent[data.recent.length-1] : 0)
-        }))
-        .sort((a, b) => b.power - a.power)
-        .slice(0, 5);
-      
-      const powerList = document.getElementById('power-rankings-list');
-      powerList.innerHTML = '';
-      
-      const colors = [
-        'linear-gradient(135deg, #ff6b6b, #feca57)',
-        'linear-gradient(135deg, #48dbfb, #0abde3)',
-        'linear-gradient(135deg, #ff9ff3, #ee5a24)',
-        'linear-gradient(135deg, #54a0ff, #5f27cd)',
-        'linear-gradient(135deg, #00d2d3, #1dd1a1)'
-      ];
-      
-      rankings.forEach((player, index) => {
-        const bar = document.createElement('div');
-        bar.className = 'power-bar animate-in';
-        bar.style.animationDelay = `${index * 0.1}s`;
+
+      sortedTally.forEach(([name, medals], index) => {
+        const row = document.createElement('div');
+        row.className = 'medal-row';
         
-        bar.innerHTML = `
-          <div class="power-bar-label">${player.name}</div>
-          <div class="power-bar-track">
-            <div class="power-bar-fill" style="width: ${player.power}%; background: ${colors[index % colors.length]}">
-              ${player.power}%
-            </div>
+        const posClass = index === 0 ? 'first' : index === 1 ? 'second' : index === 2 ? 'third' : '';
+        
+        row.innerHTML = `
+          <div class="medal-position ${posClass}">${index + 1}</div>
+          <div class="medal-name">${name}</div>
+          <div class="medal-counts">
+            <div class="medal-count gold">🥇 ${medals.gold}</div>
+            <div class="medal-count silver">🥈 ${medals.silver}</div>
+            <div class="medal-count bronze">🥉 ${medals.bronze}</div>
           </div>
-          <div class="power-bar-change ${player.trend}">
-            ${player.trend === 'up' ? '↑' : '→'} ${player.change}
-          </div>
+          <div class="medal-total">${medals.total}</div>
         `;
         
-        powerList.appendChild(bar);
+        tallyList.appendChild(row);
       });
+
+      // Create medal distribution chart
+      createMedalChart(medalCounts);
     }
 
-    function displayFunStats() {
-      const stats = calculateFunStats();
-      const funStatsList = document.getElementById('fun-stats-list');
-      funStatsList.innerHTML = '';
+    // Calculate medal counts
+    function calculateMedalCounts() {
+      const medals = {};
       
-      stats.forEach((stat, index) => {
-        const item = document.createElement('div');
-        item.className = 'fun-stat-item animate-in';
-        item.style.animationDelay = `${index * 0.1}s`;
-        item.innerHTML = `
-          <div class="fun-stat-emoji">${stat.emoji}</div>
-          <div class="fun-stat-content">
-            <div class="fun-stat-title">${stat.title}</div>
-            <div class="fun-stat-desc">${stat.desc}</div>
-          </div>
-        `;
-        funStatsList.appendChild(item);
-      });
-    }
-
-    function calculateFunStats() {
-      const stats = [];
-      
-      // Most consistent (lowest standard deviation)
-      const avgPositions = {};
       competitionData.participants.forEach(p => {
-        const positions = [];
-        competitionData.competitions.forEach(comp => {
-          if (comp.scores[p.id]) positions.push(comp.scores[p.id]);
-        });
-        if (positions.length > 3) {
-          const avg = positions.reduce((a, b) => a + b, 0) / positions.length;
-          const variance = positions.reduce((sum, pos) => sum + Math.pow(pos - avg, 2), 0) / positions.length;
-          avgPositions[p.name] = { avg, stdDev: Math.sqrt(variance), count: positions.length };
-        }
+        medals[p.name] = { gold: 0, silver: 0, bronze: 0, total: 0 };
       });
-      
-      const mostConsistent = Object.entries(avgPositions)
-        .sort((a, b) => a[1].stdDev - b[1].stdDev)[0];
-      
-      if (mostConsistent) {
-        stats.push({
-          emoji: '🎯',
-          title: 'Mr. Consistent',
-          desc: `${mostConsistent[0]} - Mest stabil prestation`
-        });
-      }
-      
-      // Comeback kid
-      const comebacks = [];
-      competitionData.participants.forEach(p => {
-        const positions = [];
-        competitionData.competitions.forEach(comp => {
-          if (comp.scores[p.id]) positions.push({ year: comp.year, pos: comp.scores[p.id] });
-        });
-        if (positions.length > 4) {
-          const firstHalf = positions.slice(0, Math.floor(positions.length/2));
-          const secondHalf = positions.slice(Math.floor(positions.length/2));
-          const firstAvg = firstHalf.reduce((a, b) => a + b.pos, 0) / firstHalf.length;
-          const secondAvg = secondHalf.reduce((a, b) => a + b.pos, 0) / secondHalf.length;
-          if (firstAvg > secondAvg && firstAvg - secondAvg > 2) {
-            comebacks.push({ name: p.name, improvement: firstAvg - secondAvg });
-          }
-        }
-      });
-      
-      if (comebacks.length > 0) {
-        const best = comebacks.sort((a, b) => b.improvement - a.improvement)[0];
-        stats.push({
-          emoji: '💪',
-          title: 'Comeback Kid',
-          desc: `${best.name} - Mest förbättring över tid`
-        });
-      }
-      
-      // Lucky winner (won with minimal margin)
-      const closeWins = competitionData.competitions.filter(c => {
-        const scores = Object.values(c.scores).sort((a, b) => a - b);
-        return scores.length > 1 && scores[0] === 1 && scores[1] === 2;
-      });
-      
-      if (closeWins.length > 0) {
-        const luckyWinners = {};
-        closeWins.forEach(c => {
-          luckyWinners[c.winner] = (luckyWinners[c.winner] || 0) + 1;
-        });
-        const luckiest = Object.entries(luckyWinners).sort((a, b) => b[1] - a[1])[0];
-        if (luckiest) {
-          stats.push({
-            emoji: '🍀',
-            title: 'Lucky Charm',
-            desc: `${luckiest[0]} - ${luckiest[1]} knappa vinster`
-          });
-        }
-      }
-      
-      // Veteran
-      const participationCounts = {};
-      competitionData.participants.forEach(p => {
-        let count = 0;
-        competitionData.competitions.forEach(comp => {
-          if (comp.scores[p.id] !== undefined) count++;
-        });
-        participationCounts[p.name] = count;
-      });
-      
-      const veteran = Object.entries(participationCounts).sort((a, b) => b[1] - a[1])[0];
-      if (veteran) {
-        stats.push({
-          emoji: '🏅',
-          title: 'Järnmannen',
-          desc: `${veteran[0]} - ${veteran[1]} tävlingar`
-        });
-      }
-      
-      // Hot streak
-      const recentWinner = competitionData.competitions.slice(-3)
-        .map(c => c.winner)
-        .filter(w => w);
-      
-      const streakCounts = {};
-      recentWinner.forEach(w => {
-        streakCounts[w] = (streakCounts[w] || 0) + 1;
-      });
-      
-      const hotPlayer = Object.entries(streakCounts).sort((a, b) => b[1] - a[1])[0];
-      if (hotPlayer && hotPlayer[1] > 1) {
-        stats.push({
-          emoji: '🔥',
-          title: 'På Eld',
-          desc: `${hotPlayer[0]} - ${hotPlayer[1]} vinster på senaste 3`
-        });
-      }
-      
-      return stats;
-    }
-
-    // Load Leaderboard
-    function loadLeaderboard() {
-      const winCounts = {};
-      const participations = {};
-      const podiums = {};
       
       competitionData.competitions.forEach(comp => {
-        if (comp.winner) {
-          winCounts[comp.winner] = (winCounts[comp.winner] || 0) + 1;
-        }
-        
-        Object.entries(comp.scores).forEach(([pId, score]) => {
+        Object.entries(comp.scores).forEach(([pId, position]) => {
           const participant = competitionData.participants.find(p => p.id === pId);
           if (participant) {
-            participations[participant.name] = (participations[participant.name] || 0) + 1;
-            if (score <= 3) {
-              podiums[participant.name] = (podiums[participant.name] || 0) + 1;
+            if (position === 1) {
+              medals[participant.name].gold++;
+              medals[participant.name].total++;
+            } else if (position === 2) {
+              medals[participant.name].silver++;
+              medals[participant.name].total++;
+            } else if (position === 3) {
+              medals[participant.name].bronze++;
+              medals[participant.name].total++;
             }
           }
         });
       });
-
-      const leaderboardData = competitionData.participants.map(p => ({
-        name: p.name,
-        wins: winCounts[p.name] || 0,
-        participations: participations[p.name] || 0,
-        podiums: podiums[p.name] || 0,
-        winRate: participations[p.name] ? ((winCounts[p.name] || 0) / participations[p.name] * 100) : 0
-      })).sort((a, b) => b.wins - a.wins || b.winRate - a.winRate);
-
-      const leaderboardList = document.getElementById('leaderboard-list');
-      leaderboardList.innerHTML = '';
       
-      leaderboardData.slice(0, 10).forEach((player, index) => {
-        const item = document.createElement('div');
-        const posClass = index === 0 ? 'gold' : index === 1 ? 'silver' : index === 2 ? 'bronze' : '';
-        item.className = `leaderboard-item ${posClass} animate-in`;
-        item.style.animationDelay = `${index * 0.1}s`;
-        
-        item.innerHTML = `
-          <div class="position ${posClass}">${index + 1}</div>
-          <div class="player-info">
-            <div class="player-name">${player.name}</div>
-            <div class="player-stats">
-              <span>🏆 ${player.wins} vinster</span>
-              <span>🥇 ${player.podiums} pallplatser</span>
-              <span>📊 ${player.winRate.toFixed(1)}% vinstprocent</span>
-            </div>
-          </div>
-          ${index === 0 ? '<div class="trophy-count"><div class="trophy">👑 Champion</div></div>' : ''}
-        `;
-        
-        leaderboardList.appendChild(item);
-      });
-
-      // Create wins chart
-      createWinsChart(winCounts);
+      return medals;
     }
 
-    // Load Achievements
+    // Load fun but reasonable achievements
     function loadAchievements() {
       const achievements = calculateAchievements();
       const grid = document.getElementById('achievements-grid');
+      
+      if (!grid) return;
+      
       grid.innerHTML = '';
       
-      achievements.forEach((ach, index) => {
+      achievements.forEach(ach => {
         const card = document.createElement('div');
-        card.className = `achievement ${ach.unlocked ? 'unlocked' : 'locked'} ${ach.legendary ? 'legendary' : ''} animate-in`;
-        card.style.animationDelay = `${index * 0.05}s`;
+        card.className = `achievement ${ach.unlocked ? 'unlocked' : 'locked'} ${ach.legendary ? 'legendary' : ''}`;
         
         card.innerHTML = `
           <div class="achievement-icon">${ach.icon}</div>
@@ -1984,945 +1230,547 @@
       });
     }
 
+    // Calculate realistic achievements based on placement data
     function calculateAchievements() {
+      const medals = calculateMedalCounts();
       const achievements = [];
-      const winCounts = {};
-      const participations = {};
       
-      competitionData.competitions.forEach(comp => {
-        if (comp.winner) winCounts[comp.winner] = (winCounts[comp.winner] || 0) + 1;
-        Object.entries(comp.scores).forEach(([pId, _]) => {
-          const p = competitionData.participants.find(part => part.id === pId);
-          if (p) participations[p.name] = (participations[p.name] || 0) + 1;
-        });
+      // Medal-based achievements
+      Object.entries(medals).forEach(([name, count]) => {
+        // Gold achievements
+        if (count.gold >= 5) {
+          achievements.push({
+            icon: '👑',
+            name: 'Guldkungen',
+            desc: `${name} - 5+ guldmedaljer`,
+            unlocked: true,
+            legendary: true
+          });
+        } else if (count.gold >= 3) {
+          achievements.push({
+            icon: '🥇',
+            name: 'Guldsamlare',
+            desc: `${name} - 3+ guldmedaljer`,
+            unlocked: true
+          });
+        }
+        
+        // Total medals
+        if (count.total >= 10) {
+          achievements.push({
+            icon: '🏅',
+            name: 'Medaljmagnet',
+            desc: `${name} - 10+ medaljer totalt`,
+            unlocked: true
+          });
+        }
+        
+        // Consistency
+        if (count.gold > 0 && count.silver > 0 && count.bronze > 0) {
+          achievements.push({
+            icon: '🌈',
+            name: 'Regnbågssamlare',
+            desc: `${name} - Alla medaljfärger`,
+            unlocked: true
+          });
+        }
       });
       
-      // Check various achievement conditions
-      const hasThreeWins = Object.values(winCounts).some(w => w >= 3);
-      const hasFiveWins = Object.values(winCounts).some(w => w >= 5);
-      const hasTenParticipations = Object.values(participations).some(p => p >= 10);
-      const hasFullParticipation = Object.values(participations).some(p => p === competitionData.competitions.length);
+      // Competition-based achievements
+      const participationCounts = {};
+      competitionData.participants.forEach(p => {
+        let count = 0;
+        competitionData.competitions.forEach(comp => {
+          if (comp.scores[p.id] !== undefined) count++;
+        });
+        participationCounts[p.name] = count;
+      });
       
+      Object.entries(participationCounts).forEach(([name, count]) => {
+        if (count >= 10) {
+          achievements.push({
+            icon: '🏃',
+            name: 'Maratonlöpare',
+            desc: `${name} - 10+ tävlingar`,
+            unlocked: true
+          });
+        }
+        
+        if (count === competitionData.competitions.length) {
+          achievements.push({
+            icon: '💯',
+            name: 'Perfekt Närvaro',
+            desc: `${name} - Deltagit i alla tävlingar`,
+            unlocked: true,
+            legendary: true
+          });
+        }
+      });
+      
+      // Streak achievements
+      const streaks = calculateStreaks();
+      Object.entries(streaks).forEach(([name, streak]) => {
+        if (streak.winStreak >= 3) {
+          achievements.push({
+            icon: '🔥',
+            name: 'På Eld',
+            desc: `${name} - ${streak.winStreak} raka vinster`,
+            unlocked: true,
+            legendary: true
+          });
+        }
+        
+        if (streak.podiumStreak >= 5) {
+          achievements.push({
+            icon: '⭐',
+            name: 'Stjärnan',
+            desc: `${name} - ${streak.podiumStreak} raka pallplatser`,
+            unlocked: true
+          });
+        }
+      });
+      
+      // Special pattern achievements
+      const patterns = findSpecialPatterns();
+      achievements.push(...patterns);
+      
+      // Future achievements (locked)
       achievements.push(
-        { icon: '👑', name: 'Kung', desc: 'Vinn 5 tävlingar', unlocked: hasFiveWins, legendary: true },
-        { icon: '🥇', name: 'Guldmedaljör', desc: 'Vinn 3 tävlingar', unlocked: hasThreeWins },
-        { icon: '🏃', name: 'Maratonlöpare', desc: 'Delta i 10 tävlingar', unlocked: hasTenParticipations },
-        { icon: '🦾', name: 'Järnmannen', desc: 'Delta i alla tävlingar', unlocked: hasFullParticipation },
-        { icon: '🌟', name: 'Rising Star', desc: 'Första vinsten', unlocked: Object.keys(winCounts).length > 0 },
-        { icon: '🏁', name: 'Veteran', desc: '10 år i tävlingen', unlocked: competitionData.competitions.length >= 10 }
+        {
+          icon: '🎯',
+          name: 'Decenniummästare',
+          desc: 'Vinn minst en tävling per decennium',
+          unlocked: false
+        },
+        {
+          icon: '🚀',
+          name: 'Raketstart',
+          desc: 'Vinn din första tävling',
+          unlocked: false
+        },
+        {
+          icon: '💪',
+          name: 'Comeback Kid',
+          desc: 'Vinn efter 3+ år utan vinst',
+          unlocked: false
+        }
       );
       
       return achievements;
     }
 
-    // Load Records
-    function loadRecords() {
-      const records = calculateRecords();
-      const grid = document.getElementById('records-grid');
-      grid.innerHTML = '';
-      
-      records.forEach((record, index) => {
-        const card = document.createElement('div');
-        card.className = 'record-card animate-in';
-        card.style.animationDelay = `${index * 0.1}s`;
-        
-        card.innerHTML = `
-          <div class="record-label">${record.icon} ${record.label}</div>
-          <div class="record-value">${record.value}</div>
-          <div class="record-holder">${record.holder}</div>
-          <div class="record-date">${record.date}</div>
-        `;
-        
-        grid.appendChild(card);
-      });
-    }
-
-    function calculateRecords() {
-      const records = [];
-      const winCounts = {};
+    // Calculate win/podium streaks
+    function calculateStreaks() {
       const streaks = {};
-      const participations = {};
-      const avgPositions = {};
       
-      competitionData.competitions.forEach(comp => {
-        if (comp.winner) winCounts[comp.winner] = (winCounts[comp.winner] || 0) + 1;
+      competitionData.participants.forEach(p => {
+        let currentWinStreak = 0;
+        let maxWinStreak = 0;
+        let currentPodiumStreak = 0;
+        let maxPodiumStreak = 0;
         
-        Object.entries(comp.scores).forEach(([pId, score]) => {
-          const p = competitionData.participants.find(part => part.id === pId);
-          if (p) {
-            participations[p.name] = (participations[p.name] || 0) + 1;
-            if (!avgPositions[p.name]) avgPositions[p.name] = [];
-            avgPositions[p.name].push(score);
+        const sortedComps = [...competitionData.competitions].sort((a, b) => b.year - a.year);
+        
+        sortedComps.forEach(comp => {
+          const position = comp.scores[p.id];
+          if (position === 1) {
+            currentWinStreak++;
+            currentPodiumStreak++;
+            maxWinStreak = Math.max(maxWinStreak, currentWinStreak);
+            maxPodiumStreak = Math.max(maxPodiumStreak, currentPodiumStreak);
+          } else if (position <= 3) {
+            currentWinStreak = 0;
+            currentPodiumStreak++;
+            maxPodiumStreak = Math.max(maxPodiumStreak, currentPodiumStreak);
+          } else {
+            currentWinStreak = 0;
+            currentPodiumStreak = 0;
           }
         });
+        
+        streaks[p.name] = {
+          winStreak: maxWinStreak,
+          podiumStreak: maxPodiumStreak
+        };
       });
       
-      // Calculate averages
-      Object.entries(avgPositions).forEach(([name, positions]) => {
-        avgPositions[name] = positions.reduce((a, b) => a + b, 0) / positions.length;
-      });
-      
-      // Most wins
-      const topWinner = Object.entries(winCounts).sort((a, b) => b[1] - a[1])[0];
-      if (topWinner) {
-        records.push({
-          label: 'Flest Vinster',
-          value: topWinner[1].toString(),
-          holder: topWinner[0],
-          date: 'Totalt',
-          icon: '🏆'
-        });
-      }
-      
-      // Most participations
-      const topParticipant = Object.entries(participations).sort((a, b) => b[1] - a[1])[0];
-      if (topParticipant) {
-        records.push({
-          label: 'Flest Deltaganden',
-          value: topParticipant[1].toString(),
-          holder: topParticipant[0],
-          date: 'Totalt',
-          icon: '📊'
-        });
-      }
-      
-      // Best average
-      const bestAvg = Object.entries(avgPositions).sort((a, b) => a[1] - b[1])[0];
-      if (bestAvg) {
-        records.push({
-          label: 'Bästa Snitt',
-          value: bestAvg[1].toFixed(2),
-          holder: bestAvg[0],
-          date: 'Karriär',
-          icon: '📈'
-        });
-      }
-      
-      // Years active
-      if (competitionData.competitions.length > 0) {
-        const years = competitionData.competitions.map(c => c.year);
-        records.push({
-          label: 'År Aktiv',
-          value: `${Math.max(...years) - Math.min(...years) + 1} år`,
-          holder: 'Pekkas Pokal',
-          date: `${Math.min(...years)}-${Math.max(...years)}`,
-          icon: '📅'
-        });
-      }
-      
-      return records;
+      return streaks;
     }
 
-    // Load Statistics
-    function loadStatistics() {
-      populateCompetitorFilter();
-      setupStatisticsEventListeners();
-      renderCompetitorCards();
-      createOverallCharts();
-    }
-
-    // Populate competitor filter dropdown
-    function populateCompetitorFilter() {
-      const competitorFilter = document.getElementById('competitor-filter');
-      if (!competitorFilter) return;
-
-      // Clear existing options (except "Alla Deltagare")
-      competitorFilter.innerHTML = '<option value="all">Alla Deltagare</option>';
-
-      // Add competitors
-      competitionData.participants
-        .sort((a, b) => a.name.localeCompare(b.name, 'sv'))
-        .forEach(participant => {
-          const option = document.createElement('option');
-          option.value = participant.id;
-          option.textContent = participant.name;
-          competitorFilter.appendChild(option);
-        });
-    }
-
-    // Setup statistics event listeners
-    function setupStatisticsEventListeners() {
-      const competitorFilter = document.getElementById('competitor-filter');
-      const timeframeFilter = document.getElementById('timeframe-filter');
-      const exportBtn = document.getElementById('export-stats-btn');
-      const closeBtn = document.getElementById('close-individual-view');
-
-      competitorFilter?.addEventListener('change', () => {
-        renderCompetitorCards();
-        updateIndividualView();
-      });
-
-      timeframeFilter?.addEventListener('change', () => {
-        renderCompetitorCards();
-        updateIndividualView();
-        createOverallCharts();
-      });
-
-      exportBtn?.addEventListener('click', exportStatistics);
-      closeBtn?.addEventListener('click', closeIndividualView);
-    }
-
-    // Render competitor cards
-    function renderCompetitorCards() {
-      const grid = document.getElementById('competitor-stats-grid');
-      const competitorFilter = document.getElementById('competitor-filter');
-      const timeframeFilter = document.getElementById('timeframe-filter');
+    // Find special achievement patterns
+    function findSpecialPatterns() {
+      const patterns = [];
       
-      if (!grid) return;
-
-      const selectedCompetitor = competitorFilter?.value || 'all';
-      const selectedTimeframe = timeframeFilter?.value || 'all';
-
-      // Filter competitions by timeframe
-      let filteredCompetitions = competitionData.competitions;
-      if (selectedTimeframe !== 'all') {
-        const currentYear = new Date().getFullYear();
-        if (selectedTimeframe === 'recent') {
-          filteredCompetitions = competitionData.competitions.filter(c => c.year >= currentYear - 5);
-        } else {
-          filteredCompetitions = competitionData.competitions.filter(c => c.year.toString() === selectedTimeframe);
-        }
-      }
-
-      // Filter participants
-      let participants = competitionData.participants;
-      if (selectedCompetitor !== 'all') {
-        participants = participants.filter(p => p.id === selectedCompetitor);
-      }
-
-      grid.innerHTML = '';
-
-      participants.forEach(participant => {
-        const stats = calculateCompetitorStats(participant, filteredCompetitions);
-        const card = createCompetitorCard(participant, stats);
-        grid.appendChild(card);
-      });
-    }
-
-    // Calculate competitor statistics
-    function calculateCompetitorStats(participant, competitions) {
-      const participantCompetitions = competitions.filter(comp => 
-        comp.scores && comp.scores[participant.id] !== undefined
+      // Sibling rivalry
+      const lundqvists = competitionData.participants.filter(p => 
+        p.name.includes('Lundqvist')
       );
+      if (lundqvists.length > 1) {
+        patterns.push({
+          icon: '👨‍👨‍👦',
+          name: 'Familjeduell',
+          desc: 'Lundqvist vs Lundqvist',
+          unlocked: true
+        });
+      }
+      
+      // Per domination
+      const pers = competitionData.participants.filter(p => 
+        p.name.startsWith('Per ')
+      );
+      if (pers.length >= 2) {
+        patterns.push({
+          icon: '🎭',
+          name: 'Per-fektion',
+          desc: `${pers.length} personer med namnet Per`,
+          unlocked: true
+        });
+      }
+      
+      // Year-specific
+      const covid = competitionData.competitions.find(c => 
+        c.year === 2020 && c.name === 'Covid'
+      );
+      if (covid) {
+        patterns.push({
+          icon: '😷',
+          name: 'Pandemi-Pokalen',
+          desc: 'Tävlade under Covid-19',
+          unlocked: true
+        });
+      }
+      
+      // Location variety
+      const locations = [...new Set(competitionData.competitions.map(c => c.location))];
+      if (locations.length >= 10) {
+        patterns.push({
+          icon: '🗺️',
+          name: 'Världsresenär',
+          desc: `Tävlat på ${locations.length} olika platser`,
+          unlocked: true
+        });
+      }
+      
+      return patterns;
+    }
 
-      const stats = {
-        totalCompetitions: participantCompetitions.length,
-        wins: 0,
-        podiums: 0,
-        averagePosition: 0,
-        bestPosition: null,
-        worstPosition: null,
-        winRate: 0,
-        positions: [],
-        recentForm: []
-      };
-
-      if (participantCompetitions.length === 0) return stats;
-
-      let totalPosition = 0;
-      participantCompetitions.forEach(comp => {
-        const position = comp.scores[participant.id];
-        stats.positions.push(position);
-        totalPosition += position;
-
-        if (position === 1) stats.wins++;
-        if (position <= 3) stats.podiums++;
-
-        if (stats.bestPosition === null || position < stats.bestPosition) {
-          stats.bestPosition = position;
-        }
-        if (stats.worstPosition === null || position > stats.worstPosition) {
-          stats.worstPosition = position;
-        }
+    // Load fun stats
+    function loadFunStats() {
+      const stats = calculateFunStats();
+      const list = document.getElementById('fun-stats-list');
+      
+      if (!list) return;
+      
+      list.innerHTML = '';
+      
+      stats.forEach(stat => {
+        const item = document.createElement('div');
+        item.className = 'fun-stat-item';
+        item.innerHTML = `
+          <div class="fun-stat-emoji">${stat.emoji}</div>
+          <div class="fun-stat-content">
+            <div class="fun-stat-title">${stat.title}</div>
+            <div class="fun-stat-desc">${stat.desc}</div>
+          </div>
+        `;
+        list.appendChild(item);
       });
+    }
 
-      stats.averagePosition = totalPosition / participantCompetitions.length;
-      stats.winRate = (stats.wins / participantCompetitions.length) * 100;
-
-      // Recent form (last 3 competitions)
-      stats.recentForm = participantCompetitions
-        .sort((a, b) => b.year - a.year)
-        .slice(0, 3)
-        .map(comp => ({
-          competition: comp.name,
-          year: comp.year,
-          position: comp.scores[participant.id]
-        }));
-
+    // Calculate fun statistics
+    function calculateFunStats() {
+      const stats = [];
+      const medals = calculateMedalCounts();
+      
+      // Most consistent (smallest position variance)
+      const consistency = calculateConsistency();
+      const mostConsistent = Object.entries(consistency)
+        .sort((a, b) => a[1] - b[1])[0];
+      
+      if (mostConsistent) {
+        stats.push({
+          emoji: '🎯',
+          title: 'Mr. Consistent',
+          desc: `${mostConsistent[0]} - Mest stabil (σ=${mostConsistent[1].toFixed(1)})`
+        });
+      }
+      
+      // Biggest improvement
+      const improvements = calculateImprovements();
+      const biggestImprover = Object.entries(improvements)
+        .sort((a, b) => b[1] - a[1])[0];
+      
+      if (biggestImprover && biggestImprover[1] > 0) {
+        stats.push({
+          emoji: '📈',
+          title: 'Mest Förbättrad',
+          desc: `${biggestImprover[0]} - ${biggestImprover[1].toFixed(1)} platsers förbättring`
+        });
+      }
+      
+      // Unlucky silver
+      const silverCounts = Object.entries(medals)
+        .sort((a, b) => b[1].silver - a[1].silver)[0];
+      
+      if (silverCounts && silverCounts[1].silver >= 2) {
+        stats.push({
+          emoji: '🥈',
+          title: 'Eviga Tvåan',
+          desc: `${silverCounts[0]} - ${silverCounts[1].silver} silvermedaljer`
+        });
+      }
+      
+      // Competition specialist
+      const specialists = findSpecialists();
+      if (specialists.length > 0) {
+        stats.push({
+          emoji: '🏅',
+          title: specialists[0].title,
+          desc: specialists[0].desc
+        });
+      }
+      
+      // Rivalry
+      const rivalry = findBiggestRivalry();
+      if (rivalry) {
+        stats.push({
+          emoji: '⚔️',
+          title: 'Största Rivaliteten',
+          desc: rivalry
+        });
+      }
+      
       return stats;
     }
 
-    // Create competitor card
-    function createCompetitorCard(participant, stats) {
-      const card = document.createElement('div');
-      card.className = 'competitor-card';
-      card.dataset.participantId = participant.id;
-
-      // Determine badges
-      const badges = [];
-      if (stats.wins > 0) badges.push({ type: 'champion', text: `${stats.wins} Vinst${stats.wins > 1 ? 'er' : ''}` });
-      if (stats.podiums > stats.wins) badges.push({ type: 'podium', text: `${stats.podiums} Pallpl.` });
-      if (stats.totalCompetitions >= 10) badges.push({ type: 'veteran', text: 'Veteran' });
-      if (stats.totalCompetitions <= 3 && stats.totalCompetitions > 0) badges.push({ type: 'rookie', text: 'Rookie' });
-
-      card.innerHTML = `
-        <div class="competitor-header">
-          <div class="competitor-avatar">
-            ${participant.name.split(' ').map(n => n[0]).join('').substring(0, 2)}
-          </div>
-          <div class="competitor-info">
-            <h4>${participant.name}</h4>
-            <div class="status">${participant.status || 'Aktiv'}</div>
-          </div>
-        </div>
+    // Calculate consistency (standard deviation)
+    function calculateConsistency() {
+      const consistency = {};
+      
+      competitionData.participants.forEach(p => {
+        const positions = [];
+        competitionData.competitions.forEach(comp => {
+          if (comp.scores[p.id]) positions.push(comp.scores[p.id]);
+        });
         
-        <div class="competitor-stats">
-          <div class="stat-item">
-            <div class="value">${stats.totalCompetitions}</div>
-            <div class="label">Tävlingar</div>
-          </div>
-          <div class="stat-item">
-            <div class="value">${stats.wins}</div>
-            <div class="label">Vinster</div>
-          </div>
-          <div class="stat-item">
-            <div class="value">${stats.podiums}</div>
-            <div class="label">Pallplatser</div>
-          </div>
-          <div class="stat-item">
-            <div class="value">${stats.averagePosition.toFixed(1)}</div>
-            <div class="label">Snitt</div>
-          </div>
-        </div>
-
-        <div class="competitor-badges">
-          ${badges.map(badge => `<span class="badge ${badge.type}">${badge.text}</span>`).join('')}
-        </div>
-      `;
-
-      // Add click handler for individual view
-      card.addEventListener('click', () => {
-        // Remove selected class from all cards
-        document.querySelectorAll('.competitor-card').forEach(c => c.classList.remove('selected'));
-        // Add selected class to clicked card
-        card.classList.add('selected');
-        // Show individual details
-        showIndividualView(participant, stats);
+        if (positions.length >= 3) {
+          const avg = positions.reduce((a, b) => a + b, 0) / positions.length;
+          const variance = positions.reduce((sum, pos) => 
+            sum + Math.pow(pos - avg, 2), 0) / positions.length;
+          consistency[p.name] = Math.sqrt(variance);
+        }
       });
-
-      return card;
+      
+      return consistency;
     }
 
-    // Show individual competitor view
-    function showIndividualView(participant, stats) {
-      const detailsContainer = document.getElementById('individual-competitor-details');
-      if (!detailsContainer) return;
-
-      // Update header
-      document.getElementById('selected-competitor-name').textContent = participant.name;
-
-      // Update summary stats
-      document.getElementById('individual-competitions').textContent = stats.totalCompetitions;
-      document.getElementById('individual-wins').textContent = stats.wins;
-      document.getElementById('individual-podiums').textContent = stats.podiums;
-      document.getElementById('individual-avg').textContent = stats.averagePosition.toFixed(1);
-      document.getElementById('individual-best').textContent = stats.bestPosition || '-';
-      document.getElementById('individual-winrate').textContent = stats.winRate.toFixed(1) + '%';
-
-      // Show the container
-      detailsContainer.classList.remove('hidden');
-
-      // Create individual charts
-      createIndividualCharts(participant, stats);
-      renderCompetitionHistory(participant);
-
-      // Scroll to the individual view
-      detailsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-
-    // Close individual view
-    function closeIndividualView() {
-      const detailsContainer = document.getElementById('individual-competitor-details');
-      if (detailsContainer) {
-        detailsContainer.classList.add('hidden');
-      }
-
-      // Remove selected class from all cards
-      document.querySelectorAll('.competitor-card').forEach(c => c.classList.remove('selected'));
-    }
-
-    // Update individual view when filters change
-    function updateIndividualView() {
-      const selectedCard = document.querySelector('.competitor-card.selected');
-      if (selectedCard) {
-        const participantId = selectedCard.dataset.participantId;
-        const participant = competitionData.participants.find(p => p.id === participantId);
-        if (participant) {
-          const timeframeFilter = document.getElementById('timeframe-filter');
-          const selectedTimeframe = timeframeFilter?.value || 'all';
+    // Calculate improvements
+    function calculateImprovements() {
+      const improvements = {};
+      
+      competitionData.participants.forEach(p => {
+        const positions = [];
+        const sortedComps = [...competitionData.competitions].sort((a, b) => a.year - b.year);
+        
+        sortedComps.forEach(comp => {
+          if (comp.scores[p.id]) positions.push(comp.scores[p.id]);
+        });
+        
+        if (positions.length >= 4) {
+          const firstHalf = positions.slice(0, Math.floor(positions.length / 2));
+          const secondHalf = positions.slice(Math.floor(positions.length / 2));
           
-          let filteredCompetitions = competitionData.competitions;
-          if (selectedTimeframe !== 'all') {
-            const currentYear = new Date().getFullYear();
-            if (selectedTimeframe === 'recent') {
-              filteredCompetitions = competitionData.competitions.filter(c => c.year >= currentYear - 5);
-            } else {
-              filteredCompetitions = competitionData.competitions.filter(c => c.year.toString() === selectedTimeframe);
-            }
-          }
-
-          const stats = calculateCompetitorStats(participant, filteredCompetitions);
-          showIndividualView(participant, stats);
+          const firstAvg = firstHalf.reduce((a, b) => a + b, 0) / firstHalf.length;
+          const secondAvg = secondHalf.reduce((a, b) => a + b, 0) / secondHalf.length;
+          
+          improvements[p.name] = firstAvg - secondAvg; // Positive = improvement
         }
-      }
-    }
-
-    // Create individual competitor charts
-    function createIndividualCharts(participant, stats) {
-      createIndividualPerformanceChart(participant);
-      createIndividualPositionDistribution(participant, stats);
-    }
-
-    // Create individual performance chart
-    function createIndividualPerformanceChart(participant) {
-      const ctx = document.getElementById('individual-performance-chart');
-      if (!ctx) return;
-
-      // Destroy existing chart
-      if (window.individualPerformanceChart) {
-        window.individualPerformanceChart.destroy();
-      }
-
-      const timeframeFilter = document.getElementById('timeframe-filter');
-      const selectedTimeframe = timeframeFilter?.value || 'all';
+      });
       
-      let filteredCompetitions = competitionData.competitions;
-      if (selectedTimeframe !== 'all') {
-        const currentYear = new Date().getFullYear();
-        if (selectedTimeframe === 'recent') {
-          filteredCompetitions = competitionData.competitions.filter(c => c.year >= currentYear - 5);
-        } else {
-          filteredCompetitions = competitionData.competitions.filter(c => c.year.toString() === selectedTimeframe);
-        }
-      }
-
-      const participantCompetitions = filteredCompetitions
-        .filter(comp => comp.scores && comp.scores[participant.id] !== undefined)
-        .sort((a, b) => a.year - b.year);
-
-      const data = {
-        labels: participantCompetitions.map(comp => `${comp.year} - ${comp.name.substring(0, 15)}${comp.name.length > 15 ? '...' : ''}`),
-        datasets: [{
-          label: 'Placering',
-          data: participantCompetitions.map(comp => comp.scores[participant.id]),
-          borderColor: '#667eea',
-          backgroundColor: 'rgba(102, 126, 234, 0.1)',
-          borderWidth: 3,
-          fill: true,
-          tension: 0.4,
-          pointBackgroundColor: participantCompetitions.map(comp => {
-            const pos = comp.scores[participant.id];
-            return pos === 1 ? '#FFD700' : pos <= 3 ? '#C0C0C0' : '#667eea';
-          }),
-          pointBorderColor: '#ffffff',
-          pointBorderWidth: 2,
-          pointRadius: 6,
-          pointHoverRadius: 8
-        }]
-      };
-
-      window.individualPerformanceChart = new Chart(ctx.getContext('2d'), {
-        type: 'line',
-        data: data,
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: function(context) {
-                  const position = context.parsed.y;
-                  const competition = participantCompetitions[context.dataIndex];
-                  return [
-                    `Placering: ${position}`,
-                    `Tävling: ${competition.name}`,
-                    `År: ${competition.year}`
-                  ];
-                }
-              }
-            }
-          },
-          scales: {
-            y: {
-              reverse: true,
-              beginAtZero: false,
-              title: {
-                display: true,
-                text: 'Placering (Lägre = Bättre)',
-                color: '#a8b2d1'
-              },
-              ticks: {
-                stepSize: 1,
-                color: '#a8b2d1'
-              },
-              grid: { color: 'rgba(255, 255, 255, 0.1)' }
-            },
-            x: {
-              title: {
-                display: true,
-                text: 'Tävlingar',
-                color: '#a8b2d1'
-              },
-              ticks: {
-                maxRotation: 45,
-                color: '#a8b2d1'
-              },
-              grid: { color: 'rgba(255, 255, 255, 0.1)' }
-            }
-          }
-        }
-      });
+      return improvements;
     }
 
-    // Create individual position distribution chart
-    function createIndividualPositionDistribution(participant, stats) {
-      const ctx = document.getElementById('individual-position-distribution');
-      if (!ctx) return;
-
-      // Destroy existing chart
-      if (window.individualPositionChart) {
-        window.individualPositionChart.destroy();
-      }
-
-      // Group positions into ranges
-      const positionGroups = {
-        '1:a plats': 0,
-        '2-3 plats': 0,
-        '4-5 plats': 0,
-        '6-10 plats': 0,
-        '11+ plats': 0
-      };
-
-      stats.positions.forEach(pos => {
-        if (pos === 1) positionGroups['1:a plats']++;
-        else if (pos <= 3) positionGroups['2-3 plats']++;
-        else if (pos <= 5) positionGroups['4-5 plats']++;
-        else if (pos <= 10) positionGroups['6-10 plats']++;
-        else positionGroups['11+ plats']++;
-      });
-
-      const data = {
-        labels: Object.keys(positionGroups),
-        datasets: [{
-          data: Object.values(positionGroups),
-          backgroundColor: [
-            '#FFD700', // Gold
-            '#C0C0C0', // Silver
-            '#CD7F32', // Bronze
-            '#667eea', // Blue
-            '#f87171'  // Red
-          ],
-          borderColor: '#ffffff',
-          borderWidth: 2
-        }]
-      };
-
-      window.individualPositionChart = new Chart(ctx.getContext('2d'), {
-        type: 'doughnut',
-        data: data,
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              position: 'bottom',
-              labels: { 
-                color: '#a8b2d1',
-                padding: 15,
-                usePointStyle: true
-              }
-            },
-            tooltip: {
-              callbacks: {
-                label: function(context) {
-                  const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                  const percentage = total > 0 ? ((context.parsed / total) * 100).toFixed(1) : 0;
-                  return `${context.label}: ${context.parsed} (${percentage}%)`;
-                }
-              }
-            }
-          }
-        }
-      });
-    }
-
-    // Render competition history
-    function renderCompetitionHistory(participant) {
-      const listContainer = document.getElementById('individual-competition-list');
-      if (!listContainer) return;
-
-      const timeframeFilter = document.getElementById('timeframe-filter');
-      const selectedTimeframe = timeframeFilter?.value || 'all';
+    // Find competition specialists
+    function findSpecialists() {
+      const specialists = [];
+      const competitionTypes = {};
       
-      let filteredCompetitions = competitionData.competitions;
-      if (selectedTimeframe !== 'all') {
-        const currentYear = new Date().getFullYear();
-        if (selectedTimeframe === 'recent') {
-          filteredCompetitions = competitionData.competitions.filter(c => c.year >= currentYear - 5);
-        } else {
-          filteredCompetitions = competitionData.competitions.filter(c => c.year.toString() === selectedTimeframe);
+      competitionData.competitions.forEach(comp => {
+        if (!competitionTypes[comp.name]) {
+          competitionTypes[comp.name] = {};
+        }
+        
+        Object.entries(comp.scores).forEach(([pId, position]) => {
+          if (position === 1) {
+            const p = competitionData.participants.find(part => part.id === pId);
+            if (p) {
+              competitionTypes[comp.name][p.name] = 
+                (competitionTypes[comp.name][p.name] || 0) + 1;
+            }
+          }
+        });
+      });
+      
+      Object.entries(competitionTypes).forEach(([compName, winners]) => {
+        const topWinner = Object.entries(winners).sort((a, b) => b[1] - a[1])[0];
+        if (topWinner && topWinner[1] >= 2) {
+          specialists.push({
+            title: `${compName}-specialist`,
+            desc: `${topWinner[0]} - ${topWinner[1]} vinster i ${compName}`
+          });
+        }
+      });
+      
+      return specialists;
+    }
+
+    // Find biggest rivalry
+    function findBiggestRivalry() {
+      let maxMeetings = 0;
+      let rivalry = null;
+      
+      for (let i = 0; i < competitionData.participants.length; i++) {
+        for (let j = i + 1; j < competitionData.participants.length; j++) {
+          const p1 = competitionData.participants[i];
+          const p2 = competitionData.participants[j];
+          
+          let meetings = 0;
+          let p1Wins = 0;
+          let p2Wins = 0;
+          
+          competitionData.competitions.forEach(comp => {
+            if (comp.scores[p1.id] && comp.scores[p2.id]) {
+              meetings++;
+              if (comp.scores[p1.id] < comp.scores[p2.id]) p1Wins++;
+              else if (comp.scores[p2.id] < comp.scores[p1.id]) p2Wins++;
+            }
+          });
+          
+          if (meetings > maxMeetings && Math.abs(p1Wins - p2Wins) <= 2) {
+            maxMeetings = meetings;
+            rivalry = `${p1.name} vs ${p2.name} (${p1Wins}-${p2Wins})`;
+          }
         }
       }
+      
+      return rivalry;
+    }
 
-      const participantCompetitions = filteredCompetitions
-        .filter(comp => comp.scores && comp.scores[participant.id] !== undefined)
-        .sort((a, b) => b.year - a.year); // Most recent first
+    // Load statistics view
+    function loadStatistics() {
+      const filteredData = filterCompetitionData('all', 'all', 'all');
+      updateStatisticsView(filteredData);
+    }
 
-      listContainer.innerHTML = '';
-
-      participantCompetitions.forEach(comp => {
-        const position = comp.scores[participant.id];
-        const item = document.createElement('div');
-        item.className = 'competition-item';
-
-        const positionClass = position === 1 ? 'first' : position <= 3 ? 'podium' : 'regular';
-
-        item.innerHTML = `
-          <div class="competition-info">
-            <div class="competition-name">${comp.name}</div>
-            <div class="competition-details">${comp.year} • ${comp.location || 'Okänd plats'}</div>
+    // Update statistics view with filtered data
+    function updateStatisticsView(filteredData) {
+      const grid = document.getElementById('competitor-stats-grid');
+      if (!grid) return;
+      
+      grid.innerHTML = '';
+      
+      const stats = calculateCompetitorStats(filteredData);
+      
+      stats.forEach(stat => {
+        const card = document.createElement('div');
+        card.className = 'competitor-card';
+        
+        card.innerHTML = `
+          <div class="competitor-header">
+            <div class="competitor-avatar">${stat.initials}</div>
+            <div class="competitor-info">
+              <h4>${stat.name}</h4>
+            </div>
           </div>
-          <div class="competition-position ${positionClass}">
-            ${position}
+          <div class="competitor-medals">
+            <div class="medal-badge">🥇 ${stat.gold}</div>
+            <div class="medal-badge">🥈 ${stat.silver}</div>
+            <div class="medal-badge">🥉 ${stat.bronze}</div>
+          </div>
+          <div style="margin-top: 1rem; font-size: 0.9rem; color: var(--text-secondary);">
+            Snitt: ${stat.avgPosition.toFixed(1)} | Tävlingar: ${stat.competitions}
           </div>
         `;
-
-        listContainer.appendChild(item);
+        
+        grid.appendChild(card);
       });
-
-      if (participantCompetitions.length === 0) {
-        listContainer.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 2rem;">Inga tävlingar funna för vald tidsperiod</p>';
-      }
-    }
-
-    // Create overall charts
-    function createOverallCharts() {
-      createPerformanceChart();
-      createAveragePositionChart();
-      createParticipationStatsChart();
-      createWinsDistributionChart();
-    }
-
-    // Create participation stats chart
-    function createParticipationStatsChart() {
-      const ctx = document.getElementById('participation-stats-chart');
-      if (!ctx) return;
-
-      // Destroy existing chart
-      if (window.participationStatsChart) {
-        window.participationStatsChart.destroy();
-      }
-
-      const timeframeFilter = document.getElementById('timeframe-filter');
-      const selectedTimeframe = timeframeFilter?.value || 'all';
       
-      let filteredCompetitions = competitionData.competitions;
-      if (selectedTimeframe !== 'all') {
-        const currentYear = new Date().getFullYear();
-        if (selectedTimeframe === 'recent') {
-          filteredCompetitions = competitionData.competitions.filter(c => c.year >= currentYear - 5);
-        } else {
-          filteredCompetitions = competitionData.competitions.filter(c => c.year.toString() === selectedTimeframe);
-        }
-      }
+      updateStatisticsCharts(filteredData);
+    }
 
-      const years = filteredCompetitions.map(c => c.year);
-      const participantCounts = filteredCompetitions.map(c => Object.keys(c.scores || {}).length);
-
-      const data = {
-        labels: years,
-        datasets: [{
-          label: 'Antal Deltagare',
-          data: participantCounts,
-          borderColor: '#667eea',
-          backgroundColor: 'rgba(102, 126, 234, 0.1)',
-          borderWidth: 3,
-          fill: true,
-          tension: 0.4,
-          pointBackgroundColor: '#667eea',
-          pointBorderColor: '#ffffff',
-          pointBorderWidth: 2,
-          pointRadius: 6,
-          pointHoverRadius: 8
-        }]
-      };
-
-      window.participationStatsChart = new Chart(ctx.getContext('2d'), {
-        type: 'line',
-        data: data,
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            title: {
-              display: false
-            }
-          },
-          scales: {
-            y: {
-              beginAtZero: true,
-              title: {
-                display: true,
-                text: 'Antal Deltagare',
-                color: '#a8b2d1'
-              },
-              ticks: { color: '#a8b2d1' },
-              grid: { color: 'rgba(255, 255, 255, 0.1)' }
-            },
-            x: {
-              title: {
-                display: true,
-                text: 'År',
-                color: '#a8b2d1'
-              },
-              ticks: { color: '#a8b2d1' },
-              grid: { color: 'rgba(255, 255, 255, 0.1)' }
-            }
+    // Calculate competitor statistics
+    function calculateCompetitorStats(filteredData) {
+      const stats = [];
+      
+      competitionData.participants.forEach(p => {
+        let gold = 0, silver = 0, bronze = 0, total = 0, sum = 0;
+        
+        filteredData.forEach(comp => {
+          const position = comp.scores[p.id];
+          if (position) {
+            total++;
+            sum += position;
+            if (position === 1) gold++;
+            else if (position === 2) silver++;
+            else if (position === 3) bronze++;
           }
+        });
+        
+        if (total > 0) {
+          stats.push({
+            name: p.name,
+            initials: p.name.split(' ').map(n => n[0]).join(''),
+            gold,
+            silver,
+            bronze,
+            competitions: total,
+            avgPosition: sum / total
+          });
         }
       });
-    }
-
-    // Create wins distribution chart
-    function createWinsDistributionChart() {
-      const ctx = document.getElementById('wins-distribution-chart');
-      if (!ctx) return;
-
-      // Destroy existing chart
-      if (window.winsDistributionChart) {
-        window.winsDistributionChart.destroy();
-      }
-
-      const timeframeFilter = document.getElementById('timeframe-filter');
-      const selectedTimeframe = timeframeFilter?.value || 'all';
       
-      let filteredCompetitions = competitionData.competitions;
-      if (selectedTimeframe !== 'all') {
-        const currentYear = new Date().getFullYear();
-        if (selectedTimeframe === 'recent') {
-          filteredCompetitions = competitionData.competitions.filter(c => c.year >= currentYear - 5);
-        } else {
-          filteredCompetitions = competitionData.competitions.filter(c => c.year.toString() === selectedTimeframe);
-        }
-      }
-
-      const winCounts = {};
-      filteredCompetitions.forEach(comp => {
-        if (comp.winner) {
-          winCounts[comp.winner] = (winCounts[comp.winner] || 0) + 1;
-        }
-      });
-
-      const sortedWins = Object.entries(winCounts)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 8); // Top 8 winners
-
-      const data = {
-        labels: sortedWins.map(([name]) => name),
-        datasets: [{
-          data: sortedWins.map(([, wins]) => wins),
-          backgroundColor: [
-            '#FFD700', '#C0C0C0', '#CD7F32', '#667eea', '#764ba2',
-            '#f093fb', '#f5576c', '#4facfe'
-          ],
-          borderColor: '#ffffff',
-          borderWidth: 2
-        }]
-      };
-
-      window.winsDistributionChart = new Chart(ctx.getContext('2d'), {
-        type: 'pie',
-        data: data,
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              position: 'bottom',
-              labels: { 
-                color: '#a8b2d1',
-                padding: 15,
-                usePointStyle: true
-              }
-            },
-            tooltip: {
-              callbacks: {
-                label: function(context) {
-                  const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                  const percentage = total > 0 ? ((context.parsed / total) * 100).toFixed(1) : 0;
-                  return `${context.label}: ${context.parsed} vinster (${percentage}%)`;
-                }
-              }
-            }
-          }
-        }
+      return stats.sort((a, b) => {
+        if (b.gold !== a.gold) return b.gold - a.gold;
+        if (b.silver !== a.silver) return b.silver - a.silver;
+        if (b.bronze !== a.bronze) return b.bronze - a.bronze;
+        return a.avgPosition - b.avgPosition;
       });
     }
 
-    // Export statistics
-    function exportStatistics() {
-      const timeframeFilter = document.getElementById('timeframe-filter');
-      const selectedTimeframe = timeframeFilter?.value || 'all';
-      
-      let filteredCompetitions = competitionData.competitions;
-      if (selectedTimeframe !== 'all') {
-        const currentYear = new Date().getFullYear();
-        if (selectedTimeframe === 'recent') {
-          filteredCompetitions = competitionData.competitions.filter(c => c.year >= currentYear - 5);
-        } else {
-          filteredCompetitions = competitionData.competitions.filter(c => c.year.toString() === selectedTimeframe);
-        }
-      }
-
-      const statsData = competitionData.participants.map(participant => {
-        const stats = calculateCompetitorStats(participant, filteredCompetitions);
-        return {
-          'Namn': participant.name,
-          'Tävlingar': stats.totalCompetitions,
-          'Vinster': stats.wins,
-          'Pallplatser': stats.podiums,
-          'Genomsnittlig Placering': stats.averagePosition.toFixed(2),
-          'Bästa Placering': stats.bestPosition || 'N/A',
-          'Sämsta Placering': stats.worstPosition || 'N/A',
-          'Vinstprocent': stats.winRate.toFixed(1) + '%'
-        };
-      });
-
-      // Convert to CSV
-      const headers = Object.keys(statsData[0]);
-      const csvContent = [
-        headers.join(','),
-        ...statsData.map(row => headers.map(header => `"${row[header]}"`).join(','))
-      ].join('\n');
-
-      // Download
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = `pekkas-pokal-statistik-${selectedTimeframe}-${new Date().toISOString().split('T')[0]}.csv`;
-      link.click();
-      URL.revokeObjectURL(link.href);
-
-      showImportStatus('📊 Statistik exporterad som CSV-fil!', 'success');
+    // Update charts
+    function updateCharts() {
+      createPerformanceTrendChart();
     }
 
-    // Chart Creation Functions
-    function createParticipationChart() {
-      const ctx = document.getElementById('participation-chart');
+    // Update statistics charts
+    function updateStatisticsCharts(filteredData) {
+      createAveragePositionChart(filteredData);
+      createParticipationChart(filteredData);
+    }
+
+    // Create performance trend chart
+    function createPerformanceTrendChart() {
+      const ctx = document.getElementById('performance-trend-chart');
       if (!ctx) return;
       
       const years = competitionData.competitions.map(c => c.year);
-      const participantCounts = competitionData.competitions.map(c => Object.keys(c.scores).length);
+      const topPerformers = getTopPerformers(3);
+      
+      const datasets = topPerformers.map((performer, index) => ({
+        label: performer.name,
+        data: years.map(year => {
+          const comp = competitionData.competitions.find(c => c.year === year);
+          return comp?.scores[performer.id] || null;
+        }),
+        borderColor: ['#FFD700', '#C0C0C0', '#CD7F32'][index],
+        backgroundColor: ['rgba(255, 215, 0, 0.1)', 'rgba(192, 192, 192, 0.1)', 'rgba(205, 127, 50, 0.1)'][index],
+        tension: 0.4
+      }));
       
       new Chart(ctx.getContext('2d'), {
         type: 'line',
         data: {
           labels: years,
-          datasets: [{
-            label: 'Antal Deltagare',
-            data: participantCounts,
-            borderColor: '#667eea',
-            backgroundColor: 'rgba(102, 126, 234, 0.1)',
-            tension: 0.4,
-            fill: true
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false }
-          },
-          scales: {
-            y: {
-              beginAtZero: true,
-              grid: { color: 'rgba(255, 255, 255, 0.1)' },
-              ticks: { color: '#a8b2d1' }
-            },
-            x: {
-              grid: { color: 'rgba(255, 255, 255, 0.1)' },
-              ticks: { color: '#a8b2d1' }
-            }
-          }
-        }
-      });
-    }
-
-    function createWinsChart(winCounts) {
-      const ctx = document.getElementById('wins-chart');
-      if (!ctx) return;
-      
-      const labels = Object.keys(winCounts);
-      const data = Object.values(winCounts);
-      
-      new Chart(ctx.getContext('2d'), {
-        type: 'doughnut',
-        data: {
-          labels: labels,
-          datasets: [{
-            data: data,
-            backgroundColor: [
-              '#FFD700', '#C0C0C0', '#CD7F32', '#667eea', '#764ba2',
-              '#f093fb', '#f5576c', '#4facfe', '#00f2fe', '#43e97b'
-            ],
-            borderWidth: 0
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              position: 'right',
-              labels: { color: '#a8b2d1' }
-            }
-          }
-        }
-      });
-    }
-
-    function createPerformanceChart() {
-      const ctx = document.getElementById('performance-chart');
-      if (!ctx) return;
-      
-      // Get top 3 performers
-      const playerData = {};
-      competitionData.competitions.slice(-6).forEach(comp => {
-        Object.entries(comp.scores).forEach(([pId, score]) => {
-          const p = competitionData.participants.find(part => part.id === pId);
-          if (p) {
-            if (!playerData[p.name]) playerData[p.name] = [];
-            playerData[p.name].push({ year: comp.year, score });
-          }
-        });
-      });
-      
-      const datasets = Object.entries(playerData)
-        .slice(0, 3)
-        .map((player, idx) => ({
-          label: player[0],
-          data: player[1].map(d => d.score),
-          borderColor: ['#ff6b6b', '#4facfe', '#43e97b'][idx],
-          backgroundColor: ['rgba(255, 107, 107, 0.1)', 'rgba(79, 172, 254, 0.1)', 'rgba(67, 233, 123, 0.1)'][idx],
-          tension: 0.4
-        }));
-      
-      new Chart(ctx.getContext('2d'), {
-        type: 'line',
-        data: {
-          labels: competitionData.competitions.slice(-6).map(c => c.year),
           datasets: datasets
         },
         options: {
@@ -2937,12 +1785,10 @@
             y: {
               reverse: true,
               min: 1,
-              max: 10,
-              grid: { color: 'rgba(255, 255, 255, 0.1)' },
+              max: 13,
               ticks: { color: '#a8b2d1' }
             },
             x: {
-              grid: { color: 'rgba(255, 255, 255, 0.1)' },
               ticks: { color: '#a8b2d1' }
             }
           }
@@ -2950,62 +1796,166 @@
       });
     }
 
-    function createAveragePositionChart() {
-      const ctx = document.getElementById('average-position-chart');
+    // Create medal distribution chart
+    function createMedalChart(medalCounts) {
+      const ctx = document.getElementById('medal-distribution-chart');
       if (!ctx) return;
       
-      const avgPositions = {};
-      competitionData.participants.forEach(p => {
-        const positions = [];
-        competitionData.competitions.forEach(comp => {
-          if (comp.scores[p.id]) positions.push(comp.scores[p.id]);
-        });
-        if (positions.length > 0) {
-          avgPositions[p.name] = positions.reduce((a, b) => a + b, 0) / positions.length;
-        }
-      });
-      
-      const sorted = Object.entries(avgPositions)
-        .sort((a, b) => a[1] - b[1])
-        .slice(0, 5);
+      const topMedalists = Object.entries(medalCounts)
+        .sort((a, b) => b[1].total - a[1].total)
+        .slice(0, 8);
       
       new Chart(ctx.getContext('2d'), {
         type: 'bar',
         data: {
-          labels: sorted.map(s => s[0]),
-          datasets: [{
-            label: 'Genomsnittlig Placering',
-            data: sorted.map(s => s[1]),
-            backgroundColor: [
-              'rgba(255, 215, 0, 0.8)',
-              'rgba(192, 192, 192, 0.8)',
-              'rgba(205, 127, 50, 0.8)',
-              'rgba(102, 126, 234, 0.8)',
-              'rgba(118, 75, 162, 0.8)'
-            ],
-            borderWidth: 0
-          }]
+          labels: topMedalists.map(([name]) => name),
+          datasets: [
+            {
+              label: 'Guld',
+              data: topMedalists.map(([, m]) => m.gold),
+              backgroundColor: '#FFD700'
+            },
+            {
+              label: 'Silver',
+              data: topMedalists.map(([, m]) => m.silver),
+              backgroundColor: '#C0C0C0'
+            },
+            {
+              label: 'Brons',
+              data: topMedalists.map(([, m]) => m.bronze),
+              backgroundColor: '#CD7F32'
+            }
+          ]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          indexAxis: 'y',
           plugins: {
-            legend: { display: false }
+            legend: {
+              labels: { color: '#a8b2d1' }
+            }
           },
           scales: {
-            x: {
-              reverse: true,
-              grid: { color: 'rgba(255, 255, 255, 0.1)' },
+            y: {
+              stacked: true,
               ticks: { color: '#a8b2d1' }
             },
-            y: {
-              grid: { color: 'rgba(255, 255, 255, 0.1)' },
+            x: {
+              stacked: true,
               ticks: { color: '#a8b2d1' }
             }
           }
         }
       });
+    }
+
+    // Create average position chart
+    function createAveragePositionChart(filteredData) {
+      const ctx = document.getElementById('avg-position-chart');
+      if (!ctx) return;
+      
+      const yearStats = {};
+      filteredData.forEach(comp => {
+        if (!yearStats[comp.year]) {
+          yearStats[comp.year] = { sum: 0, count: 0 };
+        }
+        Object.values(comp.scores).forEach(pos => {
+          yearStats[comp.year].sum += pos;
+          yearStats[comp.year].count++;
+        });
+      });
+      
+      const years = Object.keys(yearStats).sort();
+      const avgPositions = years.map(year => 
+        yearStats[year].sum / yearStats[year].count
+      );
+      
+      new Chart(ctx.getContext('2d'), {
+        type: 'line',
+        data: {
+          labels: years,
+          datasets: [{
+            label: 'Genomsnittlig Placering',
+            data: avgPositions,
+            borderColor: '#667eea',
+            backgroundColor: 'rgba(102, 126, 234, 0.1)',
+            tension: 0.4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              labels: { color: '#a8b2d1' }
+            }
+          },
+          scales: {
+            y: {
+              reverse: true,
+              ticks: { color: '#a8b2d1' }
+            },
+            x: {
+              ticks: { color: '#a8b2d1' }
+            }
+          }
+        }
+      });
+    }
+
+    // Create participation chart
+    function createParticipationChart(filteredData) {
+      const ctx = document.getElementById('participation-chart');
+      if (!ctx) return;
+      
+      const yearParticipation = {};
+      filteredData.forEach(comp => {
+        yearParticipation[comp.year] = Object.keys(comp.scores).length;
+      });
+      
+      const years = Object.keys(yearParticipation).sort();
+      const participation = years.map(year => yearParticipation[year]);
+      
+      new Chart(ctx.getContext('2d'), {
+        type: 'bar',
+        data: {
+          labels: years,
+          datasets: [{
+            label: 'Antal Deltagare',
+            data: participation,
+            backgroundColor: 'rgba(102, 126, 234, 0.6)',
+            borderColor: '#667eea',
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              labels: { color: '#a8b2d1' }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: { color: '#a8b2d1' }
+            },
+            x: {
+              ticks: { color: '#a8b2d1' }
+            }
+          }
+        }
+      });
+    }
+
+    // Get top performers
+    function getTopPerformers(count) {
+      const medals = calculateMedalCounts();
+      return Object.entries(medals)
+        .sort((a, b) => b[1].total - a[1].total)
+        .slice(0, count)
+        .map(([name]) => competitionData.participants.find(p => p.name === name));
     }
 
     // Initialize on load
