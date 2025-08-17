@@ -886,8 +886,11 @@
         <h3 style="color: var(--text-primary); margin-bottom: 1rem;">Importera Tävlingsdata</h3>
         <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Dra och släpp din CSV-fil här eller klicka för att välja</p>
         <input type="file" id="csv-file" accept=".csv" style="display: none;">
-        <button onclick="document.getElementById('csv-file').click()" style="padding: 1rem 2rem; background: var(--epic-gradient); color: white; border: none; border-radius: 12px; font-weight: 600; cursor: pointer;">
+        <button onclick="document.getElementById('csv-file').click()" style="padding: 1rem 2rem; background: var(--epic-gradient); color: white; border: none; border-radius: 12px; font-weight: 600; cursor: pointer; margin: 0.5rem;">
           Välj CSV-fil
+        </button>
+        <button onclick="reloadCSVData()" style="padding: 1rem 2rem; background: var(--epic-gradient); color: white; border: none; border-radius: 12px; font-weight: 600; cursor: pointer; margin: 0.5rem;">
+          Ladda om CSV
         </button>
         <div id="import-status" style="margin-top: 1rem;"></div>
       </div>
@@ -908,10 +911,11 @@
     };
 
     // Initialize application
-    function init() {
+    async function init() {
       setupTabs();
       setupFilters();
-      loadMockData(); // Load mock data for demonstration
+      setupCSVImport();
+      await loadCSVData(); // Load actual CSV data
       updateAllViews();
     }
 
@@ -936,6 +940,48 @@
           if (targetTab === 'statistics') loadStatistics();
         });
       });
+    }
+
+    // Setup CSV import functionality
+    function setupCSVImport() {
+      const fileInput = document.getElementById('csv-file');
+      
+      fileInput?.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          try {
+            const text = await file.text();
+            parseCSVContent(text);
+            updateAllViews();
+            showImportStatus('CSV-fil importerad framgångsrikt!', 'success');
+          } catch (error) {
+            console.error('Failed to import CSV:', error);
+            showImportStatus('Fel vid import av CSV-fil', 'error');
+          }
+        }
+      });
+    }
+
+    // Reload CSV data
+    async function reloadCSVData() {
+      try {
+        await loadCSVData();
+        updateAllViews();
+        showImportStatus('Data omladdad!', 'success');
+      } catch (error) {
+        showImportStatus('Fel vid omladdning', 'error');
+      }
+    }
+
+    // Show import status message
+    function showImportStatus(message, type) {
+      const statusEl = document.getElementById('import-status');
+      if (statusEl) {
+        statusEl.innerHTML = `<div style="padding: 1rem; margin-top: 1rem; border-radius: 8px; background: ${type === 'success' ? 'rgba(74, 222, 128, 0.2)' : 'rgba(248, 113, 113, 0.2)'}; color: ${type === 'success' ? '#4ade80' : '#f87171'};">${message}</div>`;
+        setTimeout(() => {
+          statusEl.innerHTML = '';
+        }, 3000);
+      }
     }
 
     // Setup enhanced filters
@@ -1002,77 +1048,241 @@
       return filtered;
     }
 
-    // Load mock data for demonstration
-    function loadMockData() {
-      // Sample participants based on CSV
-      const participants = [
-        { id: 'p1', name: 'Olov Melander', nickname: 'Olov M.' },
-        { id: 'p2', name: 'Mikael Hägglund', nickname: 'Mikael H.' },
-        { id: 'p3', name: 'Viktor Jones', nickname: 'Viktor J.' },
-        { id: 'p4', name: 'Per Wikman', nickname: 'Per W.' },
-        { id: 'p5', name: 'Erik Vallgren', nickname: 'Erik V.' },
-        { id: 'p6', name: 'Henrik Lundqvist', nickname: 'Henrik L.' },
-        { id: 'p7', name: 'Rickard Nilsson', nickname: 'Rickard N.' },
-        { id: 'p8', name: 'Niklas Norberg', nickname: 'Niklas N.' },
-        { id: 'p9', name: 'Per Olsson', nickname: 'Per O.' },
-        { id: 'p10', name: 'Tobias Lundqvist', nickname: 'Tobias L.' },
-        { id: 'p11', name: 'Lars Sandin', nickname: 'Lars S.' },
-        { id: 'p12', name: 'Ludvig Ulenius', nickname: 'Ludvig U.' },
-        { id: 'p13', name: 'Jonas Eriksson', nickname: 'Jonas E.' }
-      ];
-
-      // Sample competitions based on CSV
-      const competitions = [
-        {
-          id: 'c1',
-          year: 2025,
-          name: 'Flipper',
-          location: 'Eskilstuna/Västerås',
-          winner: 'Viktor Jones',
-          scores: { p3: 1, p1: 2, p9: 3, p11: 4, p5: 5, p10: 6, p2: 7, p12: 8, p6: 9, p4: 10, p8: 11, p7: 12 }
-        },
-        {
-          id: 'c2',
-          year: 2024,
-          name: 'Fisketävling',
-          location: 'Själevad',
-          winner: 'Erik Vallgren',
-          scores: { p5: 1, p6: 2, p9: 3, p3: 4, p8: 5, p12: 6, p1: 7, p11: 8, p4: 9, p2: 10, p10: 11, p7: 12 }
-        },
-        {
-          id: 'c3',
-          year: 2023,
-          name: 'Fäktning',
-          location: 'Stockholm',
-          winner: 'Per Wikman',
-          scores: { p4: 1, p6: 2, p1: 3, p9: 4, p8: 9, p3: 10 }
-        },
-        {
-          id: 'c4',
-          year: 2022,
-          name: 'Skytte',
-          location: 'Arnäsvall',
-          winner: 'Ludvig Ulenius',
-          scores: { p12: 1, p10: 2, p3: 3, p7: 4, p1: 5, p11: 6, p5: 7, p8: 8, p2: 9, p4: 10 }
-        },
-        {
-          id: 'c5',
-          year: 2021,
-          name: 'Målning',
-          location: 'Ås',
-          winner: 'Olov Melander',
-          scores: { p1: 1, p10: 2, p12: 3, p9: 4, p4: 5, p3: 6, p5: 7, p8: 8, p6: 9, p7: 10 }
+    // Load CSV data from file
+    async function loadCSVData() {
+      try {
+        // Try multiple methods to load CSV
+        let csvContent = null;
+        
+        // Method 1: Try window.fs API if available
+        if (window.fs && window.fs.readFile) {
+          try {
+            csvContent = await window.fs.readFile('Pekkas Pokal Marathontabell Marathontabell.csv', { encoding: 'utf8' });
+            console.log('CSV loaded via fs.readFile');
+          } catch (e) {
+            console.log('fs.readFile not available');
+          }
         }
-      ];
-
+        
+        // Method 2: Try fetch
+        if (!csvContent) {
+          try {
+            const response = await fetch('Pekkas Pokal Marathontabell Marathontabell.csv');
+            if (response.ok) {
+              csvContent = await response.text();
+              console.log('CSV loaded via fetch');
+            }
+          } catch (e) {
+            console.log('Fetch failed:', e);
+          }
+        }
+        
+        // Method 3: Use embedded CSV data as fallback
+        if (!csvContent) {
+          console.log('Using embedded CSV data');
+          csvContent = getEmbeddedCSV();
+        }
+        
+        // Parse CSV content
+        if (csvContent) {
+          parseCSVContent(csvContent);
+        }
+        
+      } catch (error) {
+        console.error('Failed to load CSV:', error);
+        // Use embedded data as fallback
+        parseCSVContent(getEmbeddedCSV());
+      }
+    }
+    
+    // Get embedded CSV data
+    function getEmbeddedCSV() {
+      return `År,Tävling,Plats,Arrangör 3:a,Arrangör näst sist,Olov Melander,Mikael Hägglund,Viktor Jones,Per Wikman,Erik Vallgren,Henrik Lundqvist,Rickard Nilsson,Niklas Norberg,Per Olsson,Tobias Lundqvist,Lars Sandin,Ludvig Ulenius,Jonas Eriksson
+2011,Fantasy Premier League,,,,-,3,2,-,-,-,1,-,-,-,-,-,-
+2012,Gokart,Varggropen,,,-,7,3,4,2,,5,-,-,-,-,,1
+2013,Femkamp,Kroksta,,,-,4,6,2,1,3,5,7,-,-,-,-,-
+2014,Mångkamp Uppsala,Uppsala,,,,,,,1,,,,,,,,-
+2015,Bondespelen,Billsta,,,,,,1,,,3,,,,,,2
+2016,Mångkamp Lundqvist,,,,7,5,9,3,10,11,4,1,,2,,8,6
+2017,Triathlon,Lomsjön,,,-,3,1,2,6,8,7,9,-,4,-,5,-
+2018,Kortspel Ambition,Kungsholmen,,,5,3,4,8,2,6,-,1,-,7,,-,-
+2019,Pingis,Bredbyn,,,8,9,1,10,6,3,2,7,5,4,-,11,-
+2020,Covid,,,,,,,,,,,,,,,,-
+2021,Målning,Ås,,,1,-,6,5,7,9,10,8,4,2,-,3,-
+2022,Skytte,Arnäsvall,,,5,9,3,10,-,7,4,8,6,2,-,1,-
+2023,Fäktning,Stockholm,Viktor Jones,Mikael Hägglund,,3,10,1,,,2,,9,4,-,-,-
+2024-08-17,Fisketävling,Själevad,Tobias Lundqvist,Per Olsson,7,10,4,9,1,2,12,5,3,11,8,6,-
+2025-08-16,Flipper,Eskilstuna/Västerås,Viktor Jones,Mikael Hägglund,2,7,1,11,10,5,9,12,3,6,4,8,-`;
+    }
+    
+    // Parse CSV content using Papa Parse or native parser
+    function parseCSVContent(csvContent) {
+      if (typeof Papa !== 'undefined') {
+        // Use Papa Parse if available
+        Papa.parse(csvContent, {
+          header: true,
+          skipEmptyLines: true,
+          complete: (results) => {
+            processCSVData(results.data, results.meta.fields);
+          },
+          error: (error) => {
+            console.error('Papa Parse error:', error);
+            // Fallback to native parser
+            parseCSVNative(csvContent);
+          }
+        });
+      } else {
+        // Use native parser
+        parseCSVNative(csvContent);
+      }
+    }
+    
+    // Native CSV parser
+    function parseCSVNative(csvContent) {
+      const lines = csvContent.trim().split(/\r?\n/);
+      const headers = lines[0].split(',').map(h => h.trim());
+      const data = [];
+      
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',').map(v => v.trim());
+        const row = {};
+        headers.forEach((header, index) => {
+          row[header] = values[index] || '';
+        });
+        data.push(row);
+      }
+      
+      processCSVData(data, headers);
+    }
+    
+    // Process CSV data into application format
+    function processCSVData(rows, headers) {
+      // Fixed columns
+      const fixedColumns = ['År', 'Tävling', 'Plats', 'Arrangör 3:a', 'Arrangör näst sist'];
+      
+      // Extract participant names from headers
+      const participantNames = headers.filter(h => 
+        h && !fixedColumns.includes(h) && h.trim() !== ''
+      );
+      
+      // Create participants
+      const participants = participantNames.map((name, index) => ({
+        id: `p${index + 1}`,
+        name: name.trim(),
+        nickname: createNickname(name)
+      }));
+      
+      // Create participant ID map
+      const participantIdMap = {};
+      participants.forEach(p => {
+        participantIdMap[p.name] = p.id;
+      });
+      
+      // Process competitions
+      const competitions = [];
+      
+      rows.forEach(row => {
+        const year = parseInt(row['År']);
+        const name = row['Tävling'];
+        const location = row['Plats'] || '';
+        const arranger3rd = row['Arrangör 3:a'] || '';
+        const arrangerSecondLast = row['Arrangör näst sist'] || '';
+        
+        if (!year || !name || name === 'Covid') {
+          // Skip invalid rows or Covid year
+          if (name === 'Covid') {
+            competitions.push({
+              id: `c${competitions.length + 1}`,
+              year: 2020,
+              name: 'Covid',
+              location: '',
+              winner: null,
+              scores: {},
+              arranger3rd: '',
+              arrangerSecondLast: ''
+            });
+          }
+          return;
+        }
+        
+        const scores = {};
+        let winner = null;
+        let participantCount = 0;
+        
+        // Process scores for each participant
+        participantNames.forEach(participantName => {
+          const value = row[participantName];
+          if (value && value !== '' && value !== '-') {
+            const score = parseScore(value);
+            if (score !== null) {
+              const pId = participantIdMap[participantName];
+              scores[pId] = score;
+              participantCount++;
+              
+              if (score === 1) {
+                winner = participantName;
+              }
+            }
+          }
+        });
+        
+        // Adjust special positions (näst sist = second to last)
+        Object.entries(scores).forEach(([pId, score]) => {
+          if (score === 99) { // Näst sist
+            scores[pId] = Math.max(2, participantCount - 1);
+          } else if (score === 100) { // Sist
+            scores[pId] = participantCount;
+          }
+        });
+        
+        competitions.push({
+          id: `c${competitions.length + 1}`,
+          year: year,
+          name: name,
+          location: location,
+          winner: winner,
+          scores: scores,
+          arranger3rd: arranger3rd,
+          arrangerSecondLast: arrangerSecondLast,
+          participantCount: participantCount
+        });
+      });
+      
+      // Sort competitions by year (newest first)
+      competitions.sort((a, b) => b.year - a.year);
+      
       competitionData = {
         participants,
         competitions,
         initialized: true
       };
-
+      
+      console.log(`Loaded ${competitions.length} competitions and ${participants.length} participants`);
+      
       // Populate filters
       populateFilters();
+    }
+    
+    // Parse score value
+    function parseScore(value) {
+      if (!value || value === '-' || value === '') return null;
+      
+      const numValue = parseInt(value);
+      if (!isNaN(numValue)) return numValue;
+      
+      const textValue = value.toString().toLowerCase().trim();
+      if (textValue === 'näst sist') return 99;
+      if (textValue === 'sist') return 100;
+      
+      return null;
+    }
+    
+    // Create nickname from full name
+    function createNickname(fullName) {
+      const parts = fullName.trim().split(' ');
+      const firstName = parts[0];
+      const lastName = parts[parts.length - 1];
+      return firstName + ' ' + lastName.charAt(0) + '.';
     }
 
     // Populate filter dropdowns
@@ -1107,9 +1317,24 @@
 
     // Load Dashboard
     function loadDashboard() {
-      // Update stats
+      if (!competitionData.initialized || competitionData.competitions.length === 0) {
+        // Show loading state
+        document.getElementById('total-competitions').textContent = '0';
+        document.getElementById('total-participants').textContent = '0';
+        document.getElementById('current-champion').textContent = '—';
+        document.getElementById('most-wins').textContent = '—';
+        document.getElementById('comp-trend').textContent = 'Ingen data';
+        document.getElementById('part-trend').textContent = 'Ingen data';
+        document.getElementById('champ-comp').textContent = 'Ingen data';
+        document.getElementById('wins-count').textContent = 'Ingen data';
+        return;
+      }
+      
+      // Update stats with actual data
       document.getElementById('total-competitions').textContent = competitionData.competitions.length;
       document.getElementById('total-participants').textContent = competitionData.participants.length;
+      document.getElementById('comp-trend').textContent = `${competitionData.competitions.length} totalt`;
+      document.getElementById('part-trend').textContent = 'Alla aktiva';
       
       // Calculate winner stats
       const winCounts = {};
@@ -1123,13 +1348,27 @@
       if (topWinner) {
         document.getElementById('most-wins').textContent = topWinner[0];
         document.getElementById('wins-count').textContent = `${topWinner[1]} vinster`;
+      } else {
+        document.getElementById('most-wins').textContent = '—';
+        document.getElementById('wins-count').textContent = '0 vinster';
       }
       
       // Latest winner
       const latestComp = competitionData.competitions[0];
-      if (latestComp) {
-        document.getElementById('current-champion').textContent = latestComp.winner || '—';
+      if (latestComp && latestComp.winner) {
+        document.getElementById('current-champion').textContent = latestComp.winner;
         document.getElementById('champ-comp').textContent = `${latestComp.year} ${latestComp.name}`;
+      } else {
+        document.getElementById('current-champion').textContent = '—';
+        document.getElementById('champ-comp').textContent = 'Ingen vinnare';
+      }
+
+      // Update year range
+      if (competitionData.competitions.length > 0) {
+        const years = competitionData.competitions.map(c => c.year).filter(y => y);
+        const minYear = Math.min(...years);
+        const maxYear = Math.max(...years);
+        document.getElementById('year-range').textContent = `${minYear}-${maxYear}`;
       }
 
       // Load fun stats
@@ -1307,6 +1546,38 @@
         }
       });
       
+      // Arranger achievements
+      const arrangerStats = {};
+      competitionData.competitions.forEach(comp => {
+        if (comp.arranger3rd) {
+          arrangerStats[comp.arranger3rd] = arrangerStats[comp.arranger3rd] || { third: 0, secondLast: 0 };
+          arrangerStats[comp.arranger3rd].third++;
+        }
+        if (comp.arrangerSecondLast) {
+          arrangerStats[comp.arrangerSecondLast] = arrangerStats[comp.arrangerSecondLast] || { third: 0, secondLast: 0 };
+          arrangerStats[comp.arrangerSecondLast].secondLast++;
+        }
+      });
+      
+      Object.entries(arrangerStats).forEach(([name, stats]) => {
+        if (stats.third >= 2) {
+          achievements.push({
+            icon: '🥉',
+            name: 'Bronsarrangör',
+            desc: `${name} - Arrangerat ${stats.third} gånger som trea`,
+            unlocked: true
+          });
+        }
+        if (stats.secondLast >= 2) {
+          achievements.push({
+            icon: '🎭',
+            name: 'Ironisk Arrangör',
+            desc: `${name} - Arrangerat ${stats.secondLast} gånger som näst sist`,
+            unlocked: true
+          });
+        }
+      });
+      
       // Streak achievements
       const streaks = calculateStreaks();
       Object.entries(streaks).forEach(([name, streak]) => {
@@ -1352,6 +1623,12 @@
           icon: '💪',
           name: 'Comeback Kid',
           desc: 'Vinn efter 3+ år utan vinst',
+          unlocked: false
+        },
+        {
+          icon: '🎪',
+          name: 'Mästararrangör',
+          desc: 'Arrangera 5+ tävlingar',
           unlocked: false
         }
       );
@@ -1959,7 +2236,11 @@
     }
 
     // Initialize on load
-    document.addEventListener('DOMContentLoaded', init);
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
   </script>
 </body>
 </html>
