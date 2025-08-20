@@ -1017,7 +1017,6 @@
     <button class="nav-tab" data-tab="medals"><span>🥇</span> Medaljliga</button>
     <button class="nav-tab" data-tab="achievements"><span>🎖️</span> Achievements</button>
     <button class="nav-tab" data-tab="statistics"><span>📈</span> Statistik</button>
-    <button class="nav-tab" data-tab="import"><span>📁</span> Importera</button>
   </nav>
 
   <!-- Main Container -->
@@ -1195,23 +1194,6 @@
         </div>
       </div>
     </div>
-
-    <!-- Import Tab -->
-    <div id="import" class="tab-content">
-      <div style="background: var(--bg-card); border-radius: 16px; padding: 2rem; text-align: center; border: 2px dashed rgba(102, 126, 234, 0.3);">
-        <div style="font-size: 3rem; margin-bottom: 1rem;">📁</div>
-        <h3 style="color: var(--text-primary); margin-bottom: 1rem;">Importera Tävlingsdata</h3>
-        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Dra och släpp din CSV-fil här eller klicka för att välja</p>
-        <input type="file" id="csv-file" accept=".csv" style="display: none;">
-        <button onclick="document.getElementById('csv-file').click()" style="padding: 1rem 2rem; background: var(--epic-gradient); color: white; border: none; border-radius: 12px; font-weight: 600; cursor: pointer; margin: 0.5rem;">
-          Välj CSV-fil
-        </button>
-        <button onclick="reloadCSVData()" style="padding: 1rem 2rem; background: var(--epic-gradient); color: white; border: none; border-radius: 12px; font-weight: 600; cursor: pointer; margin: 0.5rem;">
-          Ladda om CSV
-        </button>
-        <div id="import-status" style="margin-top: 1rem;"></div>
-      </div>
-    </div>
   </div>
 
   <!-- Scripts -->
@@ -1295,9 +1277,8 @@
     async function init() {
       setupTabs();
       setupFilters();
-      setupCSVImport();
       setupAchievementFilters();
-      await loadCSVData(); // Load actual CSV data
+      await loadCSVData(); // Load actual CSV data automatically
       updateAllViews();
     }
 
@@ -1333,48 +1314,6 @@
           if (targetTab === 'statistics') loadStatistics();
         });
       });
-    }
-
-    // Setup CSV import functionality
-    function setupCSVImport() {
-      const fileInput = document.getElementById('csv-file');
-      
-      fileInput?.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (file) {
-          try {
-            const text = await file.text();
-            parseCSVContent(text);
-            updateAllViews();
-            showImportStatus('CSV-fil importerad framgångsrikt!', 'success');
-          } catch (error) {
-            console.error('Failed to import CSV:', error);
-            showImportStatus('Fel vid import av CSV-fil', 'error');
-          }
-        }
-      });
-    }
-
-    // Reload CSV data
-    async function reloadCSVData() {
-      try {
-        await loadCSVData();
-        updateAllViews();
-        showImportStatus('Data omladdad!', 'success');
-      } catch (error) {
-        showImportStatus('Fel vid omladdning', 'error');
-      }
-    }
-
-    // Show import status message
-    function showImportStatus(message, type) {
-      const statusEl = document.getElementById('import-status');
-      if (statusEl) {
-        statusEl.innerHTML = `<div style="padding: 1rem; margin-top: 1rem; border-radius: 8px; background: ${type === 'success' ? 'rgba(74, 222, 128, 0.2)' : 'rgba(248, 113, 113, 0.2)'}; color: ${type === 'success' ? '#4ade80' : '#f87171'};">${message}</div>`;
-        setTimeout(() => {
-          statusEl.innerHTML = '';
-        }, 3000);
-      }
     }
 
     // Setup enhanced filters
@@ -1441,7 +1380,7 @@
       return filtered;
     }
 
-    // Load CSV data from file
+    // Load CSV data from file automatically
     async function loadCSVData() {
       try {
         // Try multiple methods to load CSV
@@ -1503,7 +1442,7 @@
 2020,Covid,,,,,,,,,,,,,,,,-
 2021,Målning,Ås,,,1,-,6,5,7,9,10,8,4,2,-,3,-
 2022,Skytte,Arnäsvall,,,5,9,3,10,-,7,4,8,6,2,-,1,-
-2023,Fäktning,Stockholm,Viktor Jones,Mikael Hägglund,,3,10,1,,,2,,9,4,-,-,-
+2023,Fäkting,Stockholm,Viktor Jones,Mikael Hägglund,,3,10,1,,,2,,9,4,-,-,-
 2024-08-17,Fisketävling,Själevad,Tobias Lundqvist,Per Olsson,7,10,4,9,1,2,12,5,3,11,8,6,-
 2025-08-16,Flipper,Eskilstuna/Västerås,Viktor Jones,Mikael Hägglund,2,7,1,11,10,5,9,12,3,6,4,8,-`;
     }
@@ -3015,6 +2954,40 @@
         .slice(0, count)
         .map(([name]) => competitionData.participants.find(p => p.name === name));
     }
+
+    // Cache control button functionality
+    document.getElementById('cache-control-btn')?.addEventListener('click', () => {
+      if (window.cacheManager && window.cacheManager.showCacheControl) {
+        window.cacheManager.showCacheControl();
+      } else if (window.showCacheControl) {
+        window.showCacheControl();
+      } else {
+        alert('Cache control inte tillgängligt');
+      }
+    });
+
+    // Load default data button functionality
+    document.getElementById('load-default-btn')?.addEventListener('click', async () => {
+      if (window.loadDefaultData) {
+        try {
+          await window.loadDefaultData();
+          updateAllViews();
+        } catch (error) {
+          console.error('Failed to load default data:', error);
+          alert('Kunde inte ladda standarddata');
+        }
+      } else if (window.reloadCSVData) {
+        try {
+          await window.reloadCSVData();
+          updateAllViews();
+        } catch (error) {
+          console.error('Failed to reload CSV data:', error);
+          alert('Kunde inte ladda om CSV-data');
+        }
+      } else {
+        alert('Data reload inte tillgängligt');
+      }
+    });
 
     // Initialize on load
     if (document.readyState === 'loading') {
