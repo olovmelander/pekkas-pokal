@@ -1218,60 +1218,67 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.4.1/papaparse.min.js"></script>
   
   <script>
-    // Enhanced achievement definitions
+    // Enhanced achievement definitions for annual Pekkas Pokal
     const allAchievementDefinitions = [
       // Medal Achievements
-      { id: 'first_win', icon: '🥇', name: 'Första Segern', desc: 'Vinn din första tävling', category: 'medals', rarity: 'common' },
-      { id: 'gold_collector', icon: '🏆', name: 'Guldsamlare', desc: '3+ guldmedaljer', category: 'medals', rarity: 'rare' },
-      { id: 'gold_king', icon: '👑', name: 'Guldkungen', desc: '5+ guldmedaljer', category: 'medals', rarity: 'legendary' },
-      { id: 'medal_magnet', icon: '🏅', name: 'Medaljmagnet', desc: '10+ medaljer totalt', category: 'medals', rarity: 'epic' },
+      { id: 'first_win', icon: '🥇', name: 'Första Segern', desc: 'Vinn din första årliga Pekkas Pokal', category: 'medals', rarity: 'common' },
+      { id: 'gold_collector', icon: '🏆', name: 'Guldsamlare', desc: '3+ guldmedaljer i Pekkas Pokal', category: 'medals', rarity: 'rare' },
+      { id: 'gold_king', icon: '👑', name: 'Guldkungen', desc: '5+ guldmedaljer - Pokalens regent', category: 'medals', rarity: 'legendary' },
+      { id: 'medal_hoarder', icon: '🏅', name: 'Medaljhamstraren', desc: 'Flest medaljer totalt av alla', category: 'medals', rarity: 'mythic' },
+      { id: 'medal_magnet', icon: '🧲', name: 'Medaljmagnet', desc: '10+ medaljer totalt', category: 'medals', rarity: 'epic' },
       { id: 'rainbow_medals', icon: '🌈', name: 'Regnbågssamlare', desc: 'Minst en guld, silver och brons', category: 'medals', rarity: 'rare' },
-      { id: 'silver_surfer', icon: '🥈', name: 'Eviga Tvåan', desc: '3+ silvermedaljer', category: 'medals', rarity: 'rare' },
-      { id: 'bronze_warrior', icon: '🥉', name: 'Bronshjälten', desc: '3+ bronsmedaljer', category: 'medals', rarity: 'common' },
+      { id: 'silver_specialist', icon: '🥈', name: 'Eviga Tvåan', desc: '3+ silvermedaljer - alltid nära', category: 'medals', rarity: 'rare' },
+      { id: 'bronze_collector', icon: '🥉', name: 'Bronsbaronen', desc: '3+ bronsmedaljer', category: 'medals', rarity: 'common' },
       
       // Streak Achievements
-      { id: 'win_streak_3', icon: '🔥', name: 'På Eld', desc: '3 raka vinster', category: 'streaks', rarity: 'legendary' },
-      { id: 'win_streak_2', icon: '⚡', name: 'Dubbelseger', desc: '2 raka vinster', category: 'streaks', rarity: 'epic' },
-      { id: 'podium_streak_5', icon: '⭐', name: 'Stjärnan', desc: '5 raka pallplatser', category: 'streaks', rarity: 'epic' },
-      { id: 'podium_streak_3', icon: '🌟', name: 'Pall-Konsistens', desc: '3 raka pallplatser', category: 'streaks', rarity: 'rare' },
-      { id: 'participation_streak', icon: '🏃', name: 'Maratonlöpare', desc: '10+ tävlingar i rad', category: 'streaks', rarity: 'rare' },
+      { id: 'win_streak_3', icon: '🔥', name: 'Hattrick', desc: '3 år i rad som vinnare', category: 'streaks', rarity: 'legendary' },
+      { id: 'win_streak_2', icon: '⚡', name: 'Dubbelmästare', desc: '2 år i rad som vinnare', category: 'streaks', rarity: 'epic' },
+      { id: 'podium_streak_5', icon: '⭐', name: 'Pallplatsmästaren', desc: '5 år i rad på pallen', category: 'streaks', rarity: 'epic' },
+      { id: 'podium_streak_3', icon: '🌟', name: 'Pall-Konsistens', desc: '3 år i rad på pallen', category: 'streaks', rarity: 'rare' },
+      { id: 'never_missed', icon: '🏃', name: 'Järnmannen', desc: 'Aldrig missat en årlig tävling', category: 'streaks', rarity: 'legendary' },
       { id: 'comeback_kid', icon: '💪', name: 'Comeback Kid', desc: 'Vinn efter 3+ år utan vinst', category: 'streaks', rarity: 'epic' },
+      { id: 'losing_streak', icon: '📉', name: 'Formsvackan', desc: '3+ år i rad utanför pallen', category: 'streaks', rarity: 'common' },
       
       // Special Achievements
-      { id: 'perfect_attendance', icon: '💯', name: 'Perfekt Närvaro', desc: 'Deltagit i alla tävlingar', category: 'special', rarity: 'mythic' },
-      { id: 'decade_master', icon: '🎯', name: 'Decenniummästare', desc: 'Vinn minst en tävling per decennium', category: 'special', rarity: 'legendary' },
-      { id: 'versatile_winner', icon: '🎭', name: 'Mångsidig Mästare', desc: 'Vinn 3+ olika typer av tävlingar', category: 'special', rarity: 'epic' },
-      { id: 'arranger_bronze', icon: '🥉', name: 'Bronsarrangör', desc: 'Arrangerat 2+ gånger som trea', category: 'special', rarity: 'rare' },
-      { id: 'arranger_ironic', icon: '🎪', name: 'Ironisk Arrangör', desc: 'Arrangerat 2+ gånger som näst sist', category: 'special', rarity: 'epic' },
-      { id: 'veteran', icon: '🎖️', name: 'Veteranen', desc: 'Deltagit i 10+ tävlingar', category: 'special', rarity: 'rare' },
+      { id: 'perfect_attendance', icon: '💯', name: 'Aldrig Frånvarande', desc: 'Deltagit varje år sedan start', category: 'special', rarity: 'mythic' },
+      { id: 'decade_champion', icon: '🎯', name: 'Decenniets Mästare', desc: 'Flest vinster senaste 10 åren', category: 'special', rarity: 'legendary' },
+      { id: 'host_hero', icon: '🏠', name: 'Värdmästaren', desc: 'Arrangerat flest tävlingar', category: 'special', rarity: 'epic' },
+      { id: 'arranger_bronze', icon: '🥉', name: 'Tredjeplatsarrangören', desc: 'Arrangerar när man kom trea', category: 'special', rarity: 'rare' },
+      { id: 'arranger_revenge', icon: '😈', name: 'Hämndarrangören', desc: 'Vann året efter att ha arrangerat', category: 'special', rarity: 'epic' },
+      { id: 'veteran', icon: '🎖️', name: 'Veteranen', desc: 'Deltagit i 10+ årliga tävlingar', category: 'special', rarity: 'rare' },
+      { id: 'rookie_winner', icon: '🌟', name: 'Rookiesensationen', desc: 'Vann inom sina första 3 år', category: 'special', rarity: 'epic' },
+      { id: 'family_rivalry', icon: '👨‍👦', name: 'Familjeduellen', desc: 'Slagit sin familjemedlem 5+ gånger', category: 'special', rarity: 'rare' },
       
-      // Fun Achievements
-      { id: 'last_place_hero', icon: '🦸', name: 'Sistplatsshjälte', desc: 'Kom sist men fortsatte kämpa', category: 'fun', rarity: 'common' },
-      { id: 'middle_man', icon: '😐', name: 'Lagom är Bäst', desc: 'Kom exakt i mitten 3+ gånger', category: 'fun', rarity: 'rare' },
-      { id: 'yo_yo', icon: '🪀', name: 'Yo-Yo', desc: 'Alternera mellan topp 3 och botten 3', category: 'fun', rarity: 'epic' },
-      { id: 'consistent_chaos', icon: '🎲', name: 'Konsekvent Kaos', desc: 'Aldrig samma placering två gånger i rad', category: 'fun', rarity: 'rare' },
-      { id: 'lucky_seven', icon: '7️⃣', name: 'Lucky Seven', desc: 'Kom 7:a exakt 7 gånger', category: 'fun', rarity: 'legendary' },
-      { id: 'almost_winner', icon: '😅', name: 'Nästan-Vinnaren', desc: '5+ andraplatser utan en vinst', category: 'fun', rarity: 'epic' },
-      { id: 'participation_trophy', icon: '🏆', name: 'Deltagarpokal', desc: 'Deltagit men aldrig vunnit (10+ tävlingar)', category: 'fun', rarity: 'common' },
-      { id: 'clutch_master', icon: '⏰', name: 'Clutch Master', desc: 'Vinn senaste tävlingen efter dåligt år', category: 'fun', rarity: 'epic' },
-      { id: 'slow_starter', icon: '🐌', name: 'Långsam Start', desc: 'Förbättrad med 5+ placeringar senaste året', category: 'fun', rarity: 'rare' },
-      { id: 'rivalry_king', icon: '⚔️', name: 'Rivalitetskungen', desc: 'Slagit samma person 5+ gånger i rad', category: 'fun', rarity: 'epic' },
-      { id: 'improving', icon: '📈', name: 'Stigande Formkurva', desc: 'Förbättrat snittplacering 3 år i rad', category: 'fun', rarity: 'rare' },
+      // Fun & Funny Achievements
+      { id: 'grace_to_grass', icon: '📉', name: 'Från Topp till Botten', desc: 'Gick från 1:a till sist på ett år', category: 'fun', rarity: 'legendary' },
+      { id: 'grass_to_grace', icon: '📈', name: 'Från Botten till Topp', desc: 'Gick från sist till 1:a på ett år', category: 'fun', rarity: 'mythic' },
+      { id: 'elevator', icon: '🛗', name: 'Hissen', desc: 'Upp och ner minst 5 placeringar varje år', category: 'fun', rarity: 'epic' },
+      { id: 'mr_average', icon: '😐', name: 'Herr Medel', desc: 'Alltid placerad mitt i fältet (±1)', category: 'fun', rarity: 'rare' },
+      { id: 'fourth_place', icon: '4️⃣', name: 'Fyrans Förbannelse', desc: 'Kom 4:a minst 3 gånger - så nära!', category: 'fun', rarity: 'rare' },
+      { id: 'lucky_seven', icon: '7️⃣', name: 'Lyckonummer 7', desc: 'Kom 7:a minst 3 gånger', category: 'fun', rarity: 'rare' },
+      { id: 'bridesmaid', icon: '👰', name: 'Alltid Tärna, Aldrig Brud', desc: '5+ silvermedaljer utan guld', category: 'fun', rarity: 'epic' },
+      { id: 'participation_trophy', icon: '🏆', name: 'Deltagarmedaljen', desc: '10+ år utan pallplats - äran att delta!', category: 'fun', rarity: 'common' },
+      { id: 'sandwich', icon: '🥪', name: 'Sandwichen', desc: 'Klämd mellan samma två personer 3+ år', category: 'fun', rarity: 'rare' },
+      { id: 'yo_yo', icon: '🪀', name: 'Jojo-effekten', desc: 'Varannat år på pallen, varannat år utanför', category: 'fun', rarity: 'epic' },
+      { id: 'consistent_chaos', icon: '🎲', name: 'Kaosagenten', desc: 'Aldrig samma placering två år i rad', category: 'fun', rarity: 'rare' },
+      { id: 'nemesis', icon: '😤', name: 'Ärkefienden', desc: 'Placerat direkt efter samma person 4+ år', category: 'fun', rarity: 'epic' },
+      { id: 'gatekeeper', icon: '🚪', name: 'Grindvakten', desc: 'Alltid precis utanför pallen (4-5:a)', category: 'fun', rarity: 'common' },
+      { id: 'odd_even', icon: '🔢', name: 'Udda-Jämn', desc: 'Udda placering udda år, jämn placering jämna år', category: 'fun', rarity: 'legendary' },
       
       // Legendary Achievements
-      { id: 'goat', icon: '🐐', name: 'The GOAT', desc: '10+ vinster totalt', category: 'legendary', rarity: 'mythic' },
-      { id: 'dynasty', icon: '👨‍👩‍👧‍👦', name: 'Dynastin', desc: 'Familjemedlemmar med vinster', category: 'legendary', rarity: 'legendary' },
-      { id: 'grand_slam', icon: '🎾', name: 'Grand Slam', desc: 'Vinn 4 tävlingar samma år', category: 'legendary', rarity: 'mythic' },
-      { id: 'phoenix', icon: '🔥', name: 'Fenix', desc: 'Vinn efter att ha kommit sist föregående år', category: 'legendary', rarity: 'legendary' },
-      { id: 'untouchable', icon: '🛡️', name: 'Orörd', desc: 'Aldrig placerat sämre än 3:a (5+ tävlingar)', category: 'legendary', rarity: 'mythic' },
-      { id: 'champion', icon: '🏆', name: 'Mästaren', desc: 'Vinn 5+ olika typer av tävlingar', category: 'legendary', rarity: 'legendary' },
+      { id: 'goat', icon: '🐐', name: 'The GOAT', desc: 'Flest vinster genom tiderna', category: 'legendary', rarity: 'mythic' },
+      { id: 'dynasty', icon: '👑', name: 'Dynastin', desc: 'Dominerat ett helt decennium', category: 'legendary', rarity: 'legendary' },
+      { id: 'phoenix', icon: '🔥', name: 'Fenixfågeln', desc: 'Vann efter att ha kommit sist året innan', category: 'legendary', rarity: 'legendary' },
+      { id: 'untouchable', icon: '🛡️', name: 'Den Oberörbare', desc: 'Aldrig placerat sämre än 3:a (5+ år)', category: 'legendary', rarity: 'mythic' },
+      { id: 'triple_crown', icon: '👸', name: 'Trippelkronan', desc: 'Vunnit 3 olika decennier', category: 'legendary', rarity: 'mythic' },
+      { id: 'rivalry_winner', icon: '⚔️', name: 'Rivalitetsvinnaren', desc: 'Vunnit flest head-to-heads totalt', category: 'legendary', rarity: 'legendary' },
       
       // Mythic Achievements
-      { id: 'perfect_year', icon: '✨', name: 'Perfekt År', desc: 'Vinn alla tävlingar under ett år', category: 'mythic', rarity: 'mythic' },
-      { id: 'time_traveler', icon: '⏳', name: 'Tidsresenären', desc: 'Deltagit i första och senaste tävlingen (15+ år)', category: 'mythic', rarity: 'mythic' },
-      { id: 'legend_slayer', icon: '🗡️', name: 'Legenddödaren', desc: 'Besegrat alla tidigare vinnare samma år', category: 'mythic', rarity: 'mythic' },
-      { id: 'mr_consistent', icon: '📊', name: 'Mr. Consistent', desc: 'Lägst standardavvikelse (10+ tävlingar)', category: 'mythic', rarity: 'mythic' },
-      { id: 'comeback_legend', icon: '🦅', name: 'Comeback-Legenden', desc: 'Från sist till först på ett år', category: 'mythic', rarity: 'mythic' }
+      { id: 'founding_father', icon: '🎩', name: 'Grundaren', desc: 'Med sedan första året 2011', category: 'mythic', rarity: 'mythic' },
+      { id: 'mr_consistent', icon: '📊', name: 'Mr. Consistent', desc: 'Lägst standardavvikelse i placeringar (10+ år)', category: 'mythic', rarity: 'mythic' },
+      { id: 'grand_master', icon: '🏆', name: 'Stormästaren', desc: 'Vunnit minst 7 olika årliga tävlingar', category: 'mythic', rarity: 'mythic' },
+      { id: 'perfect_podium', icon: '✨', name: 'Perfekta Pallen', desc: 'Aldrig utanför pallen (minst 8 år)', category: 'mythic', rarity: 'mythic' },
+      { id: 'the_closer', icon: '🎯', name: 'Avslutaren', desc: 'Vunnit senaste 3 tävlingarna', category: 'mythic', rarity: 'mythic' }
     ];
 
     // Global competition data
@@ -1682,32 +1689,37 @@
       participants.forEach(p => {
         achievements[p.name] = [];
         
-        // Calculate medals
+        // Calculate medals and positions
         let gold = 0, silver = 0, bronze = 0;
         let winStreak = 0, maxWinStreak = 0;
         let podiumStreak = 0, maxPodiumStreak = 0;
         let participations = 0;
-        let lastPosition = null;
         let positions = [];
-        let competitionTypes = new Set();
-        let wonTypes = new Set();
+        let yearPositions = {};
+        let consecutiveMiddle = 0;
+        let consecutive4th = 0;
+        let consecutive7th = 0;
+        let lastPosition = null;
+        let differentPositions = true;
+        let yearsParticipated = [];
         
         const sortedComps = [...competitions].sort((a, b) => a.year - b.year);
         
-        sortedComps.forEach(comp => {
+        sortedComps.forEach((comp, idx) => {
           const position = comp.scores[p.id];
           if (position) {
             participations++;
             positions.push(position);
+            yearPositions[comp.year] = position;
+            yearsParticipated.push(comp.year);
             
+            // Medal counting
             if (position === 1) {
               gold++;
               winStreak++;
               podiumStreak++;
               maxWinStreak = Math.max(maxWinStreak, winStreak);
               maxPodiumStreak = Math.max(maxPodiumStreak, podiumStreak);
-              competitionTypes.add(comp.name);
-              wonTypes.add(comp.name);
               
               // First win
               if (gold === 1) achievements[p.name].push('first_win');
@@ -1726,6 +1738,24 @@
               podiumStreak = 0;
             }
             
+            // Check for middle positions
+            const totalInComp = Object.keys(comp.scores).length;
+            const middle = Math.ceil(totalInComp / 2);
+            if (Math.abs(position - middle) <= 1) {
+              consecutiveMiddle++;
+            } else {
+              consecutiveMiddle = 0;
+            }
+            
+            // Check specific positions
+            if (position === 4) consecutive4th++;
+            if (position === 7) consecutive7th++;
+            
+            // Check for consistent chaos (never same position)
+            if (lastPosition !== null && lastPosition === position) {
+              differentPositions = false;
+            }
+            
             lastPosition = position;
           }
         });
@@ -1734,10 +1764,13 @@
         if (gold >= 5) achievements[p.name].push('gold_king');
         else if (gold >= 3) achievements[p.name].push('gold_collector');
         
-        if (silver >= 3) achievements[p.name].push('silver_surfer');
-        if (bronze >= 3) achievements[p.name].push('bronze_warrior');
+        if (silver >= 3) achievements[p.name].push('silver_specialist');
+        if (bronze >= 3) achievements[p.name].push('bronze_collector');
         if (gold + silver + bronze >= 10) achievements[p.name].push('medal_magnet');
         if (gold > 0 && silver > 0 && bronze > 0) achievements[p.name].push('rainbow_medals');
+        
+        // Bridesmaid achievement (5+ silver without gold)
+        if (silver >= 5 && gold === 0) achievements[p.name].push('bridesmaid');
         
         // Streak achievements
         if (maxWinStreak >= 3) achievements[p.name].push('win_streak_3');
@@ -1746,53 +1779,171 @@
         if (maxPodiumStreak >= 5) achievements[p.name].push('podium_streak_5');
         else if (maxPodiumStreak >= 3) achievements[p.name].push('podium_streak_3');
         
-        // Participation achievements
-        if (participations >= 10) {
-          achievements[p.name].push('participation_streak');
-          achievements[p.name].push('veteran');
-        }
-        
-        if (participations === competitions.length - 1) { // -1 for Covid year
+        // Check for never missed (all years present)
+        const totalYears = competitions.filter(c => c.name !== 'Covid').length;
+        if (participations === totalYears) {
+          achievements[p.name].push('never_missed');
           achievements[p.name].push('perfect_attendance');
         }
         
-        // Versatility
-        if (wonTypes.size >= 3) achievements[p.name].push('versatile_winner');
-        
-        // Fun achievements
-        if (participations >= 10 && gold === 0) achievements[p.name].push('participation_trophy');
-        if (silver >= 5 && gold === 0) achievements[p.name].push('almost_winner');
-        
-        // Check for improving trend
-        if (positions.length >= 6) {
-          const firstHalf = positions.slice(0, Math.floor(positions.length / 2));
-          const secondHalf = positions.slice(Math.floor(positions.length / 2));
-          const firstAvg = firstHalf.reduce((a, b) => a + b, 0) / firstHalf.length;
-          const secondAvg = secondHalf.reduce((a, b) => a + b, 0) / secondHalf.length;
-          if (firstAvg - secondAvg >= 5) achievements[p.name].push('slow_starter');
+        // Veteran achievement
+        if (participations >= 10) {
+          achievements[p.name].push('veteran');
         }
         
-        // GOAT achievement
-        if (gold >= 10) achievements[p.name].push('goat');
-      });
-      
-      // Check arranger achievements
-      competitions.forEach(comp => {
-        if (comp.arranger3rd && achievements[comp.arranger3rd]) {
-          const count = competitions.filter(c => c.arranger3rd === comp.arranger3rd).length;
-          if (count >= 2 && !achievements[comp.arranger3rd].includes('arranger_bronze')) {
-            achievements[comp.arranger3rd].push('arranger_bronze');
+        // Founding father (was there in 2011)
+        if (yearsParticipated.includes(2011)) {
+          achievements[p.name].push('founding_father');
+        }
+        
+        // Participation trophy (10+ years without podium)
+        if (participations >= 10 && gold === 0 && silver === 0 && bronze === 0) {
+          achievements[p.name].push('participation_trophy');
+        }
+        
+        // Fun position achievements
+        if (consecutiveMiddle >= 3) achievements[p.name].push('mr_average');
+        if (consecutive4th >= 3) achievements[p.name].push('fourth_place');
+        if (consecutive7th >= 3) achievements[p.name].push('lucky_seven');
+        
+        // Consistent chaos
+        if (differentPositions && positions.length >= 5) {
+          achievements[p.name].push('consistent_chaos');
+        }
+        
+        // Check for grace to grass / grass to grace
+        for (let i = 1; i < positions.length; i++) {
+          const prevPos = positions[i-1];
+          const currPos = positions[i];
+          const totalPrev = Object.keys(sortedComps[i-1].scores).length;
+          const totalCurr = Object.keys(sortedComps[i].scores).length;
+          
+          if (prevPos === 1 && currPos === totalCurr) {
+            achievements[p.name].push('grace_to_grass');
+          }
+          if (prevPos === totalPrev && currPos === 1) {
+            achievements[p.name].push('grass_to_grace');
+            achievements[p.name].push('phoenix');
           }
         }
-        if (comp.arrangerSecondLast && achievements[comp.arrangerSecondLast]) {
-          const count = competitions.filter(c => c.arrangerSecondLast === comp.arrangerSecondLast).length;
-          if (count >= 2 && !achievements[comp.arrangerSecondLast].includes('arranger_ironic')) {
-            achievements[comp.arrangerSecondLast].push('arranger_ironic');
+        
+        // Yo-yo effect (alternating podium/not podium)
+        let yoyoPattern = true;
+        if (positions.length >= 4) {
+          for (let i = 1; i < positions.length; i++) {
+            const prevOnPodium = positions[i-1] <= 3;
+            const currOnPodium = positions[i] <= 3;
+            if (prevOnPodium === currOnPodium) {
+              yoyoPattern = false;
+              break;
+            }
           }
+          if (yoyoPattern) achievements[p.name].push('yo_yo');
+        }
+        
+        // Gatekeeper (always 4-5)
+        let gatekeeperCount = 0;
+        positions.forEach(pos => {
+          if (pos === 4 || pos === 5) gatekeeperCount++;
+        });
+        if (gatekeeperCount >= positions.length * 0.6 && positions.length >= 5) {
+          achievements[p.name].push('gatekeeper');
+        }
+        
+        // Check for elevator (big swings)
+        let elevatorPattern = true;
+        for (let i = 1; i < positions.length; i++) {
+          if (Math.abs(positions[i] - positions[i-1]) < 5) {
+            elevatorPattern = false;
+            break;
+          }
+        }
+        if (elevatorPattern && positions.length >= 3) {
+          achievements[p.name].push('elevator');
+        }
+        
+        // Rookie winner
+        if (gold > 0 && yearsParticipated.length <= 3) {
+          achievements[p.name].push('rookie_winner');
+        }
+        
+        // Check for untouchable (never worse than 3rd)
+        if (positions.length >= 5 && positions.every(p => p <= 3)) {
+          achievements[p.name].push('untouchable');
+        }
+        
+        // Perfect podium (8+ years always on podium)
+        if (positions.length >= 8 && positions.every(p => p <= 3)) {
+          achievements[p.name].push('perfect_podium');
+        }
+        
+        // Mr Consistent (calculate standard deviation)
+        if (positions.length >= 10) {
+          const avg = positions.reduce((a, b) => a + b, 0) / positions.length;
+          const variance = positions.reduce((sum, pos) => 
+            sum + Math.pow(pos - avg, 2), 0) / positions.length;
+          const stdDev = Math.sqrt(variance);
+          // Will check later against all participants for lowest
+          p.stdDev = stdDev;
         }
       });
       
-      // Special patterns
+      // Calculate achievements that need comparison between participants
+      
+      // Find who has most medals total
+      let maxMedals = 0;
+      let medalLeader = null;
+      
+      participants.forEach(p => {
+        let totalMedals = 0;
+        competitions.forEach(comp => {
+          const pos = comp.scores[p.id];
+          if (pos && pos <= 3) totalMedals++;
+        });
+        if (totalMedals > maxMedals) {
+          maxMedals = totalMedals;
+          medalLeader = p.name;
+        }
+      });
+      
+      if (medalLeader) {
+        achievements[medalLeader].push('medal_hoarder');
+      }
+      
+      // Find GOAT (most wins)
+      let maxWins = 0;
+      let goat = null;
+      
+      participants.forEach(p => {
+        let wins = 0;
+        competitions.forEach(comp => {
+          if (comp.scores[p.id] === 1) wins++;
+        });
+        if (wins > maxWins) {
+          maxWins = wins;
+          goat = p.name;
+        }
+      });
+      
+      if (goat && maxWins >= 5) {
+        achievements[goat].push('goat');
+      }
+      
+      // Find Mr. Consistent (lowest std dev)
+      let lowestStdDev = Infinity;
+      let mrConsistent = null;
+      
+      participants.forEach(p => {
+        if (p.stdDev && p.stdDev < lowestStdDev) {
+          lowestStdDev = p.stdDev;
+          mrConsistent = p.name;
+        }
+      });
+      
+      if (mrConsistent) {
+        achievements[mrConsistent].push('mr_consistent');
+      }
+      
       // Check for comeback kid
       participants.forEach(p => {
         let lastWinYear = null;
@@ -1809,6 +1960,90 @@
           }
         }
       });
+      
+      // Check arranger achievements
+      competitions.forEach(comp => {
+        if (comp.arranger3rd && achievements[comp.arranger3rd]) {
+          const count = competitions.filter(c => c.arranger3rd === comp.arranger3rd).length;
+          if (count >= 1 && !achievements[comp.arranger3rd].includes('arranger_bronze')) {
+            achievements[comp.arranger3rd].push('arranger_bronze');
+          }
+        }
+      });
+      
+      // Check for sandwich (between same two people)
+      participants.forEach(p => {
+        let sandwichCount = 0;
+        let lastAbove = null;
+        let lastBelow = null;
+        
+        competitions.forEach(comp => {
+          const myPos = comp.scores[p.id];
+          if (myPos) {
+            let above = null, below = null;
+            
+            Object.entries(comp.scores).forEach(([otherId, otherPos]) => {
+              if (otherPos === myPos - 1) above = otherId;
+              if (otherPos === myPos + 1) below = otherId;
+            });
+            
+            if (above === lastAbove && below === lastBelow && above && below) {
+              sandwichCount++;
+            }
+            
+            lastAbove = above;
+            lastBelow = below;
+          }
+        });
+        
+        if (sandwichCount >= 3) {
+          achievements[p.name].push('sandwich');
+        }
+      });
+      
+      // Family rivalry (check Lundqvist brothers)
+      const lundqvists = participants.filter(p => p.name.includes('Lundqvist'));
+      if (lundqvists.length > 1) {
+        lundqvists.forEach(p1 => {
+          let wins = 0;
+          lundqvists.forEach(p2 => {
+            if (p1.id !== p2.id) {
+              competitions.forEach(comp => {
+                if (comp.scores[p1.id] && comp.scores[p2.id]) {
+                  if (comp.scores[p1.id] < comp.scores[p2.id]) wins++;
+                }
+              });
+            }
+          });
+          if (wins >= 5) achievements[p1.name].push('family_rivalry');
+        });
+      }
+      
+      // The Closer (won last 3 competitions)
+      const last3Comps = competitions.slice(0, 3);
+      participants.forEach(p => {
+        let wonAll = true;
+        last3Comps.forEach(comp => {
+          if (comp.scores[p.id] !== 1) wonAll = false;
+        });
+        if (wonAll && last3Comps.length === 3) {
+          achievements[p.name].push('the_closer');
+        }
+      });
+      
+      // Decade champion (most wins last 10 years)
+      const last10Years = competitions.filter(c => c.year >= 2016);
+      let decadeWins = {};
+      participants.forEach(p => {
+        decadeWins[p.name] = 0;
+        last10Years.forEach(comp => {
+          if (comp.scores[p.id] === 1) decadeWins[p.name]++;
+        });
+      });
+      const decadeChamp = Object.entries(decadeWins).sort((a, b) => b[1] - a[1])[0];
+      if (decadeChamp && decadeChamp[1] >= 3) {
+        achievements[decadeChamp[0]].push('decade_champion');
+      }
       
       return achievements;
     }
