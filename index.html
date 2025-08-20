@@ -1005,8 +1005,6 @@
       </div>
       
       <div class="header-actions">
-        <button id="cache-control-btn" class="icon-btn" title="Cache Control">🔧</button>
-        <button id="load-default-btn" class="icon-btn" title="Ladda Data">📊</button>
       </div>
     </div>
   </header>
@@ -2954,40 +2952,6 @@
         .slice(0, count)
         .map(([name]) => competitionData.participants.find(p => p.name === name));
     }
-
-    // Cache control button functionality
-    document.getElementById('cache-control-btn')?.addEventListener('click', () => {
-      if (window.cacheManager && window.cacheManager.showCacheControl) {
-        window.cacheManager.showCacheControl();
-      } else if (window.showCacheControl) {
-        window.showCacheControl();
-      } else {
-        alert('Cache control inte tillgängligt');
-      }
-    });
-
-    // Load default data button functionality
-    document.getElementById('load-default-btn')?.addEventListener('click', async () => {
-      if (window.loadDefaultData) {
-        try {
-          await window.loadDefaultData();
-          updateAllViews();
-        } catch (error) {
-          console.error('Failed to load default data:', error);
-          alert('Kunde inte ladda standarddata');
-        }
-      } else if (window.reloadCSVData) {
-        try {
-          await window.reloadCSVData();
-          updateAllViews();
-        } catch (error) {
-          console.error('Failed to reload CSV data:', error);
-          alert('Kunde inte ladda om CSV-data');
-        }
-      } else {
-        alert('Data reload inte tillgängligt');
-      }
-    });
 
     // Initialize on load
     if (document.readyState === 'loading') {
