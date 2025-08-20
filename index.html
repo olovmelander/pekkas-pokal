@@ -20,6 +20,8 @@
       --silver: linear-gradient(135deg, #C0C0C0, #808080);
       --bronze: linear-gradient(135deg, #CD7F32, #8B4513);
       --epic-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      --legendary-gradient: linear-gradient(135deg, #FFD700 0%, #FF6B6B 100%);
+      --mythic-gradient: linear-gradient(135deg, #FF00FF 0%, #00FFFF 100%);
       --fire-gradient: linear-gradient(135deg, #ff6b6b 0%, #feca57 100%);
       --ice-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
       --nature-gradient: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
@@ -405,18 +407,238 @@
       border-radius: 20px;
     }
 
-    /* ===== ACHIEVEMENTS ===== */
+    /* ===== ENHANCED ACHIEVEMENTS SECTION ===== */
+    .achievements-header {
+      text-align: center;
+      margin-bottom: 3rem;
+    }
+
+    .achievements-header h1 {
+      font-size: 2.5rem;
+      background: var(--epic-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 1rem;
+    }
+
+    .achievements-stats {
+      display: flex;
+      justify-content: center;
+      gap: 3rem;
+      margin-bottom: 3rem;
+    }
+
+    .stat-bubble {
+      text-align: center;
+      padding: 1rem 2rem;
+      background: var(--bg-card);
+      border-radius: 20px;
+      border: 2px solid rgba(102, 126, 234, 0.3);
+    }
+
+    .stat-bubble .number {
+      font-size: 2rem;
+      font-weight: bold;
+      background: var(--epic-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .stat-bubble .label {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+
+    /* Participant Achievements Section */
+    .participant-achievements {
+      margin-bottom: 4rem;
+    }
+
+    .section-title {
+      font-size: 1.8rem;
+      margin-bottom: 2rem;
+      padding-bottom: 1rem;
+      border-bottom: 2px solid rgba(102, 126, 234, 0.3);
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .participant-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+      gap: 2rem;
+    }
+
+    .participant-card {
+      background: var(--bg-card);
+      border-radius: 20px;
+      padding: 1.5rem;
+      border: 2px solid rgba(102, 126, 234, 0.2);
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .participant-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: var(--epic-gradient);
+      transform: scaleX(0);
+      transition: transform 0.3s ease;
+    }
+
+    .participant-card:hover::before {
+      transform: scaleX(1);
+    }
+
+    .participant-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+      border-color: var(--accent);
+    }
+
+    .participant-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid rgba(102, 126, 234, 0.1);
+    }
+
+    .participant-name {
+      font-size: 1.2rem;
+      font-weight: bold;
+    }
+
+    .achievement-count {
+      background: rgba(102, 126, 234, 0.2);
+      padding: 0.3rem 0.8rem;
+      border-radius: 20px;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+
+    .participant-achievements-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+
+    .mini-achievement {
+      font-size: 1.8rem;
+      padding: 0.3rem;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .mini-achievement:hover {
+      transform: scale(1.2);
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .mini-achievement .tooltip {
+      position: absolute;
+      bottom: 120%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #2d2d3d;
+      color: white;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      white-space: nowrap;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+      z-index: 10;
+      border: 1px solid rgba(102, 126, 234, 0.3);
+    }
+
+    .mini-achievement:hover .tooltip {
+      opacity: 1;
+    }
+
+    .achievement-progress {
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid rgba(102, 126, 234, 0.1);
+    }
+
+    .progress-bar {
+      height: 8px;
+      background: rgba(102, 126, 234, 0.1);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 0.5rem;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: var(--epic-gradient);
+      border-radius: 4px;
+      transition: width 0.5s ease;
+    }
+
+    .progress-text {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.3rem;
+    }
+
+    /* All Achievements Section */
+    .all-achievements {
+      margin-top: 4rem;
+    }
+
+    .achievement-categories {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+    }
+
+    .category-filter {
+      padding: 0.5rem 1.5rem;
+      background: rgba(102, 126, 234, 0.1);
+      border: 2px solid transparent;
+      border-radius: 20px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-weight: 600;
+    }
+
+    .category-filter:hover {
+      background: rgba(102, 126, 234, 0.2);
+      color: var(--text-primary);
+    }
+
+    .category-filter.active {
+      background: var(--epic-gradient);
+      color: white;
+      border-color: transparent;
+    }
+
     .achievements-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 1rem;
-      margin: 2rem 0;
+      gap: 1.5rem;
     }
 
     .achievement {
       background: var(--bg-card);
-      border-radius: 12px;
-      padding: 1.2rem;
+      border-radius: 16px;
+      padding: 1.5rem;
       text-align: center;
       border: 2px solid transparent;
       transition: all 0.3s ease;
@@ -440,19 +662,19 @@
     }
 
     .achievement-icon {
-      font-size: 2.5rem;
+      font-size: 3rem;
       margin-bottom: 0.5rem;
     }
 
     .achievement-name {
       font-weight: 600;
-      font-size: 0.9rem;
+      font-size: 1rem;
       margin-bottom: 0.3rem;
       color: var(--text-primary);
     }
 
     .achievement-desc {
-      font-size: 0.75rem;
+      font-size: 0.8rem;
       color: var(--text-secondary);
     }
 
@@ -462,9 +684,54 @@
       animation: shimmer 3s infinite;
     }
 
+    .achievement.mythic {
+      background: linear-gradient(135deg, rgba(255, 0, 255, 0.1), rgba(0, 255, 255, 0.1));
+      border-color: #FF00FF;
+      animation: rainbow 5s linear infinite;
+    }
+
     @keyframes shimmer {
       0%, 100% { box-shadow: 0 0 20px rgba(255, 215, 0, 0.3); }
       50% { box-shadow: 0 0 30px rgba(255, 215, 0, 0.5); }
+    }
+
+    @keyframes rainbow {
+      0% { border-color: #FF00FF; }
+      33% { border-color: #00FFFF; }
+      66% { border-color: #FFFF00; }
+      100% { border-color: #FF00FF; }
+    }
+
+    .rarity-badge {
+      position: absolute;
+      top: 0.5rem;
+      right: 0.5rem;
+      padding: 0.2rem 0.6rem;
+      border-radius: 12px;
+      font-size: 0.7rem;
+      font-weight: bold;
+      text-transform: uppercase;
+    }
+
+    .rarity-common { background: #808080; }
+    .rarity-rare { background: #0080FF; }
+    .rarity-epic { background: #8B00FF; }
+    .rarity-legendary { background: #FFD700; color: #000; }
+    .rarity-mythic { background: var(--mythic-gradient); }
+
+    .achievement-holders {
+      margin-top: 0.5rem;
+      padding-top: 0.5rem;
+      border-top: 1px solid rgba(102, 126, 234, 0.1);
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+    }
+
+    .no-achievements {
+      text-align: center;
+      padding: 2rem;
+      color: var(--text-secondary);
+      font-style: italic;
     }
 
     /* ===== STATISTICS FILTERS ===== */
@@ -720,6 +987,10 @@
       .filter-select {
         width: 100%;
       }
+
+      .participant-cards {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
@@ -827,10 +1098,56 @@
       </div>
     </div>
 
-    <!-- Achievements Tab -->
+    <!-- Enhanced Achievements Tab -->
     <div id="achievements" class="tab-content">
-      <h2 style="text-align: center; margin-bottom: 2rem; color: var(--text-primary);">🎖️ Achievements & Utmärkelser</h2>
-      <div class="achievements-grid" id="achievements-grid"></div>
+      <div class="achievements-header">
+        <h1>🏆 Pekkas Pokal Achievements</h1>
+        <p style="color: var(--text-secondary); font-size: 1.1rem;">Samla utmärkelser och visa din dominans!</p>
+      </div>
+
+      <div class="achievements-stats">
+        <div class="stat-bubble">
+          <div class="number" id="total-unlocked">0</div>
+          <div class="label">Upplåsta</div>
+        </div>
+        <div class="stat-bubble">
+          <div class="number" id="total-achievements">0</div>
+          <div class="label">Totalt</div>
+        </div>
+        <div class="stat-bubble">
+          <div class="number" id="completion-rate">0%</div>
+          <div class="label">Genomfört</div>
+        </div>
+      </div>
+
+      <!-- Participant Achievements Section -->
+      <section class="participant-achievements">
+        <h2 class="section-title">
+          <span>👥</span>
+          <span>Deltagare & Deras Achievements</span>
+        </h2>
+        <div class="participant-cards" id="participant-cards"></div>
+      </section>
+
+      <!-- All Achievements Section -->
+      <section class="all-achievements">
+        <h2 class="section-title">
+          <span>🎖️</span>
+          <span>Alla Tillgängliga Achievements</span>
+        </h2>
+        
+        <div class="achievement-categories">
+          <button class="category-filter active" data-category="all">Alla</button>
+          <button class="category-filter" data-category="medals">🥇 Medaljer</button>
+          <button class="category-filter" data-category="streaks">🔥 Streaks</button>
+          <button class="category-filter" data-category="special">⭐ Speciella</button>
+          <button class="category-filter" data-category="fun">🎉 Roliga</button>
+          <button class="category-filter" data-category="legendary">👑 Legendariska</button>
+          <button class="category-filter" data-category="mythic">🌟 Mytiska</button>
+        </div>
+        
+        <div class="achievements-grid" id="achievements-grid"></div>
+      </section>
     </div>
 
     <!-- Statistics Tab -->
@@ -901,12 +1218,69 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.4.1/papaparse.min.js"></script>
   
   <script>
+    // Enhanced achievement definitions
+    const allAchievementDefinitions = [
+      // Medal Achievements
+      { id: 'first_win', icon: '🥇', name: 'Första Segern', desc: 'Vinn din första tävling', category: 'medals', rarity: 'common' },
+      { id: 'gold_collector', icon: '🏆', name: 'Guldsamlare', desc: '3+ guldmedaljer', category: 'medals', rarity: 'rare' },
+      { id: 'gold_king', icon: '👑', name: 'Guldkungen', desc: '5+ guldmedaljer', category: 'medals', rarity: 'legendary' },
+      { id: 'medal_magnet', icon: '🏅', name: 'Medaljmagnet', desc: '10+ medaljer totalt', category: 'medals', rarity: 'epic' },
+      { id: 'rainbow_medals', icon: '🌈', name: 'Regnbågssamlare', desc: 'Minst en guld, silver och brons', category: 'medals', rarity: 'rare' },
+      { id: 'silver_surfer', icon: '🥈', name: 'Eviga Tvåan', desc: '3+ silvermedaljer', category: 'medals', rarity: 'rare' },
+      { id: 'bronze_warrior', icon: '🥉', name: 'Bronshjälten', desc: '3+ bronsmedaljer', category: 'medals', rarity: 'common' },
+      
+      // Streak Achievements
+      { id: 'win_streak_3', icon: '🔥', name: 'På Eld', desc: '3 raka vinster', category: 'streaks', rarity: 'legendary' },
+      { id: 'win_streak_2', icon: '⚡', name: 'Dubbelseger', desc: '2 raka vinster', category: 'streaks', rarity: 'epic' },
+      { id: 'podium_streak_5', icon: '⭐', name: 'Stjärnan', desc: '5 raka pallplatser', category: 'streaks', rarity: 'epic' },
+      { id: 'podium_streak_3', icon: '🌟', name: 'Pall-Konsistens', desc: '3 raka pallplatser', category: 'streaks', rarity: 'rare' },
+      { id: 'participation_streak', icon: '🏃', name: 'Maratonlöpare', desc: '10+ tävlingar i rad', category: 'streaks', rarity: 'rare' },
+      { id: 'comeback_kid', icon: '💪', name: 'Comeback Kid', desc: 'Vinn efter 3+ år utan vinst', category: 'streaks', rarity: 'epic' },
+      
+      // Special Achievements
+      { id: 'perfect_attendance', icon: '💯', name: 'Perfekt Närvaro', desc: 'Deltagit i alla tävlingar', category: 'special', rarity: 'mythic' },
+      { id: 'decade_master', icon: '🎯', name: 'Decenniummästare', desc: 'Vinn minst en tävling per decennium', category: 'special', rarity: 'legendary' },
+      { id: 'versatile_winner', icon: '🎭', name: 'Mångsidig Mästare', desc: 'Vinn 3+ olika typer av tävlingar', category: 'special', rarity: 'epic' },
+      { id: 'arranger_bronze', icon: '🥉', name: 'Bronsarrangör', desc: 'Arrangerat 2+ gånger som trea', category: 'special', rarity: 'rare' },
+      { id: 'arranger_ironic', icon: '🎪', name: 'Ironisk Arrangör', desc: 'Arrangerat 2+ gånger som näst sist', category: 'special', rarity: 'epic' },
+      { id: 'veteran', icon: '🎖️', name: 'Veteranen', desc: 'Deltagit i 10+ tävlingar', category: 'special', rarity: 'rare' },
+      
+      // Fun Achievements
+      { id: 'last_place_hero', icon: '🦸', name: 'Sistplatsshjälte', desc: 'Kom sist men fortsatte kämpa', category: 'fun', rarity: 'common' },
+      { id: 'middle_man', icon: '😐', name: 'Lagom är Bäst', desc: 'Kom exakt i mitten 3+ gånger', category: 'fun', rarity: 'rare' },
+      { id: 'yo_yo', icon: '🪀', name: 'Yo-Yo', desc: 'Alternera mellan topp 3 och botten 3', category: 'fun', rarity: 'epic' },
+      { id: 'consistent_chaos', icon: '🎲', name: 'Konsekvent Kaos', desc: 'Aldrig samma placering två gånger i rad', category: 'fun', rarity: 'rare' },
+      { id: 'lucky_seven', icon: '7️⃣', name: 'Lucky Seven', desc: 'Kom 7:a exakt 7 gånger', category: 'fun', rarity: 'legendary' },
+      { id: 'almost_winner', icon: '😅', name: 'Nästan-Vinnaren', desc: '5+ andraplatser utan en vinst', category: 'fun', rarity: 'epic' },
+      { id: 'participation_trophy', icon: '🏆', name: 'Deltagarpokal', desc: 'Deltagit men aldrig vunnit (10+ tävlingar)', category: 'fun', rarity: 'common' },
+      { id: 'clutch_master', icon: '⏰', name: 'Clutch Master', desc: 'Vinn senaste tävlingen efter dåligt år', category: 'fun', rarity: 'epic' },
+      { id: 'slow_starter', icon: '🐌', name: 'Långsam Start', desc: 'Förbättrad med 5+ placeringar senaste året', category: 'fun', rarity: 'rare' },
+      { id: 'rivalry_king', icon: '⚔️', name: 'Rivalitetskungen', desc: 'Slagit samma person 5+ gånger i rad', category: 'fun', rarity: 'epic' },
+      { id: 'improving', icon: '📈', name: 'Stigande Formkurva', desc: 'Förbättrat snittplacering 3 år i rad', category: 'fun', rarity: 'rare' },
+      
+      // Legendary Achievements
+      { id: 'goat', icon: '🐐', name: 'The GOAT', desc: '10+ vinster totalt', category: 'legendary', rarity: 'mythic' },
+      { id: 'dynasty', icon: '👨‍👩‍👧‍👦', name: 'Dynastin', desc: 'Familjemedlemmar med vinster', category: 'legendary', rarity: 'legendary' },
+      { id: 'grand_slam', icon: '🎾', name: 'Grand Slam', desc: 'Vinn 4 tävlingar samma år', category: 'legendary', rarity: 'mythic' },
+      { id: 'phoenix', icon: '🔥', name: 'Fenix', desc: 'Vinn efter att ha kommit sist föregående år', category: 'legendary', rarity: 'legendary' },
+      { id: 'untouchable', icon: '🛡️', name: 'Orörd', desc: 'Aldrig placerat sämre än 3:a (5+ tävlingar)', category: 'legendary', rarity: 'mythic' },
+      { id: 'champion', icon: '🏆', name: 'Mästaren', desc: 'Vinn 5+ olika typer av tävlingar', category: 'legendary', rarity: 'legendary' },
+      
+      // Mythic Achievements
+      { id: 'perfect_year', icon: '✨', name: 'Perfekt År', desc: 'Vinn alla tävlingar under ett år', category: 'mythic', rarity: 'mythic' },
+      { id: 'time_traveler', icon: '⏳', name: 'Tidsresenären', desc: 'Deltagit i första och senaste tävlingen (15+ år)', category: 'mythic', rarity: 'mythic' },
+      { id: 'legend_slayer', icon: '🗡️', name: 'Legenddödaren', desc: 'Besegrat alla tidigare vinnare samma år', category: 'mythic', rarity: 'mythic' },
+      { id: 'mr_consistent', icon: '📊', name: 'Mr. Consistent', desc: 'Lägst standardavvikelse (10+ tävlingar)', category: 'mythic', rarity: 'mythic' },
+      { id: 'comeback_legend', icon: '🦅', name: 'Comeback-Legenden', desc: 'Från sist till först på ett år', category: 'mythic', rarity: 'mythic' }
+    ];
+
     // Global competition data
     let competitionData = {
       competitions: [],
       participants: [],
       medals: {},
       achievements: [],
+      participantAchievements: {},
       initialized: false
     };
 
@@ -915,8 +1289,20 @@
       setupTabs();
       setupFilters();
       setupCSVImport();
+      setupAchievementFilters();
       await loadCSVData(); // Load actual CSV data
       updateAllViews();
+    }
+
+    // Setup achievement category filters
+    function setupAchievementFilters() {
+      document.querySelectorAll('.category-filter').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.category-filter').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          renderAchievementsGrid(btn.dataset.category);
+        });
+      });
     }
 
     // Tab navigation
@@ -936,7 +1322,7 @@
           
           // Load specific tab data
           if (targetTab === 'medals') loadMedalTally();
-          if (targetTab === 'achievements') loadAchievements();
+          if (targetTab === 'achievements') loadEnhancedAchievements();
           if (targetTab === 'statistics') loadStatistics();
         });
       });
@@ -1251,9 +1637,13 @@
       // Sort competitions by year (newest first)
       competitions.sort((a, b) => b.year - a.year);
       
+      // Calculate participant achievements
+      const participantAchievements = calculateParticipantAchievements(competitions, participants);
+      
       competitionData = {
         participants,
         competitions,
+        participantAchievements,
         initialized: true
       };
       
@@ -1283,6 +1673,144 @@
       const firstName = parts[0];
       const lastName = parts[parts.length - 1];
       return firstName + ' ' + lastName.charAt(0) + '.';
+    }
+
+    // Calculate participant achievements based on data
+    function calculateParticipantAchievements(competitions, participants) {
+      const achievements = {};
+      
+      participants.forEach(p => {
+        achievements[p.name] = [];
+        
+        // Calculate medals
+        let gold = 0, silver = 0, bronze = 0;
+        let winStreak = 0, maxWinStreak = 0;
+        let podiumStreak = 0, maxPodiumStreak = 0;
+        let participations = 0;
+        let lastPosition = null;
+        let positions = [];
+        let competitionTypes = new Set();
+        let wonTypes = new Set();
+        
+        const sortedComps = [...competitions].sort((a, b) => a.year - b.year);
+        
+        sortedComps.forEach(comp => {
+          const position = comp.scores[p.id];
+          if (position) {
+            participations++;
+            positions.push(position);
+            
+            if (position === 1) {
+              gold++;
+              winStreak++;
+              podiumStreak++;
+              maxWinStreak = Math.max(maxWinStreak, winStreak);
+              maxPodiumStreak = Math.max(maxPodiumStreak, podiumStreak);
+              competitionTypes.add(comp.name);
+              wonTypes.add(comp.name);
+              
+              // First win
+              if (gold === 1) achievements[p.name].push('first_win');
+            } else if (position === 2) {
+              silver++;
+              winStreak = 0;
+              podiumStreak++;
+              maxPodiumStreak = Math.max(maxPodiumStreak, podiumStreak);
+            } else if (position === 3) {
+              bronze++;
+              winStreak = 0;
+              podiumStreak++;
+              maxPodiumStreak = Math.max(maxPodiumStreak, podiumStreak);
+            } else {
+              winStreak = 0;
+              podiumStreak = 0;
+            }
+            
+            lastPosition = position;
+          }
+        });
+        
+        // Medal achievements
+        if (gold >= 5) achievements[p.name].push('gold_king');
+        else if (gold >= 3) achievements[p.name].push('gold_collector');
+        
+        if (silver >= 3) achievements[p.name].push('silver_surfer');
+        if (bronze >= 3) achievements[p.name].push('bronze_warrior');
+        if (gold + silver + bronze >= 10) achievements[p.name].push('medal_magnet');
+        if (gold > 0 && silver > 0 && bronze > 0) achievements[p.name].push('rainbow_medals');
+        
+        // Streak achievements
+        if (maxWinStreak >= 3) achievements[p.name].push('win_streak_3');
+        else if (maxWinStreak >= 2) achievements[p.name].push('win_streak_2');
+        
+        if (maxPodiumStreak >= 5) achievements[p.name].push('podium_streak_5');
+        else if (maxPodiumStreak >= 3) achievements[p.name].push('podium_streak_3');
+        
+        // Participation achievements
+        if (participations >= 10) {
+          achievements[p.name].push('participation_streak');
+          achievements[p.name].push('veteran');
+        }
+        
+        if (participations === competitions.length - 1) { // -1 for Covid year
+          achievements[p.name].push('perfect_attendance');
+        }
+        
+        // Versatility
+        if (wonTypes.size >= 3) achievements[p.name].push('versatile_winner');
+        
+        // Fun achievements
+        if (participations >= 10 && gold === 0) achievements[p.name].push('participation_trophy');
+        if (silver >= 5 && gold === 0) achievements[p.name].push('almost_winner');
+        
+        // Check for improving trend
+        if (positions.length >= 6) {
+          const firstHalf = positions.slice(0, Math.floor(positions.length / 2));
+          const secondHalf = positions.slice(Math.floor(positions.length / 2));
+          const firstAvg = firstHalf.reduce((a, b) => a + b, 0) / firstHalf.length;
+          const secondAvg = secondHalf.reduce((a, b) => a + b, 0) / secondHalf.length;
+          if (firstAvg - secondAvg >= 5) achievements[p.name].push('slow_starter');
+        }
+        
+        // GOAT achievement
+        if (gold >= 10) achievements[p.name].push('goat');
+      });
+      
+      // Check arranger achievements
+      competitions.forEach(comp => {
+        if (comp.arranger3rd && achievements[comp.arranger3rd]) {
+          const count = competitions.filter(c => c.arranger3rd === comp.arranger3rd).length;
+          if (count >= 2 && !achievements[comp.arranger3rd].includes('arranger_bronze')) {
+            achievements[comp.arranger3rd].push('arranger_bronze');
+          }
+        }
+        if (comp.arrangerSecondLast && achievements[comp.arrangerSecondLast]) {
+          const count = competitions.filter(c => c.arrangerSecondLast === comp.arrangerSecondLast).length;
+          if (count >= 2 && !achievements[comp.arrangerSecondLast].includes('arranger_ironic')) {
+            achievements[comp.arrangerSecondLast].push('arranger_ironic');
+          }
+        }
+      });
+      
+      // Special patterns
+      // Check for comeback kid
+      participants.forEach(p => {
+        let lastWinYear = null;
+        let recentWinYear = null;
+        competitions.forEach(comp => {
+          if (comp.scores[p.id] === 1) {
+            if (!lastWinYear) lastWinYear = comp.year;
+            recentWinYear = comp.year;
+          }
+        });
+        if (lastWinYear && recentWinYear && recentWinYear - lastWinYear >= 3) {
+          if (!achievements[p.name].includes('comeback_kid')) {
+            achievements[p.name].push('comeback_kid');
+          }
+        }
+      });
+      
+      return achievements;
     }
 
     // Populate filter dropdowns
@@ -1446,289 +1974,112 @@
       return medals;
     }
 
-    // Load fun but reasonable achievements
-    function loadAchievements() {
-      const achievements = calculateAchievements();
-      const grid = document.getElementById('achievements-grid');
+    // Load enhanced achievements view
+    function loadEnhancedAchievements() {
+      // Update stats
+      updateAchievementStats();
       
-      if (!grid) return;
+      // Render participant cards
+      renderParticipantCards();
       
-      grid.innerHTML = '';
+      // Render achievements grid
+      renderAchievementsGrid('all');
+    }
+
+    // Update achievement statistics
+    function updateAchievementStats() {
+      const totalUnlocked = Object.values(competitionData.participantAchievements)
+        .flat()
+        .filter((v, i, a) => a.indexOf(v) === i)
+        .length;
       
-      achievements.forEach(ach => {
+      const totalAchievements = allAchievementDefinitions.length;
+      const completionRate = Math.round((totalUnlocked / totalAchievements) * 100);
+
+      document.getElementById('total-unlocked').textContent = totalUnlocked;
+      document.getElementById('total-achievements').textContent = totalAchievements;
+      document.getElementById('completion-rate').textContent = completionRate + '%';
+    }
+
+    // Render participant achievement cards
+    function renderParticipantCards() {
+      const container = document.getElementById('participant-cards');
+      if (!container) return;
+      
+      container.innerHTML = '';
+
+      Object.entries(competitionData.participantAchievements).forEach(([name, achievements]) => {
+        const progress = Math.round((achievements.length / allAchievementDefinitions.length) * 100);
+        
         const card = document.createElement('div');
-        card.className = `achievement ${ach.unlocked ? 'unlocked' : 'locked'} ${ach.legendary ? 'legendary' : ''}`;
+        card.className = 'participant-card';
         
         card.innerHTML = `
+          <div class="participant-header">
+            <div class="participant-name">${name}</div>
+            <div class="achievement-count">${achievements.length} 🏆</div>
+          </div>
+          <div class="participant-achievements-list">
+            ${achievements.map(achId => {
+              const ach = allAchievementDefinitions.find(a => a.id === achId);
+              if (!ach) return '';
+              return `
+                <div class="mini-achievement">
+                  ${ach.icon}
+                  <div class="tooltip">${ach.name}</div>
+                </div>
+              `;
+            }).join('')}
+            ${achievements.length === 0 ? '<div class="no-achievements">Inga achievements än...</div>' : ''}
+          </div>
+          <div class="achievement-progress">
+            <div class="progress-text">Framsteg: ${progress}% (${achievements.length}/${allAchievementDefinitions.length})</div>
+            <div class="progress-bar">
+              <div class="progress-fill" style="width: ${progress}%"></div>
+            </div>
+          </div>
+        `;
+        
+        container.appendChild(card);
+      });
+    }
+
+    // Render all achievements grid
+    function renderAchievementsGrid(category = 'all') {
+      const container = document.getElementById('achievements-grid');
+      if (!container) return;
+      
+      container.innerHTML = '';
+
+      const filteredAchievements = category === 'all' 
+        ? allAchievementDefinitions 
+        : allAchievementDefinitions.filter(a => a.category === category);
+
+      filteredAchievements.forEach(ach => {
+        // Find holders of this achievement
+        const holders = Object.entries(competitionData.participantAchievements)
+          .filter(([name, achs]) => achs.includes(ach.id))
+          .map(([name]) => name);
+
+        const isUnlocked = holders.length > 0;
+        
+        const achElement = document.createElement('div');
+        achElement.className = `achievement ${isUnlocked ? 'unlocked' : 'locked'} ${ach.rarity === 'legendary' ? 'legendary' : ''} ${ach.rarity === 'mythic' ? 'mythic' : ''}`;
+        
+        achElement.innerHTML = `
+          ${ach.rarity !== 'common' ? `<div class="rarity-badge rarity-${ach.rarity}">${ach.rarity}</div>` : ''}
           <div class="achievement-icon">${ach.icon}</div>
           <div class="achievement-name">${ach.name}</div>
           <div class="achievement-desc">${ach.desc}</div>
+          ${holders.length > 0 ? `
+            <div class="achievement-holders">
+              ${holders.length === 1 ? holders[0] : holders.length + ' deltagare'}
+            </div>
+          ` : ''}
         `;
         
-        grid.appendChild(card);
+        container.appendChild(achElement);
       });
-    }
-
-    // Calculate realistic achievements based on placement data
-    function calculateAchievements() {
-      const medals = calculateMedalCounts();
-      const achievements = [];
-      
-      // Medal-based achievements
-      Object.entries(medals).forEach(([name, count]) => {
-        // Gold achievements
-        if (count.gold >= 5) {
-          achievements.push({
-            icon: '👑',
-            name: 'Guldkungen',
-            desc: `${name} - 5+ guldmedaljer`,
-            unlocked: true,
-            legendary: true
-          });
-        } else if (count.gold >= 3) {
-          achievements.push({
-            icon: '🥇',
-            name: 'Guldsamlare',
-            desc: `${name} - 3+ guldmedaljer`,
-            unlocked: true
-          });
-        }
-        
-        // Total medals
-        if (count.total >= 10) {
-          achievements.push({
-            icon: '🏅',
-            name: 'Medaljmagnet',
-            desc: `${name} - 10+ medaljer totalt`,
-            unlocked: true
-          });
-        }
-        
-        // Consistency
-        if (count.gold > 0 && count.silver > 0 && count.bronze > 0) {
-          achievements.push({
-            icon: '🌈',
-            name: 'Regnbågssamlare',
-            desc: `${name} - Alla medaljfärger`,
-            unlocked: true
-          });
-        }
-      });
-      
-      // Competition-based achievements
-      const participationCounts = {};
-      competitionData.participants.forEach(p => {
-        let count = 0;
-        competitionData.competitions.forEach(comp => {
-          if (comp.scores[p.id] !== undefined) count++;
-        });
-        participationCounts[p.name] = count;
-      });
-      
-      Object.entries(participationCounts).forEach(([name, count]) => {
-        if (count >= 10) {
-          achievements.push({
-            icon: '🏃',
-            name: 'Maratonlöpare',
-            desc: `${name} - 10+ tävlingar`,
-            unlocked: true
-          });
-        }
-        
-        if (count === competitionData.competitions.length) {
-          achievements.push({
-            icon: '💯',
-            name: 'Perfekt Närvaro',
-            desc: `${name} - Deltagit i alla tävlingar`,
-            unlocked: true,
-            legendary: true
-          });
-        }
-      });
-      
-      // Arranger achievements
-      const arrangerStats = {};
-      competitionData.competitions.forEach(comp => {
-        if (comp.arranger3rd) {
-          arrangerStats[comp.arranger3rd] = arrangerStats[comp.arranger3rd] || { third: 0, secondLast: 0 };
-          arrangerStats[comp.arranger3rd].third++;
-        }
-        if (comp.arrangerSecondLast) {
-          arrangerStats[comp.arrangerSecondLast] = arrangerStats[comp.arrangerSecondLast] || { third: 0, secondLast: 0 };
-          arrangerStats[comp.arrangerSecondLast].secondLast++;
-        }
-      });
-      
-      Object.entries(arrangerStats).forEach(([name, stats]) => {
-        if (stats.third >= 2) {
-          achievements.push({
-            icon: '🥉',
-            name: 'Bronsarrangör',
-            desc: `${name} - Arrangerat ${stats.third} gånger som trea`,
-            unlocked: true
-          });
-        }
-        if (stats.secondLast >= 2) {
-          achievements.push({
-            icon: '🎭',
-            name: 'Ironisk Arrangör',
-            desc: `${name} - Arrangerat ${stats.secondLast} gånger som näst sist`,
-            unlocked: true
-          });
-        }
-      });
-      
-      // Streak achievements
-      const streaks = calculateStreaks();
-      Object.entries(streaks).forEach(([name, streak]) => {
-        if (streak.winStreak >= 3) {
-          achievements.push({
-            icon: '🔥',
-            name: 'På Eld',
-            desc: `${name} - ${streak.winStreak} raka vinster`,
-            unlocked: true,
-            legendary: true
-          });
-        }
-        
-        if (streak.podiumStreak >= 5) {
-          achievements.push({
-            icon: '⭐',
-            name: 'Stjärnan',
-            desc: `${name} - ${streak.podiumStreak} raka pallplatser`,
-            unlocked: true
-          });
-        }
-      });
-      
-      // Special pattern achievements
-      const patterns = findSpecialPatterns();
-      achievements.push(...patterns);
-      
-      // Future achievements (locked)
-      achievements.push(
-        {
-          icon: '🎯',
-          name: 'Decenniummästare',
-          desc: 'Vinn minst en tävling per decennium',
-          unlocked: false
-        },
-        {
-          icon: '🚀',
-          name: 'Raketstart',
-          desc: 'Vinn din första tävling',
-          unlocked: false
-        },
-        {
-          icon: '💪',
-          name: 'Comeback Kid',
-          desc: 'Vinn efter 3+ år utan vinst',
-          unlocked: false
-        },
-        {
-          icon: '🎪',
-          name: 'Mästararrangör',
-          desc: 'Arrangera 5+ tävlingar',
-          unlocked: false
-        }
-      );
-      
-      return achievements;
-    }
-
-    // Calculate win/podium streaks
-    function calculateStreaks() {
-      const streaks = {};
-      
-      competitionData.participants.forEach(p => {
-        let currentWinStreak = 0;
-        let maxWinStreak = 0;
-        let currentPodiumStreak = 0;
-        let maxPodiumStreak = 0;
-        
-        const sortedComps = [...competitionData.competitions].sort((a, b) => b.year - a.year);
-        
-        sortedComps.forEach(comp => {
-          const position = comp.scores[p.id];
-          if (position === 1) {
-            currentWinStreak++;
-            currentPodiumStreak++;
-            maxWinStreak = Math.max(maxWinStreak, currentWinStreak);
-            maxPodiumStreak = Math.max(maxPodiumStreak, currentPodiumStreak);
-          } else if (position <= 3) {
-            currentWinStreak = 0;
-            currentPodiumStreak++;
-            maxPodiumStreak = Math.max(maxPodiumStreak, currentPodiumStreak);
-          } else {
-            currentWinStreak = 0;
-            currentPodiumStreak = 0;
-          }
-        });
-        
-        streaks[p.name] = {
-          winStreak: maxWinStreak,
-          podiumStreak: maxPodiumStreak
-        };
-      });
-      
-      return streaks;
-    }
-
-    // Find special achievement patterns
-    function findSpecialPatterns() {
-      const patterns = [];
-      
-      // Sibling rivalry
-      const lundqvists = competitionData.participants.filter(p => 
-        p.name.includes('Lundqvist')
-      );
-      if (lundqvists.length > 1) {
-        patterns.push({
-          icon: '👨‍👨‍👦',
-          name: 'Familjeduell',
-          desc: 'Lundqvist vs Lundqvist',
-          unlocked: true
-        });
-      }
-      
-      // Per domination
-      const pers = competitionData.participants.filter(p => 
-        p.name.startsWith('Per ')
-      );
-      if (pers.length >= 2) {
-        patterns.push({
-          icon: '🎭',
-          name: 'Per-fektion',
-          desc: `${pers.length} personer med namnet Per`,
-          unlocked: true
-        });
-      }
-      
-      // Year-specific
-      const covid = competitionData.competitions.find(c => 
-        c.year === 2020 && c.name === 'Covid'
-      );
-      if (covid) {
-        patterns.push({
-          icon: '😷',
-          name: 'Pandemi-Pokalen',
-          desc: 'Tävlade under Covid-19',
-          unlocked: true
-        });
-      }
-      
-      // Location variety
-      const locations = [...new Set(competitionData.competitions.map(c => c.location))];
-      if (locations.length >= 10) {
-        patterns.push({
-          icon: '🗺️',
-          name: 'Världsresenär',
-          desc: `Tävlat på ${locations.length} olika platser`,
-          unlocked: true
-        });
-      }
-      
-      return patterns;
     }
 
     // Load fun stats
