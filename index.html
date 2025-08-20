@@ -2522,7 +2522,48 @@
     // Load statistics view
     function loadStatistics() {
       const filteredData = filterCompetitionData('all', 'all', 'all');
+      updateChartTitles();
       updateStatisticsView(filteredData);
+    }
+
+    // Update chart titles based on filters
+    function updateChartTitles() {
+      const competitorFilter = document.getElementById('competitor-filter').value;
+      const timeframeFilter = document.getElementById('timeframe-filter').value;
+      
+      // Get competitor name if specific one selected
+      let competitorName = '';
+      if (competitorFilter !== 'all') {
+        const competitor = competitionData.participants.find(p => p.id === competitorFilter);
+        competitorName = competitor ? competitor.name : 'Okänd';
+      }
+      
+      // Get timeframe description
+      let timeframeDesc = '';
+      if (timeframeFilter !== 'all') {
+        switch (timeframeFilter) {
+          case 'recent5':
+            timeframeDesc = ' (Senaste 5 År)';
+            break;
+          case 'recent3':
+            timeframeDesc = ' (Senaste 3 År)';
+            break;
+          default:
+            timeframeDesc = ` (${timeframeFilter})`;
+        }
+      }
+      
+      // Update chart titles
+      const avgPositionTitle = document.querySelector('#avg-position-chart').closest('.chart-container').querySelector('.chart-title');
+      const participationTitle = document.querySelector('#participation-chart').closest('.chart-container').querySelector('.chart-title');
+      
+      if (competitorFilter === 'all') {
+        avgPositionTitle.textContent = `📈 Snittplacering per År${timeframeDesc}`;
+        participationTitle.textContent = `🎯 Deltagande över Tid${timeframeDesc}`;
+      } else {
+        avgPositionTitle.textContent = `📈 ${competitorName}s Placeringar${timeframeDesc}`;
+        participationTitle.textContent = `🎯 ${competitorName}s Deltagande${timeframeDesc}`;
+      }
     }
 
     // Update statistics view with filtered data
@@ -2557,6 +2598,9 @@
         
         grid.appendChild(card);
       });
+      
+      // Update chart titles based on filters
+      updateChartTitles();
       
       updateStatisticsCharts(filteredData);
     }
@@ -2717,53 +2761,117 @@
       const ctx = document.getElementById('avg-position-chart');
       if (!ctx) return;
       
-      const yearStats = {};
-      filteredData.forEach(comp => {
-        if (!yearStats[comp.year]) {
-          yearStats[comp.year] = { sum: 0, count: 0 };
-        }
-        Object.values(comp.scores).forEach(pos => {
-          yearStats[comp.year].sum += pos;
-          yearStats[comp.year].count++;
+      const competitorFilter = document.getElementById('competitor-filter').value;
+      
+      // Clear previous chart
+      if (window.avgPositionChart) {
+        window.avgPositionChart.destroy();
+      }
+      
+      if (competitorFilter === 'all') {
+        // Show overall average position per year
+        const yearStats = {};
+        filteredData.forEach(comp => {
+          if (!yearStats[comp.year]) {
+            yearStats[comp.year] = { sum: 0, count: 0 };
+          }
+          Object.values(comp.scores).forEach(pos => {
+            yearStats[comp.year].sum += pos;
+            yearStats[comp.year].count++;
+          });
         });
-      });
-      
-      const years = Object.keys(yearStats).sort();
-      const avgPositions = years.map(year => 
-        yearStats[year].sum / yearStats[year].count
-      );
-      
-      new Chart(ctx.getContext('2d'), {
-        type: 'line',
-        data: {
-          labels: years,
-          datasets: [{
-            label: 'Genomsnittlig Placering',
-            data: avgPositions,
-            borderColor: '#667eea',
-            backgroundColor: 'rgba(102, 126, 234, 0.1)',
-            tension: 0.4
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              labels: { color: '#a8b2d1' }
-            }
+        
+        const years = Object.keys(yearStats).sort();
+        const avgPositions = years.map(year => 
+          yearStats[year].count > 0 ? yearStats[year].sum / yearStats[year].count : null
+        );
+        
+        window.avgPositionChart = new Chart(ctx.getContext('2d'), {
+          type: 'line',
+          data: {
+            labels: years,
+            datasets: [{
+              label: 'Genomsnittlig Placering',
+              data: avgPositions,
+              borderColor: '#667eea',
+              backgroundColor: 'rgba(102, 126, 234, 0.1)',
+              tension: 0.4
+            }]
           },
-          scales: {
-            y: {
-              reverse: true,
-              ticks: { color: '#a8b2d1' }
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                labels: { color: '#a8b2d1' }
+              }
             },
-            x: {
-              ticks: { color: '#a8b2d1' }
+            scales: {
+              y: {
+                reverse: true,
+                ticks: { color: '#a8b2d1' }
+              },
+              x: {
+                ticks: { color: '#a8b2d1' }
+              }
             }
           }
-        }
-      });
+        });
+      } else {
+        // Show individual competitor's positions over time
+        const competitor = competitionData.participants.find(p => p.id === competitorFilter);
+        const competitorName = competitor ? competitor.name : 'Okänd';
+        
+        const years = [];
+        const positions = [];
+        
+        filteredData.forEach(comp => {
+          if (comp.scores[competitorFilter]) {
+            years.push(comp.year);
+            positions.push(comp.scores[competitorFilter]);
+          }
+        });
+        
+        window.avgPositionChart = new Chart(ctx.getContext('2d'), {
+          type: 'line',
+          data: {
+            labels: years,
+            datasets: [{
+              label: `${competitorName}s Placeringar`,
+              data: positions,
+              borderColor: '#667eea',
+              backgroundColor: 'rgba(102, 126, 234, 0.1)',
+              tension: 0.4,
+              pointBackgroundColor: '#667eea',
+              pointBorderColor: '#fff',
+              pointBorderWidth: 2,
+              pointRadius: 6
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                labels: { color: '#a8b2d1' }
+              }
+            },
+            scales: {
+              y: {
+                reverse: true,
+                beginAtZero: false,
+                ticks: { 
+                  color: '#a8b2d1',
+                  stepSize: 1
+                }
+              },
+              x: {
+                ticks: { color: '#a8b2d1' }
+              }
+            }
+          }
+        });
+      }
     }
 
     // Create participation chart
@@ -2771,45 +2879,132 @@
       const ctx = document.getElementById('participation-chart');
       if (!ctx) return;
       
-      const yearParticipation = {};
-      filteredData.forEach(comp => {
-        yearParticipation[comp.year] = Object.keys(comp.scores).length;
-      });
+      const competitorFilter = document.getElementById('competitor-filter').value;
       
-      const years = Object.keys(yearParticipation).sort();
-      const participation = years.map(year => yearParticipation[year]);
+      // Clear previous chart
+      if (window.participationChart) {
+        window.participationChart.destroy();
+      }
       
-      new Chart(ctx.getContext('2d'), {
-        type: 'bar',
-        data: {
-          labels: years,
-          datasets: [{
-            label: 'Antal Deltagare',
-            data: participation,
-            backgroundColor: 'rgba(102, 126, 234, 0.6)',
-            borderColor: '#667eea',
-            borderWidth: 2
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              labels: { color: '#a8b2d1' }
-            }
+      if (competitorFilter === 'all') {
+        // Show total participants per year
+        const yearParticipation = {};
+        filteredData.forEach(comp => {
+          yearParticipation[comp.year] = Object.keys(comp.scores).length;
+        });
+        
+        const years = Object.keys(yearParticipation).sort();
+        const participation = years.map(year => yearParticipation[year]);
+        
+        window.participationChart = new Chart(ctx.getContext('2d'), {
+          type: 'bar',
+          data: {
+            labels: years,
+            datasets: [{
+              label: 'Antal Deltagare',
+              data: participation,
+              backgroundColor: 'rgba(102, 126, 234, 0.6)',
+              borderColor: '#667eea',
+              borderWidth: 2
+            }]
           },
-          scales: {
-            y: {
-              beginAtZero: true,
-              ticks: { color: '#a8b2d1' }
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                labels: { color: '#a8b2d1' }
+              }
             },
-            x: {
-              ticks: { color: '#a8b2d1' }
+            scales: {
+              y: {
+                beginAtZero: true,
+                ticks: { color: '#a8b2d1' }
+              },
+              x: {
+                ticks: { color: '#a8b2d1' }
+              }
             }
           }
-        }
-      });
+        });
+      } else {
+        // Show competitor's performance/participation over time
+        const competitor = competitionData.participants.find(p => p.id === competitorFilter);
+        const competitorName = competitor ? competitor.name : 'Okänd';
+        
+        // Get all years and mark participation
+        const allYears = [...new Set(competitionData.competitions.map(c => c.year))].sort();
+        const participationData = [];
+        const positionData = [];
+        
+        allYears.forEach(year => {
+          const comp = competitionData.competitions.find(c => c.year === year);
+          if (comp && comp.scores[competitorFilter]) {
+            participationData.push(1); // Participated
+            positionData.push(comp.scores[competitorFilter]);
+          } else {
+            participationData.push(0); // Did not participate
+            positionData.push(null);
+          }
+        });
+        
+        window.participationChart = new Chart(ctx.getContext('2d'), {
+          type: 'bar',
+          data: {
+            labels: allYears,
+            datasets: [{
+              label: `${competitorName} - Deltagande`,
+              data: participationData,
+              backgroundColor: participationData.map(val => 
+                val === 1 ? 'rgba(102, 126, 234, 0.6)' : 'rgba(248, 113, 113, 0.3)'
+              ),
+              borderColor: participationData.map(val => 
+                val === 1 ? '#667eea' : '#f87171'
+              ),
+              borderWidth: 2
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                labels: { color: '#a8b2d1' }
+              },
+              tooltip: {
+                callbacks: {
+                  label: function(context) {
+                    const year = context.label;
+                    const participated = context.raw === 1;
+                    if (participated) {
+                      const comp = competitionData.competitions.find(c => c.year == year);
+                      const position = comp ? comp.scores[competitorFilter] : null;
+                      return `${competitorName}: Deltog (Placering: ${position})`;
+                    } else {
+                      return `${competitorName}: Deltog inte`;
+                    }
+                  }
+                }
+              }
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                max: 1.2,
+                ticks: { 
+                  color: '#a8b2d1',
+                  callback: function(value) {
+                    return value === 1 ? 'Deltog' : value === 0 ? 'Deltog inte' : '';
+                  }
+                }
+              },
+              x: {
+                ticks: { color: '#a8b2d1' }
+              }
+            }
+          }
+        });
+      }
     }
 
     // Get top performers
