@@ -201,6 +201,69 @@ class ChartManager {
   }
 
   /**
+   * Create wins distribution chart
+   */
+  createWinsChart(data) {
+    const ctx = document.getElementById('wins-chart');
+    if (!ctx) {
+      console.warn('Wins chart canvas not found');
+      return;
+    }
+
+    this.destroyChart('wins-chart');
+
+    const winCounts = {};
+    data.competitions.forEach(comp => {
+      if (comp.winner) {
+        winCounts[comp.winner] = (winCounts[comp.winner] || 0) + 1;
+      }
+    });
+
+    const topWinners = Object.entries(winCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8);
+
+    const options = {
+      ...this.defaultOptions,
+      plugins: {
+        ...this.defaultOptions.plugins,
+        legend: { display: false }
+      },
+      scales: {
+        ...this.defaultOptions.scales,
+        y: {
+          ...this.defaultOptions.scales.y,
+          beginAtZero: true,
+          title: { display: true, text: 'Antal Vinster', color: '#a8b2d1' }
+        },
+        x: {
+          ...this.defaultOptions.scales.x,
+          title: { display: true, text: 'Deltagare', color: '#a8b2d1' }
+        }
+      }
+    };
+
+    const chart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: topWinners.map(([name]) => name),
+        datasets: [
+          {
+            label: 'Vinster',
+            data: topWinners.map(([, wins]) => wins),
+            backgroundColor: this.colorPalette.primary,
+            borderColor: this.colorPalette.primary,
+            borderWidth: 1
+          }
+        ]
+      },
+      options: options
+    });
+
+    this.charts.set('wins-chart', chart);
+  }
+
+  /**
    * Create medal distribution chart
    */
   createMedalChart(medalCounts) {
