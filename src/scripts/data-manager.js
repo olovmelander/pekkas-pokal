@@ -1,11 +1,12 @@
 /**
  * Data Manager - Handles CSV loading and data processing (FIXED VERSION)
+ * Now properly handles file paths and loading
  */
 
 class DataManager {
   constructor() {
-    // Simplified filename without spaces issues
-    this.csvFileName = 'Pekkas Pokal Marathontabell Marathontabell.csv';
+    // Updated to use simpler filename for public directory
+    this.csvFileName = 'competition-data.csv';
     this.cache = new Map();
     this.cacheExpiry = 5 * 60 * 1000; // 5 minutes
   }
@@ -30,20 +31,48 @@ class DataManager {
       if (window.fs && window.fs.readFile) {
         try {
           console.log('🔄 Trying window.fs.readFile...');
-          csvContent = await window.fs.readFile(`src/data/${this.csvFileName}`, { encoding: 'utf8' });
-          console.log('✅ CSV loaded via fs.readFile');
+          // Try multiple paths for fs.readFile
+          const fsUrls = [
+            `src/data/${this.csvFileName}`,
+            `src/data/Pekkas Pokal Marathontabell Marathontabell.csv`,
+            `public/${this.csvFileName}`,
+            this.csvFileName
+          ];
+          
+          for (const fsUrl of fsUrls) {
+            try {
+              csvContent = await window.fs.readFile(fsUrl, { encoding: 'utf8' });
+              console.log(`✅ CSV loaded via fs.readFile from: ${fsUrl}`);
+              break;
+            } catch (e) {
+              console.log(`⚠️ fs.readFile failed for ${fsUrl}:`, e.message);
+            }
+          }
         } catch (e) {
-          console.log('⚠️ fs.readFile failed:', e.message);
+          console.log('⚠️ fs.readFile general error:', e.message);
         }
       }
       
       // Method 2: Try fetch from multiple possible paths
       if (!csvContent) {
         const possiblePaths = [
+          // Public directory paths (preferred for Vite)
+          `/${this.csvFileName}`,
+          `/public/${this.csvFileName}`,
+          
+          // Legacy paths
+          `src/data/Pekkas Pokal Marathontabell Marathontabell.csv`,
+          `./src/data/Pekkas Pokal Marathontabell Marathontabell.csv`,
           `src/data/${this.csvFileName}`,
           `./src/data/${this.csvFileName}`,
+          
+          // Additional fallbacks
           this.csvFileName,
-          `data/${this.csvFileName}`
+          `data/${this.csvFileName}`,
+          
+          // Try with exact original filename
+          'Pekkas Pokal Marathontabell Marathontabell.csv',
+          '/Pekkas Pokal Marathontabell Marathontabell.csv'
         ];
         
         for (const path of possiblePaths) {
@@ -55,7 +84,7 @@ class DataManager {
               console.log(`✅ CSV loaded via fetch from: ${path}`);
               break;
             } else {
-              console.log(`❌ Fetch failed for ${path}: ${response.status}`);
+              console.log(`❌ Fetch failed for ${path}: ${response.status} ${response.statusText}`);
             }
           } catch (e) {
             console.log(`❌ Fetch error for ${path}:`, e.message);
@@ -67,13 +96,14 @@ class DataManager {
       if (!csvContent) {
         console.log('🔄 Using embedded CSV data as fallback');
         csvContent = this.getEmbeddedCSV();
+        console.log('📋 Loaded embedded CSV data');
       }
       
       if (!csvContent) {
         throw new Error('No CSV content available from any source');
       }
       
-      console.log('📊 CSV content loaded, parsing...');
+      console.log(`📊 CSV content loaded (${csvContent.length} characters), parsing...`);
       
       // Parse CSV content
       const processedData = await this.parseCSVContent(csvContent);
@@ -82,6 +112,8 @@ class DataManager {
       this.setCachedData(processedData);
       
       console.log('✅ CSV data loaded and processed successfully');
+      console.log(`📊 Found ${processedData.competitions.length} competitions and ${processedData.participants.length} participants`);
+      
       return processedData;
       
     } catch (error) {
@@ -89,7 +121,7 @@ class DataManager {
       
       // Final fallback to embedded data
       console.log('🆘 Using embedded data as final fallback');
-      const embeddedData = this.parseCSVContent(this.getEmbeddedCSV());
+      const embeddedData = await this.parseCSVContent(this.getEmbeddedCSV());
       return embeddedData;
     }
   }
@@ -103,29 +135,36 @@ class DataManager {
     if (typeof Papa !== 'undefined') {
       // Use Papa Parse if available
       console.log('📊 Parsing with Papa Parse...');
-      parsedData = await new Promise((resolve, reject) => {
-        Papa.parse(csvContent, {
-          header: true,
-          skipEmptyLines: true,
-          dynamicTyping: false, // Keep as strings for better control
-          complete: (results) => {
-            if (results.errors.length > 0) {
-              console.warn('⚠️ Papa Parse warnings:', results.errors);
+      try {
+        parsedData = await new Promise((resolve, reject) => {
+          Papa.parse(csvContent, {
+            header: true,
+            skipEmptyLines: true,
+            dynamicTyping: false, // Keep as strings for better control
+            trimHeaders: true, // Trim whitespace from headers
+            complete: (results) => {
+              if (results.errors.length > 0) {
+                console.warn('⚠️ Papa Parse warnings:', results.errors);
+              }
+              console.log(`📊 Papa Parse complete: ${results.data.length} rows, ${results.meta.fields.length} columns`);
+              resolve({
+                data: results.data,
+                headers: results.meta.fields
+              });
+            },
+            error: (error) => {
+              console.error('❌ Papa Parse error:', error);
+              reject(error);
             }
-            resolve({
-              data: results.data,
-              headers: results.meta.fields
-            });
-          },
-          error: (error) => {
-            console.error('❌ Papa Parse error:', error);
-            reject(error);
-          }
+          });
         });
-      });
+      } catch (error) {
+        console.error('❌ Papa Parse failed, falling back to native parser:', error);
+        parsedData = this.parseCSVNative(csvContent);
+      }
     } else {
       // Use native parser
-      console.log('🔧 Parsing with native parser...');
+      console.log('🔧 Papa Parse not available, using native parser...');
       parsedData = this.parseCSVNative(csvContent);
     }
     
@@ -137,9 +176,17 @@ class DataManager {
    * Native CSV parser fallback
    */
   parseCSVNative(csvContent) {
+    console.log('🔧 Parsing with native parser...');
+    
     const lines = csvContent.trim().split(/\r?\n/);
+    if (lines.length === 0) {
+      throw new Error('CSV file is empty');
+    }
+    
     const headers = this.parseCSVLine(lines[0]);
     const data = [];
+    
+    console.log(`📊 Found headers: ${headers.join(', ')}`);
     
     for (let i = 1; i < lines.length; i++) {
       if (lines[i].trim()) {
@@ -151,6 +198,8 @@ class DataManager {
         data.push(row);
       }
     }
+    
+    console.log(`📊 Parsed ${data.length} data rows`);
     
     return { data, headers };
   }
@@ -185,6 +234,7 @@ class DataManager {
    */
   processData(rows, headers) {
     console.log('🔄 Processing data...');
+    console.log(`📊 Processing ${rows.length} rows with headers: ${headers.join(', ')}`);
     
     // Fixed columns that aren't participants
     const fixedColumns = ['År', 'Tävling', 'Plats', 'Arrangör 3:a', 'Arrangör näst sist'];
@@ -393,6 +443,18 @@ class DataManager {
 
   clearCache() {
     this.cache.clear();
+  }
+  
+  /**
+   * Get debug information
+   */
+  getDebugInfo() {
+    return {
+      csvFileName: this.csvFileName,
+      cacheSize: this.cache.size,
+      hasCache: this.cache.has('competitionData'),
+      cacheExpiry: this.cacheExpiry
+    };
   }
 }
 

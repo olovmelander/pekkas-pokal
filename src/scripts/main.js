@@ -1,5 +1,5 @@
 /**
- * Pekkas Pokal - Main Application Controller (FIXED VERSION)
+ * Pekkas Pokal - Main Application Controller (ENHANCED FIXED VERSION)
  * Entry point and coordination between modules
  */
 
@@ -17,6 +17,8 @@ class PekkasPokalApp {
       }
     };
     
+    console.log('🏆 PekkasPokalApp constructor called');
+    
     // Add error handling for initialization
     this.initialize().catch(error => {
       console.error('❌ App initialization failed:', error);
@@ -33,25 +35,34 @@ class PekkasPokalApp {
       
       // Wait for DOM to be ready
       await this.waitForDOM();
+      console.log('✅ DOM ready');
+      
+      // Wait for dependencies
+      await this.waitForDependencies();
+      console.log('✅ Dependencies loaded');
       
       // Initialize modules in dependency order
       await this.initializeModules();
+      console.log('✅ Modules initialized');
       
       // Setup event listeners BEFORE loading data
       this.setupEventListeners();
+      console.log('✅ Event listeners setup');
       
       // Load data
       await this.loadData();
+      console.log('✅ Data loaded');
       
       // Initial render
       this.render();
+      console.log('✅ Initial render complete');
       
       this.state.initialized = true;
-      console.log('✅ Pekkas Pokal initialized successfully!');
+      console.log('🎉 Pekkas Pokal initialized successfully!');
       
     } catch (error) {
       console.error('❌ Failed to initialize Pekkas Pokal:', error);
-      this.showError('Failed to initialize application. Please refresh the page.');
+      this.showError(`Failed to initialize application: ${error.message}`);
       throw error;
     }
   }
@@ -66,6 +77,39 @@ class PekkasPokalApp {
       } else {
         resolve();
       }
+    });
+  }
+
+  /**
+   * Wait for external dependencies to load
+   */
+  async waitForDependencies() {
+    const maxWait = 10000; // 10 seconds
+    const startTime = Date.now();
+    
+    return new Promise((resolve, reject) => {
+      const checkDependencies = () => {
+        const chartLoaded = typeof Chart !== 'undefined';
+        const papaLoaded = typeof Papa !== 'undefined';
+        
+        if (chartLoaded && papaLoaded) {
+          console.log('📦 All external dependencies loaded');
+          resolve();
+        } else {
+          const elapsed = Date.now() - startTime;
+          if (elapsed > maxWait) {
+            const missing = [];
+            if (!chartLoaded) missing.push('Chart.js');
+            if (!papaLoaded) missing.push('Papa Parse');
+            reject(new Error(`Dependencies not loaded after ${maxWait}ms: ${missing.join(', ')}`));
+          } else {
+            console.log(`⏳ Waiting for dependencies... (${elapsed}ms)`);
+            setTimeout(checkDependencies, 100);
+          }
+        }
+      };
+      
+      checkDependencies();
     });
   }
 
@@ -91,15 +135,32 @@ class PekkasPokalApp {
       }
     }
     
-    // Initialize modules
-    this.modules.dataManager = new DataManager();
-    this.modules.achievementEngine = new AchievementEngine();
-    this.modules.chartManager = new ChartManager();
-    this.modules.uiComponents = new UIComponents();
-    this.modules.statistics = new Statistics();
-    this.modules.filterManager = new FilterManager();
+    // Initialize modules with error handling
+    try {
+      this.modules.dataManager = new DataManager();
+      console.log('✅ DataManager initialized');
+      
+      this.modules.achievementEngine = new AchievementEngine();
+      console.log('✅ AchievementEngine initialized');
+      
+      this.modules.chartManager = new ChartManager();
+      console.log('✅ ChartManager initialized');
+      
+      this.modules.uiComponents = new UIComponents();
+      console.log('✅ UIComponents initialized');
+      
+      this.modules.statistics = new Statistics();
+      console.log('✅ Statistics initialized');
+      
+      this.modules.filterManager = new FilterManager();
+      console.log('✅ FilterManager initialized');
+      
+    } catch (error) {
+      console.error('❌ Module initialization failed:', error);
+      throw error;
+    }
     
-    console.log('📦 All modules initialized');
+    console.log('📦 All modules initialized successfully');
   }
 
   /**
@@ -108,7 +169,7 @@ class PekkasPokalApp {
   setupEventListeners() {
     console.log('🎛️ Setting up event listeners...');
     
-    // Tab navigation - FIXED
+    // Tab navigation - ENHANCED
     this.setupTabNavigation();
     
     // Filter controls
@@ -121,14 +182,21 @@ class PekkasPokalApp {
     window.addEventListener('resize', () => this.handleResize());
     window.addEventListener('beforeunload', () => this.cleanup());
     
+    // Debug event listener
+    window.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+        this.showDebugInfo();
+      }
+    });
+    
     console.log('🎛️ Event listeners setup complete');
   }
 
   /**
-   * Setup tab navigation - FIXED VERSION
+   * Setup tab navigation - ENHANCED VERSION
    */
   setupTabNavigation() {
-    console.log('🎯 Setting up tab navigation...');
+    console.log('🎯 Setting up enhanced tab navigation...');
     
     const tabs = document.querySelectorAll('.nav-tab');
     const contents = document.querySelectorAll('.tab-content');
@@ -140,41 +208,99 @@ class PekkasPokalApp {
       return;
     }
 
+    // Enhanced tab click handling
     tabs.forEach((tab, index) => {
-      console.log(`Setting up tab ${index + 1}: ${tab.dataset.tab}`);
+      console.log(`Setting up tab ${index + 1}: ${tab.dataset.tab} (${tab.textContent.trim()})`);
       
-      tab.addEventListener('click', (event) => {
-        event.preventDefault();
-        console.log(`🎯 Tab clicked: ${tab.dataset.tab}`);
-        
-        const targetTab = tab.dataset.tab;
-        
-        if (!targetTab) {
-          console.error('❌ Tab missing data-tab attribute:', tab);
-          return;
+      // Remove any existing listeners to prevent duplicates
+      tab.removeEventListener('click', this.handleTabClick);
+      
+      // Create bound event handler
+      const boundClickHandler = this.handleTabClick.bind(this);
+      tab.addEventListener('click', boundClickHandler);
+      
+      // Store reference for cleanup
+      tab._boundClickHandler = boundClickHandler;
+      
+      // Add keyboard support
+      tab.setAttribute('tabindex', '0');
+      tab.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          boundClickHandler(e);
         }
-        
-        // Update active states
-        tabs.forEach(t => t.classList.remove('active'));
-        contents.forEach(c => c.classList.remove('active'));
-        
-        tab.classList.add('active');
-        const targetContent = document.getElementById(targetTab);
-        
-        if (targetContent) {
-          targetContent.classList.add('active');
-          console.log(`✅ Switched to tab: ${targetTab}`);
-        } else {
-          console.error(`❌ Target content not found: ${targetTab}`);
-        }
+      });
+    });
+
+    console.log('✅ Enhanced tab navigation setup complete');
+  }
+
+  /**
+   * Handle tab click events
+   */
+  handleTabClick(event) {
+    event.preventDefault();
+    
+    const clickedTab = event.currentTarget;
+    const targetTab = clickedTab.dataset.tab;
+    
+    console.log(`🎯 Tab clicked: ${targetTab}`);
+    
+    if (!targetTab) {
+      console.error('❌ Tab missing data-tab attribute:', clickedTab);
+      return;
+    }
+    
+    // Don't do anything if already active
+    if (clickedTab.classList.contains('active')) {
+      console.log('📝 Tab already active, skipping');
+      return;
+    }
+    
+    try {
+      // Update active states
+      const allTabs = document.querySelectorAll('.nav-tab');
+      const allContents = document.querySelectorAll('.tab-content');
+      
+      allTabs.forEach(t => t.classList.remove('active'));
+      allContents.forEach(c => c.classList.remove('active'));
+      
+      clickedTab.classList.add('active');
+      const targetContent = document.getElementById(targetTab);
+      
+      if (targetContent) {
+        targetContent.classList.add('active');
+        console.log(`✅ Switched to tab: ${targetTab}`);
         
         // Update state and load tab-specific content
         this.state.currentTab = targetTab;
         this.loadTabContent(targetTab);
-      });
-    });
-
-    console.log('✅ Tab navigation setup complete');
+        
+        // Analytics/tracking
+        if (window.gtag) {
+          window.gtag('event', 'tab_switch', {
+            tab_name: targetTab
+          });
+        }
+        
+      } else {
+        console.error(`❌ Target content not found: ${targetTab}`);
+        // Re-activate previous tab
+        allTabs.forEach(t => {
+          if (t.dataset.tab === this.state.currentTab) {
+            t.classList.add('active');
+          }
+        });
+        allContents.forEach(c => {
+          if (c.id === this.state.currentTab) {
+            c.classList.add('active');
+          }
+        });
+      }
+      
+    } catch (error) {
+      console.error('❌ Error handling tab click:', error);
+    }
   }
 
   /**
@@ -222,7 +348,9 @@ class PekkasPokalApp {
         // Render filtered achievements
         const category = e.target.dataset.category;
         console.log(`Achievement filter: ${category}`);
-        this.modules.uiComponents.renderAchievementsGrid(category);
+        if (this.modules.uiComponents) {
+          this.modules.uiComponents.renderAchievementsGrid(category);
+        }
       }
     });
   }
@@ -237,12 +365,15 @@ class PekkasPokalApp {
       // Show loading state
       this.showLoading();
       
-      // Load CSV data
+      // Load CSV data with detailed logging
+      console.log('🔄 Starting CSV data load...');
       this.state.competitionData = await this.modules.dataManager.loadCSVData();
       
       if (!this.state.competitionData || !this.state.competitionData.competitions) {
         throw new Error('Invalid data structure received');
       }
+      
+      console.log(`📊 CSV data loaded: ${this.state.competitionData.competitions.length} competitions, ${this.state.competitionData.participants.length} participants`);
       
       console.log('🏆 Calculating achievements...');
       
@@ -253,10 +384,12 @@ class PekkasPokalApp {
           this.state.competitionData.participants
         );
       
+      console.log('🏆 Achievements calculated');
+      
       // Populate filter options
       this.populateFilters();
       
-      console.log(`✅ Loaded ${this.state.competitionData.competitions.length} competitions and ${this.state.competitionData.participants.length} participants`);
+      console.log(`✅ Data loading complete - ${this.state.competitionData.competitions.length} competitions and ${this.state.competitionData.participants.length} participants`);
       
     } catch (error) {
       console.error('❌ Failed to load data:', error);
@@ -270,6 +403,8 @@ class PekkasPokalApp {
   populateFilters() {
     if (!this.state.competitionData) return;
     
+    console.log('🔄 Populating filters...');
+    
     // Competitor filter
     const competitorFilter = document.getElementById('competitor-filter');
     if (competitorFilter) {
@@ -280,6 +415,7 @@ class PekkasPokalApp {
         option.textContent = p.name;
         competitorFilter.appendChild(option);
       });
+      console.log(`✅ Populated competitor filter with ${this.state.competitionData.participants.length} participants`);
     }
 
     // Competition type filter
@@ -295,6 +431,7 @@ class PekkasPokalApp {
         option.textContent = type;
         typeFilter.appendChild(option);
       });
+      console.log(`✅ Populated competition type filter with ${competitionTypes.length} types`);
     }
   }
 
@@ -307,6 +444,8 @@ class PekkasPokalApp {
       return;
     }
 
+    console.log('🎨 Rendering application...');
+
     // Render dashboard by default
     this.loadTabContent('dashboard');
     
@@ -315,6 +454,8 @@ class PekkasPokalApp {
     
     // Hide loading state
     this.hideLoading();
+    
+    console.log('✅ Application render complete');
   }
 
   /**
@@ -561,6 +702,30 @@ class PekkasPokalApp {
   }
 
   /**
+   * Show debug information
+   */
+  showDebugInfo() {
+    const debugInfo = {
+      state: this.state,
+      modules: Object.keys(this.modules),
+      dataManager: this.modules.dataManager?.getDebugInfo(),
+      chartManager: this.modules.chartManager?.getStats(),
+      uiComponents: this.modules.uiComponents?.getStats()
+    };
+    
+    console.log('🐛 Debug Information:', debugInfo);
+    
+    // Show in UI as well
+    if (this.modules.uiComponents) {
+      this.modules.uiComponents.showToast(
+        '🐛 Debug info logged to console (Ctrl+Shift+I)', 
+        'info', 
+        5000
+      );
+    }
+  }
+
+  /**
    * Utility function to update element content
    */
   updateElement(id, content, property = 'textContent') {
@@ -580,6 +745,15 @@ class PekkasPokalApp {
     if (this.modules.chartManager) {
       this.modules.chartManager.cleanup();
     }
+    
+    // Clean up event listeners
+    const tabs = document.querySelectorAll('.nav-tab');
+    tabs.forEach(tab => {
+      if (tab._boundClickHandler) {
+        tab.removeEventListener('click', tab._boundClickHandler);
+        delete tab._boundClickHandler;
+      }
+    });
     
     // Clear timeouts
     if (this.resizeTimeout) {
@@ -602,23 +776,27 @@ class PekkasPokalApp {
   }
 }
 
-// Initialize application when DOM is ready
-let app;
-
+// Global initialization function
 function initializeApp() {
   console.log('🚀 Starting Pekkas Pokal application...');
   try {
-    app = new PekkasPokalApp();
-    window.PekkasPokalApp = app; // Make globally accessible
+    if (window.app) {
+      console.log('⚠️ App already exists, cleaning up...');
+      window.app.cleanup();
+    }
+    
+    window.app = new PekkasPokalApp();
+    window.PekkasPokalApp = window.app; // Make globally accessible
+    
+    return window.app;
   } catch (error) {
     console.error('❌ Failed to start application:', error);
+    throw error;
   }
 }
 
-// Initialize based on document state
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initializeApp);
-} else {
-  // DOM already loaded
-  initializeApp();
-}
+// Export for manual initialization
+window.initializeApp = initializeApp;
+
+// Export the class
+window.PekkasPokalApp = PekkasPokalApp;
