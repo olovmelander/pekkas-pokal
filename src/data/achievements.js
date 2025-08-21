@@ -77,6 +77,51 @@ const ACHIEVEMENT_DEFINITIONS = [
     rarity: 'common',
     points: 15
   },
+  {
+    id: 'full_house',
+    icon: '🃏',
+    name: 'Full House',
+    desc: 'Har tagit guld, silver och brons vid olika år',
+    category: 'medals',
+    rarity: 'rare',
+    points: 25
+  },
+  {
+    id: 'triple_crown_medals',
+    icon: '🎗️',
+    name: 'Triple Crown',
+    desc: 'Tre förstaplatser totalt',
+    category: 'medals',
+    rarity: 'epic',
+    points: 60
+  },
+  {
+    id: 'podium_regular',
+    icon: '🥉',
+    name: 'Pallräven',
+    desc: 'Topp 3 totalt fem olika år',
+    category: 'medals',
+    rarity: 'rare',
+    points: 30
+  },
+  {
+    id: 'rising_star',
+    icon: '🌠',
+    name: 'Stigande Stjärna',
+    desc: 'Tre år i rad bättre placering och avslutar med medalj',
+    category: 'medals',
+    rarity: 'epic',
+    points: 55
+  },
+  {
+    id: 'silver_streak',
+    icon: '🥈',
+    name: 'Silversvit',
+    desc: 'Två år i rad som tvåa',
+    category: 'medals',
+    rarity: 'rare',
+    points: 25
+  },
 
   // ===== STREAK ACHIEVEMENTS =====
   {
@@ -141,6 +186,42 @@ const ACHIEVEMENT_DEFINITIONS = [
     category: 'streaks',
     rarity: 'common',
     points: 5
+  },
+  {
+    id: 'consistent_competitor',
+    icon: '📅',
+    name: 'Konsistent Konkurrent',
+    desc: 'Topp 10 fem år i rad',
+    category: 'streaks',
+    rarity: 'rare',
+    points: 30
+  },
+  {
+    id: 'comeback_top3',
+    icon: '🔄',
+    name: 'Comeback Kid',
+    desc: 'Utanför topp 10 ett år, tillbaka på pallen nästa',
+    category: 'streaks',
+    rarity: 'epic',
+    points: 60
+  },
+  {
+    id: 'slow_burner',
+    icon: '🐢',
+    name: 'Slow Burner',
+    desc: 'Förbättrat placeringen fyra år i rad',
+    category: 'streaks',
+    rarity: 'epic',
+    points: 65
+  },
+  {
+    id: 'iron_competitor',
+    icon: '🪨',
+    name: 'Järnkompassen',
+    desc: 'Deltagit tio år i rad utan avbrott',
+    category: 'streaks',
+    rarity: 'legendary',
+    points: 120
   },
 
   // ===== SPECIAL ACHIEVEMENTS =====
@@ -215,6 +296,51 @@ const ACHIEVEMENT_DEFINITIONS = [
     category: 'special',
     rarity: 'rare',
     points: 30
+  },
+  {
+    id: 'rookie_sensation',
+    icon: '🚀',
+    name: 'Rookie Sensation',
+    desc: 'Topp 5 på första försöket',
+    category: 'special',
+    rarity: 'rare',
+    points: 30
+  },
+  {
+    id: 'late_bloomer',
+    icon: '🌸',
+    name: 'Senblomman',
+    desc: 'Första medaljen efter minst fem år',
+    category: 'special',
+    rarity: 'epic',
+    points: 50
+  },
+  {
+    id: 'dark_horse',
+    icon: '🐎',
+    name: 'Dark Horse',
+    desc: 'Från utanför topp 20 till topp 3 på ett år',
+    category: 'special',
+    rarity: 'legendary',
+    points: 150
+  },
+  {
+    id: 'tiebreaker',
+    icon: '🤝',
+    name: 'Delad Pott',
+    desc: 'Delat placering med annan spelare',
+    category: 'special',
+    rarity: 'common',
+    points: 10
+  },
+  {
+    id: 'passing_torch',
+    icon: '🕯️',
+    name: 'Fackelöverlämning',
+    desc: 'Familjemedlemmar topp 10 i följd',
+    category: 'special',
+    rarity: 'rare',
+    points: 35
   },
 
   // ===== FUN & FUNNY ACHIEVEMENTS =====
@@ -344,6 +470,51 @@ const ACHIEVEMENT_DEFINITIONS = [
     rarity: 'legendary',
     points: 80
   },
+  {
+    id: 'same_spot',
+    icon: '📍',
+    name: 'Mr./Ms. Consistency',
+    desc: 'Samma placering tre år i rad',
+    category: 'fun',
+    rarity: 'rare',
+    points: 25
+  },
+  {
+    id: 'edge_of_glory',
+    icon: '🪙',
+    name: 'Edge of Glory',
+    desc: 'Två fjärdeplatser innan första medaljen',
+    category: 'fun',
+    rarity: 'rare',
+    points: 30
+  },
+  {
+    id: 'runner_up_specialist',
+    icon: '🥈',
+    name: 'Andraplatsproffset',
+    desc: 'Fyra silver utan guld',
+    category: 'fun',
+    rarity: 'epic',
+    points: 60
+  },
+  {
+    id: 'bounced_back',
+    icon: '🔁',
+    name: 'Bounced Back',
+    desc: 'Från sista plats till mitten året efter',
+    category: 'fun',
+    rarity: 'rare',
+    points: 30
+  },
+  {
+    id: 'lucky_seven_anniversary',
+    icon: '🎰',
+    name: 'Lyckotalet Sju',
+    desc: 'Sjua exakt sju år efter debut',
+    category: 'fun',
+    rarity: 'rare',
+    points: 25
+  },
 
   // ===== LEGENDARY ACHIEVEMENTS =====
   {
@@ -400,6 +571,51 @@ const ACHIEVEMENT_DEFINITIONS = [
     rarity: 'legendary',
     points: 300
   },
+  {
+    id: 'decade_of_dominance',
+    icon: '🏅',
+    name: 'Decennium av Dominans',
+    desc: 'Topp 3 tio år i rad',
+    category: 'legendary',
+    rarity: 'legendary',
+    points: 300
+  },
+  {
+    id: 'record_breaker',
+    icon: '📈',
+    name: 'Record Breaker',
+    desc: 'Flest förstaplatser någonsin',
+    category: 'legendary',
+    rarity: 'mythic',
+    points: 400
+  },
+  {
+    id: 'pioneer',
+    icon: '🚩',
+    name: 'Pionjär',
+    desc: 'Vann första tävlingen och tävlar än 10 år senare',
+    category: 'legendary',
+    rarity: 'legendary',
+    points: 250
+  },
+  {
+    id: 'legacy_builder',
+    icon: '🏛️',
+    name: 'Legacy Builder',
+    desc: 'Pallen i tre olika decennier',
+    category: 'legendary',
+    rarity: 'legendary',
+    points: 260
+  },
+  {
+    id: 'two_time_champion',
+    icon: '2️⃣',
+    name: 'Tvåfaldig Mästare',
+    desc: 'Vinner igen efter minst fem års uppehåll',
+    category: 'legendary',
+    rarity: 'legendary',
+    points: 180
+  },
 
   // ===== MYTHIC ACHIEVEMENTS =====
   {
@@ -446,6 +662,51 @@ const ACHIEVEMENT_DEFINITIONS = [
     category: 'mythic',
     rarity: 'mythic',
     points: 500
+  },
+  {
+    id: 'immortal_champion',
+    icon: '🗿',
+    name: 'Odödlig Mästare',
+    desc: 'Vinner varje gång man deltar (minst 3 ggr)',
+    category: 'mythic',
+    rarity: 'mythic',
+    points: 700
+  },
+  {
+    id: 'first_place_five',
+    icon: '🔥',
+    name: 'Untouchable',
+    desc: 'Förstaplats fem år i rad',
+    category: 'mythic',
+    rarity: 'mythic',
+    points: 900
+  },
+  {
+    id: 'timeless_wonder',
+    icon: '⏳',
+    name: 'Tidlöst Under',
+    desc: 'Topp 10 i femton olika år',
+    category: 'mythic',
+    rarity: 'mythic',
+    points: 600
+  },
+  {
+    id: 'mythic_comeback',
+    icon: '🔁',
+    name: 'Mytisk Comeback',
+    desc: 'Vinner igen efter tio år utan seger',
+    category: 'mythic',
+    rarity: 'mythic',
+    points: 650
+  },
+  {
+    id: 'era_definer',
+    icon: '📜',
+    name: 'Eradefinierare',
+    desc: 'Fler titlar än någon annan genom historien',
+    category: 'mythic',
+    rarity: 'mythic',
+    points: 800
   }
 ];
 
