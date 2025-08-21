@@ -546,32 +546,65 @@
   }
 }
 
+/* Placement heatmap adjustments */
+@media (max-width: 640px) {
+  .heatmap-table th,
+  .heatmap-table td {
+    padding: var(--spacing-xs);
+    font-size: var(--text-xs);
+  }
+}
+
 /* ===== UTILITIES FOR RESPONSIVE DESIGN ===== */
 
 /* Hide/show at breakpoints */
-.hide-xs { display: none; }
-.hide-sm { display: block; }
-.hide-md { display: block; }
-.hide-lg { display: block; }
+.hide-xs {
+  display: none;
+}
+.hide-sm {
+  display: block;
+}
+.hide-md {
+  display: block;
+}
+.hide-lg {
+  display: block;
+}
 
 @media (min-width: 481px) {
-  .hide-xs { display: block; }
-  .show-xs { display: none; }
+  .hide-xs {
+    display: block;
+  }
+  .show-xs {
+    display: none;
+  }
 }
 
 @media (min-width: 641px) {
-  .hide-sm { display: none; }
-  .show-sm { display: block; }
+  .hide-sm {
+    display: none;
+  }
+  .show-sm {
+    display: block;
+  }
 }
 
 @media (min-width: 769px) {
-  .hide-md { display: none; }
-  .show-md { display: block; }
+  .hide-md {
+    display: none;
+  }
+  .show-md {
+    display: block;
+  }
 }
 
 @media (min-width: 1025px) {
-  .hide-lg { display: none; }
-  .show-lg { display: block; }
+  .hide-lg {
+    display: none;
+  }
+  .show-lg {
+    display: block;
+  }
 }
 
 /* Responsive text sizes */
