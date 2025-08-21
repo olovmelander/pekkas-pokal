@@ -111,9 +111,8 @@ sw-*.js.map
 *.sqlite
 *.sqlite3
 
-# Package files
-package-lock.json
-yarn.lock
+# REMOVED package-lock.json and yarn.lock from gitignore
+# These should be committed for reproducible builds
 
 # User uploaded content (if any in future)
 uploads/
