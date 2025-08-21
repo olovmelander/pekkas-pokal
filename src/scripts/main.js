@@ -67,24 +67,51 @@ class PekkasPokalApp {
   async initializeModules() {
     console.log('📦 Initializing modules...');
     
-    // Initialize modules with fallbacks
+    // Initialize modules with safe fallbacks
     try {
-      this.modules.dataManager = typeof DataManager !== 'undefined' ? new DataManager() : null;
-      this.modules.achievementEngine = typeof AchievementEngine !== 'undefined' ? new AchievementEngine() : null;
-      this.modules.chartManager = typeof ChartManager !== 'undefined' ? new ChartManager() : null;
-      this.modules.uiComponents = typeof UIComponents !== 'undefined' ? new UIComponents() : null;
-      this.modules.statistics = typeof Statistics !== 'undefined' ? new Statistics() : null;
-      this.modules.filterManager = typeof FilterManager !== 'undefined' ? new FilterManager() : null;
-      
-      // Check critical modules
-      if (!this.modules.dataManager) {
-        throw new Error('DataManager not available');
+      // Critical module - DataManager
+      if (typeof DataManager !== 'undefined') {
+        this.modules.dataManager = new DataManager();
+        console.log('✅ DataManager initialized');
+      } else {
+        // Create a minimal DataManager if missing
+        console.warn('DataManager missing, creating minimal version');
+        this.modules.dataManager = {
+          loadCSVData: () => this.getEmbeddedData(),
+          processData: (data, headers) => this.getEmbeddedData()
+        };
       }
       
-      console.log('📦 All modules initialized');
+      // Optional modules - create safely
+      if (typeof AchievementEngine !== 'undefined') {
+        this.modules.achievementEngine = new AchievementEngine();
+        console.log('✅ AchievementEngine initialized');
+      }
+      
+      if (typeof ChartManager !== 'undefined' && typeof Chart !== 'undefined') {
+        this.modules.chartManager = new ChartManager();
+        console.log('✅ ChartManager initialized');
+      }
+      
+      if (typeof UIComponents !== 'undefined') {
+        this.modules.uiComponents = new UIComponents();
+        console.log('✅ UIComponents initialized');
+      }
+      
+      if (typeof Statistics !== 'undefined') {
+        this.modules.statistics = new Statistics();
+        console.log('✅ Statistics initialized');
+      }
+      
+      if (typeof FilterManager !== 'undefined') {
+        this.modules.filterManager = new FilterManager();
+        console.log('✅ FilterManager initialized');
+      }
+      
+      console.log('📦 Module initialization complete');
     } catch (error) {
-      console.error('❌ Module initialization failed:', error);
-      throw error;
+      console.error('⚠️ Non-critical module initialization failed:', error);
+      // Continue anyway - the app can work with reduced functionality
     }
   }
 
@@ -193,26 +220,35 @@ class PekkasPokalApp {
     try {
       console.log('📊 Loading competition data...');
       
-      if (!this.modules.dataManager) {
-        throw new Error('DataManager not initialized');
+      if (this.modules.dataManager && this.modules.dataManager.loadCSVData) {
+        // Try to load via DataManager
+        this.state.competitionData = await this.modules.dataManager.loadCSVData();
+      } else {
+        // Use embedded data directly
+        console.log('Using embedded data directly');
+        this.state.competitionData = this.getEmbeddedData();
       }
       
-      // Load CSV data
-      this.state.competitionData = await this.modules.dataManager.loadCSVData();
-      
       if (!this.state.competitionData || !this.state.competitionData.competitions) {
-        throw new Error('Invalid data structure received');
+        throw new Error('Invalid data structure');
       }
       
       console.log(`📊 Data loaded: ${this.state.competitionData.competitions.length} competitions`);
       
       // Calculate achievements if engine is available
-      if (this.modules.achievementEngine) {
-        this.state.competitionData.participantAchievements = 
-          this.modules.achievementEngine.calculateAllAchievements(
-            this.state.competitionData.competitions,
-            this.state.competitionData.participants
-          );
+      if (this.modules.achievementEngine && this.modules.achievementEngine.calculateAllAchievements) {
+        try {
+          this.state.competitionData.participantAchievements = 
+            this.modules.achievementEngine.calculateAllAchievements(
+              this.state.competitionData.competitions,
+              this.state.competitionData.participants
+            );
+        } catch (e) {
+          console.warn('Achievement calculation failed:', e);
+          this.state.competitionData.participantAchievements = {};
+        }
+      } else {
+        this.state.competitionData.participantAchievements = {};
       }
       
       // Populate filter options
@@ -220,8 +256,8 @@ class PekkasPokalApp {
       
     } catch (error) {
       console.error('❌ Failed to load data:', error);
-      // Use embedded data as fallback
-      console.log('Using embedded data as fallback...');
+      // Use embedded data as final fallback
+      console.log('Using embedded data as final fallback...');
       this.state.competitionData = this.getEmbeddedData();
       this.populateFilters();
     }
@@ -248,8 +284,62 @@ class PekkasPokalApp {
 2024-08-17,Fisketävling,Själevad,Tobias Lundqvist,Per Olsson,7,10,4,9,1,2,12,5,3,11,8,6,-
 2025-08-16,Flipper,Eskilstuna/Västerås,Viktor Jones,Mikael Hägglund,2,7,1,11,10,5,9,12,3,6,4,8,-`;
     
-    const parsed = Papa.parse(csvContent, { header: true, skipEmptyLines: true });
-    return this.modules.dataManager.processData(parsed.data, parsed.meta.fields);
+    // Simple parsing without dependencies
+    const lines = csvContent.split('\n');
+    const headers = lines[0].split(',');
+    const participantNames = headers.slice(5);
+    
+    const participants = participantNames.map((name, i) => ({
+      id: `p${i + 1}`,
+      name: name.trim(),
+      nickname: name.trim()
+    }));
+    
+    const competitions = [];
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(',');
+      const year = parseInt(values[0]);
+      const name = values[1];
+      
+      if (!year || !name) continue;
+      
+      const scores = {};
+      let winner = null;
+      
+      for (let j = 0; j < participantNames.length; j++) {
+        const score = values[j + 5];
+        if (score && score !== '-' && score !== '') {
+          const position = parseInt(score);
+          if (!isNaN(position)) {
+            scores[`p${j + 1}`] = position;
+            if (position === 1) {
+              winner = participantNames[j].trim();
+            }
+          }
+        }
+      }
+      
+      competitions.push({
+        id: `c${competitions.length + 1}`,
+        year: year,
+        name: name,
+        location: values[2] || '',
+        winner: winner,
+        scores: scores,
+        arranger3rd: values[3] || '',
+        arrangerSecondLast: values[4] || '',
+        participantCount: Object.keys(scores).length
+      });
+    }
+    
+    competitions.sort((a, b) => b.year - a.year);
+    
+    return {
+      participants,
+      competitions,
+      participantAchievements: {},
+      initialized: true
+    };
   }
 
   /**

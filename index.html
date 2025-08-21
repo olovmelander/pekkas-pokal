@@ -383,8 +383,17 @@
     console.log('✅ Built-in CSV parser ready');
   </script>
 
-  <!-- Load Chart.js -->
+  <!-- Load Chart.js with fallback -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    // Create a dummy Chart object if Chart.js fails to load
+    if (typeof Chart === 'undefined') {
+      console.warn('Chart.js failed to load, creating dummy');
+      window.Chart = function() { return { destroy: () => {}, update: () => {}, resize: () => {} }; };
+      window.Chart.register = () => {};
+      window.Chart.defaults = { font: {}, color: '', backgroundColor: '', borderColor: '' };
+    }
+  </script>
   
   <!-- Scripts (Load in order) -->
   <script src="src/data/achievements.js"></script>
@@ -402,43 +411,67 @@
     function updateLoadingStatus(message) {
       const statusEl = document.getElementById('loading-status');
       if (statusEl) statusEl.textContent = message;
+      console.log('Loading status:', message);
     }
     
-    // Initialize when DOM is ready
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initApp);
-    } else {
-      initApp();
-    }
-    
-    function initApp() {
-      updateLoadingStatus('Startar applikation...');
+    // Wait for all scripts to load
+    window.addEventListener('load', function() {
+      console.log('Window loaded, starting initialization...');
+      updateLoadingStatus('Initialiserar moduler...');
       
-      // Give scripts time to load
-      setTimeout(() => {
-        try {
-          if (typeof window.PekkasPokalApp === 'undefined') {
-            console.error('PekkasPokalApp class not found');
-            updateLoadingStatus('Väntar på skript...');
-            // Try again after a moment
-            setTimeout(initApp, 1000);
+      // Check if all required modules are loaded
+      const checkModules = () => {
+        const required = [
+          'PekkasPokalApp',
+          'DataManager', 
+          'ChartManager',
+          'UIComponents',
+          'Statistics',
+          'FilterManager',
+          'AchievementEngine'
+        ];
+        
+        const available = required.filter(module => typeof window[module] !== 'undefined');
+        const missing = required.filter(module => typeof window[module] === 'undefined');
+        
+        console.log('Available modules:', available);
+        
+        if (missing.length > 0) {
+          console.log('Missing modules:', missing);
+          
+          // If only non-critical modules are missing, continue anyway
+          if (missing.includes('PekkasPokalApp')) {
+            updateLoadingStatus('Väntar på huvudmodul...');
+            setTimeout(checkModules, 200);
             return;
           }
           
-          console.log('Creating PekkasPokalApp instance...');
+          // PekkasPokalApp is available, other modules are optional
+          console.log('Main module available, continuing with available modules');
+        }
+        
+        // Initialize app
+        updateLoadingStatus('Startar applikation...');
+        
+        try {
+          console.log('Creating app instance with available modules:', available);
           window.app = new PekkasPokalApp();
-          window.PekkasPokalApp = window.app;
+          console.log('App instance created successfully');
           
-          // Hide loading screen will be done by the app after successful init
+          // The app will hide the loading screen when ready
         } catch (error) {
-          console.error('Initialization error:', error);
-          updateLoadingStatus('Fel: ' + error.message);
-          // Don't retry on error, show reload button
+          console.error('Failed to create app:', error);
+          updateLoadingStatus('Fel vid start: ' + error.message);
+          
+          // Show error with reload button
           setTimeout(() => {
             document.getElementById('loading-screen').innerHTML = `
-              <div style="text-align: center; padding: 2rem;">
-                <h2>❌ Kunde inte ladda applikationen</h2>
+              <div style="text-align: center; padding: 2rem; color: white;">
+                <h2>❌ Kunde inte starta applikationen</h2>
                 <p style="margin: 1rem 0; color: #a8b2d1;">${error.message}</p>
+                <pre style="text-align: left; background: rgba(0,0,0,0.5); padding: 1rem; border-radius: 8px; margin: 1rem; font-size: 0.8rem;">
+${error.stack || 'No stack trace available'}
+                </pre>
                 <button onclick="window.location.reload()" style="
                   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                   color: white;
@@ -453,10 +486,18 @@
                 </button>
               </div>
             `;
-          }, 1000);
+          }, 500);
         }
-      }, 500);
-    }
+      };
+      
+      // Start checking for modules after a short delay
+      setTimeout(checkModules, 100);
+    });
+    
+    // Add global error handler for debugging
+    window.addEventListener('error', function(event) {
+      console.error('Global error:', event.error);
+    });
   </script>
 </body>
 </html>
