@@ -929,3 +929,32 @@
   outline: none;
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
+
+/* ===== PLACEMENT HEATMAP TABLE ===== */
+.table-container {
+  height: auto;
+  overflow-x: auto;
+}
+.heatmap-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.heatmap-table th,
+.heatmap-table td {
+  padding: var(--spacing-sm);
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.heatmap-cell[data-position="1"] {
+  background: var(--gold);
+  color: #000;
+}
+.heatmap-cell[data-position="2"] {
+  background: var(--silver);
+  color: #000;
+}
+.heatmap-cell[data-position="3"] {
+  background: var(--bronze);
+  color: #000;
+}
+/* default cell colors can be set inline via JS for other positions */
