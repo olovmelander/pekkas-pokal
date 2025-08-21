@@ -394,15 +394,19 @@ class ChartManager {
     const competitor = window.PekkasPokalApp?.getState()?.competitionData?.participants?.find(p => p.id === competitorId);
     const competitorName = competitor ? competitor.name : 'Okänd';
     
-    const years = [];
-    const positions = [];
-    
+    const data = [];
+
     filteredData.forEach(comp => {
       if (comp.scores[competitorId]) {
-        years.push(comp.year);
-        positions.push(comp.scores[competitorId]);
+        data.push({ year: comp.year, position: comp.scores[competitorId] });
       }
     });
+
+    // Sort chronologically so earliest year appears first on x-axis
+    data.sort((a, b) => a.year - b.year);
+
+    const years = data.map(d => d.year);
+    const positions = data.map(d => d.position);
 
     const options = {
       ...this.defaultOptions,
