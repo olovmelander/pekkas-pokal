@@ -38,15 +38,16 @@ jobs:
       - name: Copy CSV file to dist
         run: |
           cp competition-data.csv dist/competition-data.csv
-          # Also copy from public if it exists there
           if [ -f public/competition-data.csv ]; then
             cp public/competition-data.csv dist/competition-data.csv
           fi
-          
-      # --- NEW STEP ADDED HERE ---
-      - name: Replace index.html with root version
-        run: cp ./index.html ./dist/index.html
-      # ---------------------------
+
+      - name: Copy static assets
+        run: |
+          mkdir -p dist/src
+          cp -r src/styles dist/src/
+          cp -r src/scripts dist/src/
+          cp -r src/data dist/src/
           
       - name: Setup Pages
         uses: actions/configure-pages@v4
