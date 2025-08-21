@@ -32,17 +32,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          # Remove cache since we don't have lock file
           
       - name: Install dependencies
-        # Use npm install instead of npm ci
         run: npm install
         
       - name: Build project
         run: npm run build
         env:
-          # Add base path for GitHub Pages (replace 'your-repo-name' with actual repo name)
-          BASE_URL: /${{ github.event.repository.name }}/
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          NODE_ENV: production
           
       - name: Setup Pages
         uses: actions/configure-pages@v4
