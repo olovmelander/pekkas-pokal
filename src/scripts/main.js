@@ -187,7 +187,9 @@ class PekkasPokalApp {
             this.updateElement('competitor-filter', e.target.value, 'value');
             this.updateElement('achievement-competitor-filter', e.target.value, 'value');
           } else {
-            filterType = e.target.id.replace('-filter', '').replace('-', '');
+            filterType = e.target.id
+              .replace('-filter', '')
+              .replace(/-([a-z])/g, (_, c) => c.toUpperCase());
           }
 
           this.state.filters[filterType] = e.target.value;
