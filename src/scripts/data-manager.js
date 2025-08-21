@@ -27,38 +27,25 @@ class DataManager {
       let csvContent = null;
       
       // Method 1: Try fetch from the correct path
-      const possiblePaths = [
-        'competition-data.csv',
-        './competition-data.csv',
-        '/competition-data.csv',
-        'src/data/competition-data.csv',
-        '../competition-data.csv'
-      ];
-      
-      // If on GitHub Pages, adjust paths
-      if (window.location.hostname.includes('github.io')) {
-        const basePath = window.location.pathname.replace(/\/$/, '').replace(/\/[^\/]*$/, '');
-        possiblePaths.unshift(`${basePath}/competition-data.csv`);
-      }
-      
-      for (const path of possiblePaths) {
-        try {
-          console.log(`🔄 Trying fetch from: ${path}`);
-          const response = await fetch(path);
-          
-          if (response.ok) {
-            const text = await response.text();
-            // Validate it's actually CSV content
-            if (text && text.includes(',') && text.includes('År')) {
-              csvContent = text;
-              console.log(`✅ CSV loaded from: ${path}`);
-              break;
-            }
+      // Build a single, correct URL that works in dev AND on GitHub Pages
+      const csvUrl = new URL('competition-data.csv', document.baseURI).toString();
+
+      try {
+        console.log(`🔄 Fetching CSV from: ${csvUrl}`);
+        const response = await fetch(csvUrl, { cache: 'no-cache' });
+
+        if (response.ok) {
+          const text = await response.text();
+          // Validate it's actually CSV content (basic sanity check)
+          if (text && text.includes(',') && /(^|\n)\s*År\s*,/.test(text)) {
+            csvContent = text;
+            console.log(`✅ CSV loaded from: ${csvUrl}`);
           }
-        } catch (e) {
-          // Continue to next path
         }
+      } catch (e) {
+        // fall through to embedded fallback
       }
+
       
       // Method 2: Use embedded data as fallback
       if (!csvContent) {
