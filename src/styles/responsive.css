@@ -64,19 +64,25 @@
 
   /* Navigation adjustments */
   .nav-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
     padding: var(--spacing-sm);
     gap: var(--spacing-sm);
-    justify-content: flex-start;
+    justify-content: center;
+    overflow-x: visible;
   }
 
   .nav-tab {
-    padding: var(--spacing-xs) var(--spacing-sm);
-    font-size: var(--text-xs);
+    padding: var(--spacing-sm);
+    font-size: var(--text-sm);
+    text-align: center;
     min-width: auto;
   }
 
   .nav-tab span {
-    margin-right: var(--spacing-xs);
+    display: block;
+    margin: 0 0 var(--spacing-xs) 0;
+    font-size: var(--text-lg);
   }
 
   /* Grid system adjustments */
