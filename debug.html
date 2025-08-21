@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🛠️ Pekkas Pokal Debug Helper</title>
+    <style>
+        body {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            background: #0f0f23;
+            color: #a8b2d1;
+            padding: 20px;
+            margin: 0;
+        }
+        .debug-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: #1a1a2e;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #667eea;
+        }
+        .debug-header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #667eea;
+        }
+        .debug-section {
+            margin: 20px 0;
+            padding: 15px;
+            background: rgba(102, 126, 234, 0.1);
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        .debug-title {
+            color: #fbbf24;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .status-ok { color: #4ade80; }
+        .status-error { color: #f87171; }
+        .status-warning { color: #fbbf24; }
+        .log-item {
+            margin: 5px 0;
+            padding: 5px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 14px;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        pre {
+            background: #0f0f23;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 0.8em;
+        }
+    </style>
+</head>
+<body>
+    <div class="debug-container">
+        <div class="debug-header">
+            <h1>🛠️ Pekkas Pokal Debug Helper</h1>
+            <p>Diagnose and fix common issues</p>
+        </div>
+
+        <div class="debug-section">
+            <div class="debug-title">📋 System Status</div>
+            <div id="system-status">Checking...</div>
+        </div>
+
+        <div class="debug-section">
+            <div class="debug-title">📦 Module Loading</div>
+            <div id="module-status">Checking...</div>
+        </div>
+
+        <div class="debug-section">
+            <div class="debug-title">📊 Data Loading</div>
+            <div id="data-status">Checking...</div>
+            <button class="btn" onclick="testDataLoading()">🔄 Test Data Loading</button>
+        </div>
+
+        <div class="debug-section">
+            <div class="debug-title">🎛️ Event Listeners</div>
+            <div id="events-status">Checking...</div>
+            <button class="btn" onclick="testTabNavigation()">🧪 Test Tab Navigation</button>
+        </div>
+
+        <div class="debug-section">
+            <div class="debug-title">🔍 Console Logs</div>
+            <div id="console-logs"></div>
+            <button class="btn" onclick="clearLogs()">🗑️ Clear Logs</button>
+        </div>
+
+        <div class="debug-section">
+            <div class="debug-title">🚀 Quick Actions</div>
+            <button class="btn" onclick="runFullDiagnostic()">🩺 Full Diagnostic</button>
+            <button class="btn" onclick="downloadDebugReport()">📥 Download Report</button>
+            <button class="btn" onclick="window.location.href='index.html'">🏠 Go to Main App</button>
+        </div>
+    </div>
+
+    <script>
+        // Capture console logs
+        const originalLog = console.log;
+        const originalError = console.error;
+        const originalWarn = console.warn;
+        const logs = [];
+
+        function addLog(type, message) {
+            const timestamp = new Date().toLocaleTimeString();
+            logs.push({ timestamp, type, message });
+            updateConsoleDisplay();
+        }
+
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            addLog('log', args.join(' '));
+        };
+
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            addLog('error', args.join(' '));
+        };
+
+        console.warn = function(...args) {
+            originalWarn.apply(console, args);
+            addLog('warn', args.join(' '));
+        };
+
+        function updateConsoleDisplay() {
+            const container = document.getElementById('console-logs');
+            container.innerHTML = logs.slice(-10).map(log => `
+                <div class="log-item status-${log.type}">
+                    [${log.timestamp}] ${log.type.toUpperCase()}: ${log.message}
+                </div>
+            `).join('');
+        }
+
+        function clearLogs() {
+            logs.length = 0;
+            updateConsoleDisplay();
+        }
+
+        // System checks
+        function checkSystemStatus() {
+            const status = document.getElementById('system-status');
+            let html = '';
+
+            // Check basic browser features
+            const checks = [
+                { name: 'Local Storage', test: () => typeof Storage !== 'undefined', required: false },
+                { name: 'Fetch API', test: () => typeof fetch !== 'undefined', required: true },
+                { name: 'ES6 Support', test: () => typeof Promise !== 'undefined', required: true },
+                { name: 'Chart.js', test: () => typeof Chart !== 'undefined', required: true },
+                { name: 'Papa Parse', test: () => typeof Papa !== 'undefined', required: true }
+            ];
+
+            checks.forEach(check => {
+                const passed = check.test();
+                const statusClass = passed ? 'status-ok' : (check.required ? 'status-error' : 'status-warning');
+                const icon = passed ? '✅' : (check.required ? '❌' : '⚠️');
+                html += `<div class="${statusClass}">${icon} ${check.name}: ${passed ? 'OK' : 'MISSING'}</div>`;
+            });
+
+            status.innerHTML = html;
+        }
+
+        function checkModuleStatus() {
+            const status = document.getElementById('module-status');
+            let html = '';
+
+            const modules = [
+                'DataManager',
+                'AchievementEngine', 
+                'ChartManager',
+                'UIComponents',
+                'Statistics',
+                'FilterManager',
+                'ACHIEVEMENT_DEFINITIONS'
+            ];
+
+            modules.forEach(module => {
+                const exists = typeof window[module] !== 'undefined';
+                const statusClass = exists ? 'status-ok' : 'status-error';
+                const icon = exists ? '✅' : '❌';
+                html += `<div class="${statusClass}">${icon} ${module}: ${exists ? 'LOADED' : 'MISSING'}</div>`;
+            });
+
+            status.innerHTML = html;
+        }
+
+        async function testDataLoading() {
+            const status = document.getElementById('data-status');
+            status.innerHTML = '<div class="status-warning">🔄 Testing data loading...</div>';
+
+            try {
+                if (typeof DataManager === 'undefined') {
+                    throw new Error('DataManager not available');
+                }
+
+                const dataManager = new DataManager();
+                const data = await dataManager.loadCSVData();
+                
+                if (!data || !data.competitions || !data.participants) {
+                    throw new Error('Invalid data structure');
+                }
+
+                status.innerHTML = `
+                    <div class="status-ok">✅ Data loaded successfully</div>
+                    <div>📊 ${data.competitions.length} competitions found</div>
+                    <div>👥 ${data.participants.length} participants found</div>
+                `;
+            } catch (error) {
+                status.innerHTML = `<div class="status-error">❌ Data loading failed: ${error.message}</div>`;
+                console.error('Data loading test failed:', error);
+            }
+        }
+
+        function testTabNavigation() {
+            const status = document.getElementById('events-status');
+            let html = '';
+
+            // Check if tabs exist
+            const tabs = document.querySelectorAll('.nav-tab');
+            const contents = document.querySelectorAll('.tab-content');
+
+            html += `<div class="${tabs.length > 0 ? 'status-ok' : 'status-error'}">
+                ${tabs.length > 0 ? '✅' : '❌'} Found ${tabs.length} navigation tabs
+            </div>`;
+
+            html += `<div class="${contents.length > 0 ? 'status-ok' : 'status-error'}">
+                ${contents.length > 0 ? '✅' : '❌'} Found ${contents.length} content areas
+            </div>`;
+
+            // Check if main app is initialized
+            const appExists = typeof window.PekkasPokalApp !== 'undefined';
+            html += `<div class="${appExists ? 'status-ok' : 'status-error'}">
+                ${appExists ? '✅' : '❌'} Main application: ${appExists ? 'INITIALIZED' : 'NOT FOUND'}
+            </div>`;
+
+            status.innerHTML = html;
+        }
+
+        function runFullDiagnostic() {
+            console.log('🩺 Running full diagnostic...');
+            checkSystemStatus();
+            checkModuleStatus();
+            testDataLoading();
+            testTabNavigation();
+            console.log('✅ Diagnostic complete');
+        }
+
+        function downloadDebugReport() {
+            const report = {
+                timestamp: new Date().toISOString(),
+                userAgent: navigator.userAgent,
+                url: window.location.href,
+                logs: logs,
+                systemStatus: document.getElementById('system-status').textContent,
+                moduleStatus: document.getElementById('module-status').textContent,
+                dataStatus: document.getElementById('data-status').textContent,
+                eventsStatus: document.getElementById('events-status').textContent
+            };
+
+            const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `pekkas-pokal-debug-${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Initialize debug helper
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('🛠️ Debug helper loaded');
+            runFullDiagnostic();
+        });
+
+        // Auto-refresh status every 5 seconds
+        setInterval(() => {
+            if (document.visibilityState === 'visible') {
+                checkSystemStatus();
+                checkModuleStatus();
+            }
+        }, 5000);
+    </script>
+</body>
+</html>

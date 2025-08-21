@@ -1,9 +1,10 @@
 /**
- * Data Manager - Handles CSV loading and data processing
+ * Data Manager - Handles CSV loading and data processing (FIXED VERSION)
  */
 
 class DataManager {
   constructor() {
+    // Simplified filename without spaces issues
     this.csvFileName = 'Pekkas Pokal Marathontabell Marathontabell.csv';
     this.cache = new Map();
     this.cacheExpiry = 5 * 60 * 1000; // 5 minutes
@@ -14,6 +15,8 @@ class DataManager {
    */
   async loadCSVData() {
     try {
+      console.log('🔄 Starting CSV data load...');
+      
       // Check cache first
       const cached = this.getCachedData();
       if (cached) {
@@ -21,50 +24,56 @@ class DataManager {
         return cached;
       }
 
-      console.log('📥 Loading CSV data...');
       let csvContent = null;
       
       // Method 1: Try window.fs API if available (from artifacts environment)
       if (window.fs && window.fs.readFile) {
         try {
-          csvContent = await window.fs.readFile(this.csvFileName, { encoding: 'utf8' });
+          console.log('🔄 Trying window.fs.readFile...');
+          csvContent = await window.fs.readFile(`src/data/${this.csvFileName}`, { encoding: 'utf8' });
           console.log('✅ CSV loaded via fs.readFile');
         } catch (e) {
-          console.log('⚠️ fs.readFile not available');
+          console.log('⚠️ fs.readFile failed:', e.message);
         }
       }
       
-      // Method 2: Try fetch from relative path
+      // Method 2: Try fetch from multiple possible paths
       if (!csvContent) {
-        try {
-          const response = await fetch(`src/data/${this.csvFileName}`);
-          if (response.ok) {
-            csvContent = await response.text();
-            console.log('✅ CSV loaded via fetch');
+        const possiblePaths = [
+          `src/data/${this.csvFileName}`,
+          `./src/data/${this.csvFileName}`,
+          this.csvFileName,
+          `data/${this.csvFileName}`
+        ];
+        
+        for (const path of possiblePaths) {
+          try {
+            console.log(`🔄 Trying fetch from: ${path}`);
+            const response = await fetch(path);
+            if (response.ok) {
+              csvContent = await response.text();
+              console.log(`✅ CSV loaded via fetch from: ${path}`);
+              break;
+            } else {
+              console.log(`❌ Fetch failed for ${path}: ${response.status}`);
+            }
+          } catch (e) {
+            console.log(`❌ Fetch error for ${path}:`, e.message);
           }
-        } catch (e) {
-          console.log('⚠️ Fetch failed:', e.message);
         }
       }
       
-      // Method 3: Try fetch from current directory
-      if (!csvContent) {
-        try {
-          const response = await fetch(this.csvFileName);
-          if (response.ok) {
-            csvContent = await response.text();
-            console.log('✅ CSV loaded via fetch (current dir)');
-          }
-        } catch (e) {
-          console.log('⚠️ Direct fetch failed:', e.message);
-        }
-      }
-      
-      // Method 4: Use embedded data as fallback
+      // Method 3: Use embedded data as fallback
       if (!csvContent) {
         console.log('🔄 Using embedded CSV data as fallback');
         csvContent = this.getEmbeddedCSV();
       }
+      
+      if (!csvContent) {
+        throw new Error('No CSV content available from any source');
+      }
+      
+      console.log('📊 CSV content loaded, parsing...');
       
       // Parse CSV content
       const processedData = await this.parseCSVContent(csvContent);
@@ -72,6 +81,7 @@ class DataManager {
       // Cache the result
       this.setCachedData(processedData);
       
+      console.log('✅ CSV data loaded and processed successfully');
       return processedData;
       
     } catch (error) {
@@ -383,75 +393,6 @@ class DataManager {
 
   clearCache() {
     this.cache.clear();
-  }
-
-  /**
-   * Data validation
-   */
-  validateData(data) {
-    const errors = [];
-    
-    if (!data.participants || data.participants.length === 0) {
-      errors.push('No participants found');
-    }
-    
-    if (!data.competitions || data.competitions.length === 0) {
-      errors.push('No competitions found');
-    }
-    
-    // Check for duplicate participant IDs
-    const participantIds = data.participants.map(p => p.id);
-    const uniqueIds = new Set(participantIds);
-    if (uniqueIds.size !== participantIds.length) {
-      errors.push('Duplicate participant IDs found');
-    }
-    
-    // Check for valid years
-    const invalidYears = data.competitions.filter(c => 
-      !c.year || c.year < 2000 || c.year > new Date().getFullYear() + 1
-    );
-    if (invalidYears.length > 0) {
-      errors.push(`Invalid years found: ${invalidYears.map(c => c.year).join(', ')}`);
-    }
-    
-    if (errors.length > 0) {
-      console.warn('⚠️ Data validation warnings:', errors);
-    }
-    
-    return errors.length === 0;
-  }
-
-  /**
-   * Export data to CSV format
-   */
-  exportToCSV(data) {
-    // Implementation for exporting processed data back to CSV
-    // Useful for data backup or sharing
-    const headers = ['År', 'Tävling', 'Plats', 'Arrangör 3:a', 'Arrangör näst sist'];
-    const participantHeaders = data.participants.map(p => p.name);
-    const allHeaders = [...headers, ...participantHeaders];
-    
-    let csv = allHeaders.join(',') + '\n';
-    
-    data.competitions.forEach(comp => {
-      const row = [
-        comp.year,
-        comp.name,
-        comp.location,
-        comp.arranger3rd,
-        comp.arrangerSecondLast
-      ];
-      
-      // Add participant scores
-      data.participants.forEach(p => {
-        const score = comp.scores[p.id];
-        row.push(score || '-');
-      });
-      
-      csv += row.join(',') + '\n';
-    });
-    
-    return csv;
   }
 }
 

@@ -1,5 +1,5 @@
 /**
- * Pekkas Pokal - Main Application Controller
+ * Pekkas Pokal - Main Application Controller (FIXED VERSION)
  * Entry point and coordination between modules
  */
 
@@ -17,7 +17,11 @@ class PekkasPokalApp {
       }
     };
     
-    this.initialize();
+    // Add error handling for initialization
+    this.initialize().catch(error => {
+      console.error('❌ App initialization failed:', error);
+      this.showError('Failed to initialize application. Please refresh the page.');
+    });
   }
 
   /**
@@ -27,10 +31,13 @@ class PekkasPokalApp {
     try {
       console.log('🏆 Initializing Pekkas Pokal...');
       
+      // Wait for DOM to be ready
+      await this.waitForDOM();
+      
       // Initialize modules in dependency order
       await this.initializeModules();
       
-      // Setup event listeners
+      // Setup event listeners BEFORE loading data
       this.setupEventListeners();
       
       // Load data
@@ -45,13 +52,29 @@ class PekkasPokalApp {
     } catch (error) {
       console.error('❌ Failed to initialize Pekkas Pokal:', error);
       this.showError('Failed to initialize application. Please refresh the page.');
+      throw error;
     }
+  }
+
+  /**
+   * Wait for DOM to be ready
+   */
+  async waitForDOM() {
+    return new Promise((resolve) => {
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', resolve);
+      } else {
+        resolve();
+      }
+    });
   }
 
   /**
    * Initialize all modules
    */
   async initializeModules() {
+    console.log('📦 Initializing modules...');
+    
     // Check if modules are available
     const requiredModules = [
       'DataManager', 
@@ -83,7 +106,9 @@ class PekkasPokalApp {
    * Setup event listeners
    */
   setupEventListeners() {
-    // Tab navigation
+    console.log('🎛️ Setting up event listeners...');
+    
+    // Tab navigation - FIXED
     this.setupTabNavigation();
     
     // Filter controls
@@ -100,28 +125,56 @@ class PekkasPokalApp {
   }
 
   /**
-   * Setup tab navigation
+   * Setup tab navigation - FIXED VERSION
    */
   setupTabNavigation() {
+    console.log('🎯 Setting up tab navigation...');
+    
     const tabs = document.querySelectorAll('.nav-tab');
     const contents = document.querySelectorAll('.tab-content');
 
-    tabs.forEach(tab => {
-      tab.addEventListener('click', () => {
+    console.log(`Found ${tabs.length} tabs and ${contents.length} content areas`);
+
+    if (tabs.length === 0) {
+      console.error('❌ No tabs found! Check HTML structure.');
+      return;
+    }
+
+    tabs.forEach((tab, index) => {
+      console.log(`Setting up tab ${index + 1}: ${tab.dataset.tab}`);
+      
+      tab.addEventListener('click', (event) => {
+        event.preventDefault();
+        console.log(`🎯 Tab clicked: ${tab.dataset.tab}`);
+        
         const targetTab = tab.dataset.tab;
+        
+        if (!targetTab) {
+          console.error('❌ Tab missing data-tab attribute:', tab);
+          return;
+        }
         
         // Update active states
         tabs.forEach(t => t.classList.remove('active'));
         contents.forEach(c => c.classList.remove('active'));
         
         tab.classList.add('active');
-        document.getElementById(targetTab).classList.add('active');
+        const targetContent = document.getElementById(targetTab);
+        
+        if (targetContent) {
+          targetContent.classList.add('active');
+          console.log(`✅ Switched to tab: ${targetTab}`);
+        } else {
+          console.error(`❌ Target content not found: ${targetTab}`);
+        }
         
         // Update state and load tab-specific content
         this.state.currentTab = targetTab;
         this.loadTabContent(targetTab);
       });
     });
+
+    console.log('✅ Tab navigation setup complete');
   }
 
   /**
@@ -135,16 +188,23 @@ class PekkasPokalApp {
 
     // Filter change handlers
     [competitorFilter, timeframeFilter, competitionTypeFilter].forEach(filter => {
-      filter?.addEventListener('change', (e) => {
-        this.state.filters[e.target.id.replace('-filter', '')] = e.target.value;
-        this.applyFilters();
-      });
+      if (filter) {
+        filter.addEventListener('change', (e) => {
+          const filterType = e.target.id.replace('-filter', '').replace('-', '');
+          this.state.filters[filterType] = e.target.value;
+          console.log(`Filter changed: ${filterType} = ${e.target.value}`);
+          this.applyFilters();
+        });
+      }
     });
 
     // Reset filters
-    resetBtn?.addEventListener('click', () => {
-      this.resetFilters();
-    });
+    if (resetBtn) {
+      resetBtn.addEventListener('click', () => {
+        console.log('🔄 Resetting filters');
+        this.resetFilters();
+      });
+    }
   }
 
   /**
@@ -161,6 +221,7 @@ class PekkasPokalApp {
         
         // Render filtered achievements
         const category = e.target.dataset.category;
+        console.log(`Achievement filter: ${category}`);
         this.modules.uiComponents.renderAchievementsGrid(category);
       }
     });
@@ -173,8 +234,17 @@ class PekkasPokalApp {
     try {
       console.log('📊 Loading competition data...');
       
+      // Show loading state
+      this.showLoading();
+      
       // Load CSV data
       this.state.competitionData = await this.modules.dataManager.loadCSVData();
+      
+      if (!this.state.competitionData || !this.state.competitionData.competitions) {
+        throw new Error('Invalid data structure received');
+      }
+      
+      console.log('🏆 Calculating achievements...');
       
       // Calculate achievements
       this.state.competitionData.participantAchievements = 
@@ -186,10 +256,10 @@ class PekkasPokalApp {
       // Populate filter options
       this.populateFilters();
       
-      console.log(`✅ Loaded ${this.state.competitionData.competitions.length} competitions`);
+      console.log(`✅ Loaded ${this.state.competitionData.competitions.length} competitions and ${this.state.competitionData.participants.length} participants`);
       
     } catch (error) {
-      console.error('Failed to load data:', error);
+      console.error('❌ Failed to load data:', error);
       throw error;
     }
   }
@@ -198,6 +268,8 @@ class PekkasPokalApp {
    * Populate filter dropdowns
    */
   populateFilters() {
+    if (!this.state.competitionData) return;
+    
     // Competitor filter
     const competitorFilter = document.getElementById('competitor-filter');
     if (competitorFilter) {
@@ -240,27 +312,41 @@ class PekkasPokalApp {
     
     // Update year range display
     this.updateYearRange();
+    
+    // Hide loading state
+    this.hideLoading();
   }
 
   /**
    * Load content for specific tab
    */
   loadTabContent(tabName) {
-    if (!this.state.competitionData) return;
+    console.log(`📄 Loading content for tab: ${tabName}`);
+    
+    if (!this.state.competitionData) {
+      console.warn('No data available for tab content');
+      return;
+    }
 
-    switch (tabName) {
-      case 'dashboard':
-        this.loadDashboard();
-        break;
-      case 'medals':
-        this.loadMedalTally();
-        break;
-      case 'achievements':
-        this.loadAchievements();
-        break;
-      case 'statistics':
-        this.loadStatistics();
-        break;
+    try {
+      switch (tabName) {
+        case 'dashboard':
+          this.loadDashboard();
+          break;
+        case 'medals':
+          this.loadMedalTally();
+          break;
+        case 'achievements':
+          this.loadAchievements();
+          break;
+        case 'statistics':
+          this.loadStatistics();
+          break;
+        default:
+          console.warn(`Unknown tab: ${tabName}`);
+      }
+    } catch (error) {
+      console.error(`❌ Error loading ${tabName} content:`, error);
     }
   }
 
@@ -268,6 +354,7 @@ class PekkasPokalApp {
    * Load dashboard content
    */
   loadDashboard() {
+    console.log('📊 Loading dashboard...');
     const data = this.state.competitionData;
     
     // Update stats cards
@@ -286,27 +373,27 @@ class PekkasPokalApp {
   updateStatsCards(data) {
     // Total competitions
     const totalComps = data.competitions.length;
-    document.getElementById('total-competitions').textContent = totalComps;
-    document.getElementById('comp-trend').textContent = `${totalComps} totalt`;
+    this.updateElement('total-competitions', totalComps);
+    this.updateElement('comp-trend', `${totalComps} totalt`);
     
     // Total participants
     const totalParticipants = data.participants.length;
-    document.getElementById('total-participants').textContent = totalParticipants;
+    this.updateElement('total-participants', totalParticipants);
     
     // Calculate winner stats
     const winCounts = this.modules.statistics.calculateWinCounts(data.competitions);
     const topWinner = Object.entries(winCounts).sort((a, b) => b[1] - a[1])[0];
     
     if (topWinner) {
-      document.getElementById('most-wins').textContent = topWinner[0];
-      document.getElementById('wins-count').textContent = `${topWinner[1]} vinster`;
+      this.updateElement('most-wins', topWinner[0]);
+      this.updateElement('wins-count', `${topWinner[1]} vinster`);
     }
     
     // Latest winner
     const latestComp = data.competitions[0];
     if (latestComp && latestComp.winner) {
-      document.getElementById('current-champion').textContent = latestComp.winner;
-      document.getElementById('champ-comp').textContent = `${latestComp.year} ${latestComp.name}`;
+      this.updateElement('current-champion', latestComp.winner);
+      this.updateElement('champ-comp', `${latestComp.year} ${latestComp.name}`);
     }
   }
 
@@ -314,6 +401,7 @@ class PekkasPokalApp {
    * Load medal tally
    */
   loadMedalTally() {
+    console.log('🥇 Loading medal tally...');
     const data = this.state.competitionData;
     const medalCounts = this.modules.statistics.calculateMedalCounts(data);
     
@@ -328,6 +416,7 @@ class PekkasPokalApp {
    * Load achievements
    */
   loadAchievements() {
+    console.log('🏆 Loading achievements...');
     const data = this.state.competitionData;
     
     // Update achievement stats
@@ -344,6 +433,7 @@ class PekkasPokalApp {
    * Load statistics
    */
   loadStatistics() {
+    console.log('📈 Loading statistics...');
     const filteredData = this.modules.filterManager.applyFilters(
       this.state.competitionData,
       this.state.filters
@@ -384,9 +474,9 @@ class PekkasPokalApp {
     };
     
     // Update UI
-    document.getElementById('competitor-filter').value = 'all';
-    document.getElementById('timeframe-filter').value = 'all';
-    document.getElementById('competition-type-filter').value = 'all';
+    this.updateElement('competitor-filter', 'all', 'value');
+    this.updateElement('timeframe-filter', 'all', 'value');
+    this.updateElement('competition-type-filter', 'all', 'value');
     
     // Apply filters
     this.applyFilters();
@@ -402,10 +492,7 @@ class PekkasPokalApp {
       const minYear = Math.min(...years);
       const maxYear = Math.max(...years);
       
-      const yearRangeElement = document.getElementById('year-range');
-      if (yearRangeElement) {
-        yearRangeElement.textContent = `${minYear}-${maxYear}`;
-      }
+      this.updateElement('year-range', `${minYear}-${maxYear}`);
     }
   }
 
@@ -429,11 +516,21 @@ class PekkasPokalApp {
     const container = document.querySelector('.container');
     if (container) {
       container.innerHTML = `
-        <div class="loading">
+        <div style="display: flex; justify-content: center; align-items: center; min-height: 300px; flex-direction: column;">
           <div class="spinner"></div>
+          <div style="margin-top: 1rem; color: var(--text-secondary); font-size: 1.1rem;">
+            Laddar tävlingsdata...
+          </div>
         </div>
       `;
     }
+  }
+
+  /**
+   * Hide loading state
+   */
+  hideLoading() {
+    // Loading will be replaced by actual content
   }
 
   /**
@@ -445,12 +542,33 @@ class PekkasPokalApp {
       container.innerHTML = `
         <div style="text-align: center; padding: 2rem; color: var(--danger);">
           <h2>❌ Fel uppstod</h2>
-          <p>${message}</p>
-          <button onclick="window.location.reload()" class="btn btn-primary" style="margin-top: 1rem;">
+          <p style="margin: 1rem 0; color: var(--text-secondary);">${message}</p>
+          <button onclick="window.location.reload()" style="
+            background: var(--epic-gradient);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            margin-top: 1rem;
+          ">
             🔄 Ladda om sidan
           </button>
         </div>
       `;
+    }
+  }
+
+  /**
+   * Utility function to update element content
+   */
+  updateElement(id, content, property = 'textContent') {
+    const element = document.getElementById(id);
+    if (element) {
+      element[property] = content;
+    } else {
+      console.warn(`Element not found: ${id}`);
     }
   }
 
@@ -487,13 +605,20 @@ class PekkasPokalApp {
 // Initialize application when DOM is ready
 let app;
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => {
+function initializeApp() {
+  console.log('🚀 Starting Pekkas Pokal application...');
+  try {
     app = new PekkasPokalApp();
-  });
-} else {
-  app = new PekkasPokalApp();
+    window.PekkasPokalApp = app; // Make globally accessible
+  } catch (error) {
+    console.error('❌ Failed to start application:', error);
+  }
 }
 
-// Export for global access
-window.PekkasPokalApp = app;
+// Initialize based on document state
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initializeApp);
+} else {
+  // DOM already loaded
+  initializeApp();
+}
