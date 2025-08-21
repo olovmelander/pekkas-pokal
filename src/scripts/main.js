@@ -171,15 +171,25 @@ class PekkasPokalApp {
    */
   setupFilterControls() {
     const competitorFilter = document.getElementById('competitor-filter');
+    const achievementCompetitorFilter = document.getElementById('achievement-competitor-filter');
     const timeframeFilter = document.getElementById('timeframe-filter');
     const competitionTypeFilter = document.getElementById('competition-type-filter');
     const resetBtn = document.getElementById('reset-filters-btn');
 
     // Filter change handlers
-    [competitorFilter, timeframeFilter, competitionTypeFilter].forEach(filter => {
+    [competitorFilter, achievementCompetitorFilter, timeframeFilter, competitionTypeFilter].forEach(filter => {
       if (filter) {
         filter.addEventListener('change', (e) => {
-          const filterType = e.target.id.replace('-filter', '').replace('-', '');
+          let filterType;
+          if (e.target.id === 'competitor-filter' || e.target.id === 'achievement-competitor-filter') {
+            filterType = 'competitor';
+            // Keep competitor filters in sync
+            this.updateElement('competitor-filter', e.target.value, 'value');
+            this.updateElement('achievement-competitor-filter', e.target.value, 'value');
+          } else {
+            filterType = e.target.id.replace('-filter', '').replace('-', '');
+          }
+
           this.state.filters[filterType] = e.target.value;
           this.applyFilters();
         });
@@ -348,17 +358,21 @@ class PekkasPokalApp {
   populateFilters() {
     if (!this.state.competitionData) return;
     
-    // Competitor filter
+    // Competitor filters
     const competitorFilter = document.getElementById('competitor-filter');
-    if (competitorFilter) {
-      competitorFilter.innerHTML = '<option value="all">Alla Deltagare</option>';
-      this.state.competitionData.participants.forEach(p => {
-        const option = document.createElement('option');
-        option.value = p.id;
-        option.textContent = p.name;
-        competitorFilter.appendChild(option);
-      });
-    }
+    const achievementCompetitorFilter = document.getElementById('achievement-competitor-filter');
+    [competitorFilter, achievementCompetitorFilter].forEach(filter => {
+      if (filter) {
+        filter.innerHTML = '<option value="all">Alla Deltagare</option>';
+      }
+    });
+    this.state.competitionData.participants.forEach(p => {
+      const option = document.createElement('option');
+      option.value = p.id;
+      option.textContent = p.name;
+      if (competitorFilter) competitorFilter.appendChild(option.cloneNode(true));
+      if (achievementCompetitorFilter) achievementCompetitorFilter.appendChild(option);
+    });
 
     // Competition type filter
     const competitionTypes = [...new Set(
@@ -683,11 +697,11 @@ class PekkasPokalApp {
    */
   loadAchievements() {
     console.log('🏆 Loading achievements...');
-    const data = this.state.competitionData;
-    
-    if (this.modules.uiComponents && data.participantAchievements) {
-      this.modules.uiComponents.updateAchievementStats(data.participantAchievements);
-      this.modules.uiComponents.renderParticipantCards(data.participantAchievements);
+    const participantAchievements = this.getFilteredParticipantAchievements();
+
+    if (this.modules.uiComponents) {
+      this.modules.uiComponents.updateAchievementStats(participantAchievements);
+      this.modules.uiComponents.renderParticipantCards(participantAchievements);
       this.modules.uiComponents.renderAchievementsGrid('all');
     }
   }
@@ -717,6 +731,8 @@ class PekkasPokalApp {
   applyFilters() {
     if (this.state.currentTab === 'statistics') {
       this.loadStatistics();
+    } else if (this.state.currentTab === 'achievements') {
+      this.loadAchievements();
     }
   }
 
@@ -729,9 +745,10 @@ class PekkasPokalApp {
       timeframe: 'all',
       competitionType: 'all'
     };
-    
+
     // Update UI
     this.updateElement('competitor-filter', 'all', 'value');
+    this.updateElement('achievement-competitor-filter', 'all', 'value');
     this.updateElement('timeframe-filter', 'all', 'value');
     this.updateElement('competition-type-filter', 'all', 'value');
     
@@ -799,6 +816,24 @@ class PekkasPokalApp {
     if (element) {
       element[property] = content;
     }
+  }
+
+  /**
+   * Get participant achievements filtered by current competitor
+   */
+  getFilteredParticipantAchievements() {
+    const data = this.state.competitionData;
+    if (!data || !data.participantAchievements) return {};
+
+    const selected = this.state.filters.competitor;
+    if (selected === 'all') return data.participantAchievements;
+
+    const participant = data.participants.find(p => p.id === selected);
+    if (participant) {
+      return { [participant.name]: data.participantAchievements[participant.name] || [] };
+    }
+
+    return {};
   }
 
   /**
