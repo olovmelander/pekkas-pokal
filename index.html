@@ -16,10 +16,6 @@
   <link rel="stylesheet" href="src/styles/layout.css">
   <link rel="stylesheet" href="src/styles/animations.css">
   <link rel="stylesheet" href="src/styles/responsive.css">
-  
-  <!-- External Dependencies -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.4.1/papaparse.min.js"></script>
 </head>
 <body>
   <!-- Loading Screen -->
@@ -29,18 +25,89 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background: var(--bg-dark);
+    background: #0f0f23;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
     z-index: 9999;
+    color: white;
+    font-family: Arial, sans-serif;
   ">
-    <div class="spinner"></div>
-    <div style="margin-top: 1rem; color: var(--text-secondary); font-size: 1.1rem;">
-      Laddar Pekkas Pokal...
+    <div style="
+      width: 50px;
+      height: 50px;
+      border: 3px solid rgba(102, 126, 234, 0.3);
+      border-top-color: #667eea;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 1rem;
+    "></div>
+    
+    <div style="font-size: 1.2rem; margin-bottom: 1rem;">
+      🏆 Laddar Pekkas Pokal...
+    </div>
+    
+    <div id="loading-status" style="font-size: 0.9rem; color: #a8b2d1;">
+      Initialiserar...
     </div>
   </div>
+
+  <style>
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    /* Basic fallback styles */
+    :root {
+      --bg-dark: #0f0f23;
+      --bg-card: #1a1a2e;
+      --text-primary: #ffffff;
+      --text-secondary: #a8b2d1;
+      --accent: #667eea;
+      --success: #4ade80;
+      --danger: #f87171;
+      --spacing-sm: 0.5rem;
+      --spacing-md: 1rem;
+      --spacing-lg: 1.5rem;
+      --spacing-xl: 2rem;
+      --radius-md: 12px;
+      --transition-normal: 0.3s ease;
+    }
+    
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg-dark);
+      color: var(--text-primary);
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+    }
+    
+    .nav-tab {
+      padding: var(--spacing-sm) var(--spacing-lg);
+      background: transparent;
+      color: var(--text-secondary);
+      border: 2px solid transparent;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: all var(--transition-normal);
+      font-weight: 600;
+    }
+    
+    .nav-tab.active {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    
+    .tab-content {
+      display: none;
+    }
+    
+    .tab-content.active {
+      display: block;
+    }
+  </style>
 
   <!-- Header -->
   <header class="header">
@@ -242,115 +309,164 @@
     </div>
   </div>
 
-  <!-- Scripts (Load in order) -->
+  <!-- Built-in Papa Parse Alternative -->
   <script>
-    // Debug function to check if all dependencies are loaded
-    function checkDependencies() {
-      const deps = {
-        'Chart.js': typeof Chart !== 'undefined',
-        'Papa Parse': typeof Papa !== 'undefined'
-      };
+    // Native CSV parser that replaces Papa Parse
+    window.Papa = {
+      parse: function(csvText, options = {}) {
+        const lines = csvText.trim().split(/\r?\n/);
+        const result = { data: [], meta: { fields: [] }, errors: [] };
+        
+        if (lines.length === 0) {
+          return result;
+        }
+        
+        // Parse header
+        const headerLine = lines[0];
+        const headers = this.parseLine(headerLine);
+        
+        if (options.trimHeaders) {
+          headers.forEach((h, i) => headers[i] = h.trim());
+        }
+        
+        result.meta.fields = headers;
+        
+        // Parse data lines
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line && options.skipEmptyLines) continue;
+          
+          const values = this.parseLine(line);
+          
+          if (options.header) {
+            const row = {};
+            headers.forEach((header, index) => {
+              row[header] = values[index] || '';
+            });
+            result.data.push(row);
+          } else {
+            result.data.push(values);
+          }
+        }
+        
+        // Call complete callback if provided
+        if (options.complete && typeof options.complete === 'function') {
+          setTimeout(() => options.complete(result), 0);
+        }
+        
+        return result;
+      },
       
-      console.log('📦 Dependency Check:', deps);
-      
-      const allLoaded = Object.values(deps).every(loaded => loaded);
-      if (!allLoaded) {
-        console.error('❌ Missing dependencies:', Object.entries(deps).filter(([name, loaded]) => !loaded));
-        return false;
+      parseLine: function(line) {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+        
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          
+          if (char === '"') {
+            inQuotes = !inQuotes;
+          } else if (char === ',' && !inQuotes) {
+            result.push(current.trim());
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+        
+        result.push(current.trim());
+        return result;
       }
-      
-      console.log('✅ All dependencies loaded');
-      return true;
-    }
+    };
+    
+    console.log('✅ Built-in CSV parser ready');
+  </script>
 
-    // Enhanced initialization function
-    function initializeAppSafely() {
-      console.log('🚀 Starting safe app initialization...');
+  <!-- Load Chart.js with fallback -->
+  <script>
+    function updateLoadingStatus(message) {
+      const statusEl = document.getElementById('loading-status');
+      if (statusEl) statusEl.textContent = message;
+    }
+    
+    updateLoadingStatus('Laddar Chart.js...');
+    
+    // Try to load Chart.js
+    function loadChartJS() {
+      return new Promise((resolve) => {
+        if (typeof Chart !== 'undefined') {
+          resolve();
+          return;
+        }
+        
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+        script.onload = () => {
+          console.log('✅ Chart.js loaded');
+          resolve();
+        };
+        script.onerror = () => {
+          console.log('⚠️ Chart.js failed to load, charts will be disabled');
+          // Create dummy Chart object
+          window.Chart = { register: () => {}, defaults: { font: {}, color: '', backgroundColor: '', borderColor: '' } };
+          resolve();
+        };
+        document.head.appendChild(script);
+      });
+    }
+    
+    // Initialize app without waiting for Papa Parse
+    async function initializeApp() {
+      updateLoadingStatus('Laddar Chart.js...');
+      await loadChartJS();
       
-      // Check dependencies first
-      if (!checkDependencies()) {
-        setTimeout(initializeAppSafely, 500); // Retry in 500ms
-        return;
-      }
+      updateLoadingStatus('Laddar moduler...');
       
-      // Check if all modules are loaded
-      const requiredModules = [
-        'ACHIEVEMENT_DEFINITIONS',
-        'Utils', 
-        'DataManager', 
-        'AchievementEngine', 
-        'ChartManager', 
-        'UIComponents', 
-        'Statistics', 
-        'FilterManager'
-      ];
+      // Wait a bit for scripts to load
+      await new Promise(resolve => setTimeout(resolve, 500));
       
-      const moduleStatus = requiredModules.map(module => ({
-        name: module,
-        loaded: typeof window[module] !== 'undefined'
-      }));
+      updateLoadingStatus('Startar applikation...');
       
-      console.log('📦 Module Status:', moduleStatus);
-      
-      const allModulesLoaded = moduleStatus.every(m => m.loaded);
-      if (!allModulesLoaded) {
-        console.log('⏳ Waiting for modules to load...');
-        setTimeout(initializeAppSafely, 500); // Retry in 500ms
-        return;
-      }
-      
-      // Initialize the app
       try {
-        console.log('🏆 All modules loaded, initializing app...');
-        window.app = new PekkasPokalApp();
-        window.PekkasPokalApp = window.app;
-        
-        // Hide loading screen
-        const loadingScreen = document.getElementById('loading-screen');
-        if (loadingScreen) {
-          loadingScreen.style.opacity = '0';
+        if (typeof window.PekkasPokalApp !== 'undefined') {
+          window.app = new PekkasPokalApp();
+          window.PekkasPokalApp = window.app;
+          
+          // Hide loading screen after successful init
           setTimeout(() => {
-            loadingScreen.style.display = 'none';
-          }, 500);
+            document.getElementById('loading-screen').style.display = 'none';
+          }, 1000);
+        } else {
+          throw new Error('PekkasPokalApp not found');
         }
-        
-        console.log('✅ App initialized successfully!');
       } catch (error) {
-        console.error('❌ App initialization failed:', error);
-        // Show error message
-        const loadingScreen = document.getElementById('loading-screen');
-        if (loadingScreen) {
-          loadingScreen.innerHTML = `
-            <div style="text-align: center; color: var(--danger);">
-              <h2>❌ Initialization Error</h2>
-              <p>Failed to start the application. Check console for details.</p>
-              <button onclick="window.location.reload()" style="
-                background: var(--epic-gradient);
-                color: white;
-                border: none;
-                padding: 0.75rem 1.5rem;
-                border-radius: 8px;
-                cursor: pointer;
-                font-size: 1rem;
-                margin-top: 1rem;
-              ">
-                🔄 Reload Page
-              </button>
-            </div>
-          `;
-        }
+        console.error('App initialization failed:', error);
+        updateLoadingStatus('Fel vid laddning - försöker igen...');
+        
+        // Try again after 2 seconds
+        setTimeout(() => {
+          if (typeof window.PekkasPokalApp !== 'undefined') {
+            try {
+              window.app = new PekkasPokalApp();
+              document.getElementById('loading-screen').style.display = 'none';
+            } catch (e) {
+              updateLoadingStatus('Kan inte ladda appen. Uppdatera sidan.');
+            }
+          }
+        }, 2000);
       }
     }
-
-    // Start initialization when DOM is ready
+    
+    // Start when DOM is ready
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initializeAppSafely);
+      document.addEventListener('DOMContentLoaded', initializeApp);
     } else {
-      // DOM already loaded, start immediately
-      initializeAppSafely();
+      initializeApp();
     }
   </script>
   
+  <!-- Scripts (Load in order) -->
   <script src="src/data/achievements.js"></script>
   <script src="src/scripts/utils.js"></script>
   <script src="src/scripts/data-manager.js"></script>
