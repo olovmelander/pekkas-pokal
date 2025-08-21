@@ -1,0 +1,73 @@
+{
+  "name": "pekkas-pokal",
+  "version": "2.0.0",
+  "description": "Årlig tävling för vänner med omfattande statistik och datahantering",
+  "main": "public/index.html",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "serve": "python -m http.server 8000 --directory public",
+    "serve:node": "npx http-server public -p 8000 -c-1",
+    "lint": "eslint src --ext .js",
+    "lint:fix": "eslint src --ext .js --fix",
+    "format": "prettier --write src/**/*.{js,css,html}",
+    "validate": "npm run lint && npm run format",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "clean": "rm -rf dist",
+    "deploy": "npm run build && npm run deploy:gh-pages",
+    "deploy:gh-pages": "gh-pages -d dist"
+  },
+  "keywords": [
+    "competition",
+    "statistics",
+    "charts",
+    "pwa",
+    "javascript",
+    "achievements"
+  ],
+  "author": "Pekkas Pokal Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/pekkas-pokal.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-username/pekkas-pokal/issues"
+  },
+  "homepage": "https://your-username.github.io/pekkas-pokal",
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "eslint": "^8.57.0",
+    "gh-pages": "^6.1.0",
+    "http-server": "^14.1.1",
+    "prettier": "^3.2.5",
+    "vite": "^5.2.0",
+    "vitest": "^1.5.0",
+    "@vitest/ui": "^1.5.0"
+  },
+  "dependencies": {
+    "chart.js": "^4.4.0",
+    "papaparse": "^5.4.1"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "browserslist": [
+    "> 1%",
+    "last 2 versions",
+    "not dead"
+  ],
+  "files": [
+    "public/**/*",
+    "src/**/*",
+    "README.md",
+    "LICENSE"
+  ],
+  "config": {
+    "port": 8000
+  }
+}

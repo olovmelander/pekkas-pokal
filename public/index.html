@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🏆 Pekkas Pokal - Ultimate Competition Tracker</title>
+  
+  <!-- PWA Meta Tags -->
+  <meta name="theme-color" content="#667eea">
+  <meta name="description" content="Årlig tävling för vänner med omfattande statistik och datahantering">
+  <link rel="manifest" href="manifest.json">
+  
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="src/styles/main.css">
+  <link rel="stylesheet" href="src/styles/components.css">
+  <link rel="stylesheet" href="src/styles/layout.css">
+  <link rel="stylesheet" href="src/styles/animations.css">
+  <link rel="stylesheet" href="src/styles/responsive.css">
+  
+  <!-- External Dependencies -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.4.1/papaparse.min.js"></script>
+</head>
+<body>
+  <!-- Header -->
+  <header class="header">
+    <div class="header-content">
+      <div class="logo">
+        <span class="trophy-logo">🏆</span>
+        <h1>Pekkas Pokal</h1>
+        <span class="year-range" id="year-range">2011-2025</span>
+      </div>
+      
+      <div class="header-actions">
+        <!-- Actions can be added here -->
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation -->
+  <nav class="nav-tabs">
+    <button class="nav-tab active" data-tab="dashboard"><span>📊</span> Dashboard</button>
+    <button class="nav-tab" data-tab="medals"><span>🥇</span> Medaljliga</button>
+    <button class="nav-tab" data-tab="achievements"><span>🎖️</span> Achievements</button>
+    <button class="nav-tab" data-tab="statistics"><span>📈</span> Statistik</button>
+  </nav>
+
+  <!-- Main Container -->
+  <div class="container">
+    <!-- Dashboard Tab -->
+    <div id="dashboard" class="tab-content active">
+      <div class="dashboard-grid">
+        <div class="stat-card">
+          <div class="stat-icon">🏆</div>
+          <div class="stat-value counter" id="total-competitions">0</div>
+          <div class="stat-label">Tävlingar</div>
+          <div class="stat-change" id="comp-change">
+            <span>📈</span> <span id="comp-trend">14 totalt</span>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon">👥</div>
+          <div class="stat-value counter" id="total-participants">0</div>
+          <div class="stat-label">Deltagare</div>
+          <div class="stat-change" id="part-change">
+            <span>✅</span> <span id="part-trend">Alla aktiva</span>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon">🥇</div>
+          <div class="stat-value" id="current-champion">—</div>
+          <div class="stat-label">Senaste Vinnare</div>
+          <div class="stat-change" id="champ-change">
+            <span>🎯</span> <span id="champ-comp">2025 Flipper</span>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon">👑</div>
+          <div class="stat-value" id="most-wins">—</div>
+          <div class="stat-label">Flest Vinster</div>
+          <div class="stat-change" id="wins-change">
+            <span>🏅</span> <span id="wins-count">0 vinster</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Fun Stats -->
+      <div class="fun-stats">
+        <div class="fun-stats-title">
+          <span>🎉</span> Roliga Fakta <span>🎉</span>
+        </div>
+        <div id="fun-stats-list"></div>
+      </div>
+
+      <!-- Charts -->
+      <div class="chart-container">
+        <div class="chart-header">
+          <div class="chart-title">📊 Prestationsutveckling över Tid</div>
+        </div>
+        <canvas id="performance-trend-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- Medal Tally Tab -->
+    <div id="medals" class="tab-content">
+      <div class="medal-tally">
+        <div class="medal-tally-header">
+          <div class="medal-tally-title">
+            <span>🏅</span> Olympisk Medaljliga
+          </div>
+        </div>
+        <div id="medal-tally-list"></div>
+      </div>
+
+      <div class="chart-container">
+        <div class="chart-header">
+          <div class="chart-title">🥇 Medaljfördelning</div>
+        </div>
+        <canvas id="medal-distribution-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- Enhanced Achievements Tab -->
+    <div id="achievements" class="tab-content">
+      <div class="achievements-header">
+        <h1>🏆 Pekkas Pokal Achievements</h1>
+        <p style="color: var(--text-secondary); font-size: 1.1rem;">Samla utmärkelser och visa din dominans!</p>
+      </div>
+
+      <div class="achievements-stats">
+        <div class="stat-bubble">
+          <div class="number" id="total-unlocked">0</div>
+          <div class="label">Upplåsta</div>
+        </div>
+        <div class="stat-bubble">
+          <div class="number" id="total-achievements">0</div>
+          <div class="label">Totalt</div>
+        </div>
+        <div class="stat-bubble">
+          <div class="number" id="completion-rate">0%</div>
+          <div class="label">Genomfört</div>
+        </div>
+      </div>
+
+      <!-- Participant Achievements Section -->
+      <section class="participant-achievements">
+        <h2 class="section-title">
+          <span>👥</span>
+          <span>Deltagare & Deras Achievements</span>
+        </h2>
+        <div class="participant-cards" id="participant-cards"></div>
+      </section>
+
+      <!-- All Achievements Section -->
+      <section class="all-achievements">
+        <h2 class="section-title">
+          <span>🎖️</span>
+          <span>Alla Tillgängliga Achievements</span>
+        </h2>
+        
+        <div class="achievement-categories">
+          <button class="category-filter active" data-category="all">Alla</button>
+          <button class="category-filter" data-category="medals">🥇 Medaljer</button>
+          <button class="category-filter" data-category="streaks">🔥 Streaks</button>
+          <button class="category-filter" data-category="special">⭐ Speciella</button>
+          <button class="category-filter" data-category="fun">🎉 Roliga</button>
+          <button class="category-filter" data-category="legendary">👑 Legendariska</button>
+          <button class="category-filter" data-category="mythic">🌟 Mytiska</button>
+        </div>
+        
+        <div class="achievements-grid" id="achievements-grid"></div>
+      </section>
+    </div>
+
+    <!-- Statistics Tab -->
+    <div id="statistics" class="tab-content">
+      <!-- Enhanced Filters -->
+      <div class="stats-controls">
+        <select id="competitor-filter" class="filter-select">
+          <option value="all">Alla Deltagare</option>
+        </select>
+        <select id="timeframe-filter" class="filter-select">
+          <option value="all">Alla År</option>
+          <option value="recent5">Senaste 5 År</option>
+          <option value="recent3">Senaste 3 År</option>
+          <option value="2025">2025</option>
+          <option value="2024">2024</option>
+          <option value="2023">2023</option>
+          <option value="2022">2022</option>
+          <option value="2021">2021</option>
+        </select>
+        <select id="competition-type-filter" class="filter-select">
+          <option value="all">Alla Tävlingar</option>
+        </select>
+        <button id="reset-filters-btn" class="icon-btn" style="margin-left: auto;">
+          🔄 Återställ
+        </button>
+      </div>
+
+      <!-- Competitor Cards -->
+      <div class="competitor-stats-grid" id="competitor-stats-grid"></div>
+
+      <!-- Charts -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 2rem;">
+        <div class="chart-container">
+          <div class="chart-header">
+            <div class="chart-title">📈 Snittplacering per År</div>
+          </div>
+          <canvas id="avg-position-chart"></canvas>
+        </div>
+
+        <div class="chart-container">
+          <div class="chart-header">
+            <div class="chart-title">🎯 Deltagande över Tid</div>
+          </div>
+          <canvas id="participation-chart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts (Load in order) -->
+  <script src="src/data/achievements.js"></script>
+  <script src="src/scripts/utils.js"></script>
+  <script src="src/scripts/data-manager.js"></script>
+  <script src="src/scripts/achievement-engine.js"></script>
+  <script src="src/scripts/chart-manager.js"></script>
+  <script src="src/scripts/ui-components.js"></script>
+  <script src="src/scripts/statistics.js"></script>
+  <script src="src/scripts/filters.js"></script>
+  <script src="src/scripts/main.js"></script>
+</body>
+</html>
