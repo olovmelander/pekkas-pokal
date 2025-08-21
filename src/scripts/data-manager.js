@@ -1,6 +1,6 @@
 /**
  * Data Manager - Handles CSV loading and data processing
- * FIXED VERSION for GitHub Pages deployment
+ * FIXED VERSION with better path handling
  */
 
 class DataManager {
@@ -26,27 +26,20 @@ class DataManager {
 
       let csvContent = null;
       
-      // Get the base URL for GitHub Pages
-      const baseUrl = window.location.hostname.includes('github.io') 
-        ? window.location.pathname.replace(/\/$/, '') 
-        : '';
-      
-      // Method 1: Try fetch from various paths (GitHub Pages compatible)
+      // Method 1: Try fetch from the correct path
       const possiblePaths = [
-        // Direct path (works in development and should work on GitHub Pages)
-        `${baseUrl}/competition-data.csv`,
-        '/competition-data.csv',
         'competition-data.csv',
         './competition-data.csv',
-        
-        // Try without base URL
-        'public/competition-data.csv',
-        '/public/competition-data.csv',
-        
-        // Legacy paths
-        `${baseUrl}/Pekkas Pokal Marathontabell Marathontabell.csv`,
-        'Pekkas Pokal Marathontabell Marathontabell.csv',
+        '/competition-data.csv',
+        'src/data/competition-data.csv',
+        '../competition-data.csv'
       ];
+      
+      // If on GitHub Pages, adjust paths
+      if (window.location.hostname.includes('github.io')) {
+        const basePath = window.location.pathname.replace(/\/$/, '').replace(/\/[^\/]*$/, '');
+        possiblePaths.unshift(`${basePath}/competition-data.csv`);
+      }
       
       for (const path of possiblePaths) {
         try {
@@ -58,54 +51,23 @@ class DataManager {
             // Validate it's actually CSV content
             if (text && text.includes(',') && text.includes('År')) {
               csvContent = text;
-              console.log(`✅ CSV loaded via fetch from: ${path}`);
+              console.log(`✅ CSV loaded from: ${path}`);
               break;
-            } else {
-              console.log(`❌ Invalid CSV content from: ${path}`);
-            }
-          } else {
-            console.log(`❌ Fetch failed for ${path}: ${response.status} ${response.statusText}`);
-          }
-        } catch (e) {
-          console.log(`❌ Fetch error for ${path}:`, e.message);
-        }
-      }
-      
-      // Method 2: Try window.fs API if available (for local development)
-      if (!csvContent && window.fs && window.fs.readFile) {
-        try {
-          console.log('🔄 Trying window.fs.readFile...');
-          const fsUrls = [
-            'competition-data.csv',
-            'public/competition-data.csv',
-            `src/data/${this.csvFileName}`
-          ];
-          
-          for (const fsUrl of fsUrls) {
-            try {
-              const content = await window.fs.readFile(fsUrl, { encoding: 'utf8' });
-              if (content && content.includes(',')) {
-                csvContent = content;
-                console.log(`✅ CSV loaded via fs.readFile from: ${fsUrl}`);
-                break;
-              }
-            } catch (e) {
-              console.log(`⚠️ fs.readFile failed for ${fsUrl}:`, e.message);
             }
           }
         } catch (e) {
-          console.log('⚠️ fs.readFile not available:', e.message);
+          // Continue to next path
         }
       }
       
-      // Method 3: Use embedded data as fallback
+      // Method 2: Use embedded data as fallback
       if (!csvContent) {
         console.log('⚠️ Using embedded CSV data as fallback');
         csvContent = this.getEmbeddedCSV();
       }
       
       if (!csvContent) {
-        throw new Error('No CSV content available from any source');
+        throw new Error('No CSV content available');
       }
       
       console.log(`📊 CSV content loaded (${csvContent.length} characters), parsing...`);
@@ -141,41 +103,20 @@ class DataManager {
     if (typeof Papa !== 'undefined') {
       // Use Papa Parse if available
       console.log('📊 Parsing with Papa Parse...');
-      try {
-        parsedData = await new Promise((resolve, reject) => {
-          Papa.parse(csvContent, {
-            header: true,
-            skipEmptyLines: true,
-            dynamicTyping: false,
-            trimHeaders: true,
-            complete: (results) => {
-              if (results.errors.length > 0) {
-                console.warn('⚠️ Papa Parse warnings:', results.errors);
-              }
-              console.log(`📊 Papa Parse complete: ${results.data.length} rows`);
-              resolve({
-                data: results.data,
-                headers: results.meta.fields
-              });
-            },
-            error: (error) => {
-              console.error('❌ Papa Parse error:', error);
-              reject(error);
-            }
-          });
-        });
-      } catch (error) {
-        console.error('❌ Papa Parse failed, falling back to native parser:', error);
-        parsedData = this.parseCSVNative(csvContent);
-      }
+      parsedData = Papa.parse(csvContent, {
+        header: true,
+        skipEmptyLines: true,
+        dynamicTyping: false,
+        trimHeaders: true
+      });
+      
+      return this.processData(parsedData.data, parsedData.meta.fields);
     } else {
       // Use native parser
       console.log('🔧 Using built-in CSV parser...');
       parsedData = this.parseCSVNative(csvContent);
+      return this.processData(parsedData.data, parsedData.headers);
     }
-    
-    // Process the parsed data
-    return this.processData(parsedData.data, parsedData.headers);
   }
 
   /**
@@ -189,7 +130,7 @@ class DataManager {
       throw new Error('CSV file is empty');
     }
     
-    const headers = this.parseCSVLine(lines[0]);
+    const headers = this.parseCSVLine(lines[0]).map(h => h.trim());
     const data = [];
     
     console.log(`📊 Found ${headers.length} headers`);
@@ -277,7 +218,6 @@ class DataManager {
         const arrangerSecondLast = row['Arrangör näst sist']?.trim() || '';
         
         if (!year || !name) {
-          console.warn(`⚠️ Skipping invalid row ${index + 2}:`, row);
           return;
         }
         
@@ -331,7 +271,7 @@ class DataManager {
         });
         
       } catch (error) {
-        console.error(`❌ Error processing row ${index + 2}:`, error, row);
+        console.error(`❌ Error processing row ${index + 2}:`, error);
       }
     });
     
@@ -433,6 +373,16 @@ class DataManager {
 
   clearCache() {
     this.cache.clear();
+  }
+  
+  /**
+   * Get debug info
+   */
+  getDebugInfo() {
+    return {
+      cacheSize: this.cache.size,
+      csvFileName: this.csvFileName
+    };
   }
 }
 

@@ -1,5 +1,5 @@
 /**
- * Pekkas Pokal - Main Application Controller (ENHANCED FIXED VERSION)
+ * Pekkas Pokal - Main Application Controller (FIXED VERSION)
  * Entry point and coordination between modules
  */
 
@@ -17,13 +17,10 @@ class PekkasPokalApp {
       }
     };
     
-    console.log('🏆 PekkasPokalApp constructor called');
+    console.log('🏆 PekkasPokalApp starting...');
     
-    // Add error handling for initialization
-    this.initialize().catch(error => {
-      console.error('❌ App initialization failed:', error);
-      this.showError('Failed to initialize application. Please refresh the page.');
-    });
+    // Initialize immediately
+    this.initialize();
   }
 
   /**
@@ -33,19 +30,11 @@ class PekkasPokalApp {
     try {
       console.log('🏆 Initializing Pekkas Pokal...');
       
-      // Wait for DOM to be ready
-      await this.waitForDOM();
-      console.log('✅ DOM ready');
-      
-      // Wait for dependencies
-      await this.waitForDependencies();
-      console.log('✅ Dependencies loaded');
-      
-      // Initialize modules in dependency order
+      // Initialize modules
       await this.initializeModules();
       console.log('✅ Modules initialized');
       
-      // Setup event listeners BEFORE loading data
+      // Setup event listeners
       this.setupEventListeners();
       console.log('✅ Event listeners setup');
       
@@ -57,60 +46,19 @@ class PekkasPokalApp {
       this.render();
       console.log('✅ Initial render complete');
       
+      // Hide loading screen
+      const loadingScreen = document.getElementById('loading-screen');
+      if (loadingScreen) {
+        loadingScreen.style.display = 'none';
+      }
+      
       this.state.initialized = true;
       console.log('🎉 Pekkas Pokal initialized successfully!');
       
     } catch (error) {
-      console.error('❌ Failed to initialize Pekkas Pokal:', error);
-      this.showError(`Failed to initialize application: ${error.message}`);
-      throw error;
+      console.error('❌ Failed to initialize:', error);
+      this.showError(`Fel vid initialisering: ${error.message}`);
     }
-  }
-
-  /**
-   * Wait for DOM to be ready
-   */
-  async waitForDOM() {
-    return new Promise((resolve) => {
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', resolve);
-      } else {
-        resolve();
-      }
-    });
-  }
-
-  /**
-   * Wait for external dependencies to load
-   */
-  async waitForDependencies() {
-    const maxWait = 10000; // 10 seconds
-    const startTime = Date.now();
-    
-    return new Promise((resolve, reject) => {
-      const checkDependencies = () => {
-        const chartLoaded = typeof Chart !== 'undefined';
-        const papaLoaded = typeof Papa !== 'undefined';
-        
-        if (chartLoaded && papaLoaded) {
-          console.log('📦 All external dependencies loaded');
-          resolve();
-        } else {
-          const elapsed = Date.now() - startTime;
-          if (elapsed > maxWait) {
-            const missing = [];
-            if (!chartLoaded) missing.push('Chart.js');
-            if (!papaLoaded) missing.push('Papa Parse');
-            reject(new Error(`Dependencies not loaded after ${maxWait}ms: ${missing.join(', ')}`));
-          } else {
-            console.log(`⏳ Waiting for dependencies... (${elapsed}ms)`);
-            setTimeout(checkDependencies, 100);
-          }
-        }
-      };
-      
-      checkDependencies();
-    });
   }
 
   /**
@@ -119,48 +67,25 @@ class PekkasPokalApp {
   async initializeModules() {
     console.log('📦 Initializing modules...');
     
-    // Check if modules are available
-    const requiredModules = [
-      'DataManager', 
-      'AchievementEngine', 
-      'ChartManager', 
-      'UIComponents', 
-      'Statistics', 
-      'FilterManager'
-    ];
-    
-    for (const moduleName of requiredModules) {
-      if (typeof window[moduleName] === 'undefined') {
-        throw new Error(`Module ${moduleName} not found. Check script loading order.`);
-      }
-    }
-    
-    // Initialize modules with error handling
+    // Initialize modules with fallbacks
     try {
-      this.modules.dataManager = new DataManager();
-      console.log('✅ DataManager initialized');
+      this.modules.dataManager = typeof DataManager !== 'undefined' ? new DataManager() : null;
+      this.modules.achievementEngine = typeof AchievementEngine !== 'undefined' ? new AchievementEngine() : null;
+      this.modules.chartManager = typeof ChartManager !== 'undefined' ? new ChartManager() : null;
+      this.modules.uiComponents = typeof UIComponents !== 'undefined' ? new UIComponents() : null;
+      this.modules.statistics = typeof Statistics !== 'undefined' ? new Statistics() : null;
+      this.modules.filterManager = typeof FilterManager !== 'undefined' ? new FilterManager() : null;
       
-      this.modules.achievementEngine = new AchievementEngine();
-      console.log('✅ AchievementEngine initialized');
+      // Check critical modules
+      if (!this.modules.dataManager) {
+        throw new Error('DataManager not available');
+      }
       
-      this.modules.chartManager = new ChartManager();
-      console.log('✅ ChartManager initialized');
-      
-      this.modules.uiComponents = new UIComponents();
-      console.log('✅ UIComponents initialized');
-      
-      this.modules.statistics = new Statistics();
-      console.log('✅ Statistics initialized');
-      
-      this.modules.filterManager = new FilterManager();
-      console.log('✅ FilterManager initialized');
-      
+      console.log('📦 All modules initialized');
     } catch (error) {
       console.error('❌ Module initialization failed:', error);
       throw error;
     }
-    
-    console.log('📦 All modules initialized successfully');
   }
 
   /**
@@ -169,7 +94,7 @@ class PekkasPokalApp {
   setupEventListeners() {
     console.log('🎛️ Setting up event listeners...');
     
-    // Tab navigation - ENHANCED
+    // Tab navigation
     this.setupTabNavigation();
     
     // Filter controls
@@ -180,127 +105,38 @@ class PekkasPokalApp {
     
     // Window events
     window.addEventListener('resize', () => this.handleResize());
-    window.addEventListener('beforeunload', () => this.cleanup());
-    
-    // Debug event listener
-    window.addEventListener('keydown', (e) => {
-      if (e.ctrlKey && e.shiftKey && e.key === 'D') {
-        this.showDebugInfo();
-      }
-    });
     
     console.log('🎛️ Event listeners setup complete');
   }
 
   /**
-   * Setup tab navigation - ENHANCED VERSION
+   * Setup tab navigation
    */
   setupTabNavigation() {
-    console.log('🎯 Setting up enhanced tab navigation...');
-    
     const tabs = document.querySelectorAll('.nav-tab');
     const contents = document.querySelectorAll('.tab-content');
 
-    console.log(`Found ${tabs.length} tabs and ${contents.length} content areas`);
-
-    if (tabs.length === 0) {
-      console.error('❌ No tabs found! Check HTML structure.');
-      return;
-    }
-
-    // Enhanced tab click handling
-    tabs.forEach((tab, index) => {
-      console.log(`Setting up tab ${index + 1}: ${tab.dataset.tab} (${tab.textContent.trim()})`);
-      
-      // Remove any existing listeners to prevent duplicates
-      tab.removeEventListener('click', this.handleTabClick);
-      
-      // Create bound event handler
-      const boundClickHandler = this.handleTabClick.bind(this);
-      tab.addEventListener('click', boundClickHandler);
-      
-      // Store reference for cleanup
-      tab._boundClickHandler = boundClickHandler;
-      
-      // Add keyboard support
-      tab.setAttribute('tabindex', '0');
-      tab.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          boundClickHandler(e);
+    tabs.forEach(tab => {
+      tab.addEventListener('click', (e) => {
+        e.preventDefault();
+        const targetTab = tab.dataset.tab;
+        
+        if (!targetTab) return;
+        
+        // Update active states
+        tabs.forEach(t => t.classList.remove('active'));
+        contents.forEach(c => c.classList.remove('active'));
+        
+        tab.classList.add('active');
+        const targetContent = document.getElementById(targetTab);
+        
+        if (targetContent) {
+          targetContent.classList.add('active');
+          this.state.currentTab = targetTab;
+          this.loadTabContent(targetTab);
         }
       });
     });
-
-    console.log('✅ Enhanced tab navigation setup complete');
-  }
-
-  /**
-   * Handle tab click events
-   */
-  handleTabClick(event) {
-    event.preventDefault();
-    
-    const clickedTab = event.currentTarget;
-    const targetTab = clickedTab.dataset.tab;
-    
-    console.log(`🎯 Tab clicked: ${targetTab}`);
-    
-    if (!targetTab) {
-      console.error('❌ Tab missing data-tab attribute:', clickedTab);
-      return;
-    }
-    
-    // Don't do anything if already active
-    if (clickedTab.classList.contains('active')) {
-      console.log('📝 Tab already active, skipping');
-      return;
-    }
-    
-    try {
-      // Update active states
-      const allTabs = document.querySelectorAll('.nav-tab');
-      const allContents = document.querySelectorAll('.tab-content');
-      
-      allTabs.forEach(t => t.classList.remove('active'));
-      allContents.forEach(c => c.classList.remove('active'));
-      
-      clickedTab.classList.add('active');
-      const targetContent = document.getElementById(targetTab);
-      
-      if (targetContent) {
-        targetContent.classList.add('active');
-        console.log(`✅ Switched to tab: ${targetTab}`);
-        
-        // Update state and load tab-specific content
-        this.state.currentTab = targetTab;
-        this.loadTabContent(targetTab);
-        
-        // Analytics/tracking
-        if (window.gtag) {
-          window.gtag('event', 'tab_switch', {
-            tab_name: targetTab
-          });
-        }
-        
-      } else {
-        console.error(`❌ Target content not found: ${targetTab}`);
-        // Re-activate previous tab
-        allTabs.forEach(t => {
-          if (t.dataset.tab === this.state.currentTab) {
-            t.classList.add('active');
-          }
-        });
-        allContents.forEach(c => {
-          if (c.id === this.state.currentTab) {
-            c.classList.add('active');
-          }
-        });
-      }
-      
-    } catch (error) {
-      console.error('❌ Error handling tab click:', error);
-    }
   }
 
   /**
@@ -318,7 +154,6 @@ class PekkasPokalApp {
         filter.addEventListener('change', (e) => {
           const filterType = e.target.id.replace('-filter', '').replace('-', '');
           this.state.filters[filterType] = e.target.value;
-          console.log(`Filter changed: ${filterType} = ${e.target.value}`);
           this.applyFilters();
         });
       }
@@ -327,7 +162,6 @@ class PekkasPokalApp {
     // Reset filters
     if (resetBtn) {
       resetBtn.addEventListener('click', () => {
-        console.log('🔄 Resetting filters');
         this.resetFilters();
       });
     }
@@ -339,15 +173,12 @@ class PekkasPokalApp {
   setupAchievementFilters() {
     document.addEventListener('click', (e) => {
       if (e.target.classList.contains('category-filter')) {
-        // Update active state
         document.querySelectorAll('.category-filter').forEach(btn => 
           btn.classList.remove('active')
         );
         e.target.classList.add('active');
         
-        // Render filtered achievements
         const category = e.target.dataset.category;
-        console.log(`Achievement filter: ${category}`);
         if (this.modules.uiComponents) {
           this.modules.uiComponents.renderAchievementsGrid(category);
         }
@@ -362,39 +193,63 @@ class PekkasPokalApp {
     try {
       console.log('📊 Loading competition data...');
       
-      // Show loading state
-      this.showLoading();
+      if (!this.modules.dataManager) {
+        throw new Error('DataManager not initialized');
+      }
       
-      // Load CSV data with detailed logging
-      console.log('🔄 Starting CSV data load...');
+      // Load CSV data
       this.state.competitionData = await this.modules.dataManager.loadCSVData();
       
       if (!this.state.competitionData || !this.state.competitionData.competitions) {
         throw new Error('Invalid data structure received');
       }
       
-      console.log(`📊 CSV data loaded: ${this.state.competitionData.competitions.length} competitions, ${this.state.competitionData.participants.length} participants`);
+      console.log(`📊 Data loaded: ${this.state.competitionData.competitions.length} competitions`);
       
-      console.log('🏆 Calculating achievements...');
-      
-      // Calculate achievements
-      this.state.competitionData.participantAchievements = 
-        this.modules.achievementEngine.calculateAllAchievements(
-          this.state.competitionData.competitions,
-          this.state.competitionData.participants
-        );
-      
-      console.log('🏆 Achievements calculated');
+      // Calculate achievements if engine is available
+      if (this.modules.achievementEngine) {
+        this.state.competitionData.participantAchievements = 
+          this.modules.achievementEngine.calculateAllAchievements(
+            this.state.competitionData.competitions,
+            this.state.competitionData.participants
+          );
+      }
       
       // Populate filter options
       this.populateFilters();
       
-      console.log(`✅ Data loading complete - ${this.state.competitionData.competitions.length} competitions and ${this.state.competitionData.participants.length} participants`);
-      
     } catch (error) {
       console.error('❌ Failed to load data:', error);
-      throw error;
+      // Use embedded data as fallback
+      console.log('Using embedded data as fallback...');
+      this.state.competitionData = this.getEmbeddedData();
+      this.populateFilters();
     }
+  }
+
+  /**
+   * Get embedded data as fallback
+   */
+  getEmbeddedData() {
+    const csvContent = `År,Tävling,Plats,Arrangör 3:a,Arrangör näst sist,Olov Melander,Mikael Hägglund,Viktor Jones,Per Wikman,Erik Vallgren,Henrik Lundqvist,Rickard Nilsson,Niklas Norberg,Per Olsson,Tobias Lundqvist,Lars Sandin,Ludvig Ulenius,Jonas Eriksson
+2011,Fantasy Premier League,,,,-,3,2,-,-,-,1,-,-,-,-,-,-
+2012,Gokart,Varggropen,,,-,7,3,4,2,,5,-,-,-,-,,1
+2013,Femkamp,Kroksta,,,-,4,6,2,1,3,5,7,-,-,-,-,-
+2014,Mångkamp Uppsala,Uppsala,,,,,,,1,,,,,,,,-
+2015,Bondespelen,Billsta,,,,,,1,,,3,,,,,,2
+2016,Mångkamp Lundqvist,,,,7,5,9,3,10,11,4,1,,2,,8,6
+2017,Triathlon,Lomsjön,,,-,3,1,2,6,8,7,9,-,4,-,5,-
+2018,Kortspel Ambition,Kungsholmen,,,5,3,4,8,2,6,-,1,-,7,,-,-
+2019,Pingis,Bredbyn,,,8,9,1,10,6,3,2,7,5,4,-,11,-
+2020,Covid,,,,,,,,,,,,,,,,-
+2021,Målning,Ås,,,1,-,6,5,7,9,10,8,4,2,-,3,-
+2022,Skytte,Arnäsvall,,,5,9,3,10,-,7,4,8,6,2,-,1,-
+2023,Fäkting,Stockholm,Viktor Jones,Mikael Hägglund,,3,10,1,,,2,,9,4,-,-,-
+2024-08-17,Fisketävling,Själevad,Tobias Lundqvist,Per Olsson,7,10,4,9,1,2,12,5,3,11,8,6,-
+2025-08-16,Flipper,Eskilstuna/Västerås,Viktor Jones,Mikael Hägglund,2,7,1,11,10,5,9,12,3,6,4,8,-`;
+    
+    const parsed = Papa.parse(csvContent, { header: true, skipEmptyLines: true });
+    return this.modules.dataManager.processData(parsed.data, parsed.meta.fields);
   }
 
   /**
@@ -402,8 +257,6 @@ class PekkasPokalApp {
    */
   populateFilters() {
     if (!this.state.competitionData) return;
-    
-    console.log('🔄 Populating filters...');
     
     // Competitor filter
     const competitorFilter = document.getElementById('competitor-filter');
@@ -415,7 +268,6 @@ class PekkasPokalApp {
         option.textContent = p.name;
         competitorFilter.appendChild(option);
       });
-      console.log(`✅ Populated competitor filter with ${this.state.competitionData.participants.length} participants`);
     }
 
     // Competition type filter
@@ -431,7 +283,6 @@ class PekkasPokalApp {
         option.textContent = type;
         typeFilter.appendChild(option);
       });
-      console.log(`✅ Populated competition type filter with ${competitionTypes.length} types`);
     }
   }
 
@@ -440,7 +291,6 @@ class PekkasPokalApp {
    */
   render() {
     if (!this.state.competitionData) {
-      this.showLoading();
       return;
     }
 
@@ -451,9 +301,6 @@ class PekkasPokalApp {
     
     // Update year range display
     this.updateYearRange();
-    
-    // Hide loading state
-    this.hideLoading();
     
     console.log('✅ Application render complete');
   }
@@ -483,8 +330,6 @@ class PekkasPokalApp {
         case 'statistics':
           this.loadStatistics();
           break;
-        default:
-          console.warn(`Unknown tab: ${tabName}`);
       }
     } catch (error) {
       console.error(`❌ Error loading ${tabName} content:`, error);
@@ -502,10 +347,15 @@ class PekkasPokalApp {
     this.updateStatsCards(data);
     
     // Load fun stats
-    this.loadFunStats(data);
+    if (this.modules.statistics && this.modules.uiComponents) {
+      const funStats = this.modules.statistics.calculateFunStats(data);
+      this.modules.uiComponents.renderFunStats(funStats);
+    }
     
     // Create performance chart
-    this.modules.chartManager.createPerformanceTrendChart(data);
+    if (this.modules.chartManager) {
+      this.modules.chartManager.createPerformanceTrendChart(data);
+    }
   }
 
   /**
@@ -522,12 +372,14 @@ class PekkasPokalApp {
     this.updateElement('total-participants', totalParticipants);
     
     // Calculate winner stats
-    const winCounts = this.modules.statistics.calculateWinCounts(data.competitions);
-    const topWinner = Object.entries(winCounts).sort((a, b) => b[1] - a[1])[0];
-    
-    if (topWinner) {
-      this.updateElement('most-wins', topWinner[0]);
-      this.updateElement('wins-count', `${topWinner[1]} vinster`);
+    if (this.modules.statistics) {
+      const winCounts = this.modules.statistics.calculateWinCounts(data.competitions);
+      const topWinner = Object.entries(winCounts).sort((a, b) => b[1] - a[1])[0];
+      
+      if (topWinner) {
+        this.updateElement('most-wins', topWinner[0]);
+        this.updateElement('wins-count', `${topWinner[1]} vinster`);
+      }
     }
     
     // Latest winner
@@ -544,13 +396,16 @@ class PekkasPokalApp {
   loadMedalTally() {
     console.log('🥇 Loading medal tally...');
     const data = this.state.competitionData;
-    const medalCounts = this.modules.statistics.calculateMedalCounts(data);
     
-    // Render medal tally table
-    this.modules.uiComponents.renderMedalTally(medalCounts);
+    if (this.modules.statistics && this.modules.uiComponents) {
+      const medalCounts = this.modules.statistics.calculateMedalCounts(data);
+      this.modules.uiComponents.renderMedalTally(medalCounts);
+    }
     
-    // Create medal distribution chart
-    this.modules.chartManager.createMedalChart(medalCounts);
+    if (this.modules.chartManager && this.modules.statistics) {
+      const medalCounts = this.modules.statistics.calculateMedalCounts(data);
+      this.modules.chartManager.createMedalChart(medalCounts);
+    }
   }
 
   /**
@@ -560,14 +415,11 @@ class PekkasPokalApp {
     console.log('🏆 Loading achievements...');
     const data = this.state.competitionData;
     
-    // Update achievement stats
-    this.modules.uiComponents.updateAchievementStats(data.participantAchievements);
-    
-    // Render participant cards
-    this.modules.uiComponents.renderParticipantCards(data.participantAchievements);
-    
-    // Render achievements grid
-    this.modules.uiComponents.renderAchievementsGrid('all');
+    if (this.modules.uiComponents && data.participantAchievements) {
+      this.modules.uiComponents.updateAchievementStats(data.participantAchievements);
+      this.modules.uiComponents.renderParticipantCards(data.participantAchievements);
+      this.modules.uiComponents.renderAchievementsGrid('all');
+    }
   }
 
   /**
@@ -575,24 +427,16 @@ class PekkasPokalApp {
    */
   loadStatistics() {
     console.log('📈 Loading statistics...');
-    const filteredData = this.modules.filterManager.applyFilters(
-      this.state.competitionData,
-      this.state.filters
-    );
     
-    // Update competitor stats
-    this.modules.uiComponents.updateStatisticsView(filteredData);
-    
-    // Update charts
-    this.modules.chartManager.updateStatisticsCharts(filteredData);
-  }
-
-  /**
-   * Load fun stats
-   */
-  loadFunStats(data) {
-    const funStats = this.modules.statistics.calculateFunStats(data);
-    this.modules.uiComponents.renderFunStats(funStats);
+    if (this.modules.filterManager && this.modules.uiComponents && this.modules.chartManager) {
+      const filteredData = this.modules.filterManager.applyFilters(
+        this.state.competitionData,
+        this.state.filters
+      );
+      
+      this.modules.uiComponents.updateStatisticsView(filteredData);
+      this.modules.chartManager.updateStatisticsCharts(filteredData);
+    }
   }
 
   /**
@@ -619,7 +463,6 @@ class PekkasPokalApp {
     this.updateElement('timeframe-filter', 'all', 'value');
     this.updateElement('competition-type-filter', 'all', 'value');
     
-    // Apply filters
     this.applyFilters();
   }
 
@@ -641,7 +484,6 @@ class PekkasPokalApp {
    * Handle window resize
    */
   handleResize() {
-    // Debounce resize events
     clearTimeout(this.resizeTimeout);
     this.resizeTimeout = setTimeout(() => {
       if (this.modules.chartManager) {
@@ -651,41 +493,17 @@ class PekkasPokalApp {
   }
 
   /**
-   * Show loading state
-   */
-  showLoading() {
-    const container = document.querySelector('.container');
-    if (container) {
-      container.innerHTML = `
-        <div style="display: flex; justify-content: center; align-items: center; min-height: 300px; flex-direction: column;">
-          <div class="spinner"></div>
-          <div style="margin-top: 1rem; color: var(--text-secondary); font-size: 1.1rem;">
-            Laddar tävlingsdata...
-          </div>
-        </div>
-      `;
-    }
-  }
-
-  /**
-   * Hide loading state
-   */
-  hideLoading() {
-    // Loading will be replaced by actual content
-  }
-
-  /**
    * Show error message
    */
   showError(message) {
-    const container = document.querySelector('.container');
-    if (container) {
-      container.innerHTML = `
-        <div style="text-align: center; padding: 2rem; color: var(--danger);">
+    const loadingScreen = document.getElementById('loading-screen');
+    if (loadingScreen) {
+      loadingScreen.innerHTML = `
+        <div style="text-align: center; padding: 2rem;">
           <h2>❌ Fel uppstod</h2>
-          <p style="margin: 1rem 0; color: var(--text-secondary);">${message}</p>
+          <p style="margin: 1rem 0; color: #a8b2d1;">${message}</p>
           <button onclick="window.location.reload()" style="
-            background: var(--epic-gradient);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border: none;
             padding: 0.75rem 1.5rem;
@@ -702,62 +520,12 @@ class PekkasPokalApp {
   }
 
   /**
-   * Show debug information
-   */
-  showDebugInfo() {
-    const debugInfo = {
-      state: this.state,
-      modules: Object.keys(this.modules),
-      dataManager: this.modules.dataManager?.getDebugInfo(),
-      chartManager: this.modules.chartManager?.getStats(),
-      uiComponents: this.modules.uiComponents?.getStats()
-    };
-    
-    console.log('🐛 Debug Information:', debugInfo);
-    
-    // Show in UI as well
-    if (this.modules.uiComponents) {
-      this.modules.uiComponents.showToast(
-        '🐛 Debug info logged to console (Ctrl+Shift+I)', 
-        'info', 
-        5000
-      );
-    }
-  }
-
-  /**
    * Utility function to update element content
    */
   updateElement(id, content, property = 'textContent') {
     const element = document.getElementById(id);
     if (element) {
       element[property] = content;
-    } else {
-      console.warn(`Element not found: ${id}`);
-    }
-  }
-
-  /**
-   * Cleanup resources
-   */
-  cleanup() {
-    // Clean up chart instances
-    if (this.modules.chartManager) {
-      this.modules.chartManager.cleanup();
-    }
-    
-    // Clean up event listeners
-    const tabs = document.querySelectorAll('.nav-tab');
-    tabs.forEach(tab => {
-      if (tab._boundClickHandler) {
-        tab.removeEventListener('click', tab._boundClickHandler);
-        delete tab._boundClickHandler;
-      }
-    });
-    
-    // Clear timeouts
-    if (this.resizeTimeout) {
-      clearTimeout(this.resizeTimeout);
     }
   }
 
@@ -775,28 +543,6 @@ class PekkasPokalApp {
     return this.modules[name];
   }
 }
-
-// Global initialization function
-function initializeApp() {
-  console.log('🚀 Starting Pekkas Pokal application...');
-  try {
-    if (window.app) {
-      console.log('⚠️ App already exists, cleaning up...');
-      window.app.cleanup();
-    }
-    
-    window.app = new PekkasPokalApp();
-    window.PekkasPokalApp = window.app; // Make globally accessible
-    
-    return window.app;
-  } catch (error) {
-    console.error('❌ Failed to start application:', error);
-    throw error;
-  }
-}
-
-// Export for manual initialization
-window.initializeApp = initializeApp;
 
 // Export the class
 window.PekkasPokalApp = PekkasPokalApp;

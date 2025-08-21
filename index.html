@@ -309,7 +309,7 @@
     </div>
   </div>
 
-  <!-- Built-in Papa Parse Alternative -->
+  <!-- Native CSV parser as immediate backup -->
   <script>
     // Native CSV parser that replaces Papa Parse
     window.Papa = {
@@ -383,88 +383,8 @@
     console.log('✅ Built-in CSV parser ready');
   </script>
 
-  <!-- Load Chart.js with fallback -->
-  <script>
-    function updateLoadingStatus(message) {
-      const statusEl = document.getElementById('loading-status');
-      if (statusEl) statusEl.textContent = message;
-    }
-    
-    updateLoadingStatus('Laddar Chart.js...');
-    
-    // Try to load Chart.js
-    function loadChartJS() {
-      return new Promise((resolve) => {
-        if (typeof Chart !== 'undefined') {
-          resolve();
-          return;
-        }
-        
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
-        script.onload = () => {
-          console.log('✅ Chart.js loaded');
-          resolve();
-        };
-        script.onerror = () => {
-          console.log('⚠️ Chart.js failed to load, charts will be disabled');
-          // Create dummy Chart object
-          window.Chart = { register: () => {}, defaults: { font: {}, color: '', backgroundColor: '', borderColor: '' } };
-          resolve();
-        };
-        document.head.appendChild(script);
-      });
-    }
-    
-    // Initialize app without waiting for Papa Parse
-    async function initializeApp() {
-      updateLoadingStatus('Laddar Chart.js...');
-      await loadChartJS();
-      
-      updateLoadingStatus('Laddar moduler...');
-      
-      // Wait a bit for scripts to load
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      updateLoadingStatus('Startar applikation...');
-      
-      try {
-        if (typeof window.PekkasPokalApp !== 'undefined') {
-          window.app = new PekkasPokalApp();
-          window.PekkasPokalApp = window.app;
-          
-          // Hide loading screen after successful init
-          setTimeout(() => {
-            document.getElementById('loading-screen').style.display = 'none';
-          }, 1000);
-        } else {
-          throw new Error('PekkasPokalApp not found');
-        }
-      } catch (error) {
-        console.error('App initialization failed:', error);
-        updateLoadingStatus('Fel vid laddning - försöker igen...');
-        
-        // Try again after 2 seconds
-        setTimeout(() => {
-          if (typeof window.PekkasPokalApp !== 'undefined') {
-            try {
-              window.app = new PekkasPokalApp();
-              document.getElementById('loading-screen').style.display = 'none';
-            } catch (e) {
-              updateLoadingStatus('Kan inte ladda appen. Uppdatera sidan.');
-            }
-          }
-        }, 2000);
-      }
-    }
-    
-    // Start when DOM is ready
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initializeApp);
-    } else {
-      initializeApp();
-    }
-  </script>
+  <!-- Load Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   
   <!-- Scripts (Load in order) -->
   <script src="src/data/achievements.js"></script>
@@ -476,5 +396,67 @@
   <script src="src/scripts/statistics.js"></script>
   <script src="src/scripts/filters.js"></script>
   <script src="src/scripts/main.js"></script>
+  
+  <!-- Initialize app when all scripts are loaded -->
+  <script>
+    function updateLoadingStatus(message) {
+      const statusEl = document.getElementById('loading-status');
+      if (statusEl) statusEl.textContent = message;
+    }
+    
+    // Initialize when DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initApp);
+    } else {
+      initApp();
+    }
+    
+    function initApp() {
+      updateLoadingStatus('Startar applikation...');
+      
+      // Give scripts time to load
+      setTimeout(() => {
+        try {
+          if (typeof window.PekkasPokalApp === 'undefined') {
+            console.error('PekkasPokalApp class not found');
+            updateLoadingStatus('Väntar på skript...');
+            // Try again after a moment
+            setTimeout(initApp, 1000);
+            return;
+          }
+          
+          console.log('Creating PekkasPokalApp instance...');
+          window.app = new PekkasPokalApp();
+          window.PekkasPokalApp = window.app;
+          
+          // Hide loading screen will be done by the app after successful init
+        } catch (error) {
+          console.error('Initialization error:', error);
+          updateLoadingStatus('Fel: ' + error.message);
+          // Don't retry on error, show reload button
+          setTimeout(() => {
+            document.getElementById('loading-screen').innerHTML = `
+              <div style="text-align: center; padding: 2rem;">
+                <h2>❌ Kunde inte ladda applikationen</h2>
+                <p style="margin: 1rem 0; color: #a8b2d1;">${error.message}</p>
+                <button onclick="window.location.reload()" style="
+                  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                  color: white;
+                  border: none;
+                  padding: 0.75rem 1.5rem;
+                  border-radius: 8px;
+                  cursor: pointer;
+                  font-size: 1rem;
+                  margin-top: 1rem;
+                ">
+                  🔄 Ladda om sidan
+                </button>
+              </div>
+            `;
+          }, 1000);
+        }
+      }, 500);
+    }
+  </script>
 </body>
 </html>
