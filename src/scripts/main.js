@@ -464,9 +464,7 @@ class PekkasPokalApp {
 
     // Render additional dashboard sections
     this.renderUpcomingEvent(data);
-    this.renderLeaderboard(data);
     this.renderAchievementsHighlight(data);
-    this.renderRivalry(data);
     this.renderRecords(data);
   }
 
@@ -539,34 +537,6 @@ class PekkasPokalApp {
   }
 
   /**
-   * Render leaderboard snapshot with search
-   */
-  renderLeaderboard(data) {
-    const list = document.getElementById('leaderboard-list');
-    const search = document.getElementById('leaderboard-search');
-    if (!list || !search || !this.modules.statistics) return;
-
-    const winCounts = this.modules.statistics.calculateWinCounts(data.competitions);
-    const sorted = Object.entries(winCounts).sort((a, b) => b[1] - a[1]);
-
-    const render = () => {
-      const term = search.value.toLowerCase();
-      list.innerHTML = '';
-      sorted
-        .filter(([name]) => name.toLowerCase().includes(term))
-        .slice(0, 5)
-        .forEach(([name, count], index) => {
-          const li = document.createElement('li');
-          li.textContent = `${index + 1}. ${name} (${count})`;
-          list.appendChild(li);
-        });
-    };
-
-    search.addEventListener('input', render);
-    render();
-  }
-
-  /**
    * Highlight recent achievements
    */
   renderAchievementsHighlight(data) {
@@ -596,16 +566,6 @@ class PekkasPokalApp {
       li.textContent = 'Inga nya achievements';
       list.appendChild(li);
     }
-  }
-
-  /**
-   * Render rivalry summary
-   */
-  renderRivalry(data) {
-    const el = document.getElementById('rivalry-info');
-    if (!el || !this.modules.statistics) return;
-    const rivalry = this.modules.statistics.findBiggestRivalry(data);
-    el.textContent = rivalry || 'Ingen tydlig rivalitet';
   }
 
   /**
