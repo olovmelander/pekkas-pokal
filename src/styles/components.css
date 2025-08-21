@@ -78,7 +78,7 @@
 }
 
 .nav-tab::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   left: -100%;
@@ -116,7 +116,7 @@
 }
 
 .stat-card::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   left: 0;
@@ -193,7 +193,7 @@
 }
 
 .medal-tally::before {
-  content: '🏅';
+  content: "🏅";
   position: absolute;
   right: -20px;
   top: -20px;
@@ -245,7 +245,7 @@
   text-align: center;
 }
 
-.medal-position.first { 
+.medal-position.first {
   background: var(--gold);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -289,17 +289,17 @@
 
 .medal-count.gold {
   background: rgba(255, 215, 0, 0.2);
-  color: #FFD700;
+  color: #ffd700;
 }
 
 .medal-count.silver {
   background: rgba(192, 192, 192, 0.2);
-  color: #C0C0C0;
+  color: #c0c0c0;
 }
 
 .medal-count.bronze {
   background: rgba(205, 127, 50, 0.2);
-  color: #CD7F32;
+  color: #cd7f32;
 }
 
 .medal-total {
@@ -380,7 +380,7 @@
 }
 
 .participant-card::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   left: 0;
@@ -568,14 +568,22 @@
 }
 
 .achievement.legendary {
-  background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(255, 165, 0, 0.1));
+  background: linear-gradient(
+    135deg,
+    rgba(255, 215, 0, 0.1),
+    rgba(255, 165, 0, 0.1)
+  );
   border-color: gold;
   animation: shimmer 3s infinite;
 }
 
 .achievement.mythic {
-  background: linear-gradient(135deg, rgba(255, 0, 255, 0.1), rgba(0, 255, 255, 0.1));
-  border-color: #FF00FF;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 0, 255, 0.1),
+    rgba(0, 255, 255, 0.1)
+  );
+  border-color: #ff00ff;
   animation: rainbow 5s linear infinite;
 }
 
@@ -590,11 +598,22 @@
   text-transform: uppercase;
 }
 
-.rarity-common { background: #808080; }
-.rarity-rare { background: #0080FF; }
-.rarity-epic { background: #8B00FF; }
-.rarity-legendary { background: #FFD700; color: #000; }
-.rarity-mythic { background: var(--mythic-gradient); }
+.rarity-common {
+  background: #808080;
+}
+.rarity-rare {
+  background: #0080ff;
+}
+.rarity-epic {
+  background: #8b00ff;
+}
+.rarity-legendary {
+  background: #ffd700;
+  color: #000;
+}
+.rarity-mythic {
+  background: var(--mythic-gradient);
+}
 
 .achievement-holders {
   margin-top: var(--spacing-sm);
@@ -650,7 +669,7 @@
 }
 
 .competitor-card::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   left: 0;
@@ -714,7 +733,11 @@
 
 /* ===== FUN STATS ===== */
 .fun-stats {
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(240, 147, 251, 0.1));
+  background: linear-gradient(
+    135deg,
+    rgba(102, 126, 234, 0.1),
+    rgba(240, 147, 251, 0.1)
+  );
   border-radius: var(--radius-lg);
   padding: var(--spacing-lg);
   margin: var(--spacing-xl) 0;
@@ -789,6 +812,12 @@
   cursor: pointer;
   transition: all var(--transition-normal);
   min-width: 150px;
+}
+
+@media (min-width: 769px) {
+  .filter-select[multiple] {
+    min-width: 220px;
+  }
 }
 
 .filter-select option {
