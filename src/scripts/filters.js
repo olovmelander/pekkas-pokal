@@ -34,8 +34,11 @@ class FilterManager {
     
     // Apply competitor filter (affects both competitions and participants)
     if (filters.competitor !== 'all') {
-      filteredParticipants = filteredParticipants.filter(p => p.id === filters.competitor);
-      filteredCompetitions = this.applyCompetitorFilter(filteredCompetitions, filters.competitor);
+      const ids = Array.isArray(filters.competitor)
+        ? filters.competitor
+        : [filters.competitor];
+      filteredParticipants = filteredParticipants.filter(p => ids.includes(p.id));
+      filteredCompetitions = this.applyCompetitorFilter(filteredCompetitions, ids);
     }
     
     const endTime = performance.now();
@@ -91,15 +94,19 @@ class FilterManager {
   /**
    * Apply competitor filter
    */
-  applyCompetitorFilter(competitions, competitorId) {
-    if (competitorId === 'all') return competitions;
-    
-    return competitions.map(comp => ({
-      ...comp,
-      scores: Object.fromEntries(
-        Object.entries(comp.scores).filter(([pId]) => pId === competitorId)
-      )
-    })).filter(comp => Object.keys(comp.scores).length > 0);
+  applyCompetitorFilter(competitions, competitorIds) {
+    if (competitorIds === 'all') return competitions;
+
+    const ids = Array.isArray(competitorIds) ? competitorIds : [competitorIds];
+
+    return competitions
+      .map(comp => ({
+        ...comp,
+        scores: Object.fromEntries(
+          Object.entries(comp.scores).filter(([pId]) => ids.includes(pId))
+        )
+      }))
+      .filter(comp => Object.keys(comp.scores).length > 0);
   }
 
   /**

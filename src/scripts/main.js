@@ -183,16 +183,31 @@ class PekkasPokalApp {
           let filterType;
           if (e.target.id === 'competitor-filter' || e.target.id === 'achievement-competitor-filter') {
             filterType = 'competitor';
-            // Keep competitor filters in sync
-            this.updateElement('competitor-filter', e.target.value, 'value');
-            this.updateElement('achievement-competitor-filter', e.target.value, 'value');
+
+            // Get selected values
+            let values = Array.from(e.target.selectedOptions).map(opt => opt.value);
+            if (values.length === 0 || values.includes('all')) {
+              values = ['all'];
+            }
+
+            // Sync both competitor filters
+            const syncSelect = (select) => {
+              if (!select) return;
+              Array.from(select.options).forEach(opt => {
+                opt.selected = values.includes(opt.value);
+              });
+            };
+            syncSelect(competitorFilter);
+            syncSelect(achievementCompetitorFilter);
+
+            this.state.filters[filterType] = values.includes('all') ? 'all' : values;
           } else {
             filterType = e.target.id
               .replace('-filter', '')
               .replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+            this.state.filters[filterType] = e.target.value;
           }
 
-          this.state.filters[filterType] = e.target.value;
           this.applyFilters();
         });
       }
@@ -365,7 +380,7 @@ class PekkasPokalApp {
     const achievementCompetitorFilter = document.getElementById('achievement-competitor-filter');
     [competitorFilter, achievementCompetitorFilter].forEach(filter => {
       if (filter) {
-        filter.innerHTML = '<option value="all">Alla Deltagare</option>';
+        filter.innerHTML = '<option value="all" selected>Alla Deltagare</option>';
       }
     });
     this.state.competitionData.participants.forEach(p => {
@@ -709,8 +724,8 @@ class PekkasPokalApp {
     };
 
     // Update UI
-    this.updateElement('competitor-filter', 'all', 'value');
-    this.updateElement('achievement-competitor-filter', 'all', 'value');
+    this.updateElement('competitor-filter', ['all'], 'value');
+    this.updateElement('achievement-competitor-filter', ['all'], 'value');
     this.updateElement('timeframe-filter', 'all', 'value');
     this.updateElement('competition-type-filter', 'all', 'value');
     
@@ -772,10 +787,17 @@ class PekkasPokalApp {
 
   /**
    * Utility function to update element content
-   */
+  */
   updateElement(id, content, property = 'textContent') {
     const element = document.getElementById(id);
-    if (element) {
+    if (!element) return;
+
+    if (property === 'value' && element.multiple) {
+      const values = Array.isArray(content) ? content : [content];
+      Array.from(element.options).forEach(opt => {
+        opt.selected = values.includes(opt.value);
+      });
+    } else {
       element[property] = content;
     }
   }
@@ -790,12 +812,15 @@ class PekkasPokalApp {
     const selected = this.state.filters.competitor;
     if (selected === 'all') return data.participantAchievements;
 
-    const participant = data.participants.find(p => p.id === selected);
-    if (participant) {
-      return { [participant.name]: data.participantAchievements[participant.name] || [] };
-    }
-
-    return {};
+    const ids = Array.isArray(selected) ? selected : [selected];
+    const result = {};
+    ids.forEach(id => {
+      const participant = data.participants.find(p => p.id === id);
+      if (participant) {
+        result[participant.name] = data.participantAchievements[participant.name] || [];
+      }
+    });
+    return result;
   }
 
   /**
