@@ -66,19 +66,19 @@
 
   /* Navigation adjustments */
   .nav-tabs {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    display: flex;
     padding: var(--spacing-sm);
     gap: var(--spacing-sm);
-    justify-content: center;
-    overflow-x: visible;
+    justify-content: flex-start;
+    overflow-x: auto;
   }
 
   .nav-tab {
     padding: var(--spacing-sm);
     font-size: var(--text-sm);
     text-align: center;
-    min-width: auto;
+    flex: 0 0 auto;
+    min-width: max-content;
   }
 
   .nav-tab span {
