@@ -1,11 +1,10 @@
 /**
- * Data Manager - Handles CSV loading and data processing (FIXED VERSION)
- * Now properly handles file paths and loading
+ * Data Manager - Handles CSV loading and data processing
+ * FIXED VERSION for GitHub Pages deployment
  */
 
 class DataManager {
   constructor() {
-    // Updated to use simpler filename for public directory
     this.csvFileName = 'competition-data.csv';
     this.cache = new Map();
     this.cacheExpiry = 5 * 60 * 1000; // 5 minutes
@@ -27,76 +26,82 @@ class DataManager {
 
       let csvContent = null;
       
-      // Method 1: Try window.fs API if available (from artifacts environment)
-      if (window.fs && window.fs.readFile) {
+      // Get the base URL for GitHub Pages
+      const baseUrl = window.location.hostname.includes('github.io') 
+        ? window.location.pathname.replace(/\/$/, '') 
+        : '';
+      
+      // Method 1: Try fetch from various paths (GitHub Pages compatible)
+      const possiblePaths = [
+        // Direct path (works in development and should work on GitHub Pages)
+        `${baseUrl}/competition-data.csv`,
+        '/competition-data.csv',
+        'competition-data.csv',
+        './competition-data.csv',
+        
+        // Try without base URL
+        'public/competition-data.csv',
+        '/public/competition-data.csv',
+        
+        // Legacy paths
+        `${baseUrl}/Pekkas Pokal Marathontabell Marathontabell.csv`,
+        'Pekkas Pokal Marathontabell Marathontabell.csv',
+      ];
+      
+      for (const path of possiblePaths) {
+        try {
+          console.log(`🔄 Trying fetch from: ${path}`);
+          const response = await fetch(path);
+          
+          if (response.ok) {
+            const text = await response.text();
+            // Validate it's actually CSV content
+            if (text && text.includes(',') && text.includes('År')) {
+              csvContent = text;
+              console.log(`✅ CSV loaded via fetch from: ${path}`);
+              break;
+            } else {
+              console.log(`❌ Invalid CSV content from: ${path}`);
+            }
+          } else {
+            console.log(`❌ Fetch failed for ${path}: ${response.status} ${response.statusText}`);
+          }
+        } catch (e) {
+          console.log(`❌ Fetch error for ${path}:`, e.message);
+        }
+      }
+      
+      // Method 2: Try window.fs API if available (for local development)
+      if (!csvContent && window.fs && window.fs.readFile) {
         try {
           console.log('🔄 Trying window.fs.readFile...');
-          // Try multiple paths for fs.readFile
           const fsUrls = [
-            `src/data/${this.csvFileName}`,
-            `src/data/Pekkas Pokal Marathontabell Marathontabell.csv`,
-            `public/${this.csvFileName}`,
-            this.csvFileName
+            'competition-data.csv',
+            'public/competition-data.csv',
+            `src/data/${this.csvFileName}`
           ];
           
           for (const fsUrl of fsUrls) {
             try {
-              csvContent = await window.fs.readFile(fsUrl, { encoding: 'utf8' });
-              console.log(`✅ CSV loaded via fs.readFile from: ${fsUrl}`);
-              break;
+              const content = await window.fs.readFile(fsUrl, { encoding: 'utf8' });
+              if (content && content.includes(',')) {
+                csvContent = content;
+                console.log(`✅ CSV loaded via fs.readFile from: ${fsUrl}`);
+                break;
+              }
             } catch (e) {
               console.log(`⚠️ fs.readFile failed for ${fsUrl}:`, e.message);
             }
           }
         } catch (e) {
-          console.log('⚠️ fs.readFile general error:', e.message);
-        }
-      }
-      
-      // Method 2: Try fetch from multiple possible paths
-      if (!csvContent) {
-        const possiblePaths = [
-          // Public directory paths (preferred for Vite)
-          `/${this.csvFileName}`,
-          `/public/${this.csvFileName}`,
-          
-          // Legacy paths
-          `src/data/Pekkas Pokal Marathontabell Marathontabell.csv`,
-          `./src/data/Pekkas Pokal Marathontabell Marathontabell.csv`,
-          `src/data/${this.csvFileName}`,
-          `./src/data/${this.csvFileName}`,
-          
-          // Additional fallbacks
-          this.csvFileName,
-          `data/${this.csvFileName}`,
-          
-          // Try with exact original filename
-          'Pekkas Pokal Marathontabell Marathontabell.csv',
-          '/Pekkas Pokal Marathontabell Marathontabell.csv'
-        ];
-        
-        for (const path of possiblePaths) {
-          try {
-            console.log(`🔄 Trying fetch from: ${path}`);
-            const response = await fetch(path);
-            if (response.ok) {
-              csvContent = await response.text();
-              console.log(`✅ CSV loaded via fetch from: ${path}`);
-              break;
-            } else {
-              console.log(`❌ Fetch failed for ${path}: ${response.status} ${response.statusText}`);
-            }
-          } catch (e) {
-            console.log(`❌ Fetch error for ${path}:`, e.message);
-          }
+          console.log('⚠️ fs.readFile not available:', e.message);
         }
       }
       
       // Method 3: Use embedded data as fallback
       if (!csvContent) {
-        console.log('🔄 Using embedded CSV data as fallback');
+        console.log('⚠️ Using embedded CSV data as fallback');
         csvContent = this.getEmbeddedCSV();
-        console.log('📋 Loaded embedded CSV data');
       }
       
       if (!csvContent) {
@@ -122,6 +127,7 @@ class DataManager {
       // Final fallback to embedded data
       console.log('🆘 Using embedded data as final fallback');
       const embeddedData = await this.parseCSVContent(this.getEmbeddedCSV());
+      this.setCachedData(embeddedData);
       return embeddedData;
     }
   }
@@ -140,13 +146,13 @@ class DataManager {
           Papa.parse(csvContent, {
             header: true,
             skipEmptyLines: true,
-            dynamicTyping: false, // Keep as strings for better control
-            trimHeaders: true, // Trim whitespace from headers
+            dynamicTyping: false,
+            trimHeaders: true,
             complete: (results) => {
               if (results.errors.length > 0) {
                 console.warn('⚠️ Papa Parse warnings:', results.errors);
               }
-              console.log(`📊 Papa Parse complete: ${results.data.length} rows, ${results.meta.fields.length} columns`);
+              console.log(`📊 Papa Parse complete: ${results.data.length} rows`);
               resolve({
                 data: results.data,
                 headers: results.meta.fields
@@ -164,7 +170,7 @@ class DataManager {
       }
     } else {
       // Use native parser
-      console.log('🔧 Papa Parse not available, using native parser...');
+      console.log('🔧 Using built-in CSV parser...');
       parsedData = this.parseCSVNative(csvContent);
     }
     
@@ -186,7 +192,7 @@ class DataManager {
     const headers = this.parseCSVLine(lines[0]);
     const data = [];
     
-    console.log(`📊 Found headers: ${headers.join(', ')}`);
+    console.log(`📊 Found ${headers.length} headers`);
     
     for (let i = 1; i < lines.length; i++) {
       if (lines[i].trim()) {
@@ -234,7 +240,7 @@ class DataManager {
    */
   processData(rows, headers) {
     console.log('🔄 Processing data...');
-    console.log(`📊 Processing ${rows.length} rows with headers: ${headers.join(', ')}`);
+    console.log(`📊 Processing ${rows.length} rows`);
     
     // Fixed columns that aren't participants
     const fixedColumns = ['År', 'Tävling', 'Plats', 'Arrangör 3:a', 'Arrangör näst sist'];
@@ -312,15 +318,6 @@ class DataManager {
           }
         });
         
-        // Adjust special positions (näst sist = second to last)
-        Object.entries(scores).forEach(([pId, score]) => {
-          if (score === 99) { // Näst sist marker
-            scores[pId] = Math.max(2, participantCount - 1);
-          } else if (score === 100) { // Sist marker
-            scores[pId] = participantCount;
-          }
-        });
-        
         competitions.push({
           id: `c${competitions.length + 1}`,
           year: year,
@@ -344,7 +341,7 @@ class DataManager {
     const result = {
       participants,
       competitions,
-      participantAchievements: {}, // Will be calculated later
+      participantAchievements: {},
       initialized: true
     };
     
@@ -373,18 +370,11 @@ class DataManager {
   }
 
   /**
-   * Parse score value with special handling
+   * Parse score value
    */
   parseScore(value) {
     if (!value || value === '-' || value === '') return null;
     
-    const textValue = value.toString().toLowerCase().trim();
-    
-    // Handle special text values
-    if (textValue === 'näst sist' || textValue === 'nest sist') return 99;
-    if (textValue === 'sist' || textValue === 'last') return 100;
-    
-    // Handle numeric values
     const numValue = parseInt(value);
     return isNaN(numValue) ? null : numValue;
   }
@@ -443,18 +433,6 @@ class DataManager {
 
   clearCache() {
     this.cache.clear();
-  }
-  
-  /**
-   * Get debug information
-   */
-  getDebugInfo() {
-    return {
-      csvFileName: this.csvFileName,
-      cacheSize: this.cache.size,
-      hasCache: this.cache.has('competitionData'),
-      cacheExpiry: this.cacheExpiry
-    };
   }
 }
 

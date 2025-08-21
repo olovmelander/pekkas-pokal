@@ -2,13 +2,16 @@ import { defineConfig } from 'vite';
 import { resolve } from 'path';
 
 export default defineConfig({
-  // Base path for GitHub Pages
+  // Base path for GitHub Pages - repository name
   base: process.env.NODE_ENV === 'production' 
-    ? `/${process.env.GITHUB_REPOSITORY?.split('/')[1] || 'pekkas-pokal'}/`
+    ? '/pekkas-pokal/'  // Replace with your actual repository name
     : '/',
   
-  // Root directory where index.html is located
+  // Root directory
   root: './',
+  
+  // Public directory for static assets
+  publicDir: 'public',
   
   // Build configuration
   build: {
@@ -16,10 +19,15 @@ export default defineConfig({
     emptyOutDir: true,
     
     rollupOptions: {
-      input: resolve(__dirname, 'index.html')
+      input: {
+        main: resolve(__dirname, 'index.html')
+      }
     },
     
-    // Don't inline small assets to preserve file structure
+    // Copy static files
+    copyPublicDir: true,
+    
+    // Don't inline assets
     assetsInlineLimit: 0
   },
   
