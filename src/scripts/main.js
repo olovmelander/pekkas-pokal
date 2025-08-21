@@ -131,6 +131,8 @@ class PekkasPokalApp {
 
     // Window events
     window.addEventListener("resize", () => this.handleResize());
+    // Set initial header height for sticky nav
+    this.updateHeaderHeight();
 
     console.log("🎛️ Event listeners setup complete");
   }
@@ -772,11 +774,26 @@ class PekkasPokalApp {
   }
 
   /**
+   * Update CSS variable for header height to keep nav positioning in sync
+   */
+  updateHeaderHeight() {
+    const header = document.querySelector(".header");
+    if (header) {
+      const height = header.offsetHeight;
+      document.documentElement.style.setProperty(
+        "--header-height",
+        `${height}px`,
+      );
+    }
+  }
+
+  /**
    * Handle window resize
    */
   handleResize() {
     clearTimeout(this.resizeTimeout);
     this.resizeTimeout = setTimeout(() => {
+      this.updateHeaderHeight();
       if (this.modules.chartManager) {
         this.modules.chartManager.handleResize();
       }
