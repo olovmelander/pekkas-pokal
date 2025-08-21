@@ -709,10 +709,21 @@ class ChartManager {
 
     this.destroyChart('placement-trend-chart');
 
+    // Determine which participants have data in the filtered competitions
+    const participantsInData = new Set();
+    filteredData.forEach(comp => {
+      Object.keys(comp.scores || {}).forEach(id => participantsInData.add(id));
+    });
+
     // Determine competitors to show
-    let selected = Array.from(document.getElementById('competitor-filter')?.selectedOptions || []).map(o => o.value);
+    let selected = Array.from(
+      document.getElementById('competitor-filter')?.selectedOptions || []
+    ).map(o => o.value);
+
     if (selected.length === 0 || selected.includes('all')) {
-      selected = window.PekkasPokalApp?.getState()?.competitionData?.participants?.map(p => p.id) || [];
+      selected = [...participantsInData];
+    } else {
+      selected = selected.filter(id => participantsInData.has(id));
     }
 
     const allYears = [...new Set(filteredData.map(c => c.year))].sort();
