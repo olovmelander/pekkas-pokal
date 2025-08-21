@@ -32,10 +32,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'npm'
+          # Remove cache since we don't have lock file
           
       - name: Install dependencies
-        run: npm ci
+        # Use npm install instead of npm ci
+        run: npm install
         
       - name: Build project
         run: npm run build
