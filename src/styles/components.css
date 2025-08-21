@@ -781,7 +781,7 @@
 
 .filter-select {
   padding: var(--spacing-sm) var(--spacing-md);
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bg-card);
   border: 1px solid rgba(102, 126, 234, 0.3);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
@@ -789,6 +789,11 @@
   cursor: pointer;
   transition: all var(--transition-normal);
   min-width: 150px;
+}
+
+.filter-select option {
+  background: var(--bg-card);
+  color: var(--text-primary);
 }
 
 .filter-select:hover,

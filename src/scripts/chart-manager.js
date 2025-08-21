@@ -374,8 +374,9 @@ class ChartManager {
     this.destroyChart('avg-position-chart');
 
     // Get competitor filter to determine chart type
-    const competitorFilter = document.getElementById('competitor-filter')?.value || 'all';
-    
+    const selected = Array.from(document.getElementById('competitor-filter')?.selectedOptions || []).map(o => o.value);
+    const competitorFilter = selected.length === 1 ? selected[0] : 'all';
+
     if (competitorFilter === 'all') {
       this.createOverallAverageChart(ctx, filteredData);
     } else {
@@ -535,8 +536,9 @@ class ChartManager {
 
     this.destroyChart('participation-chart');
 
-    const competitorFilter = document.getElementById('competitor-filter')?.value || 'all';
-    
+    const selected = Array.from(document.getElementById('competitor-filter')?.selectedOptions || []).map(o => o.value);
+    const competitorFilter = selected.length === 1 ? selected[0] : 'all';
+
     if (competitorFilter === 'all') {
       this.createOverallParticipationChart(ctx, filteredData);
     } else {
@@ -696,6 +698,86 @@ class ChartManager {
   }
 
   /**
+   * Create placement trend chart for multiple competitors
+   */
+  createPlacementTrendChart(filteredData) {
+    const ctx = document.getElementById('placement-trend-chart');
+    if (!ctx) {
+      console.warn('Placement trend chart canvas not found');
+      return;
+    }
+
+    this.destroyChart('placement-trend-chart');
+
+    // Determine competitors to show
+    let selected = Array.from(document.getElementById('competitor-filter')?.selectedOptions || []).map(o => o.value);
+    if (selected.length === 0 || selected.includes('all')) {
+      selected = window.PekkasPokalApp?.getState()?.competitionData?.participants?.map(p => p.id) || [];
+    }
+
+    const allYears = [...new Set(filteredData.map(c => c.year))].sort();
+
+    const datasets = selected.map((id, idx) => {
+      const participant = window.PekkasPokalApp?.getState()?.competitionData?.participants?.find(p => p.id === id);
+      const name = participant ? participant.name : id;
+      const color = this.colorPalette.participants[idx % this.colorPalette.participants.length];
+      const data = allYears.map(year => {
+        const comp = filteredData.find(c => c.year === year);
+        return comp && comp.scores[id] ? comp.scores[id] : null;
+      });
+      return {
+        label: name,
+        data,
+        borderColor: color,
+        backgroundColor: color + '20',
+        tension: 0.4,
+        spanGaps: true,
+        pointRadius: 6,
+        pointHoverRadius: 8
+      };
+    });
+
+    const options = {
+      ...this.defaultOptions,
+      scales: {
+        ...this.defaultOptions.scales,
+        y: {
+          ...this.defaultOptions.scales.y,
+          reverse: true,
+          title: {
+            display: true,
+            text: 'Placering',
+            color: '#a8b2d1'
+          },
+          ticks: {
+            ...this.defaultOptions.scales.y.ticks,
+            stepSize: 1
+          }
+        },
+        x: {
+          ...this.defaultOptions.scales.x,
+          title: {
+            display: true,
+            text: 'År',
+            color: '#a8b2d1'
+          }
+        }
+      }
+    };
+
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: allYears,
+        datasets
+      },
+      options
+    });
+
+    this.charts.set('placement-trend-chart', chart);
+  }
+
+  /**
    * Create dashboard participation overview chart
    */
   createDashboardParticipationChart(data) {
@@ -764,6 +846,7 @@ class ChartManager {
   updateStatisticsCharts(filteredData) {
     this.createAveragePositionChart(filteredData);
     this.createParticipationChart(filteredData);
+    this.createPlacementTrendChart(filteredData);
   }
 
   /**

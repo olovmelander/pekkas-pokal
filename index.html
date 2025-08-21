@@ -264,7 +264,7 @@
           <span>Deltagare & Deras Achievements</span>
         </h2>
         <div class="achievements-controls">
-          <select id="achievement-competitor-filter" class="filter-select">
+          <select id="achievement-competitor-filter" class="filter-select" multiple size="1">
             <option value="all">Alla Deltagare</option>
           </select>
         </div>
@@ -296,7 +296,7 @@
     <div id="statistics" class="tab-content">
       <!-- Enhanced Filters -->
       <div class="stats-controls">
-        <select id="competitor-filter" class="filter-select">
+        <select id="competitor-filter" class="filter-select" multiple size="1">
           <option value="all">Alla Deltagare</option>
         </select>
         <select id="timeframe-filter" class="filter-select">
@@ -335,6 +335,13 @@
           </div>
           <canvas id="participation-chart"></canvas>
         </div>
+      </div>
+
+      <div class="chart-container">
+        <div class="chart-header">
+          <div class="chart-title">📉 Placering per År</div>
+        </div>
+        <canvas id="placement-trend-chart"></canvas>
       </div>
     </div>
   </div>
