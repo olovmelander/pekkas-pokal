@@ -198,7 +198,7 @@ class UIComponents {
       : window.ACHIEVEMENT_DEFINITIONS.filter(a => a.category === category);
 
     // Get current achievement data
-    const participantAchievements = window.PekkasPokalApp?.getState()?.competitionData?.participantAchievements || {};
+    const participantAchievements = window.PekkasPokalApp?.getFilteredParticipantAchievements?.() || {};
 
     filteredAchievements.forEach((ach, index) => {
       // Find holders of this achievement
