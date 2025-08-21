@@ -27,11 +27,10 @@ class ChartManager {
     Chart.defaults.color = '#a8b2d1';
     Chart.defaults.backgroundColor = 'rgba(102, 126, 234, 0.1)';
     Chart.defaults.borderColor = '#667eea';
-    
-    // Register Chart.js components if needed
-    if (Chart.register) {
-      Chart.register(...Chart.controllers, ...Chart.elements, ...Chart.plugins, ...Chart.scales);
-    }
+
+    // NOTE: Using the UMD/auto build — components are already registered.
+    // Removing the faulty "Chart.register(...Chart.controllers, ...)" call
+    // which attempted to spread non-iterable objects and caused a runtime error.
     
     this.initialized = true;
     console.log('📊 Chart Manager initialized');
