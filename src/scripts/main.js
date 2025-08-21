@@ -523,9 +523,11 @@ class PekkasPokalApp {
         this.state.competitionData,
         this.state.filters
       );
-      
-      this.modules.uiComponents.updateStatisticsView(filteredData);
-      this.modules.chartManager.updateStatisticsCharts(filteredData);
+      // FilterManager returns an object containing competitions, participants and the
+      // original data. The statistics components only need the competitions array,
+      // so pass that to avoid runtime errors when iterating over the result.
+      this.modules.uiComponents.updateStatisticsView(filteredData.competitions);
+      this.modules.chartManager.updateStatisticsCharts(filteredData.competitions);
     }
   }
 
