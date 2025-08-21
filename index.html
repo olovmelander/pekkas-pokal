@@ -1,514 +1,579 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="sv">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>🏆 Pekkas Pokal - Ultimate Competition Tracker</title>
-  
-  <!-- PWA Meta Tags -->
-  <meta name="theme-color" content="#667eea">
-  <meta name="description" content="Årlig tävling för vänner med omfattande statistik och datahantering">
-  <link rel="manifest" href="manifest.json">
-  
-  <!-- Stylesheets -->
-  <link rel="stylesheet" href="src/styles/main.css">
-  <link rel="stylesheet" href="src/styles/components.css">
-  <link rel="stylesheet" href="src/styles/layout.css">
-  <link rel="stylesheet" href="src/styles/animations.css">
-  <link rel="stylesheet" href="src/styles/responsive.css">
-</head>
-<body>
-  <!-- Loading Screen -->
-  <div id="loading-screen" style="
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: #0f0f23;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    z-index: 9999;
-    color: white;
-    font-family: Arial, sans-serif;
-  ">
-    <div style="
-      width: 50px;
-      height: 50px;
-      border: 3px solid rgba(102, 126, 234, 0.3);
-      border-top-color: #667eea;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-      margin-bottom: 1rem;
-    "></div>
-    
-    <div style="font-size: 1.2rem; margin-bottom: 1rem;">
-      🏆 Laddar Pekkas Pokal...
-    </div>
-    
-    <div id="loading-status" style="font-size: 0.9rem; color: #a8b2d1;">
-      Initialiserar...
-    </div>
-  </div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>🏆 Pekkas Pokal - Ultimate Competition Tracker</title>
 
-  <style>
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-    
-    /* Basic fallback styles */
-    :root {
-      --bg-dark: #0f0f23;
-      --bg-card: #1a1a2e;
-      --text-primary: #ffffff;
-      --text-secondary: #a8b2d1;
-      --accent: #667eea;
-      --success: #4ade80;
-      --danger: #f87171;
-      --spacing-sm: 0.5rem;
-      --spacing-md: 1rem;
-      --spacing-lg: 1.5rem;
-      --spacing-xl: 2rem;
-      --radius-md: 12px;
-      --transition-normal: 0.3s ease;
-    }
-    
-    body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: var(--bg-dark);
-      color: var(--text-primary);
-      margin: 0;
-      padding: 0;
-      min-height: 100vh;
-    }
-    
-    .nav-tab {
-      padding: var(--spacing-sm) var(--spacing-lg);
-      background: transparent;
-      color: var(--text-secondary);
-      border: 2px solid transparent;
-      border-radius: var(--radius-md);
-      cursor: pointer;
-      transition: all var(--transition-normal);
-      font-weight: 600;
-    }
-    
-    .nav-tab.active {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-    }
-    
-    .tab-content {
-      display: none;
-    }
-    
-    .tab-content.active {
-      display: block;
-    }
-  </style>
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#667eea" />
+    <meta
+      name="description"
+      content="Årlig tävling för vänner med omfattande statistik och datahantering"
+    />
+    <link rel="manifest" href="manifest.json" />
 
-  <!-- Header -->
-  <header class="header">
-    <div class="header-content">
-      <div class="logo">
-        <span class="trophy-logo">🏆</span>
-        <h1>Pekkas Pokal</h1>
-        <span class="year-range" id="year-range">2011-2025</span>
-      </div>
-      
-      <div class="header-actions">
-        <!-- Actions can be added here -->
-      </div>
-    </div>
-  </header>
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="src/styles/main.css" />
+    <link rel="stylesheet" href="src/styles/components.css" />
+    <link rel="stylesheet" href="src/styles/layout.css" />
+    <link rel="stylesheet" href="src/styles/animations.css" />
+    <link rel="stylesheet" href="src/styles/responsive.css" />
+  </head>
+  <body>
+    <!-- Loading Screen -->
+    <div
+      id="loading-screen"
+      style="
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: #0f0f23;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+        color: white;
+        font-family: Arial, sans-serif;
+      "
+    >
+      <div
+        style="
+          width: 50px;
+          height: 50px;
+          border: 3px solid rgba(102, 126, 234, 0.3);
+          border-top-color: #667eea;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+          margin-bottom: 1rem;
+        "
+      ></div>
 
-  <!-- Navigation -->
-  <nav class="nav-tabs">
-    <button class="nav-tab active" data-tab="dashboard"><span>📊</span> Dashboard</button>
-    <button class="nav-tab" data-tab="medals"><span>🥇</span> Medaljliga</button>
-    <button class="nav-tab" data-tab="achievements"><span>🎖️</span> Achievements</button>
-    <button class="nav-tab" data-tab="statistics"><span>📈</span> Statistik</button>
-  </nav>
-
-  <!-- Main Container -->
-  <div class="container">
-    <!-- Dashboard Tab -->
-    <div id="dashboard" class="tab-content active">
-      <div class="dashboard-grid">
-        <div class="stat-card">
-          <div class="stat-icon">🏆</div>
-          <div class="stat-value counter" id="total-competitions">0</div>
-          <div class="stat-label">Tävlingar</div>
-          <div class="stat-change" id="comp-change">
-            <span>📈</span> <span id="comp-trend">14 totalt</span>
-          </div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-icon">👥</div>
-          <div class="stat-value counter" id="total-participants">0</div>
-          <div class="stat-label">Deltagare</div>
-          <div class="stat-change" id="part-change">
-            <span>✅</span> <span id="part-trend">Alla aktiva</span>
-          </div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-icon">🥇</div>
-          <div class="stat-value" id="current-champion">—</div>
-          <div class="stat-label">Senaste Vinnare</div>
-          <div class="stat-change" id="champ-change">
-            <span>🎯</span> <span id="champ-comp">2025 Flipper</span>
-          </div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-icon">👑</div>
-          <div class="stat-value" id="most-wins">—</div>
-          <div class="stat-label">Flest Vinster</div>
-          <div class="stat-change" id="wins-change">
-            <span>🏅</span> <span id="wins-count">0 vinster</span>
-          </div>
-        </div>
+      <div style="font-size: 1.2rem; margin-bottom: 1rem">
+        🏆 Laddar Pekkas Pokal...
       </div>
 
-      <!-- Fun Stats -->
-      <div class="fun-stats">
-        <div class="fun-stats-title">
-          <span>🎉</span> Roliga Fakta <span>🎉</span>
-        </div>
-        <div id="fun-stats-list"></div>
-      </div>
-
-      <!-- Charts -->
-      <div class="chart-container">
-        <div class="chart-header">
-          <div class="chart-title">🏆 Vinster per Deltagare</div>
-        </div>
-        <canvas id="wins-chart"></canvas>
-      </div>
-
-      <div class="dashboard-extras">
-        <div class="extra-card" id="upcoming-event">
-          <h3>⏳ Nästa Tävling</h3>
-          <div id="next-event-name">—</div>
-          <div id="next-event-countdown"></div>
-        </div>
-
-        <div class="extra-card" id="recent-achievements">
-          <h3>🎖️ Nya Achievements</h3>
-          <ul id="recent-achievements-list"></ul>
-        </div>
-
-        <div class="extra-card" id="records-section">
-          <h3>📚 Rekordbok</h3>
-          <ul id="record-list"></ul>
-        </div>
-
-        <div class="chart-container">
-          <div class="chart-header">
-            <div class="chart-title">👥 Deltagande per År</div>
-          </div>
-          <canvas id="dashboard-participation-chart"></canvas>
-        </div>
+      <div id="loading-status" style="font-size: 0.9rem; color: #a8b2d1">
+        Initialiserar...
       </div>
     </div>
 
-    <!-- Medal Tally Tab -->
-    <div id="medals" class="tab-content">
-      <div class="medal-tally">
-        <div class="medal-tally-header">
-          <div class="medal-tally-title">
-            <span>🏅</span> Olympisk Medaljliga
-          </div>
-        </div>
-        <div id="medal-tally-list"></div>
-      </div>
-
-      <div class="chart-container">
-        <div class="chart-header">
-          <div class="chart-title">🥇 Medaljfördelning</div>
-        </div>
-        <canvas id="medal-distribution-chart"></canvas>
-      </div>
-    </div>
-
-    <!-- Enhanced Achievements Tab -->
-    <div id="achievements" class="tab-content">
-      <div class="achievements-header">
-        <h1>🏆 Pekkas Pokal Achievements</h1>
-        <p style="color: var(--text-secondary); font-size: 1.1rem;">Samla utmärkelser och visa din dominans!</p>
-      </div>
-
-      <div class="achievements-stats">
-        <div class="stat-bubble">
-          <div class="number" id="total-unlocked">0</div>
-          <div class="label">Upplåsta</div>
-        </div>
-        <div class="stat-bubble">
-          <div class="number" id="total-achievements">0</div>
-          <div class="label">Totalt</div>
-        </div>
-        <div class="stat-bubble">
-          <div class="number" id="completion-rate">0%</div>
-          <div class="label">Genomfört</div>
-        </div>
-      </div>
-
-      <!-- Participant Achievements Section -->
-      <section class="participant-achievements">
-        <h2 class="section-title">
-          <span>👥</span>
-          <span>Deltagare & Deras Achievements</span>
-        </h2>
-        <div class="achievements-controls">
-          <select id="achievement-competitor-filter" class="filter-select" multiple size="1">
-            <option value="all">Alla Deltagare</option>
-          </select>
-        </div>
-        <div class="participant-cards" id="participant-cards"></div>
-      </section>
-
-      <!-- All Achievements Section -->
-      <section class="all-achievements">
-        <h2 class="section-title">
-          <span>🎖️</span>
-          <span>Alla Tillgängliga Achievements</span>
-        </h2>
-        
-        <div class="achievement-categories">
-          <button class="category-filter active" data-category="all">Alla</button>
-          <button class="category-filter" data-category="medals">🥇 Medaljer</button>
-          <button class="category-filter" data-category="streaks">🔥 Streaks</button>
-          <button class="category-filter" data-category="special">⭐ Speciella</button>
-          <button class="category-filter" data-category="fun">🎉 Roliga</button>
-          <button class="category-filter" data-category="legendary">👑 Legendariska</button>
-          <button class="category-filter" data-category="mythic">🌟 Mytiska</button>
-        </div>
-        
-        <div class="achievements-grid" id="achievements-grid"></div>
-      </section>
-    </div>
-
-    <!-- Statistics Tab -->
-    <div id="statistics" class="tab-content">
-      <!-- Enhanced Filters -->
-      <div class="stats-controls">
-        <select id="competitor-filter" class="filter-select" multiple size="1">
-          <option value="all">Alla Deltagare</option>
-        </select>
-        <select id="timeframe-filter" class="filter-select">
-          <option value="all">Alla År</option>
-          <option value="recent5">Senaste 5 År</option>
-          <option value="recent3">Senaste 3 År</option>
-          <option value="2025">2025</option>
-          <option value="2024">2024</option>
-          <option value="2023">2023</option>
-          <option value="2022">2022</option>
-          <option value="2021">2021</option>
-        </select>
-        <select id="competition-type-filter" class="filter-select">
-          <option value="all">Alla Tävlingar</option>
-        </select>
-        <button id="reset-filters-btn" class="icon-btn" style="margin-left: auto;">
-          🔄 Återställ
-        </button>
-      </div>
-
-      <!-- Competitor Cards -->
-      <div class="competitor-stats-grid" id="competitor-stats-grid"></div>
-
-      <!-- Charts -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 2rem;">
-        <div class="chart-container">
-          <div class="chart-header">
-            <div class="chart-title">📈 Snittplacering per År</div>
-          </div>
-          <canvas id="avg-position-chart"></canvas>
-        </div>
-
-        <div class="chart-container">
-          <div class="chart-header">
-            <div class="chart-title">🎯 Deltagande över Tid</div>
-          </div>
-          <canvas id="participation-chart"></canvas>
-        </div>
-      </div>
-
-      <div class="chart-container">
-        <div class="chart-header">
-          <div class="chart-title">📉 Placering per År</div>
-        </div>
-        <canvas id="placement-trend-chart"></canvas>
-      </div>
-    </div>
-  </div>
-
-  <!-- Native CSV parser as immediate backup -->
-  <script>
-    // Native CSV parser that replaces Papa Parse
-    window.Papa = {
-      parse: function(csvText, options = {}) {
-        const lines = csvText.trim().split(/\r?\n/);
-        const result = { data: [], meta: { fields: [] }, errors: [] };
-        
-        if (lines.length === 0) {
-          return result;
+    <style>
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
         }
-        
-        // Parse header
-        const headerLine = lines[0];
-        const headers = this.parseLine(headerLine);
-        
-        if (options.trimHeaders) {
-          headers.forEach((h, i) => headers[i] = h.trim());
-        }
-        
-        result.meta.fields = headers;
-        
-        // Parse data lines
-        for (let i = 1; i < lines.length; i++) {
-          const line = lines[i].trim();
-          if (!line && options.skipEmptyLines) continue;
-          
-          const values = this.parseLine(line);
-          
-          if (options.header) {
-            const row = {};
-            headers.forEach((header, index) => {
-              row[header] = values[index] || '';
-            });
-            result.data.push(row);
-          } else {
-            result.data.push(values);
-          }
-        }
-        
-        // Call complete callback if provided
-        if (options.complete && typeof options.complete === 'function') {
-          setTimeout(() => options.complete(result), 0);
-        }
-        
-        return result;
-      },
-      
-      parseLine: function(line) {
-        const result = [];
-        let current = '';
-        let inQuotes = false;
-        
-        for (let i = 0; i < line.length; i++) {
-          const char = line[i];
-          
-          if (char === '"') {
-            inQuotes = !inQuotes;
-          } else if (char === ',' && !inQuotes) {
-            result.push(current.trim());
-            current = '';
-          } else {
-            current += char;
-          }
-        }
-        
-        result.push(current.trim());
-        return result;
       }
-    };
-    
-    console.log('✅ Built-in CSV parser ready');
-  </script>
 
-  <!-- Load Chart.js with fallback -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script>
-    // Create a dummy Chart object if Chart.js fails to load
-    if (typeof Chart === 'undefined') {
-      console.warn('Chart.js failed to load, creating dummy');
-      window.Chart = function() { return { destroy: () => {}, update: () => {}, resize: () => {} }; };
-      window.Chart.register = () => {};
-      window.Chart.defaults = { font: {}, color: '', backgroundColor: '', borderColor: '' };
-    }
-  </script>
-  
-  <!-- Scripts (Load in order) -->
-  <script src="src/data/achievements.js"></script>
-  <script src="src/scripts/utils.js"></script>
-  <script src="src/scripts/data-manager.js"></script>
-  <script src="src/scripts/achievement-engine.js"></script>
-  <script src="src/scripts/chart-manager.js"></script>
-  <script src="src/scripts/ui-components.js"></script>
-  <script src="src/scripts/statistics.js"></script>
-  <script src="src/scripts/filters.js"></script>
-  <script src="src/scripts/main.js"></script>
-  
-  <!-- Initialize app when all scripts are loaded -->
-  <script>
-    function updateLoadingStatus(message) {
-      const statusEl = document.getElementById('loading-status');
-      if (statusEl) statusEl.textContent = message;
-      console.log('Loading status:', message);
-    }
-    
-    // Wait for all scripts to load
-    window.addEventListener('load', function() {
-      console.log('Window loaded, starting initialization...');
-      updateLoadingStatus('Initialiserar moduler...');
-      
-      // Check if all required modules are loaded
-      const checkModules = () => {
-        const required = [
-          'PekkasPokalApp',
-          'DataManager', 
-          'ChartManager',
-          'UIComponents',
-          'Statistics',
-          'FilterManager',
-          'AchievementEngine'
-        ];
-        
-        const available = required.filter(module => typeof window[module] !== 'undefined');
-        const missing = required.filter(module => typeof window[module] === 'undefined');
-        
-        console.log('Available modules:', available);
-        
-        if (missing.length > 0) {
-          console.log('Missing modules:', missing);
-          
-          // If only non-critical modules are missing, continue anyway
-          if (missing.includes('PekkasPokalApp')) {
-            updateLoadingStatus('Väntar på huvudmodul...');
-            setTimeout(checkModules, 200);
-            return;
+      /* Basic fallback styles */
+      :root {
+        --bg-dark: #0f0f23;
+        --bg-card: #1a1a2e;
+        --text-primary: #ffffff;
+        --text-secondary: #a8b2d1;
+        --accent: #667eea;
+        --success: #4ade80;
+        --danger: #f87171;
+        --spacing-sm: 0.5rem;
+        --spacing-md: 1rem;
+        --spacing-lg: 1.5rem;
+        --spacing-xl: 2rem;
+        --radius-md: 12px;
+        --transition-normal: 0.3s ease;
+      }
+
+      body {
+        font-family:
+          "Inter",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        background: var(--bg-dark);
+        color: var(--text-primary);
+        margin: 0;
+        padding: 0;
+        min-height: 100vh;
+      }
+
+      .nav-tab {
+        padding: var(--spacing-sm) var(--spacing-lg);
+        background: transparent;
+        color: var(--text-secondary);
+        border: 2px solid transparent;
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        transition: all var(--transition-normal);
+        font-weight: 600;
+      }
+
+      .nav-tab.active {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+      }
+
+      .tab-content {
+        display: none;
+      }
+
+      .tab-content.active {
+        display: block;
+      }
+    </style>
+
+    <!-- Header -->
+    <header class="header">
+      <div class="header-content">
+        <div class="logo">
+          <span class="trophy-logo">🏆</span>
+          <h1>Pekkas Pokal</h1>
+          <span class="year-range" id="year-range">2011-2025</span>
+        </div>
+
+        <div class="header-actions">
+          <!-- Actions can be added here -->
+        </div>
+      </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="nav-tabs">
+      <button class="nav-tab active" data-tab="dashboard">
+        <span>📊</span> Dashboard
+      </button>
+      <button class="nav-tab" data-tab="medals">
+        <span>🥇</span> Medaljliga
+      </button>
+      <button class="nav-tab" data-tab="achievements">
+        <span>🎖️</span> Achievements
+      </button>
+      <button class="nav-tab" data-tab="statistics">
+        <span>📈</span> Statistik
+      </button>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="container">
+      <!-- Dashboard Tab -->
+      <div id="dashboard" class="tab-content active">
+        <div class="dashboard-grid">
+          <div class="stat-card">
+            <div class="stat-icon">🏆</div>
+            <div class="stat-value counter" id="total-competitions">0</div>
+            <div class="stat-label">Tävlingar</div>
+            <div class="stat-change" id="comp-change">
+              <span>📈</span> <span id="comp-trend">14 totalt</span>
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-icon">👥</div>
+            <div class="stat-value counter" id="total-participants">0</div>
+            <div class="stat-label">Deltagare</div>
+            <div class="stat-change" id="part-change">
+              <span>✅</span> <span id="part-trend">Alla aktiva</span>
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-icon">🥇</div>
+            <div class="stat-value" id="current-champion">—</div>
+            <div class="stat-label">Senaste Vinnare</div>
+            <div class="stat-change" id="champ-change">
+              <span>🎯</span> <span id="champ-comp">2025 Flipper</span>
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-icon">👑</div>
+            <div class="stat-value" id="most-wins">—</div>
+            <div class="stat-label">Flest Vinster</div>
+            <div class="stat-change" id="wins-change">
+              <span>🏅</span> <span id="wins-count">0 vinster</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Fun Stats -->
+        <div class="fun-stats">
+          <div class="fun-stats-title">
+            <span>🎉</span> Roliga Fakta <span>🎉</span>
+          </div>
+          <div id="fun-stats-list"></div>
+        </div>
+
+        <!-- Charts -->
+        <div class="chart-container">
+          <div class="chart-header">
+            <div class="chart-title">🏆 Vinster per Deltagare</div>
+          </div>
+          <canvas id="wins-chart"></canvas>
+        </div>
+
+        <div class="dashboard-extras">
+          <div class="extra-card" id="upcoming-event">
+            <h3>⏳ Nästa Tävling</h3>
+            <div id="next-event-name">—</div>
+            <div id="next-event-countdown"></div>
+          </div>
+
+          <div class="extra-card" id="recent-achievements">
+            <h3>🎖️ Nya Achievements</h3>
+            <ul id="recent-achievements-list"></ul>
+          </div>
+
+          <div class="extra-card" id="records-section">
+            <h3>📚 Rekordbok</h3>
+            <ul id="record-list"></ul>
+          </div>
+
+          <div class="chart-container">
+            <div class="chart-header">
+              <div class="chart-title">👥 Deltagande per År</div>
+            </div>
+            <canvas id="dashboard-participation-chart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Medal Tally Tab -->
+      <div id="medals" class="tab-content">
+        <div class="medal-tally">
+          <div class="medal-tally-header">
+            <div class="medal-tally-title">
+              <span>🏅</span> Olympisk Medaljliga
+            </div>
+          </div>
+          <div id="medal-tally-list"></div>
+        </div>
+
+        <div class="chart-container">
+          <div class="chart-header">
+            <div class="chart-title">🥇 Medaljfördelning</div>
+          </div>
+          <canvas id="medal-distribution-chart"></canvas>
+        </div>
+      </div>
+
+      <!-- Enhanced Achievements Tab -->
+      <div id="achievements" class="tab-content">
+        <div class="achievements-header">
+          <h1>🏆 Pekkas Pokal Achievements</h1>
+          <p style="color: var(--text-secondary); font-size: 1.1rem">
+            Samla utmärkelser och visa din dominans!
+          </p>
+        </div>
+
+        <div class="achievements-stats">
+          <div class="stat-bubble">
+            <div class="number" id="total-unlocked">0</div>
+            <div class="label">Upplåsta</div>
+          </div>
+          <div class="stat-bubble">
+            <div class="number" id="total-achievements">0</div>
+            <div class="label">Totalt</div>
+          </div>
+          <div class="stat-bubble">
+            <div class="number" id="completion-rate">0%</div>
+            <div class="label">Genomfört</div>
+          </div>
+        </div>
+
+        <!-- Participant Achievements Section -->
+        <section class="participant-achievements">
+          <h2 class="section-title">
+            <span>👥</span>
+            <span>Deltagare & Deras Achievements</span>
+          </h2>
+          <div class="achievements-controls">
+            <div
+              class="competitor-multiselect"
+              id="achievement-competitor-filter"
+            ></div>
+          </div>
+          <div class="participant-cards" id="participant-cards"></div>
+        </section>
+
+        <!-- All Achievements Section -->
+        <section class="all-achievements">
+          <h2 class="section-title">
+            <span>🎖️</span>
+            <span>Alla Tillgängliga Achievements</span>
+          </h2>
+
+          <div class="achievement-categories">
+            <button class="category-filter active" data-category="all">
+              Alla
+            </button>
+            <button class="category-filter" data-category="medals">
+              🥇 Medaljer
+            </button>
+            <button class="category-filter" data-category="streaks">
+              🔥 Streaks
+            </button>
+            <button class="category-filter" data-category="special">
+              ⭐ Speciella
+            </button>
+            <button class="category-filter" data-category="fun">
+              🎉 Roliga
+            </button>
+            <button class="category-filter" data-category="legendary">
+              👑 Legendariska
+            </button>
+            <button class="category-filter" data-category="mythic">
+              🌟 Mytiska
+            </button>
+          </div>
+
+          <div class="achievements-grid" id="achievements-grid"></div>
+        </section>
+      </div>
+
+      <!-- Statistics Tab -->
+      <div id="statistics" class="tab-content">
+        <!-- Enhanced Filters -->
+        <div class="stats-controls">
+          <div class="competitor-multiselect" id="competitor-filter"></div>
+          <select id="timeframe-filter" class="filter-select">
+            <option value="all">Alla År</option>
+            <option value="recent5">Senaste 5 År</option>
+            <option value="recent3">Senaste 3 År</option>
+            <option value="2025">2025</option>
+            <option value="2024">2024</option>
+            <option value="2023">2023</option>
+            <option value="2022">2022</option>
+            <option value="2021">2021</option>
+          </select>
+          <select id="competition-type-filter" class="filter-select">
+            <option value="all">Alla Tävlingar</option>
+          </select>
+          <button
+            id="reset-filters-btn"
+            class="icon-btn"
+            style="margin-left: auto"
+          >
+            🔄 Återställ
+          </button>
+        </div>
+
+        <!-- Competitor Cards -->
+        <div class="competitor-stats-grid" id="competitor-stats-grid"></div>
+
+        <!-- Charts -->
+        <div
+          style="
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 2rem;
+          "
+        >
+          <div class="chart-container">
+            <div class="chart-header">
+              <div class="chart-title">📈 Snittplacering per År</div>
+            </div>
+            <canvas id="avg-position-chart"></canvas>
+          </div>
+
+          <div class="chart-container">
+            <div class="chart-header">
+              <div class="chart-title">🎯 Deltagande över Tid</div>
+            </div>
+            <canvas id="participation-chart"></canvas>
+          </div>
+        </div>
+
+        <div class="chart-container">
+          <div class="chart-header">
+            <div class="chart-title">📉 Placering per År</div>
+          </div>
+          <canvas id="placement-trend-chart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Native CSV parser as immediate backup -->
+    <script>
+      // Native CSV parser that replaces Papa Parse
+      window.Papa = {
+        parse: function (csvText, options = {}) {
+          const lines = csvText.trim().split(/\r?\n/);
+          const result = { data: [], meta: { fields: [] }, errors: [] };
+
+          if (lines.length === 0) {
+            return result;
           }
-          
-          // PekkasPokalApp is available, other modules are optional
-          console.log('Main module available, continuing with available modules');
-        }
-        
-        // Initialize app
-        updateLoadingStatus('Startar applikation...');
-        
-        try {
-          console.log('Creating app instance with available modules:', available);
-          window.PekkasPokalApp = new PekkasPokalApp();
-          window.app = window.PekkasPokalApp;
-          console.log('App instance created successfully');
-          
-          // The app will hide the loading screen when ready
-        } catch (error) {
-          console.error('Failed to create app:', error);
-          updateLoadingStatus('Fel vid start: ' + error.message);
-          
-          // Show error with reload button
-          setTimeout(() => {
-            document.getElementById('loading-screen').innerHTML = `
+
+          // Parse header
+          const headerLine = lines[0];
+          const headers = this.parseLine(headerLine);
+
+          if (options.trimHeaders) {
+            headers.forEach((h, i) => (headers[i] = h.trim()));
+          }
+
+          result.meta.fields = headers;
+
+          // Parse data lines
+          for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line && options.skipEmptyLines) continue;
+
+            const values = this.parseLine(line);
+
+            if (options.header) {
+              const row = {};
+              headers.forEach((header, index) => {
+                row[header] = values[index] || "";
+              });
+              result.data.push(row);
+            } else {
+              result.data.push(values);
+            }
+          }
+
+          // Call complete callback if provided
+          if (options.complete && typeof options.complete === "function") {
+            setTimeout(() => options.complete(result), 0);
+          }
+
+          return result;
+        },
+
+        parseLine: function (line) {
+          const result = [];
+          let current = "";
+          let inQuotes = false;
+
+          for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+
+            if (char === '"') {
+              inQuotes = !inQuotes;
+            } else if (char === "," && !inQuotes) {
+              result.push(current.trim());
+              current = "";
+            } else {
+              current += char;
+            }
+          }
+
+          result.push(current.trim());
+          return result;
+        },
+      };
+
+      console.log("✅ Built-in CSV parser ready");
+    </script>
+
+    <!-- Load Chart.js with fallback -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+      // Create a dummy Chart object if Chart.js fails to load
+      if (typeof Chart === "undefined") {
+        console.warn("Chart.js failed to load, creating dummy");
+        window.Chart = function () {
+          return { destroy: () => {}, update: () => {}, resize: () => {} };
+        };
+        window.Chart.register = () => {};
+        window.Chart.defaults = {
+          font: {},
+          color: "",
+          backgroundColor: "",
+          borderColor: "",
+        };
+      }
+    </script>
+
+    <!-- Scripts (Load in order) -->
+    <script src="src/data/achievements.js"></script>
+    <script src="src/scripts/utils.js"></script>
+    <script src="src/scripts/data-manager.js"></script>
+    <script src="src/scripts/achievement-engine.js"></script>
+    <script src="src/scripts/chart-manager.js"></script>
+    <script src="src/scripts/ui-components.js"></script>
+    <script src="src/scripts/statistics.js"></script>
+    <script src="src/scripts/filters.js"></script>
+    <script src="src/scripts/components/competitor-filter.js"></script>
+    <script src="src/scripts/main.js"></script>
+
+    <!-- Initialize app when all scripts are loaded -->
+    <script>
+      function updateLoadingStatus(message) {
+        const statusEl = document.getElementById("loading-status");
+        if (statusEl) statusEl.textContent = message;
+        console.log("Loading status:", message);
+      }
+
+      // Wait for all scripts to load
+      window.addEventListener("load", function () {
+        console.log("Window loaded, starting initialization...");
+        updateLoadingStatus("Initialiserar moduler...");
+
+        // Check if all required modules are loaded
+        const checkModules = () => {
+          const required = [
+            "PekkasPokalApp",
+            "DataManager",
+            "ChartManager",
+            "UIComponents",
+            "Statistics",
+            "FilterManager",
+            "AchievementEngine",
+          ];
+
+          const available = required.filter(
+            (module) => typeof window[module] !== "undefined",
+          );
+          const missing = required.filter(
+            (module) => typeof window[module] === "undefined",
+          );
+
+          console.log("Available modules:", available);
+
+          if (missing.length > 0) {
+            console.log("Missing modules:", missing);
+
+            // If only non-critical modules are missing, continue anyway
+            if (missing.includes("PekkasPokalApp")) {
+              updateLoadingStatus("Väntar på huvudmodul...");
+              setTimeout(checkModules, 200);
+              return;
+            }
+
+            // PekkasPokalApp is available, other modules are optional
+            console.log(
+              "Main module available, continuing with available modules",
+            );
+          }
+
+          // Initialize app
+          updateLoadingStatus("Startar applikation...");
+
+          try {
+            console.log(
+              "Creating app instance with available modules:",
+              available,
+            );
+            window.PekkasPokalApp = new PekkasPokalApp();
+            window.app = window.PekkasPokalApp;
+            console.log("App instance created successfully");
+
+            // The app will hide the loading screen when ready
+          } catch (error) {
+            console.error("Failed to create app:", error);
+            updateLoadingStatus("Fel vid start: " + error.message);
+
+            // Show error with reload button
+            setTimeout(() => {
+              document.getElementById("loading-screen").innerHTML = `
               <div style="text-align: center; padding: 2rem; color: white;">
                 <h2>❌ Kunde inte starta applikationen</h2>
                 <p style="margin: 1rem 0; color: #a8b2d1;">${error.message}</p>
                 <pre style="text-align: left; background: rgba(0,0,0,0.5); padding: 1rem; border-radius: 8px; margin: 1rem; font-size: 0.8rem;">
-${error.stack || 'No stack trace available'}
+${error.stack || "No stack trace available"}
                 </pre>
                 <button onclick="window.location.reload()" style="
                   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -524,18 +589,18 @@ ${error.stack || 'No stack trace available'}
                 </button>
               </div>
             `;
-          }, 500);
-        }
-      };
-      
-      // Start checking for modules after a short delay
-      setTimeout(checkModules, 100);
-    });
-    
-    // Add global error handler for debugging
-    window.addEventListener('error', function(event) {
-      console.error('Global error:', event.error);
-    });
-  </script>
-</body>
+            }, 500);
+          }
+        };
+
+        // Start checking for modules after a short delay
+        setTimeout(checkModules, 100);
+      });
+
+      // Add global error handler for debugging
+      window.addEventListener("error", function (event) {
+        console.error("Global error:", event.error);
+      });
+    </script>
+  </body>
 </html>

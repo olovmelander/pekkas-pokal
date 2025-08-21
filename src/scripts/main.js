@@ -169,8 +169,8 @@ class PekkasPokalApp {
    * Setup filter controls
    */
   setupFilterControls() {
-    const competitorFilter = document.getElementById("competitor-filter");
-    const achievementCompetitorFilter = document.getElementById(
+    const competitorContainer = document.getElementById("competitor-filter");
+    const achievementContainer = document.getElementById(
       "achievement-competitor-filter",
     );
     const timeframeFilter = document.getElementById("timeframe-filter");
@@ -179,71 +179,42 @@ class PekkasPokalApp {
     );
     const resetBtn = document.getElementById("reset-filters-btn");
 
-    const updateSelectSize = () => {
-      const isDesktop = window.matchMedia("(min-width: 769px)").matches;
-      const size = isDesktop
-        ? Math.min(8, competitorFilter?.options.length || 8)
-        : 1;
-      [competitorFilter, achievementCompetitorFilter].forEach((select) => {
-        if (select) {
-          select.size = size;
-        }
+    if (typeof CompetitorMultiSelect !== "undefined") {
+      this.competitorSelect = new CompetitorMultiSelect(competitorContainer, {
+        onChange: (values) => {
+          this.state.filters.competitor = values.length ? values : "all";
+          if (this.achievementCompetitorSelect) {
+            this.achievementCompetitorSelect.setSelected(values, true);
+          }
+          this.applyFilters();
+        },
       });
-    };
-    this.updateSelectSize = updateSelectSize;
-    updateSelectSize();
-    window.addEventListener("resize", updateSelectSize);
+      this.achievementCompetitorSelect = new CompetitorMultiSelect(
+        achievementContainer,
+        {
+          onChange: (values) => {
+            this.state.filters.competitor = values.length ? values : "all";
+            if (this.competitorSelect) {
+              this.competitorSelect.setSelected(values, true);
+            }
+            this.applyFilters();
+          },
+        },
+      );
+    }
 
-    // Filter change handlers
-    [
-      competitorFilter,
-      achievementCompetitorFilter,
-      timeframeFilter,
-      competitionTypeFilter,
-    ].forEach((filter) => {
+    [timeframeFilter, competitionTypeFilter].forEach((filter) => {
       if (filter) {
         filter.addEventListener("change", (e) => {
-          let filterType;
-          if (
-            e.target.id === "competitor-filter" ||
-            e.target.id === "achievement-competitor-filter"
-          ) {
-            filterType = "competitor";
-
-            // Get selected values
-            let values = Array.from(e.target.selectedOptions).map(
-              (opt) => opt.value,
-            );
-            if (values.length === 0 || values.includes("all")) {
-              values = ["all"];
-            }
-
-            // Sync both competitor filters
-            const syncSelect = (select) => {
-              if (!select) return;
-              Array.from(select.options).forEach((opt) => {
-                opt.selected = values.includes(opt.value);
-              });
-            };
-            syncSelect(competitorFilter);
-            syncSelect(achievementCompetitorFilter);
-
-            this.state.filters[filterType] = values.includes("all")
-              ? "all"
-              : values;
-          } else {
-            filterType = e.target.id
-              .replace("-filter", "")
-              .replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-            this.state.filters[filterType] = e.target.value;
-          }
-
+          const filterType = e.target.id
+            .replace("-filter", "")
+            .replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+          this.state.filters[filterType] = e.target.value;
           this.applyFilters();
         });
       }
     });
 
-    // Reset filters
     if (resetBtn) {
       resetBtn.addEventListener("click", () => {
         this.resetFilters();
@@ -414,28 +385,18 @@ class PekkasPokalApp {
     if (!this.state.competitionData) return;
 
     // Competitor filters
-    const competitorFilter = document.getElementById("competitor-filter");
-    const achievementCompetitorFilter = document.getElementById(
-      "achievement-competitor-filter",
-    );
-    [competitorFilter, achievementCompetitorFilter].forEach((filter) => {
-      if (filter) {
-        filter.innerHTML =
-          '<option value="all" selected>Alla Deltagare</option>';
-      }
-    });
-    this.state.competitionData.participants.forEach((p) => {
-      const option = document.createElement("option");
-      option.value = p.id;
-      option.textContent = p.name;
-      if (competitorFilter)
-        competitorFilter.appendChild(option.cloneNode(true));
-      if (achievementCompetitorFilter)
-        achievementCompetitorFilter.appendChild(option);
-    });
-
-    if (this.updateSelectSize) {
-      this.updateSelectSize();
+    const participants = this.state.competitionData.participants;
+    const selected =
+      this.state.filters.competitor === "all"
+        ? []
+        : this.state.filters.competitor;
+    if (this.competitorSelect) {
+      this.competitorSelect.setOptions(participants);
+      this.competitorSelect.setSelected(selected, true);
+    }
+    if (this.achievementCompetitorSelect) {
+      this.achievementCompetitorSelect.setOptions(participants);
+      this.achievementCompetitorSelect.setSelected(selected, true);
     }
 
     // Competition type filter
@@ -787,8 +748,9 @@ class PekkasPokalApp {
     };
 
     // Update UI
-    this.updateElement("competitor-filter", ["all"], "value");
-    this.updateElement("achievement-competitor-filter", ["all"], "value");
+    if (this.competitorSelect) this.competitorSelect.setSelected([], true);
+    if (this.achievementCompetitorSelect)
+      this.achievementCompetitorSelect.setSelected([], true);
     this.updateElement("timeframe-filter", "all", "value");
     this.updateElement("competition-type-filter", "all", "value");
 
