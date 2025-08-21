@@ -442,10 +442,16 @@ class PekkasPokalApp {
       this.modules.uiComponents.renderFunStats(funStats);
     }
     
-    // Create wins chart
+    // Create charts
     if (this.modules.chartManager) {
       this.modules.chartManager.createWinsChart(data);
+      this.modules.chartManager.createDashboardParticipationChart(data);
     }
+
+    // Render additional dashboard sections
+    this.renderUpcomingEvent(data);
+    this.renderAchievementsHighlight(data);
+    this.renderRecords(data);
   }
 
   /**
@@ -477,6 +483,140 @@ class PekkasPokalApp {
     if (latestComp && latestComp.winner) {
       this.updateElement('current-champion', latestComp.winner);
       this.updateElement('champ-comp', `${latestComp.year} ${latestComp.name}`);
+    }
+  }
+
+  /**
+   * Render upcoming event and countdown
+   */
+  renderUpcomingEvent(data) {
+    const nameEl = document.getElementById('next-event-name');
+    const countdownEl = document.getElementById('next-event-countdown');
+    if (!nameEl || !countdownEl) return;
+
+    const now = new Date();
+    const upcoming = data.competitions
+      .filter(c => c.date && c.date > now)
+      .sort((a, b) => a.date - b.date)[0];
+
+    if (!upcoming) {
+      nameEl.textContent = 'Ingen planerad';
+      countdownEl.textContent = '';
+      return;
+    }
+
+    nameEl.textContent = `${upcoming.year} ${upcoming.name}`;
+
+    const updateCountdown = () => {
+      const diff = upcoming.date - new Date();
+      if (diff <= 0) {
+        countdownEl.textContent = 'Pågår!';
+        return;
+      }
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      countdownEl.textContent = `${days}d ${hours}h`;
+    };
+
+    updateCountdown();
+    setInterval(updateCountdown, 60 * 60 * 1000);
+  }
+
+  /**
+   * Highlight recent achievements
+   */
+  renderAchievementsHighlight(data) {
+    const list = document.getElementById('recent-achievements-list');
+    if (!list) return;
+
+    const latestComp = data.competitions[0];
+    const achievementsData = data.participantAchievements || {};
+    let achievements = [];
+
+    if (latestComp && latestComp.winner) {
+      achievements = achievementsData[latestComp.winner] || [];
+    }
+
+    list.innerHTML = '';
+    achievements.slice(0, 3).forEach(achId => {
+      const def = window.ACHIEVEMENT_DEFINITIONS?.find(a => a.id === achId);
+      if (def) {
+        const li = document.createElement('li');
+        li.textContent = `${def.icon} ${def.name}`;
+        list.appendChild(li);
+      }
+    });
+
+    if (list.childElementCount === 0) {
+      const li = document.createElement('li');
+      li.textContent = 'Inga nya achievements';
+      list.appendChild(li);
+    }
+  }
+
+  /**
+   * Render record book section
+   */
+  renderRecords(data) {
+    const list = document.getElementById('record-list');
+    if (!list || !this.modules.statistics) return;
+
+    list.innerHTML = '';
+
+    // Longest winning streak
+    const comps = [...data.competitions].sort((a, b) => a.year - b.year);
+    let bestStreak = 0;
+    let streakHolder = null;
+    let currentWinner = null;
+    let currentStreak = 0;
+
+    comps.forEach(comp => {
+      if (comp.winner) {
+        if (comp.winner === currentWinner) {
+          currentStreak++;
+        } else {
+          currentWinner = comp.winner;
+          currentStreak = 1;
+        }
+        if (currentStreak > bestStreak) {
+          bestStreak = currentStreak;
+          streakHolder = currentWinner;
+        }
+      } else {
+        currentWinner = null;
+        currentStreak = 0;
+      }
+    });
+
+    if (streakHolder) {
+      const li = document.createElement('li');
+      li.textContent = `Längsta segersvit: ${streakHolder} (${bestStreak})`;
+      list.appendChild(li);
+    }
+
+    // Most participants in a year
+    const mostPart = comps.reduce((max, comp) =>
+      comp.participantCount > (max?.participantCount || 0) ? comp : max,
+    null);
+    if (mostPart) {
+      const li = document.createElement('li');
+      li.textContent = `Flest deltagare: ${mostPart.year} (${mostPart.participantCount})`;
+      list.appendChild(li);
+    }
+
+    // Most wins overall
+    const winCounts = this.modules.statistics.calculateWinCounts(data.competitions);
+    const topWinner = Object.entries(winCounts).sort((a, b) => b[1] - a[1])[0];
+    if (topWinner) {
+      const li = document.createElement('li');
+      li.textContent = `Flest vinster: ${topWinner[0]} (${topWinner[1]})`;
+      list.appendChild(li);
+    }
+
+    if (list.childElementCount === 0) {
+      const li = document.createElement('li');
+      li.textContent = 'Inga rekord';
+      list.appendChild(li);
     }
   }
 

@@ -28,6 +28,18 @@
   margin-bottom: var(--spacing-xl);
 }
 
+.dashboard-extras {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--spacing-lg);
+  margin-top: var(--spacing-xl);
+  align-items: start;
+}
+
+.dashboard-extras .chart-container {
+  grid-column: 1 / -1;
+}
+
 /* Participant Cards Grid */
 .participant-cards {
   display: grid;

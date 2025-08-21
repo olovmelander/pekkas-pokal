@@ -198,7 +198,9 @@ class DataManager {
     
     rows.forEach((row, index) => {
       try {
-        const year = this.parseYear(row['År']);
+        const rawDate = row['År'];
+        const year = this.parseYear(rawDate);
+        const date = this.parseDate(rawDate);
         const name = row['Tävling']?.trim();
         const location = row['Plats']?.trim() || '';
         const arranger3rd = row['Arrangör 3:a']?.trim() || '';
@@ -213,6 +215,7 @@ class DataManager {
           competitions.push({
             id: `c${competitions.length + 1}`,
             year: year,
+            date: date,
             name: 'Covid',
             location: '',
             winner: null,
@@ -248,6 +251,7 @@ class DataManager {
         competitions.push({
           id: `c${competitions.length + 1}`,
           year: year,
+          date: date,
           name: name,
           location: location,
           winner: winner,
@@ -294,6 +298,22 @@ class DataManager {
     // Handle simple year
     const year = parseInt(str);
     return isNaN(year) ? null : year;
+  }
+
+  /**
+   * Parse full date from string if available
+   */
+  parseDate(dateString) {
+    if (!dateString) return null;
+
+    const str = dateString.toString().trim();
+    if (str.includes('-')) {
+      const d = new Date(str);
+      return isNaN(d.getTime()) ? null : d;
+    }
+
+    const year = parseInt(str);
+    return isNaN(year) ? null : new Date(year, 0, 1);
   }
 
   /**
