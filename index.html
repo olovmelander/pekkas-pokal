@@ -189,6 +189,42 @@
         </div>
         <canvas id="wins-chart"></canvas>
       </div>
+
+      <div class="dashboard-extras">
+        <div class="extra-card" id="upcoming-event">
+          <h3>⏳ Nästa Tävling</h3>
+          <div id="next-event-name">—</div>
+          <div id="next-event-countdown"></div>
+        </div>
+
+        <div class="extra-card" id="leaderboard-snapshot">
+          <h3>🏅 Topplista</h3>
+          <input id="leaderboard-search" class="filter-input" type="text" placeholder="Sök deltagare..." />
+          <ul id="leaderboard-list"></ul>
+        </div>
+
+        <div class="extra-card" id="recent-achievements">
+          <h3>🎖️ Nya Achievements</h3>
+          <ul id="recent-achievements-list"></ul>
+        </div>
+
+        <div class="extra-card" id="rivalry-section">
+          <h3>⚔️ Rivalitet</h3>
+          <div id="rivalry-info">—</div>
+        </div>
+
+        <div class="extra-card" id="records-section">
+          <h3>📚 Rekordbok</h3>
+          <ul id="record-list"></ul>
+        </div>
+
+        <div class="chart-container">
+          <div class="chart-header">
+            <div class="chart-title">👥 Deltagande per År</div>
+          </div>
+          <canvas id="dashboard-participation-chart"></canvas>
+        </div>
+      </div>
     </div>
 
     <!-- Medal Tally Tab -->

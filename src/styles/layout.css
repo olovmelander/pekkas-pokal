@@ -28,6 +28,17 @@
   margin-bottom: var(--spacing-xl);
 }
 
+.dashboard-extras {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--spacing-lg);
+  margin-top: var(--spacing-xl);
+}
+
+.dashboard-extras .chart-container {
+  grid-column: 1 / -1;
+}
+
 /* Participant Cards Grid */
 .participant-cards {
   display: grid;

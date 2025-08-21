@@ -696,6 +696,69 @@ class ChartManager {
   }
 
   /**
+   * Create dashboard participation overview chart
+   */
+  createDashboardParticipationChart(data) {
+    const ctx = document.getElementById('dashboard-participation-chart');
+    if (!ctx) {
+      console.warn('Dashboard participation chart canvas not found');
+      return;
+    }
+
+    this.destroyChart('dashboard-participation-chart');
+
+    const yearParticipation = {};
+    data.competitions.forEach(comp => {
+      yearParticipation[comp.year] = comp.participantCount;
+    });
+
+    const years = Object.keys(yearParticipation).sort();
+    const participation = years.map(year => yearParticipation[year]);
+
+    const options = {
+      ...this.defaultOptions,
+      scales: {
+        ...this.defaultOptions.scales,
+        y: {
+          ...this.defaultOptions.scales.y,
+          beginAtZero: true,
+          title: {
+            display: true,
+            text: 'Antal deltagare',
+            color: '#a8b2d1'
+          }
+        },
+        x: {
+          ...this.defaultOptions.scales.x,
+          title: {
+            display: true,
+            text: 'År',
+            color: '#a8b2d1'
+          }
+        }
+      }
+    };
+
+    const chart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: years,
+        datasets: [{
+          label: 'Antal Deltagare',
+          data: participation,
+          backgroundColor: this.colorPalette.primary + '80',
+          borderColor: this.colorPalette.primary,
+          borderWidth: 2,
+          borderRadius: 4
+        }]
+      },
+      options: options
+    });
+
+    this.charts.set('dashboard-participation-chart', chart);
+  }
+
+  /**
    * Update statistics charts
    */
   updateStatisticsCharts(filteredData) {
