@@ -442,9 +442,9 @@ class PekkasPokalApp {
       this.modules.uiComponents.renderFunStats(funStats);
     }
     
-    // Create performance chart
+    // Create wins chart
     if (this.modules.chartManager) {
-      this.modules.chartManager.createPerformanceTrendChart(data);
+      this.modules.chartManager.createWinsChart(data);
     }
   }
 
