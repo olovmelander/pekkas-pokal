@@ -455,7 +455,8 @@
         
         try {
           console.log('Creating app instance with available modules:', available);
-          window.app = new PekkasPokalApp();
+          window.PekkasPokalApp = new PekkasPokalApp();
+          window.app = window.PekkasPokalApp;
           console.log('App instance created successfully');
           
           // The app will hide the loading screen when ready
