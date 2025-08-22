@@ -38,6 +38,10 @@ class PekkasPokalApp {
       this.setupEventListeners();
       console.log("✅ Event listeners setup");
 
+      // Initialize theme
+      this.initTheme();
+      console.log("✅ Theme initialized");
+
       // Load data
       await this.loadData();
       console.log("✅ Data loaded");
@@ -135,6 +139,40 @@ class PekkasPokalApp {
     this.updateHeaderHeight();
 
     console.log("🎛️ Event listeners setup complete");
+  }
+
+  /**
+   * Initialize theme switcher
+   */
+  initTheme() {
+    this.themeSwitcher = document.getElementById("theme-switcher");
+    if (!this.themeSwitcher) return;
+
+    this.themeSwitcher.addEventListener("click", () => this.toggleTheme());
+
+    const savedTheme = localStorage.getItem("theme") || "dark";
+    this.applyTheme(savedTheme);
+  }
+
+  /**
+   * Apply a theme
+   * @param {string} theme - 'dark' or 'light'
+   */
+  applyTheme(theme) {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("theme", theme);
+
+    // Dispatch event for other modules to listen to
+    window.dispatchEvent(new CustomEvent("themechange", { detail: { theme } }));
+  }
+
+  /**
+   * Toggle between dark and light themes
+   */
+  toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute("data-theme");
+    const newTheme = currentTheme === "dark" ? "light" : "dark";
+    this.applyTheme(newTheme);
   }
 
   /**

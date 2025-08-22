@@ -7,6 +7,7 @@ class ChartManager {
     this.charts = new Map();
     this.defaultOptions = this.getDefaultOptions();
     this.colorPalette = this.getColorPalette();
+    this.themeConfig = this.getThemeConfig();
     this.initialized = false;
     
     this.init();
@@ -31,6 +32,13 @@ class ChartManager {
     // NOTE: Using the UMD/auto build — components are already registered.
     // Removing the faulty "Chart.register(...Chart.controllers, ...)" call
     // which attempted to spread non-iterable objects and caused a runtime error.
+
+    // Listen for theme changes
+    window.addEventListener('themechange', (e) => this._applyTheme(e.detail.theme));
+
+    // Apply initial theme
+    const initialTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+    this._applyTheme(initialTheme);
     
     this.initialized = true;
     console.log('📊 Chart Manager initialized');
@@ -198,6 +206,9 @@ class ChartManager {
     });
 
     this.charts.set('performance-trend-chart', chart);
+    if (ctx.parentElement) {
+      ctx.parentElement.dataset.chartRendered = 'true';
+    }
   }
 
   /**
@@ -261,6 +272,9 @@ class ChartManager {
     });
 
     this.charts.set('wins-chart', chart);
+    if (ctx.parentElement) {
+      ctx.parentElement.dataset.chartRendered = 'true';
+    }
   }
 
   /**
@@ -359,6 +373,9 @@ class ChartManager {
     });
 
     this.charts.set('medal-distribution-chart', chart);
+    if (ctx.parentElement) {
+      ctx.parentElement.dataset.chartRendered = 'true';
+    }
   }
 
   /**
@@ -448,6 +465,9 @@ class ChartManager {
     });
 
     this.charts.set('avg-position-chart', chart);
+    if (ctx.parentElement) {
+      ctx.parentElement.dataset.chartRendered = 'true';
+    }
   }
 
   /**
@@ -522,6 +542,9 @@ class ChartManager {
     });
 
     this.charts.set('avg-position-chart', chart);
+    if (ctx.parentElement) {
+      ctx.parentElement.dataset.chartRendered = 'true';
+    }
   }
 
   /**
@@ -599,6 +622,9 @@ class ChartManager {
     });
 
     this.charts.set('participation-chart', chart);
+    if (ctx.parentElement) {
+      ctx.parentElement.dataset.chartRendered = 'true';
+    }
   }
 
   /**
@@ -695,6 +721,9 @@ class ChartManager {
     });
 
     this.charts.set('participation-chart', chart);
+    if (ctx.parentElement) {
+      ctx.parentElement.dataset.chartRendered = 'true';
+    }
   }
 
   /**
@@ -786,6 +815,9 @@ class ChartManager {
     });
 
     this.charts.set('placement-trend-chart', chart);
+    if (ctx.parentElement) {
+      ctx.parentElement.dataset.chartRendered = 'true';
+    }
   }
 
   /**
@@ -849,6 +881,9 @@ class ChartManager {
     });
 
     this.charts.set('dashboard-participation-chart', chart);
+    if (ctx.parentElement) {
+      ctx.parentElement.dataset.chartRendered = 'true';
+    }
   }
 
   /**
@@ -947,28 +982,71 @@ class ChartManager {
   }
 
   /**
-   * Update chart theme (for dark/light mode switching)
+   * Get theme-specific color configurations
    */
-  updateTheme(isDark = true) {
-    const textColor = isDark ? '#a8b2d1' : '#374151';
-    const gridColor = isDark ? 'rgba(102, 126, 234, 0.1)' : 'rgba(156, 163, 175, 0.2)';
+  getThemeConfig() {
+    return {
+      dark: {
+        textColor: '#a8b2d1',
+        gridColor: 'rgba(102, 126, 234, 0.1)',
+        tooltipBg: 'rgba(26, 26, 46, 0.95)',
+        tooltipTitle: '#ffffff',
+        tooltipBody: '#a8b2d1',
+      },
+      light: {
+        textColor: '#495057',
+        gridColor: 'rgba(0, 0, 0, 0.1)',
+        tooltipBg: 'rgba(255, 255, 255, 0.95)',
+        tooltipTitle: '#212529',
+        tooltipBody: '#495057',
+      }
+    };
+  }
+
+  /**
+   * Apply theme colors to charts
+   * @private
+   */
+  _applyTheme(theme = 'dark') {
+    const config = this.themeConfig[theme] || this.themeConfig.dark;
+
+    // Update Chart.js global defaults
+    Chart.defaults.color = config.textColor;
     
-    this.charts.forEach((chart, id) => {
-      // Update chart options
+    // Update default options for new charts
+    this.defaultOptions.plugins.legend.labels.color = config.textColor;
+    this.defaultOptions.plugins.tooltip.backgroundColor = config.tooltipBg;
+    this.defaultOptions.plugins.tooltip.titleColor = config.tooltipTitle;
+    this.defaultOptions.plugins.tooltip.bodyColor = config.tooltipBody;
+    this.defaultOptions.scales.x.ticks.color = config.textColor;
+    this.defaultOptions.scales.x.grid.color = config.gridColor;
+    this.defaultOptions.scales.y.ticks.color = config.textColor;
+    this.defaultOptions.scales.y.grid.color = config.gridColor;
+
+    // Update existing charts
+    this.charts.forEach((chart) => {
       if (chart.options.plugins?.legend?.labels) {
-        chart.options.plugins.legend.labels.color = textColor;
+        chart.options.plugins.legend.labels.color = config.textColor;
       }
-      
-      if (chart.options.scales?.x?.ticks) {
-        chart.options.scales.x.ticks.color = textColor;
-        chart.options.scales.x.grid.color = gridColor;
+      if (chart.options.plugins?.tooltip) {
+        chart.options.plugins.tooltip.backgroundColor = config.tooltipBg;
+        chart.options.plugins.tooltip.titleColor = config.tooltipTitle;
+        chart.options.plugins.tooltip.bodyColor = config.tooltipBody;
       }
-      
-      if (chart.options.scales?.y?.ticks) {
-        chart.options.scales.y.ticks.color = textColor;
-        chart.options.scales.y.grid.color = gridColor;
+      if (chart.options.scales?.x) {
+        chart.options.scales.x.ticks.color = config.textColor;
+        chart.options.scales.x.grid.color = config.gridColor;
+        if (chart.options.scales.x.title) {
+          chart.options.scales.x.title.color = config.textColor;
+        }
       }
-      
+      if (chart.options.scales?.y) {
+        chart.options.scales.y.ticks.color = config.textColor;
+        chart.options.scales.y.grid.color = config.gridColor;
+        if (chart.options.scales.y.title) {
+          chart.options.scales.y.title.color = config.textColor;
+        }
+      }
       chart.update('none'); // Update without animation
     });
   }

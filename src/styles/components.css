@@ -962,3 +962,43 @@
   color: #000;
 }
 /* default cell colors can be set inline via JS for other positions */
+
+/* ===== THEME SWITCHER ===== */
+#theme-switcher {
+  font-size: 1.2rem;
+  position: relative;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+}
+
+#theme-switcher .theme-icon-sun,
+#theme-switcher .theme-icon-moon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+/* Default state (dark theme) */
+#theme-switcher .theme-icon-sun {
+  opacity: 0;
+  transform: translate(-50%, -50%) rotate(-90deg);
+}
+
+#theme-switcher .theme-icon-moon {
+  opacity: 1;
+  transform: translate(-50%, -50%) rotate(0deg);
+}
+
+/* Light theme state */
+html[data-theme="light"] #theme-switcher .theme-icon-sun {
+  opacity: 1;
+  transform: translate(-50%, -50%) rotate(0deg);
+}
+
+html[data-theme="light"] #theme-switcher .theme-icon-moon {
+  opacity: 0;
+  transform: translate(-50%, -50%) rotate(90deg);
+}
