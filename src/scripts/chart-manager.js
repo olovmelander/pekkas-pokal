@@ -886,13 +886,69 @@ class ChartManager {
     }
   }
 
+  createAverageRankingChart(averageRankings) {
+    const ctx = document.getElementById('average-ranking-chart');
+    if (!ctx) {
+      console.warn('Average ranking chart canvas not found');
+      return;
+    }
+
+    this.destroyChart('average-ranking-chart');
+
+    const sortedRankings = Object.entries(averageRankings)
+      .sort((a, b) => a[1] - b[1]);
+
+    const options = {
+      ...this.defaultOptions,
+      plugins: {
+        ...this.defaultOptions.plugins,
+        legend: { display: false }
+      },
+      scales: {
+        ...this.defaultOptions.scales,
+        y: {
+          ...this.defaultOptions.scales.y,
+          beginAtZero: false,
+          title: { display: true, text: 'Genomsnittlig ranking', color: '#a8b2d1' }
+        },
+        x: {
+          ...this.defaultOptions.scales.x,
+          title: { display: true, text: 'Deltagare', color: '#a8b2d1' }
+        }
+      }
+    };
+
+    const chart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: sortedRankings.map(([name]) => name),
+        datasets: [
+          {
+            label: 'Genomsnittlig ranking',
+            data: sortedRankings.map(([, ranking]) => ranking),
+            backgroundColor: this.colorPalette.primary,
+            borderColor: this.colorPalette.primary,
+            borderWidth: 1
+          }
+        ]
+      },
+      options: options
+    });
+
+    this.charts.set('average-ranking-chart', chart);
+    if (ctx.parentElement) {
+      ctx.parentElement.dataset.chartRendered = 'true';
+    }
+  }
+
   /**
    * Update statistics charts
    */
-  updateStatisticsCharts(filteredData) {
+  updateStatisticsCharts(filteredData, averageRankings) {
     this.createAveragePositionChart(filteredData);
     this.createParticipationChart(filteredData);
     this.createPlacementTrendChart(filteredData);
+    this.createAverageRankingChart(averageRankings);
   }
 
   /**

@@ -55,31 +55,41 @@ class FilterManager {
    * Apply timeframe filter
    */
   applyTimeframeFilter(competitions, timeframe) {
-    if (timeframe === 'all') return competitions;
-    
-    const currentYear = new Date().getFullYear();
-    let startYear;
-    
-    switch (timeframe) {
-      case 'recent5':
-        startYear = currentYear - 4;
-        break;
-      case 'recent3':
-        startYear = currentYear - 2;
-        break;
-      case 'recent1':
-        startYear = currentYear;
-        break;
-      default:
-        // Assume it's a specific year
-        const year = parseInt(timeframe);
-        if (!isNaN(year)) {
-          return competitions.filter(c => c.year === year);
-        }
-        return competitions;
+    if (timeframe === 'all' || !timeframe || (Array.isArray(timeframe) && timeframe.includes('all'))) {
+      return competitions;
+    }
+
+    if (!Array.isArray(timeframe)) {
+      timeframe = [timeframe];
     }
     
-    return competitions.filter(c => c.year >= startYear);
+    const yearsToFilter = new Set();
+    const currentYear = new Date().getFullYear();
+
+    timeframe.forEach(value => {
+      switch (value) {
+        case 'recent5':
+          for (let i = 0; i < 5; i++) yearsToFilter.add(currentYear - i);
+          break;
+        case 'recent3':
+          for (let i = 0; i < 3; i++) yearsToFilter.add(currentYear - i);
+          break;
+        case 'recent1':
+          yearsToFilter.add(currentYear);
+          break;
+        default:
+          const year = parseInt(value);
+          if (!isNaN(year)) {
+            yearsToFilter.add(year);
+          }
+      }
+    });
+
+    if (yearsToFilter.size === 0) {
+      return competitions;
+    }
+    
+    return competitions.filter(c => yearsToFilter.has(c.year));
   }
 
   /**

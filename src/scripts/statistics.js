@@ -304,6 +304,25 @@ class Statistics {
     return counts;
   }
 
+  calculateAverageRankings(data) {
+    const averageRankings = {};
+
+    data.participants.forEach(p => {
+      const positions = [];
+      data.competitions.forEach(comp => {
+        if (comp.scores[p.id]) {
+          positions.push(comp.scores[p.id]);
+        }
+      });
+
+      if (positions.length > 0) {
+        averageRankings[p.name] = this.calculateMean(positions);
+      }
+    });
+
+    return averageRankings;
+  }
+
   /**
    * Calculate head-to-head records between participants
    */
