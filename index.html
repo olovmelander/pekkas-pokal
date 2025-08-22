@@ -354,7 +354,7 @@
         <!-- Enhanced Filters -->
         <div class="stats-controls">
           <div class="competitor-multiselect" id="competitor-filter"></div>
-          <select id="timeframe-filter" class="filter-select">
+          <select id="timeframe-filter" class="filter-select" multiple>
             <option value="all">Alla År</option>
             <option value="recent5">Senaste 5 År</option>
             <option value="recent3">Senaste 3 År</option>
@@ -400,6 +400,13 @@
             </div>
             <canvas id="participation-chart"></canvas>
           </div>
+        </div>
+
+        <div class="chart-container">
+          <div class="chart-header">
+            <div class="chart-title">📊 Genomsnittlig ranking</div>
+          </div>
+          <canvas id="average-ranking-chart"></canvas>
         </div>
 
         <div class="chart-container">

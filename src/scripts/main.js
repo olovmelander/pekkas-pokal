@@ -249,7 +249,11 @@ class PekkasPokalApp {
           const filterType = e.target.id
             .replace("-filter", "")
             .replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-          this.state.filters[filterType] = e.target.value;
+          if (e.target.multiple) {
+            this.state.filters[filterType] = Array.from(e.target.selectedOptions).map(o => o.value);
+          } else {
+            this.state.filters[filterType] = e.target.value;
+          }
           this.applyFilters();
         });
       }
@@ -774,12 +778,14 @@ class PekkasPokalApp {
         this.state.competitionData,
         this.state.filters,
       );
+      const averageRankings = this.modules.statistics.calculateAverageRankings(filteredData);
       // FilterManager returns an object containing competitions, participants and the
       // original data. The statistics components only need the competitions array,
       // so pass that to avoid runtime errors when iterating over the result.
       this.modules.uiComponents.updateStatisticsView(filteredData.competitions);
       this.modules.chartManager.updateStatisticsCharts(
         filteredData.competitions,
+        averageRankings,
       );
     }
   }
