@@ -96,9 +96,17 @@ class FilterManager {
    * Apply competition type filter
    */
   applyCompetitionTypeFilter(competitions, competitionType) {
-    if (competitionType === 'all') return competitions;
+    if (competitionType === 'all' || (Array.isArray(competitionType) && competitionType.length === 0)) {
+      return competitions;
+    }
+
+    const typesToFilter = new Set(Array.isArray(competitionType) ? competitionType : [competitionType]);
     
-    return competitions.filter(c => c.name === competitionType);
+    if (typesToFilter.has('all')) {
+        return competitions;
+    }
+
+    return competitions.filter(c => typesToFilter.has(c.name));
   }
 
   /**
