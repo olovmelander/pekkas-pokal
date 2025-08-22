@@ -352,28 +352,28 @@ class UIComponents {
   getHeatmapColor(position, maxPosition) {
     if (!maxPosition || position < 1) return "";
 
-    // Normalize position to a 0-1 range
+    // Normalize position to a 0-1 range.
     const ratio = (position - 1) / (maxPosition - 1 || 1);
 
-    // Define colors for the gradient (good, mid, bad)
-    const goodColor = { r: 76, g: 175, b: 80 }; // Material Green
-    const midColor = { r: 255, g: 235, b: 59 }; // Material Yellow
-    const badColor = { r: 244, g: 67, b: 54 }; // Material Red
+    // Define colors for the gradient (good, neutral, bad).
+    const goodColor = { r: 59, g: 130, b: 246 }; // Blue 500
+    const neutralColor = { r: 248, g: 250, b: 252 }; // Gray 50
+    const badColor = { r: 239, g: 68, b: 68 }; // Red 500
 
     let r, g, b;
 
     if (ratio < 0.5) {
-      // Interpolate between good and mid
+      // Interpolate between good (blue) and neutral (white).
       const localRatio = ratio * 2;
-      r = Math.round(goodColor.r + (midColor.r - goodColor.r) * localRatio);
-      g = Math.round(goodColor.g + (midColor.g - goodColor.g) * localRatio);
-      b = Math.round(goodColor.b + (midColor.b - goodColor.b) * localRatio);
+      r = Math.round(goodColor.r + (neutralColor.r - goodColor.r) * localRatio);
+      g = Math.round(goodColor.g + (neutralColor.g - goodColor.g) * localRatio);
+      b = Math.round(goodColor.b + (neutralColor.b - goodColor.b) * localRatio);
     } else {
-      // Interpolate between mid and bad
+      // Interpolate between neutral (white) and bad (red).
       const localRatio = (ratio - 0.5) * 2;
-      r = Math.round(midColor.r + (badColor.r - midColor.r) * localRatio);
-      g = Math.round(midColor.g + (badColor.g - midColor.g) * localRatio);
-      b = Math.round(midColor.b + (badColor.b - midColor.b) * localRatio);
+      r = Math.round(neutralColor.r + (badColor.r - neutralColor.r) * localRatio);
+      g = Math.round(neutralColor.g + (badColor.g - neutralColor.g) * localRatio);
+      b = Math.round(neutralColor.b + (badColor.b - neutralColor.b) * localRatio);
     }
 
     return `rgb(${r}, ${g}, ${b})`;
