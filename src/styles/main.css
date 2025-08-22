@@ -284,6 +284,10 @@ p {
   width: 8px;
 }
 
+.achievements-controls {
+  margin-bottom: var(--spacing-xl);
+}
+
 ::-webkit-scrollbar-track {
   background: var(--bg-dark);
 }
