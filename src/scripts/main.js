@@ -214,7 +214,7 @@ class PekkasPokalApp {
       "achievement-competitor-filter",
     );
     const timeframeContainer = document.getElementById("timeframe-filter");
-    const competitionTypeFilter = document.getElementById(
+    const competitionTypeContainer = document.getElementById(
       "competition-type-filter",
     );
     const resetBtn = document.getElementById("reset-filters-btn");
@@ -252,10 +252,12 @@ class PekkasPokalApp {
       });
     }
 
-    if (competitionTypeFilter) {
-      competitionTypeFilter.addEventListener("change", (e) => {
-        this.state.filters.competitionType = e.target.value;
-        this.applyFilters();
+    if (typeof CompetitionTypeMultiSelect !== "undefined") {
+      this.competitionTypeSelect = new CompetitionTypeMultiSelect(competitionTypeContainer, {
+        onChange: (values) => {
+          this.state.filters.competitionType = values.length ? values : "all";
+          this.applyFilters();
+        },
       });
     }
 
@@ -454,18 +456,12 @@ class PekkasPokalApp {
     }
 
     // Competition type filter
-    const competitionTypes = [
-      ...new Set(this.state.competitionData.competitions.map((c) => c.name)),
-    ];
-    const typeFilter = document.getElementById("competition-type-filter");
-    if (typeFilter) {
-      typeFilter.innerHTML = '<option value="all">Alla Tävlingar</option>';
-      competitionTypes.forEach((type) => {
-        const option = document.createElement("option");
-        option.value = type;
-        option.textContent = type;
-        typeFilter.appendChild(option);
-      });
+    if (this.competitionTypeSelect) {
+      const competitionTypes = [...new Set(this.state.competitionData.competitions.map((c) => c.name))]
+        .map(type => ({ id: type, name: type }));
+      this.competitionTypeSelect.setOptions(competitionTypes);
+      const selectedTypes = this.state.filters.competitionType === 'all' ? [] : this.state.filters.competitionType;
+      this.competitionTypeSelect.setSelected(selectedTypes, true);
     }
   }
 
@@ -826,7 +822,7 @@ class PekkasPokalApp {
     if (this.achievementCompetitorSelect)
       this.achievementCompetitorSelect.setSelected([], true);
     if (this.yearSelect) this.yearSelect.setSelected([], true);
-    this.updateElement("competition-type-filter", "all", "value");
+    if (this.competitionTypeSelect) this.competitionTypeSelect.setSelected([], true);
 
     this.applyFilters();
   }
