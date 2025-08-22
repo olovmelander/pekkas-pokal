@@ -213,7 +213,7 @@ class PekkasPokalApp {
     const achievementContainer = document.getElementById(
       "achievement-competitor-filter",
     );
-    const timeframeFilter = document.getElementById("timeframe-filter");
+    const timeframeContainer = document.getElementById("timeframe-filter");
     const competitionTypeFilter = document.getElementById(
       "competition-type-filter",
     );
@@ -243,21 +243,21 @@ class PekkasPokalApp {
       );
     }
 
-    [timeframeFilter, competitionTypeFilter].forEach((filter) => {
-      if (filter) {
-        filter.addEventListener("change", (e) => {
-          const filterType = e.target.id
-            .replace("-filter", "")
-            .replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-          if (e.target.multiple) {
-            this.state.filters[filterType] = Array.from(e.target.selectedOptions).map(o => o.value);
-          } else {
-            this.state.filters[filterType] = e.target.value;
-          }
+    if (typeof YearMultiSelect !== "undefined") {
+      this.yearSelect = new YearMultiSelect(timeframeContainer, {
+        onChange: (values) => {
+          this.state.filters.timeframe = values.length ? values.map(Number) : "all";
           this.applyFilters();
-        });
-      }
-    });
+        },
+      });
+    }
+
+    if (competitionTypeFilter) {
+      competitionTypeFilter.addEventListener("change", (e) => {
+        this.state.filters.competitionType = e.target.value;
+        this.applyFilters();
+      });
+    }
 
     if (resetBtn) {
       resetBtn.addEventListener("click", () => {
@@ -441,6 +441,16 @@ class PekkasPokalApp {
     if (this.achievementCompetitorSelect) {
       this.achievementCompetitorSelect.setOptions(participants);
       this.achievementCompetitorSelect.setSelected(selected, true);
+    }
+
+    // Timeframe filter
+    if (this.yearSelect) {
+      const years = [...new Set(this.state.competitionData.competitions.map(c => c.year))]
+        .sort((a, b) => b - a)
+        .map(year => ({ id: year, name: String(year) }));
+      this.yearSelect.setOptions(years);
+      const selectedYears = this.state.filters.timeframe === 'all' ? [] : this.state.filters.timeframe;
+      this.yearSelect.setSelected(selectedYears, true);
     }
 
     // Competition type filter
@@ -815,7 +825,7 @@ class PekkasPokalApp {
     if (this.competitorSelect) this.competitorSelect.setSelected([], true);
     if (this.achievementCompetitorSelect)
       this.achievementCompetitorSelect.setSelected([], true);
-    this.updateElement("timeframe-filter", "all", "value");
+    if (this.yearSelect) this.yearSelect.setSelected([], true);
     this.updateElement("competition-type-filter", "all", "value");
 
     this.applyFilters();
