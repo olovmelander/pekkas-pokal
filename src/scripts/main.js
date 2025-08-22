@@ -529,6 +529,24 @@ class PekkasPokalApp {
       this.updateElement("current-champion", latestComp.winner);
       this.updateElement("champ-comp", `${latestComp.year} ${latestComp.name}`);
     }
+
+    // Host hero
+    if (this.modules.achievementEngine) {
+      const hostCounts = this.modules.achievementEngine.calculateHostCounts(
+        data.participants,
+        data.competitions,
+      );
+      const hostLeader =
+        this.modules.achievementEngine.findLeader(hostCounts);
+
+      if (hostLeader) {
+        this.updateElement("host-hero-name", hostLeader);
+        this.updateElement(
+          "host-hero-count",
+          `${hostCounts[hostLeader]} tävlingar`,
+        );
+      }
+    }
   }
 
   /**
