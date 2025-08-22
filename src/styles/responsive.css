@@ -134,9 +134,11 @@
   }
 
   .medal-counts {
-    flex-direction: column;
+    flex-direction: row;
     gap: var(--spacing-sm);
     width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
   }
 
   .medal-position {
@@ -235,8 +237,10 @@
   }
 
   .competitor-medals {
-    flex-direction: column;
+    flex-direction: row;
     gap: var(--spacing-xs);
+    justify-content: center;
+    flex-wrap: wrap;
   }
 }
 
