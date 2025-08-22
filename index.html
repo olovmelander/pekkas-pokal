@@ -354,16 +354,7 @@
         <!-- Enhanced Filters -->
         <div class="stats-controls">
           <div class="competitor-multiselect" id="competitor-filter"></div>
-          <select id="timeframe-filter" class="filter-select" multiple>
-            <option value="all">Alla År</option>
-            <option value="recent5">Senaste 5 År</option>
-            <option value="recent3">Senaste 3 År</option>
-            <option value="2025">2025</option>
-            <option value="2024">2024</option>
-            <option value="2023">2023</option>
-            <option value="2022">2022</option>
-            <option value="2021">2021</option>
-          </select>
+          <div class="year-multiselect" id="timeframe-filter"></div>
           <select id="competition-type-filter" class="filter-select">
             <option value="all">Alla Tävlingar</option>
           </select>
@@ -528,6 +519,7 @@
     <script src="src/scripts/statistics.js"></script>
     <script src="src/scripts/filters.js"></script>
     <script src="src/scripts/components/competitor-filter.js"></script>
+    <script src="src/scripts/components/year-filter.js"></script>
     <script src="src/scripts/main.js"></script>
 
     <!-- Initialize app when all scripts are loaded -->
