@@ -351,9 +351,32 @@ class UIComponents {
    */
   getHeatmapColor(position, maxPosition) {
     if (!maxPosition || position < 1) return "";
+
+    // Normalize position to a 0-1 range
     const ratio = (position - 1) / (maxPosition - 1 || 1);
-    const hue = 120 - ratio * 120;
-    return `hsl(${hue}, 70%, 40%)`;
+
+    // Define colors for the gradient (good, mid, bad)
+    const goodColor = { r: 76, g: 175, b: 80 }; // Material Green
+    const midColor = { r: 255, g: 235, b: 59 }; // Material Yellow
+    const badColor = { r: 244, g: 67, b: 54 }; // Material Red
+
+    let r, g, b;
+
+    if (ratio < 0.5) {
+      // Interpolate between good and mid
+      const localRatio = ratio * 2;
+      r = Math.round(goodColor.r + (midColor.r - goodColor.r) * localRatio);
+      g = Math.round(goodColor.g + (midColor.g - goodColor.g) * localRatio);
+      b = Math.round(goodColor.b + (midColor.b - goodColor.b) * localRatio);
+    } else {
+      // Interpolate between mid and bad
+      const localRatio = (ratio - 0.5) * 2;
+      r = Math.round(midColor.r + (badColor.r - midColor.r) * localRatio);
+      g = Math.round(midColor.g + (badColor.g - midColor.g) * localRatio);
+      b = Math.round(midColor.b + (badColor.b - midColor.b) * localRatio);
+    }
+
+    return `rgb(${r}, ${g}, ${b})`;
   }
 
   /**
