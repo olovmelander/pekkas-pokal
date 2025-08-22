@@ -8,18 +8,18 @@ class YearMultiSelect {
   }
 
   build() {
-    this.container.classList.add("year-multiselect");
+    this.container.classList.add("competitor-multiselect");
 
     this.chipContainer = document.createElement("div");
     this.chipContainer.className = "chip-container";
 
     this.input = document.createElement("input");
     this.input.type = "text";
-    this.input.className = "year-search";
+    this.input.className = "competitor-search";
     this.input.placeholder = "Sök år...";
 
     this.dropdown = document.createElement("div");
-    this.dropdown.className = "year-options";
+    this.dropdown.className = "competitor-options";
 
     this.container.appendChild(this.chipContainer);
     this.container.appendChild(this.input);
@@ -56,7 +56,7 @@ class YearMultiSelect {
 
     filtered.forEach((o) => {
       const opt = document.createElement("div");
-      opt.className = "year-option";
+      opt.className = "competitor-option";
       opt.textContent = o.name;
       opt.dataset.id = o.id;
       opt.addEventListener("click", () => {
@@ -84,7 +84,7 @@ class YearMultiSelect {
 
     this.selected.forEach((name, id) => {
       const chip = document.createElement("span");
-      chip.className = "year-chip";
+      chip.className = "competitor-chip";
       chip.textContent = name;
 
       const btn = document.createElement("button");
