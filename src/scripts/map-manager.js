@@ -14,7 +14,7 @@ class MapManager {
     this.locationCoordinates = {
       'Varggropen': [63.2905, 18.7153],
       'Kroksta': [63.3039, 18.6119],
-      'Billsta': [63.3039, 18.6119],
+      'Billsta': [63.3221, 18.5117],
       'Idbyn': [63.2423, 18.675],
       'Lomsjön': [63.2905, 18.7153],
       'Kungsholmen': [59.3293, 18.0686],
@@ -44,6 +44,7 @@ class MapManager {
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution:
         '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      className: 'map-tiles',
     }).addTo(this.map);
 
     this.addMarkers(competitions);
@@ -96,11 +97,11 @@ class MapManager {
     const btn = document.getElementById('map-animation-btn');
     if (this.animationRunning) {
       clearInterval(this.animationInterval);
-      btn.textContent = '▶️ Starta Animation';
+      btn.textContent = '▶️';
       this.animationRunning = false;
     } else {
       this.startAnimation();
-      btn.textContent = '⏹️ Stoppa Animation';
+      btn.textContent = '⏹️';
       this.animationRunning = true;
     }
   }

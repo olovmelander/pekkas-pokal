@@ -1047,3 +1047,9 @@ html[data-theme="light"] #theme-switcher .theme-icon-moon {
   opacity: 0.9;
   transform: scale(1.05);
 }
+
+/* Dark mode for map tiles */
+html[data-theme="dark"] .map-tiles {
+  filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3)
+    brightness(0.7);
+}
