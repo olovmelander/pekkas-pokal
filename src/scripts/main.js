@@ -96,6 +96,11 @@ class PekkasPokalApp {
         console.log("✅ ChartManager initialized");
       }
 
+      if (typeof MapManager !== "undefined" && typeof L !== "undefined") {
+        this.modules.mapManager = new MapManager();
+        console.log("✅ MapManager initialized");
+      }
+
       if (typeof UIComponents !== "undefined") {
         this.modules.uiComponents = new UIComponents();
         console.log("✅ UIComponents initialized");
@@ -535,6 +540,11 @@ class PekkasPokalApp {
     if (this.modules.chartManager) {
       this.modules.chartManager.createWinsChart(data);
       this.modules.chartManager.createDashboardParticipationChart(data);
+    }
+
+    // Initialize map
+    if (this.modules.mapManager) {
+      this.modules.mapManager.initialize(data.competitions);
     }
 
     // Render additional dashboard sections
