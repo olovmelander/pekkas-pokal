@@ -23,6 +23,12 @@
     <link rel="stylesheet" href="src/styles/layout.css" />
     <link rel="stylesheet" href="src/styles/animations.css" />
     <link rel="stylesheet" href="src/styles/responsive.css" />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
   </head>
   <body>
     <!-- Loading Screen -->
@@ -255,6 +261,16 @@
             <canvas id="dashboard-participation-chart"></canvas>
           </div>
         </div>
+
+        <!-- Map -->
+        <div class="map-container" id="map-container-wrapper">
+          <div class="map-header">
+            <div class="map-title">Tävlingskarta</div>
+            <button id="map-animation-btn" class="icon-btn">▶️ Starta Animation</button>
+          </div>
+          <div id="map"></div>
+        </div>
+
       </div>
 
       <!-- Medal Tally Tab -->
@@ -491,6 +507,11 @@
 
     <!-- Load Chart.js with fallback -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
     <script>
       // Create a dummy Chart object if Chart.js fails to load
       if (typeof Chart === "undefined") {
@@ -514,6 +535,7 @@
     <script src="src/scripts/data-manager.js"></script>
     <script src="src/scripts/achievement-engine.js"></script>
     <script src="src/scripts/chart-manager.js"></script>
+    <script src="src/scripts/map-manager.js"></script>
     <script src="src/scripts/ui-components.js"></script>
     <script src="src/scripts/statistics.js"></script>
     <script src="src/scripts/filters.js"></script>

@@ -1002,3 +1002,48 @@ html[data-theme="light"] #theme-switcher .theme-icon-moon {
   opacity: 0;
   transform: translate(-50%, -50%) rotate(90deg);
 }
+
+/* Map Container */
+#map {
+  height: 450px;
+  width: 100%;
+  border-radius: var(--radius-md);
+  background-color: var(--bg-dark);
+}
+
+.map-container {
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  margin-top: var(--spacing-xl);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(102, 126, 234, 0.2);
+}
+
+.map-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-md);
+}
+
+.map-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+#map-animation-btn {
+  font-size: 1rem;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--accent);
+  color: white;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+}
+
+#map-animation-btn:hover {
+  opacity: 0.9;
+  transform: scale(1.05);
+}
