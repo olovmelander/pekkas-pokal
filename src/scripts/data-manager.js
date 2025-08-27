@@ -171,7 +171,7 @@ class DataManager {
     console.log(`📊 Processing ${rows.length} rows`);
     
     // Fixed columns that aren't participants
-    const fixedColumns = ['År', 'Tävling', 'Plats', 'Arrangör 3:a', 'Arrangör näst sist'];
+    const fixedColumns = ['År', 'Datum', 'Tävling', 'Plats', 'Arrangör 3:a', 'Arrangör näst sist'];
     
     // Extract participant names from headers
     const participantNames = headers.filter(h => 
@@ -198,7 +198,7 @@ class DataManager {
     
     rows.forEach((row, index) => {
       try {
-        const rawDate = row['År'];
+        const rawDate = row['Datum'] || row['År'];
         const year = this.parseYear(rawDate);
         const date = this.parseDate(rawDate);
         const name = row['Tävling']?.trim();
