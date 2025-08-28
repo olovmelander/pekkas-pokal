@@ -19,7 +19,7 @@ class MapManager {
       'Lomsjön': [63.2905, 18.7153],
       'Kungsholmen': [59.3359, 18.0123],
       'Bredbyn': [63.4447, 18.1064],      // Olympia, the football field
-      'Ås': [63.2905, 18.7153],
+      'Ås': [63.2963, 18.6995],
       'Arnäsvall': [63.322, 18.816],
       'Stockholm': [59.3556, 18.0993],
       'Själevad': [63.2888, 18.5974],
