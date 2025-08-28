@@ -13,18 +13,18 @@ class MapManager {
     // Hardcoded coordinates for competition locations
     this.locationCoordinates = {
       'Varggropen': [63.2905, 18.7153],
-      'Kroksta': [63.3039, 18.6119],
+      'Kroksta': [63.2900, 18.7166],     // Approximate Örnsköldsvik; consider refining if you can
       'Billsta': [63.3221, 18.5117],
       'Idbyn': [63.2423, 18.675],
       'Lomsjön': [63.2905, 18.7153],
-      'Kungsholmen': [59.3293, 18.0686],
-      'Bredbyn': [63.4333, 18.15],
+      'Kungsholmen': [59.33314, 18.03092], // Precise Stockholm borough
+      'Bredbyn': [63.4447, 18.1064],      // Olympia, the football field
       'Ås': [63.2905, 18.7153],
       'Arnäsvall': [63.322, 18.816],
-      'Stockholm': [59.3293, 18.0686],
+      'Stockholm': [59.3346, 18.0632],    // Gärdet / general central Stockholm
       'Själevad': [63.3039, 18.6119],
-      'Eskilstuna/Västerås': [59.4913, 16.0006],
-      'Uppsala': [59.8586, 17.6389],
+      'Eskilstuna/Västerås': [59.61137, 16.54503], // Västerås
+      'Uppsala': [59.8586, 17.6389]
     };
   }
 
