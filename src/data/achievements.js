@@ -789,13 +789,13 @@ const ACHIEVEMENT_RARITIES = {
 const ACHIEVEMENT_VALIDATION = {
   // Required fields for each achievement
   requiredFields: ['id', 'icon', 'name', 'desc', 'category', 'rarity'],
-  
+
   // Valid categories
   validCategories: Object.keys(ACHIEVEMENT_CATEGORIES).filter(cat => cat !== 'all'),
-  
+
   // Valid rarities
   validRarities: Object.keys(ACHIEVEMENT_RARITIES),
-  
+
   // Point ranges by rarity
   pointRanges: {
     common: [5, 25],
@@ -845,10 +845,10 @@ const AchievementHelpers = {
    */
   getCategoryStats() {
     const stats = {};
-    
+
     Object.keys(ACHIEVEMENT_CATEGORIES).forEach(category => {
       if (category === 'all') return;
-      
+
       const achievements = this.getByCategory(category);
       stats[category] = {
         count: achievements.length,
@@ -858,7 +858,7 @@ const AchievementHelpers = {
         }, 0)
       };
     });
-    
+
     return stats;
   },
 
@@ -867,11 +867,11 @@ const AchievementHelpers = {
    */
   getRarityDistribution() {
     const distribution = {};
-    
+
     Object.keys(ACHIEVEMENT_RARITIES).forEach(rarity => {
       distribution[rarity] = this.getByRarity(rarity).length;
     });
-    
+
     return distribution;
   },
 
@@ -880,24 +880,24 @@ const AchievementHelpers = {
    */
   validateAchievement(achievement) {
     const errors = [];
-    
+
     // Check required fields
     ACHIEVEMENT_VALIDATION.requiredFields.forEach(field => {
       if (!achievement[field]) {
         errors.push(`Missing required field: ${field}`);
       }
     });
-    
+
     // Check valid category
     if (achievement.category && !ACHIEVEMENT_VALIDATION.validCategories.includes(achievement.category)) {
       errors.push(`Invalid category: ${achievement.category}`);
     }
-    
+
     // Check valid rarity
     if (achievement.rarity && !ACHIEVEMENT_VALIDATION.validRarities.includes(achievement.rarity)) {
       errors.push(`Invalid rarity: ${achievement.rarity}`);
     }
-    
+
     // Check point range
     if (achievement.points && achievement.rarity) {
       const range = ACHIEVEMENT_VALIDATION.pointRanges[achievement.rarity];
@@ -905,7 +905,7 @@ const AchievementHelpers = {
         errors.push(`Points ${achievement.points} out of range for ${achievement.rarity} (${range[0]}-${range[1]})`);
       }
     }
-    
+
     return errors;
   }
 };

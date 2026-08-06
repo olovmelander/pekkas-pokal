@@ -1,545 +1,252 @@
-/* ===== LAYOUT SYSTEM ===== */
+/* ==========================================================================
+   Pekkas Pokal — Layout: header, navigation, shell, grids, footer
+   ========================================================================== */
 
-/* Main Container */
-.container {
-  max-width: 1400px;
+/* ---------- Header ---------- */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--header-bg);
+  backdrop-filter: var(--card-blur);
+  -webkit-backdrop-filter: var(--card-blur);
+  border-bottom: 1px solid var(--border);
+}
+
+.header-inner {
+  max-width: 1200px;
   margin: 0 auto;
-  padding: var(--spacing-xl);
-  width: 100%;
-}
-
-/* Tab Content */
-.tab-content {
-  display: none;
-  animation: fadeIn 0.5s ease-out;
-}
-
-.tab-content.active {
-  display: block;
-}
-
-/* ===== GRID SYSTEMS ===== */
-
-/* Dashboard Grid */
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: var(--spacing-lg);
-  margin-bottom: var(--spacing-xl);
-}
-
-.dashboard-extras {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: var(--spacing-lg);
-  margin-top: var(--spacing-xl);
-}
-
-.dashboard-extras .chart-container {
-  grid-column: 1 / -1;
-}
-
-/* Participant Cards Grid */
-.participant-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  gap: var(--spacing-xl);
-}
-
-/* Achievements Grid */
-.achievements-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: var(--spacing-lg);
-}
-
-/* Competitor Stats Grid */
-.competitor-stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: var(--spacing-lg);
-  margin-bottom: var(--spacing-xl);
-}
-
-/* Charts Grid */
-.charts-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-  gap: var(--spacing-xl);
-}
-
-/* ===== FLEXBOX LAYOUTS ===== */
-
-/* Header Layout */
-.header-content {
+  height: var(--header-h);
+  padding: 0 var(--sp-5);
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  max-width: 1400px;
-  margin: 0 auto;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  text-decoration: none;
+  color: var(--text-1);
+  min-width: 0;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  color: var(--accent-contrast);
+  background: linear-gradient(140deg, var(--gold), var(--gold-deep));
+  box-shadow: 0 4px 14px rgba(242, 193, 78, 0.35);
+  flex-shrink: 0;
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.brand-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.brand-sub {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+/* ---------- Desktop nav ---------- */
+.top-nav {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+}
+
+.nav-link {
+  position: relative;
+  z-index: 1;
+  padding: 0.45rem 1rem;
+  border-radius: var(--r-pill);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-2);
+  white-space: nowrap;
+  transition: color var(--t-fast);
+}
+
+.nav-link:hover {
+  color: var(--text-1);
+}
+
+.nav-link.active {
+  color: var(--accent-contrast);
+}
+
+.nav-indicator {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 0;
+  width: 0;
+  border-radius: var(--r-pill);
+  background: linear-gradient(140deg, var(--gold), var(--gold-deep));
+  box-shadow: 0 2px 10px rgba(242, 193, 78, 0.35);
+  transition: left var(--t-med) var(--ease-out), width var(--t-med) var(--ease-out);
 }
 
 .header-actions {
   display: flex;
-  gap: var(--spacing-sm);
   align-items: center;
+  gap: var(--sp-2);
 }
 
-/* Logo Layout */
-.logo {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
+/* ---------- Page shell ---------- */
+.page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--sp-6) var(--sp-5) var(--sp-8);
 }
 
-/* Navigation Layout */
-.nav-tabs {
-  display: flex;
-  gap: var(--spacing-md);
-  padding: var(--spacing-md) var(--spacing-xl);
-  overflow-x: auto;
-  justify-content: center;
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* IE and Edge */
-}
-
-.nav-tabs::-webkit-scrollbar {
-  display: none; /* Chrome, Safari and Opera */
-}
-
-/* Medal Tally Layout */
-.medal-tally-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--spacing-lg);
-  padding-bottom: var(--spacing-md);
-  border-bottom: 2px solid rgba(255, 215, 0, 0.2);
-}
-
-.medal-row {
-  display: flex;
-  align-items: center;
-  padding: var(--spacing-md);
-  margin: var(--spacing-sm) 0;
-}
-
-.medal-counts {
-  display: flex;
-  gap: var(--spacing-lg);
-  align-items: center;
-}
-
-/* Achievement Layout */
-.achievements-stats {
-  display: flex;
-  justify-content: center;
-  gap: var(--spacing-2xl);
-  margin-bottom: var(--spacing-2xl);
-  flex-wrap: wrap;
-}
-
-.achievement-categories {
-  display: flex;
-  gap: var(--spacing-md);
-  margin-bottom: var(--spacing-xl);
-  flex-wrap: wrap;
-}
-
-.participant-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--spacing-md);
-  padding-bottom: var(--spacing-sm);
-  border-bottom: 1px solid rgba(102, 126, 234, 0.1);
-}
-
-.participant-achievements-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-sm);
-  margin-top: var(--spacing-md);
-}
-
-/* Competitor Layout */
-.competitor-header {
-  display: flex;
-  align-items: center;
-  margin-bottom: var(--spacing-md);
-}
-
-.competitor-medals {
-  display: flex;
-  gap: var(--spacing-sm);
-  margin-top: var(--spacing-md);
-  padding-top: var(--spacing-md);
-  border-top: 1px solid rgba(102, 126, 234, 0.1);
-}
-
-/* Fun Stats Layout */
-.fun-stats-title {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-sm);
-}
-
-.fun-stat-item {
-  display: flex;
-  align-items: center;
-  padding: var(--spacing-md);
-  margin: var(--spacing-sm) 0;
-}
-
-/* Filter Controls Layout */
-.stats-controls {
-  display: flex;
-  gap: var(--spacing-md);
-  align-items: center;
-  margin-bottom: var(--spacing-xl);
-  padding: var(--spacing-md);
-  flex-wrap: wrap;
-}
-
-/* Chart Layout */
-.chart-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--spacing-lg);
-}
-
-/* Section Layout */
-.section-title {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-  margin-bottom: var(--spacing-xl);
-  padding-bottom: var(--spacing-md);
-  border-bottom: 2px solid rgba(102, 126, 234, 0.3);
-}
-
-/* ===== CONTENT SECTIONS ===== */
-
-/* Achievement Sections */
-.participant-achievements {
-  margin-bottom: 4rem;
-}
-
-.all-achievements {
-  margin-top: 4rem;
-}
-
-/* Progress Layout */
-.achievement-progress {
-  margin-top: var(--spacing-md);
-  padding-top: var(--spacing-md);
-  border-top: 1px solid rgba(102, 126, 234, 0.1);
-}
-
-/* ===== SPACING UTILITIES ===== */
-
-/* Margin utilities */
-.mt-0 {
-  margin-top: 0;
-}
-.mt-sm {
-  margin-top: var(--spacing-sm);
-}
-.mt-md {
-  margin-top: var(--spacing-md);
-}
-.mt-lg {
-  margin-top: var(--spacing-lg);
-}
-.mt-xl {
-  margin-top: var(--spacing-xl);
-}
-
-.mb-0 {
-  margin-bottom: 0;
-}
-.mb-sm {
-  margin-bottom: var(--spacing-sm);
-}
-.mb-md {
-  margin-bottom: var(--spacing-md);
-}
-.mb-lg {
-  margin-bottom: var(--spacing-lg);
-}
-.mb-xl {
-  margin-bottom: var(--spacing-xl);
-}
-
-.ml-0 {
-  margin-left: 0;
-}
-.ml-sm {
-  margin-left: var(--spacing-sm);
-}
-.ml-md {
-  margin-left: var(--spacing-md);
-}
-.ml-lg {
-  margin-left: var(--spacing-lg);
-}
-.ml-auto {
-  margin-left: auto;
-}
-
-.mr-0 {
-  margin-right: 0;
-}
-.mr-sm {
-  margin-right: var(--spacing-sm);
-}
-.mr-md {
-  margin-right: var(--spacing-md);
-}
-.mr-lg {
-  margin-right: var(--spacing-lg);
-}
-.mr-auto {
-  margin-right: auto;
-}
-
-/* Padding utilities */
-.pt-0 {
-  padding-top: 0;
-}
-.pt-sm {
-  padding-top: var(--spacing-sm);
-}
-.pt-md {
-  padding-top: var(--spacing-md);
-}
-.pt-lg {
-  padding-top: var(--spacing-lg);
-}
-
-.pb-0 {
-  padding-bottom: 0;
-}
-.pb-sm {
-  padding-bottom: var(--spacing-sm);
-}
-.pb-md {
-  padding-bottom: var(--spacing-md);
-}
-.pb-lg {
-  padding-bottom: var(--spacing-lg);
-}
-
-.pl-0 {
-  padding-left: 0;
-}
-.pl-sm {
-  padding-left: var(--spacing-sm);
-}
-.pl-md {
-  padding-left: var(--spacing-md);
-}
-.pl-lg {
-  padding-left: var(--spacing-lg);
-}
-
-.pr-0 {
-  padding-right: 0;
-}
-.pr-sm {
-  padding-right: var(--spacing-sm);
-}
-.pr-md {
-  padding-right: var(--spacing-md);
-}
-.pr-lg {
-  padding-right: var(--spacing-lg);
-}
-
-/* ===== POSITIONING ===== */
-
-.relative {
-  position: relative;
-}
-.absolute {
-  position: absolute;
-}
-.fixed {
-  position: fixed;
-}
-.sticky {
-  position: sticky;
-}
-
-/* Common positioning */
-.top-0 {
-  top: 0;
-}
-.bottom-0 {
-  bottom: 0;
-}
-.left-0 {
-  left: 0;
-}
-.right-0 {
-  right: 0;
-}
-
-/* Z-index utilities */
-.z-auto {
-  z-index: auto;
-}
-.z-0 {
-  z-index: 0;
-}
-.z-10 {
-  z-index: 10;
-}
-.z-20 {
-  z-index: 20;
-}
-.z-30 {
-  z-index: 30;
-}
-.z-40 {
-  z-index: 40;
-}
-.z-50 {
-  z-index: 50;
-}
-
-/* ===== OVERFLOW HANDLING ===== */
-
-.overflow-hidden {
-  overflow: hidden;
-}
-.overflow-auto {
-  overflow: auto;
-}
-.overflow-x-auto {
-  overflow-x: auto;
-}
-.overflow-y-auto {
-  overflow-y: auto;
-}
-
-/* Scrollable content */
-.scrollable {
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--accent) var(--bg-dark);
-}
-
-.scrollable::-webkit-scrollbar {
-  width: 8px;
-}
-
-.scrollable::-webkit-scrollbar-track {
-  background: var(--bg-dark);
-}
-
-.scrollable::-webkit-scrollbar-thumb {
-  background: var(--accent);
-  border-radius: 4px;
-}
-
-/* ===== VISIBILITY ===== */
-
-.hidden {
+.view {
   display: none;
 }
-.visible {
+
+.view.active {
   display: block;
+  animation: view-in var(--t-slow) var(--ease-out) both;
 }
 
-.opacity-0 {
-  opacity: 0;
-}
-.opacity-50 {
-  opacity: 0.5;
-}
-.opacity-100 {
-  opacity: 1;
+.view-head {
+  margin-bottom: var(--sp-6);
 }
 
-/* ===== ASPECT RATIOS ===== */
-
-.aspect-square {
-  aspect-ratio: 1 / 1;
+.view-head h1 {
+  font-size: var(--text-2xl);
+  background: linear-gradient(120deg, var(--text-1) 60%, var(--text-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
-.aspect-video {
-  aspect-ratio: 16 / 9;
+.view-sub {
+  margin-top: var(--sp-2);
+  color: var(--text-2);
+  font-size: var(--text-md);
 }
 
-.aspect-chart {
-  aspect-ratio: 2 / 1;
+.section-heading {
+  font-size: var(--text-lg);
+  margin: var(--sp-7) 0 var(--sp-4);
 }
 
-/* ===== CONTAINER QUERIES (Future Enhancement) ===== */
-
-/* When container queries are better supported, we can use these */
-/*
-@container (max-width: 600px) {
-  .dashboard-grid {
-    grid-template-columns: 1fr;
-  }
+/* ---------- Grids ---------- */
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
+  gap: var(--sp-5);
+  margin-top: var(--sp-5);
 }
 
-@container (max-width: 400px) {
-  .medal-counts {
-    flex-direction: column;
-    gap: var(--spacing-sm);
-  }
-}
-*/
-
-/* ===== PRINT LAYOUT ===== */
-
-@media print {
-  .container {
-    max-width: none;
-    padding: 1rem;
-  }
-
-  .dashboard-grid,
-  .participant-cards,
-  .achievements-grid,
-  .competitor-stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1rem;
-  }
-
-  .charts-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .chart-container {
-    height: 300px;
-    page-break-inside: avoid;
-  }
-
-  .participant-card,
-  .stat-card,
-  .achievement {
-    page-break-inside: avoid;
-  }
+.hero {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: var(--sp-5);
+  margin-bottom: var(--sp-5);
 }
 
-/* ===== STICKY ELEMENTS ===== */
-
-.sticky-header {
-  position: sticky;
-  top: 0;
-  z-index: var(--z-sticky);
-  background: var(--bg-dark);
+.hero-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  min-width: 0;
 }
 
-.sticky-nav {
-  position: sticky;
-  top: var(--header-height, 80px);
-  z-index: var(--z-sticky);
-  background: var(--bg-dark);
+.hero-side > .card {
+  flex: 1;
+}
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--sp-4);
+  margin: var(--sp-5) 0;
+}
+
+/* ---------- Footer ---------- */
+.site-footer {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--sp-5);
+  padding-bottom: calc(var(--sp-5) + env(safe-area-inset-bottom));
+  text-align: center;
+  color: var(--text-3);
+  font-size: var(--text-sm);
+  border-top: 1px solid var(--border);
+}
+
+/* ---------- Mobile tab bar (hidden on desktop) ---------- */
+.tab-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: none;
+  justify-content: space-around;
+  align-items: stretch;
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+  background: var(--header-bg);
+  backdrop-filter: var(--card-blur);
+  -webkit-backdrop-filter: var(--card-blur);
+  border-top: 1px solid var(--border);
+}
+
+.tab-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 2px;
+  border-radius: var(--r-sm);
+  color: var(--text-3);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: color var(--t-fast), transform var(--t-fast);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tab-item svg {
+  transition: transform var(--t-med) var(--ease-spring);
+}
+
+.tab-item.active {
+  color: var(--accent);
+}
+
+.tab-item.active svg {
+  transform: translateY(-2px) scale(1.08);
+}
+
+.tab-item:active {
+  transform: scale(0.94);
 }

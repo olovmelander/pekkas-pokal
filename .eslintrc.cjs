@@ -21,6 +21,7 @@ module.exports = {
   globals: {
     // Chart.js
     Chart: 'readonly',
+    L: 'readonly',
     
     // Papa Parse
     Papa: 'readonly',
@@ -67,7 +68,7 @@ module.exports = {
     }],
     
     // Best Practices
-    'eqeqeq': ['error', 'always'],
+    'eqeqeq': ['error', 'smart'],
     'no-eval': 'error',
     'no-implied-eval': 'error',
     'no-new-func': 'error',

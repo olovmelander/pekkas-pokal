@@ -1,642 +1,178 @@
-/* ===== RESPONSIVE DESIGN SYSTEM ===== */
+/* ==========================================================================
+   Pekkas Pokal — Responsive
+   ========================================================================== */
 
-/* Breakpoint Variables */
-:root {
-  --bp-xs: 480px;
-  --bp-sm: 640px;
-  --bp-md: 768px;
-  --bp-lg: 1024px;
-  --bp-xl: 1280px;
-  --bp-2xl: 1536px;
-}
-
-/* ===== MOBILE FIRST APPROACH ===== */
-
-/* Base styles are mobile-first (320px+) */
-
-/* ===== EXTRA SMALL DEVICES (480px and down) ===== */
-@media (max-width: 480px) {
-  /* Typography adjustments */
-  :root {
-    --text-xs: 0.7rem;
-    --text-sm: 0.8rem;
-    --text-base: 0.9rem;
-    --text-lg: 1rem;
-    --text-xl: 1.1rem;
-    --text-2xl: 1.3rem;
-    --text-3xl: 1.6rem;
-    --text-4xl: 2rem;
-  }
-
-  /* Container adjustments */
-  .container {
-    padding: var(--spacing-md);
-  }
-
-  /* Header modifications */
-  .header {
-    padding: var(--spacing-sm) var(--spacing-md);
-  }
-
-  .header-content {
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    gap: var(--spacing-sm);
-    text-align: center;
-  }
-
-  .logo {
-    flex-direction: row;
-    gap: var(--spacing-xs);
-  }
-
-  .trophy-logo {
-    font-size: 1.5rem;
-  }
-
-  .logo h1 {
-    font-size: var(--text-xl);
-  }
-
-  .year-range {
-    margin-left: var(--spacing-xs);
-    font-size: var(--text-xs);
-  }
-
-  /* Navigation adjustments */
-  .nav-tabs {
-    display: flex;
-    padding: var(--spacing-sm);
-    gap: var(--spacing-sm);
-    justify-content: flex-start;
-    overflow-x: auto;
-  }
-
-  .nav-tab {
-    padding: var(--spacing-sm);
-    font-size: var(--text-sm);
-    text-align: center;
-    flex: 0 0 auto;
-    min-width: max-content;
-  }
-
-  .nav-tab span {
-    display: block;
-    margin: 0 0 var(--spacing-xs) 0;
-    font-size: var(--text-lg);
-  }
-
-  /* Grid system adjustments */
-  .dashboard-grid {
-    grid-template-columns: 1fr;
-    gap: var(--spacing-md);
-  }
-
-  .participant-cards {
-    grid-template-columns: 1fr;
-    gap: var(--spacing-md);
-  }
-
-  .achievements-grid {
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-    gap: var(--spacing-sm);
-  }
-
-  .competitor-stats-grid {
-    grid-template-columns: 1fr;
-    gap: var(--spacing-md);
-  }
-
-  .charts-grid {
+/* ---------- Tablet ---------- */
+@media (max-width: 1024px) {
+  .hero {
     grid-template-columns: 1fr;
   }
 
-  /* Stats card adjustments */
-  .stat-card {
-    padding: var(--spacing-md);
-    text-align: center;
+  .hero-champion {
+    min-height: 220px;
   }
 
-  .stat-icon {
-    font-size: var(--text-3xl);
-  }
-
-  .stat-value {
-    font-size: 2rem;
-  }
-
-  /* Medal tally adjustments */
-  .medal-row {
-    flex-direction: column;
-    gap: var(--spacing-sm);
-    text-align: center;
-  }
-
-  .medal-counts {
-    flex-direction: row;
-    gap: var(--spacing-sm);
-    width: 100%;
-    justify-content: center;
-    flex-wrap: wrap;
-  }
-
-  .medal-position {
-    width: auto;
-  }
-
-  .medal-name {
-    margin-left: 0;
-    margin-bottom: var(--spacing-sm);
-  }
-
-  /* Achievement adjustments */
-  .achievements-stats {
-    flex-direction: column;
-    gap: var(--spacing-md);
-  }
-
-  .stat-bubble {
-    padding: var(--spacing-sm) var(--spacing-md);
-  }
-
-  .achievement-categories {
-    flex-direction: column;
-    gap: var(--spacing-sm);
-  }
-
-  .category-filter {
-    padding: var(--spacing-sm);
-    font-size: var(--text-sm);
-  }
-
-  .achievement {
-    padding: var(--spacing-sm);
-  }
-
-  .achievement-icon {
-    font-size: var(--text-xl);
-  }
-
-  /* Participant card adjustments */
-  .participant-card {
-    padding: var(--spacing-md);
-  }
-
-  .participant-achievements-list {
-    gap: var(--spacing-xs);
-  }
-
-  .mini-achievement {
-    font-size: 1.5rem;
-  }
-
-  /* Filter controls */
-  .stats-controls {
-    flex-direction: column;
-    gap: var(--spacing-sm);
-  }
-
-  .filter-select {
-    width: 100%;
-    min-width: auto;
-  }
-
-  /* Chart containers */
-  .chart-container {
-    height: 250px;
-    padding: var(--spacing-sm);
-  }
-
-  .chart-container canvas {
-    max-height: 200px !important;
-  }
-
-  /* Fun stats */
-  .fun-stat-item {
-    flex-direction: column;
-    text-align: center;
-    gap: var(--spacing-sm);
-  }
-
-  .fun-stat-emoji {
-    margin-right: 0;
-    margin-bottom: var(--spacing-xs);
-  }
-
-  /* Competitor cards */
-  .competitor-header {
-    flex-direction: column;
-    text-align: center;
-    gap: var(--spacing-sm);
-  }
-
-  .competitor-avatar {
-    margin-right: 0;
-    margin-bottom: var(--spacing-sm);
-  }
-
-  .competitor-medals {
-    flex-direction: row;
-    gap: var(--spacing-xs);
-    justify-content: center;
-    flex-wrap: wrap;
-  }
-}
-
-/* ===== SMALL DEVICES (481px to 640px) ===== */
-@media (min-width: 481px) and (max-width: 640px) {
-  .container {
-    padding: var(--spacing-lg);
-  }
-
-  .dashboard-grid {
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  }
-
-  .achievements-grid {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  }
-
-  .nav-tabs {
-    justify-content: center;
-  }
-
-  .chart-container {
-    height: 300px;
-  }
-
-  .medal-row {
+  .hero-side {
     flex-direction: row;
   }
 
-  .medal-counts {
-    flex-direction: row;
-    gap: var(--spacing-md);
-  }
-}
-
-/* ===== MEDIUM DEVICES (641px to 768px) ===== */
-@media (min-width: 641px) and (max-width: 768px) {
-  .dashboard-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .participant-cards {
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  }
-
-  .achievements-stats {
-    flex-direction: row;
-    flex-wrap: wrap;
-  }
-
-  .achievement-categories {
-    flex-direction: row;
-    flex-wrap: wrap;
-  }
-
-  .charts-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .stats-controls {
-    flex-direction: row;
-    flex-wrap: wrap;
-  }
-
-  .filter-select {
+  .hero-side > .card {
     flex: 1;
-    min-width: 120px;
   }
 }
 
-/* ===== LARGE DEVICES (769px to 1024px) ===== */
-@media (min-width: 769px) and (max-width: 1024px) {
-  .dashboard-grid {
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+/* ---------- Mobile ---------- */
+@media (max-width: 720px) {
+  :root {
+    --header-h: 60px;
   }
 
-  .achievements-grid {
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  .page {
+    padding: var(--sp-4) var(--sp-4) calc(var(--sp-8) + 68px);
   }
 
-  .charts-grid {
-    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-  }
-
-  .header-content {
-    flex-direction: row;
-  }
-
-  .logo {
-    flex-direction: row;
-  }
-}
-
-/* ===== TOUCH DEVICE OPTIMIZATIONS ===== */
-@media (hover: none) and (pointer: coarse) {
-  /* Increase touch targets */
-  .nav-tab {
-    min-height: 44px;
-    padding: var(--spacing-sm) var(--spacing-lg);
-  }
-
-  .icon-btn {
-    min-width: 44px;
-    min-height: 44px;
-  }
-
-  .category-filter {
-    min-height: 44px;
-    padding: var(--spacing-sm) var(--spacing-md);
-  }
-
-  .filter-select {
-    min-height: 44px;
-  }
-
-  .medal-count {
-    min-height: 36px;
-    padding: var(--spacing-sm);
-  }
-
-  /* Remove hover effects that don't work on touch */
-  .stat-card:hover,
-  .participant-card:hover,
-  .competitor-card:hover,
-  .achievement:hover {
-    transform: none;
-  }
-
-  /* Add tap feedback */
-  .nav-tab:active,
-  .btn:active,
-  .icon-btn:active {
-    transform: scale(0.95);
-    transition: transform 0.1s ease;
-  }
-
-  /* Improve scrolling */
-  .nav-tabs {
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-
-  .nav-tabs::-webkit-scrollbar {
+  /* Header: hide desktop nav, show tab bar */
+  .top-nav {
     display: none;
   }
-}
 
-/* ===== HIGH DENSITY DISPLAYS ===== */
-@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
-  /* Sharper text rendering */
-  body {
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+  .tab-bar {
+    display: flex;
   }
 
-  /* Crisper borders */
-  .stat-card,
-  .participant-card,
-  .achievement,
-  .chart-container {
-    border-width: 0.5px;
-  }
-}
-
-/* ===== LANDSCAPE ORIENTATION ===== */
-@media (orientation: landscape) and (max-height: 600px) {
-  /* Compact header for landscape phones */
-  .header {
-    padding: var(--spacing-sm) var(--spacing-lg);
+  .site-footer {
+    padding-bottom: calc(84px + env(safe-area-inset-bottom));
   }
 
-  .trophy-logo {
-    font-size: 1.5rem;
+  .header-inner {
+    padding: 0 var(--sp-4);
   }
 
-  .logo h1 {
-    font-size: var(--text-xl);
+  .brand-mark {
+    width: 36px;
+    height: 36px;
   }
 
-  /* Reduce vertical spacing */
-  .container {
-    padding: var(--spacing-md) var(--spacing-xl);
-  }
-
-  .dashboard-grid {
-    gap: var(--spacing-md);
-  }
-
-  .chart-container {
-    height: 200px;
-  }
-
-  /* Horizontal layout for stats */
-  .achievements-stats {
-    flex-direction: row;
-    gap: var(--spacing-xl);
-  }
-}
-
-/* ===== DARK MODE OVERRIDES ===== */
-@media (prefers-color-scheme: dark) {
-  /* Already handled in main theme, but can add specific responsive adjustments */
-}
-
-/* ===== REDUCED MOTION ===== */
-@media (prefers-reduced-motion: reduce) {
-  /* Disable problematic transforms on small screens */
-  .stat-card:hover,
-  .participant-card:hover,
-  .competitor-card:hover {
-    transform: none;
-  }
-
-  /* Keep essential layout shifts */
-  .nav-tab.active {
-    transform: none;
-  }
-}
-
-/* ===== CONTRAST PREFERENCES ===== */
-@media (prefers-contrast: high) {
-  .stat-card,
-  .participant-card,
-  .achievement,
-  .chart-container {
-    border-width: 2px;
-    border-color: var(--text-primary);
-  }
-
-  .nav-tab.active {
-    border: 2px solid var(--text-primary);
-  }
-
-  .medal-count {
-    border: 1px solid currentColor;
-  }
-}
-
-/* ===== SPECIFIC COMPONENT BREAKPOINTS ===== */
-
-/* Navigation breakpoint */
-@media (max-width: 600px) {
-  .nav-tabs {
-    padding: var(--spacing-sm);
-    gap: var(--spacing-xs);
-  }
-
-  .nav-tab {
-    padding: var(--spacing-xs) var(--spacing-sm);
-    font-size: var(--text-xs);
-  }
-}
-
-/* Chart breakpoint */
-@media (max-width: 500px) {
-  .charts-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .chart-container {
-    height: 200px;
-    padding: var(--spacing-sm);
-  }
-
-  .chart-header {
+  /* Hero */
+  .hero-side {
     flex-direction: column;
-    gap: var(--spacing-sm);
   }
 
-  .chart-title {
-    font-size: var(--text-base);
+  .hero-champion {
+    padding: var(--sp-5);
+    min-height: 200px;
   }
-}
 
-/* Achievement grid breakpoint */
-@media (max-width: 400px) {
-  .achievements-grid {
+  .hero-trophy {
+    width: 180px;
+    height: 180px;
+    right: -40px;
+    bottom: -40px;
+  }
+
+  .count-seg {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .countdown {
+    width: 100%;
+  }
+
+  /* Cards a touch tighter */
+  .card {
+    padding: var(--sp-4);
+    border-radius: var(--r-md);
+  }
+
+  .kpi-grid {
     grid-template-columns: repeat(2, 1fr);
-    gap: var(--spacing-xs);
   }
 
-  .achievement {
-    padding: var(--spacing-xs);
+  .chart-wrap,
+  .chart-wrap.tall {
+    height: 250px;
   }
 
-  .achievement-icon {
-    font-size: var(--text-lg);
+  #map {
+    height: 320px;
   }
 
-  .achievement-name {
-    font-size: var(--text-xs);
+  /* Podium tighter */
+  .podium {
+    gap: var(--sp-2);
   }
 
-  .achievement-desc {
-    font-size: 0.65rem;
+  .podium-avatar {
+    width: 52px;
+    height: 52px;
+    font-size: 1rem;
+  }
+
+  .podium-1 .podium-block { height: 110px; }
+  .podium-2 .podium-block { height: 80px; }
+  .podium-3 .podium-block { height: 60px; }
+
+  .podium-medals {
+    white-space: normal;
+  }
+
+  /* Timeline */
+  .timeline {
+    padding-left: 24px;
+  }
+
+  .tl-item::before {
+    left: -21px;
+  }
+
+  /* Touch targets */
+  .chip {
+    padding: 0.5rem 0.95rem;
+  }
+
+  .filter-actions {
+    justify-content: stretch;
+  }
+
+  .filter-actions .btn {
+    width: 100%;
   }
 }
 
-/* Medal tally breakpoint */
-@media (max-width: 350px) {
-  .medal-tally {
-    padding: var(--spacing-sm);
+/* ---------- Small phones ---------- */
+@media (max-width: 380px) {
+  .kpi-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp-2);
   }
 
-  .medal-row {
-    padding: var(--spacing-sm);
-  }
-
-  .medal-position {
-    font-size: var(--text-lg);
-  }
-
-  .medal-total {
-    font-size: var(--text-base);
-  }
-}
-
-/* Placement heatmap adjustments */
-@media (max-width: 640px) {
-  .heatmap-table th,
-  .heatmap-table td {
-    padding: var(--spacing-xs);
-    font-size: var(--text-xs);
-  }
-}
-
-/* ===== UTILITIES FOR RESPONSIVE DESIGN ===== */
-
-/* Hide/show at breakpoints */
-.hide-xs {
-  display: none;
-}
-.hide-sm {
-  display: block;
-}
-.hide-md {
-  display: block;
-}
-.hide-lg {
-  display: block;
-}
-
-@media (min-width: 481px) {
-  .hide-xs {
-    display: block;
-  }
-  .show-xs {
+  .brand-sub {
     display: none;
   }
-}
 
-@media (min-width: 641px) {
-  .hide-sm {
-    display: none;
-  }
-  .show-sm {
-    display: block;
+  .ccard-stats {
+    gap: var(--sp-1);
   }
 }
 
-@media (min-width: 769px) {
-  .hide-md {
-    display: none;
+/* ---------- Hover devices only: card lift ---------- */
+@media (hover: hover) and (pointer: fine) {
+  .card:hover {
+    box-shadow: var(--shadow-2);
   }
-  .show-md {
-    display: block;
-  }
-}
 
-@media (min-width: 1025px) {
-  .hide-lg {
-    display: none;
-  }
-  .show-lg {
-    display: block;
+  .chart-card:hover,
+  .map-card:hover {
+    transform: translateY(-2px);
   }
 }
 
-/* Responsive text sizes */
-.text-responsive {
-  font-size: clamp(0.875rem, 2.5vw, 1.125rem);
-}
-
-.heading-responsive {
-  font-size: clamp(1.5rem, 5vw, 2.5rem);
-}
-
-/* Responsive spacing */
-.gap-responsive {
-  gap: clamp(0.5rem, 2vw, 1.5rem);
-}
-
-.padding-responsive {
-  padding: clamp(1rem, 3vw, 2rem);
-}
-
-.margin-responsive {
-  margin: clamp(0.5rem, 2vw, 1.5rem);
+/* ---------- Large screens ---------- */
+@media (min-width: 1440px) {
+  .page,
+  .header-inner,
+  .site-footer {
+    max-width: 1320px;
+  }
 }
