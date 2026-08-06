@@ -52,7 +52,7 @@ export const L = {
 L.bumpers = [
   { x: L.centerX - 3.3, y: 26.4 },
   { x: L.centerX + 3.3, y: 26.4 },
-  { x: L.centerX, y: 29.0 }
+  { x: L.centerX, y: 29.0, trophy: true }
 ];
 
 // P-O-K-A-L drop target bank, with an open orbit lane either side
@@ -66,8 +66,8 @@ L.targets = ['P', 'O', 'K', 'A', 'L'].map((letter, i) => ({
 L.jackpot = { x: L.centerX, y: 32.9, r: 1.05 };
 
 L.posts = [
-  { x: L.centerX - 3.4, y: 14.6, r: 0.34 },
-  { x: L.centerX + 3.4, y: 14.6, r: 0.34 },
+  { x: L.centerX - 3.4, y: 17.0, r: 0.34 },
+  { x: L.centerX + 3.4, y: 17.0, r: 0.34 },
   { x: L.centerX, y: 23.2, r: 0.3 },
   { x: L.centerX - 5.2, y: 22.6, r: 0.3 },
   { x: L.centerX + 5.2, y: 22.6, r: 0.3 }
@@ -234,150 +234,168 @@ const toV = (y) => TEX_H - ((y - ART.y0) / (ART.y1 - ART.y0)) * TEX_H;
  * Draws the playfield art to a canvas. Doing this procedurally keeps the game
  * asset-free while still looking designed rather than bare.
  */
-export function createPlayfieldCanvas(participants = []) {
+export function createPlayfieldCanvas(participants = [], logo = null) {
   const cv = document.createElement('canvas');
   cv.width = TEX_W;
   cv.height = TEX_H;
   const g = cv.getContext('2d');
 
   const GOLD = '#f2c14e';
-  const GOLD_DIM = 'rgba(242,193,78,.35)';
+  const GOLD_DIM = 'rgba(242,193,78,.32)';
+  // Everything on the playfield lines up on its centre line; only the dome
+  // decoration follows the dome, which sits on the table's centre instead.
+  const cx = L.centerX;
+  const unitsX = (u) => (u / (ART.x1 - ART.x0)) * TEX_W;
+  const unitsY = (u) => (u / (ART.y1 - ART.y0)) * TEX_H;
 
-  // Base
+  /* ---- Base ---- */
   const base = g.createLinearGradient(0, 0, 0, TEX_H);
-  base.addColorStop(0, '#141a33');
-  base.addColorStop(0.45, '#0e1226');
-  base.addColorStop(1, '#171d3a');
+  base.addColorStop(0, '#131931');
+  base.addColorStop(0.45, '#0d1124');
+  base.addColorStop(1, '#161c38');
   g.fillStyle = base;
   g.fillRect(0, 0, TEX_W, TEX_H);
 
-  // Vignette glow behind the bumpers
-  const glow = g.createRadialGradient(toU(-0.9), toV(28), 20, toU(-0.9), toV(28), 420);
-  glow.addColorStop(0, 'rgba(124,140,248,.20)');
-  glow.addColorStop(1, 'rgba(124,140,248,0)');
-  g.fillStyle = glow;
-  g.fillRect(0, 0, TEX_W, TEX_H);
+  const pool = (x, y, r, color) => {
+    const grad = g.createRadialGradient(toU(x), toV(y), 10, toU(x), toV(y), r);
+    grad.addColorStop(0, color);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, TEX_W, TEX_H);
+  };
+  pool(cx, 28, 430, 'rgba(124,140,248,.20)');
+  pool(cx, 13.2, 400, 'rgba(242,193,78,.13)');
+  pool(cx, 7, 300, 'rgba(242,193,78,.10)');
 
-  const glow2 = g.createRadialGradient(toU(-0.9), toV(8), 20, toU(-0.9), toV(8), 380);
-  glow2.addColorStop(0, 'rgba(242,193,78,.16)');
-  glow2.addColorStop(1, 'rgba(242,193,78,0)');
-  g.fillStyle = glow2;
-  g.fillRect(0, 0, TEX_W, TEX_H);
-
-  // Concentric arcs echoing the dome
+  /* ---- Dome arcs (centred on the dome, not the playfield) ---- */
   g.strokeStyle = GOLD_DIM;
   g.lineWidth = 2;
-  for (let r = 3; r <= 8.4; r += 1.35) {
+  for (let r = 3.2; r <= 8.4; r += 1.3) {
     g.beginPath();
-    const rx = (r / (ART.x1 - ART.x0)) * TEX_W;
-    const ry = (r / (ART.y1 - ART.y0)) * TEX_H;
-    g.ellipse(toU(0), toV(L.domeY), rx, ry, 0, Math.PI, 2 * Math.PI);
+    g.ellipse(toU(0), toV(L.domeY), unitsX(r), unitsY(r), 0, Math.PI, 2 * Math.PI);
     g.stroke();
   }
 
-  // Orbit lane guides beside the target bank
-  g.strokeStyle = 'rgba(124,140,248,.30)';
+  /* ---- Orbit lanes either side of the target bank ---- */
+  g.strokeStyle = 'rgba(124,140,248,.28)';
   g.lineWidth = 5;
-  [[-7.6, 12, -7.6, 24], [L.laneX - 1.2, 12, L.laneX - 1.2, 24]].forEach(([x0, y0, x1, y1]) => {
+  [-7.6, L.laneX - 1.2].forEach((x) => {
     g.beginPath();
-    g.moveTo(toU(x0), toV(y0));
-    g.lineTo(toU(x1), toV(y1));
+    g.moveTo(toU(x), toV(13.5));
+    g.lineTo(toU(x), toV(24.5));
     g.stroke();
   });
 
-  // Inlane arrows pointing at the flippers
+  /* ---- Jackpot, high enough that the trophy doesn't cover it ---- */
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillStyle = GOLD;
+  g.font = '700 26px "Space Grotesk", Inter, sans-serif';
+  g.letterSpacing = '8px';
+  g.shadowColor = 'rgba(242,193,78,.6)';
+  g.shadowBlur = 18;
+  g.fillText('JACKPOT', toU(cx), toV(36.2));
+  g.shadowBlur = 0;
+  g.letterSpacing = '0px';
+
+  g.strokeStyle = GOLD;
+  g.lineWidth = 4;
+  g.setLineDash([14, 10]);
+  g.beginPath();
+  g.ellipse(toU(L.jackpot.x), toV(L.jackpot.y), unitsX(2.05), unitsY(2.05), 0, 0, Math.PI * 2);
+  g.stroke();
+  g.setLineDash([]);
+
+  /* ---- Target bank ---- */
+  g.fillStyle = 'rgba(255,255,255,.34)';
+  g.font = '700 23px Inter, sans-serif';
+  g.letterSpacing = '6px';
+  g.fillText('SLÅ NER ALLA FEM', toU(cx), toV(21.3));
+  g.letterSpacing = '0px';
+
+  // A letter under each target so the bank reads as P-O-K-A-L on the table
+  g.font = '700 34px "Space Grotesk", Inter, sans-serif';
+  L.targets.forEach((t) => {
+    g.fillStyle = 'rgba(242,193,78,.5)';
+    g.fillText(t.letter, toU(t.x), toV(17.5));
+  });
+
+  /* ---- Hero logo, centred in the lower playfield ---- */
+  if (logo && logo.width) {
+    const w = 7.8;
+    const h = (w * logo.height) / logo.width;
+    const px = toU(cx - w / 2);
+    const py = toV(13.2 + h / 2);
+    g.save();
+    g.globalAlpha = 0.34;
+    g.shadowColor = 'rgba(242,193,78,.85)';
+    g.shadowBlur = 34;
+    g.drawImage(logo, px, py, unitsX(w), unitsY(h));
+    g.shadowBlur = 0;
+    g.globalAlpha = 0.9;
+    g.drawImage(logo, px, py, unitsX(w), unitsY(h));
+    g.restore();
+  } else {
+    g.fillStyle = GOLD;
+    g.font = '700 54px "Space Grotesk", Inter, sans-serif';
+    g.fillText('PEKKAS POKAL', toU(cx), toV(13.6));
+    g.fillStyle = 'rgba(255,255,255,.45)';
+    g.font = '600 22px Inter, sans-serif';
+    g.letterSpacing = '8px';
+    g.fillText('FLIPPER · 2025', toU(cx), toV(12.2));
+    g.letterSpacing = '0px';
+  }
+
+  /* ---- Inlane arrows pointing at the flippers ---- */
   g.fillStyle = 'rgba(242,193,78,.30)';
   [-1, 1].forEach((s) => {
-    const cx = L.centerX + s * 4.3;
+    const ax = cx + s * 4.3;
     for (let i = 0; i < 3; i++) {
-      const y = 11.5 - i * 1.3;
+      const y = 11.4 - i * 1.25;
       g.beginPath();
-      g.moveTo(toU(cx - 0.55), toV(y));
-      g.lineTo(toU(cx + 0.55), toV(y));
-      g.lineTo(toU(cx), toV(y - 0.75));
+      g.moveTo(toU(ax - 0.55), toV(y));
+      g.lineTo(toU(ax + 0.55), toV(y));
+      g.lineTo(toU(ax), toV(y - 0.72));
       g.closePath();
       g.fill();
     }
   });
 
-  // Title arc across the top
-  g.save();
-  g.translate(toU(0), toV(L.domeY + 4.7));
-  g.fillStyle = GOLD;
-  g.font = '700 42px "Space Grotesk", Inter, sans-serif';
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.shadowColor = 'rgba(242,193,78,.6)';
-  g.shadowBlur = 20;
-  g.fillText('PEKKAS POKAL', 0, 0);
-  g.shadowBlur = 0;
-  g.font = '600 22px Inter, sans-serif';
-  g.fillStyle = 'rgba(255,255,255,.5)';
-  g.letterSpacing = '8px';
-  g.fillText('FLIPPER · 2025', 0, 38);
-  g.restore();
-
-  // Target bank label
-  g.fillStyle = 'rgba(255,255,255,.32)';
-  g.font = '700 26px Inter, sans-serif';
-  g.textAlign = 'center';
-  g.letterSpacing = '6px';
-  g.fillText('SLÅ NER ALLA FEM', toU(L.centerX), toV(21.4));
-  g.letterSpacing = '0px';
-
-  // Jackpot ring
-  g.strokeStyle = GOLD;
-  g.lineWidth = 4;
-  g.setLineDash([14, 10]);
-  g.beginPath();
-  g.ellipse(
-    toU(L.jackpot.x),
-    toV(L.jackpot.y),
-    (2.1 / (ART.x1 - ART.x0)) * TEX_W,
-    (2.1 / (ART.y1 - ART.y0)) * TEX_H,
-    0,
-    0,
-    Math.PI * 2
-  );
-  g.stroke();
-  g.setLineDash([]);
-
-  // Roll of honour down the left edge — the people this table is about
+  /* ---- Roll of honour down the left rail ---- */
   if (participants.length) {
     g.save();
-    g.fillStyle = 'rgba(255,255,255,.14)';
-    g.font = '600 19px Inter, sans-serif';
+    g.fillStyle = 'rgba(255,255,255,.15)';
+    g.font = '600 18px Inter, sans-serif';
     g.textAlign = 'left';
     participants.slice(0, 13).forEach((name, i) => {
-      g.fillText(name.toUpperCase(), toU(-8.75), toV(24.5 - i * 0.92));
+      g.fillText(name.toUpperCase(), toU(-8.78), toV(25.2 - i * 0.92));
     });
     g.restore();
+    g.textAlign = 'center';
   }
 
-  // Shooter lane stripe
-  g.fillStyle = 'rgba(242,193,78,.10)';
+  /* ---- Shooter lane ---- */
+  g.fillStyle = 'rgba(242,193,78,.09)';
   g.fillRect(toU(L.laneX), toV(L.domeY), toU(L.outerX) - toU(L.laneX), toV(2) - toV(L.domeY));
 
   g.save();
   g.translate(toU((L.laneX + L.outerX) / 2), toV(16));
   g.rotate(-Math.PI / 2);
   g.fillStyle = 'rgba(242,193,78,.5)';
-  g.font = '700 26px Inter, sans-serif';
-  g.textAlign = 'center';
+  g.font = '700 24px Inter, sans-serif';
   g.letterSpacing = '8px';
   g.fillText('DRA OCH SLÄPP', 0, 8);
   g.restore();
 
-  // Drain warning
+  /* ---- Drain ---- */
   g.fillStyle = 'rgba(242,109,141,.35)';
-  g.font = '700 22px Inter, sans-serif';
-  g.textAlign = 'center';
+  g.font = '700 21px Inter, sans-serif';
   g.letterSpacing = '5px';
-  g.fillText('UTGÅNG', toU(L.centerX), toV(1.2));
+  g.fillText('UTGÅNG', toU(cx), toV(1.1));
+  g.letterSpacing = '0px';
 
-  // Subtle grain so large flat areas aren't dead. Built on its own canvas and
-  // drawn with drawImage — putImageData REPLACES pixels rather than compositing,
-  // which would erase everything above.
+  /* ---- Grain. Built on its own canvas and composited with drawImage:
+     putImageData REPLACES pixels and would erase everything above. ---- */
   const gc = document.createElement('canvas');
   gc.width = 128;
   gc.height = 128;
@@ -391,7 +409,7 @@ export function createPlayfieldCanvas(participants = []) {
   }
   gg.putImageData(grain, 0, 0);
   g.save();
-  g.globalAlpha = 0.5;
+  g.globalAlpha = 0.45;
   for (let y = 0; y < TEX_H; y += 128) {
     for (let x = 0; x < TEX_W; x += 128) g.drawImage(gc, x, y);
   }

@@ -1871,6 +1871,7 @@
       competition: 'Flipper',
       tagline: 'Ett fullstort flipperspel i 3D. Tre bollar, fem mål och en pokal.',
       icon: '🎯',
+      image: 'logo-pekkas-pokal.png',
       module: 'src/games/pinball/index.js'
     }
   ];
@@ -1887,7 +1888,11 @@
           return `
           <button class="game-card playable" data-game="${comp.year}">
             <span class="game-badge">Spelbar</span>
-            <span class="game-icon">${game.icon}</span>
+            ${
+  game.image
+    ? `<img class="game-logo" src="${esc(game.image)}" alt="" loading="lazy" />`
+    : `<span class="game-icon">${game.icon}</span>`
+  }
             <span class="game-year">${comp.year}</span>
             <span class="game-title">${esc(game.title)}</span>
             <span class="game-tagline">${esc(game.tagline)}</span>

@@ -591,3 +591,11 @@ body.game-open {
   position: relative;
   z-index: 1;
 }
+
+/* Official logo on the playable game card */
+.game-logo {
+  width: clamp(120px, 46%, 170px);
+  height: auto;
+  margin-bottom: var(--sp-3);
+  filter: drop-shadow(0 4px 16px rgba(242, 193, 78, 0.35));
+}
