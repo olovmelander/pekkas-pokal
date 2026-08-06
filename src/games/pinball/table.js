@@ -6,6 +6,12 @@
  *
  * Playfield coordinates: +y runs up the table, the drain is at y = 0.
  * The shooter lane is on the right, feeding a habitrail around the top dome.
+ *
+ * Anatomy, bottom to top: flippers with real inlanes and OUTLANES (the ball
+ * can drain past the flippers on both sides), slingshot triangles, two angled
+ * P-O-K / A-L target banks framing an open corridor, and at the top the
+ * CASTLE: towers, bashable gate and the trophy in the courtyard. Two wireform
+ * ramps carry the ball in 3D across the table.
  */
 
 import { segment, circle, chain, arc, Flipper } from './physics.js';
@@ -18,8 +24,11 @@ export const L = {
   domeY: 31,
   domeOuterR: 9,
   // Inner radius and divider leave a 1.8 channel — comfortably wider than the
-  // 1.24 ball. Any narrower and the ball wedges in the shooter lane.
+  // ball. Any narrower and the ball wedges in the shooter lane.
   domeInnerR: 6.6,
+  // The left wall flares out below the dome to make room for the ramp lane
+  // beside the left orbit.
+  flareX: 9.7,
 
   // Shooter lane
   laneX: 6.6,
@@ -30,75 +39,133 @@ export const L = {
   // Playfield proper spans -9 .. 6.6
   centerX: -1.2,
 
-  ballRadius: 0.62,
+  ballRadius: 0.54,
 
   // Flippers
   flipperY: 7,
   flipperSpread: 3.7,
-  flipperLength: 3.0,
+  flipperLength: 3.15,
   flipperRest: -30 * D,
   flipperSwing: 62 * D,
 
-  // Slingshots (kicking face, outer → inner)
-  slingTopY: 12.4,
-  slingBotY: 8.4,
-
-  // Bumpers
   bumperR: 1.25,
 
-  wallH: 1.5
+  wallH: 1.7
 };
-
-L.bumpers = [
-  { x: L.centerX - 3.3, y: 26.4 },
-  { x: L.centerX + 3.3, y: 26.4 },
-  { x: L.centerX, y: 29.0, trophy: true }
-];
-
-// P-O-K-A-L drop target bank, with an open orbit lane either side
-L.targets = ['P', 'O', 'K', 'A', 'L'].map((letter, i) => ({
-  letter,
-  x: L.centerX - 4.5 + i * 2.25,
-  y: 19,
-  half: 0.62
-}));
-
-L.jackpot = { x: L.centerX, y: 32.9, r: 1.05 };
-
-L.posts = [
-  { x: L.centerX - 3.4, y: 17.0, r: 0.34 },
-  { x: L.centerX + 3.4, y: 17.0, r: 0.34 },
-  { x: L.centerX, y: 23.2, r: 0.3 },
-  { x: L.centerX - 5.2, y: 22.6, r: 0.3 },
-  { x: L.centerX + 5.2, y: 22.6, r: 0.3 }
-];
-
-// Scoring switches: invisible sensors the ball rolls through.
-// Orbits are the open lanes either side of the target bank; inlanes are the
-// return channels that feed the flippers.
-L.sensors = {
-  leftOrbit: [-8.6, 18, -6.6, 18],
-  rightOrbit: [4.2, 18, 6.2, 18],
-  inlaneLeft: [-5.55, 6.6, -4.35, 7.1],
-  inlaneRight: [mirrorXRaw(-5.55), 6.6, mirrorXRaw(-4.35), 7.1]
-};
-
-// Where locked balls are parked while waiting for multiball
-L.lockSlots = [
-  { x: -7.6, y: 27.4 },
-  { x: -6.7, y: 29.6 }
-];
-
-/* ------------------------------------------------------------ wall polylines */
 
 function mirrorXRaw(x) {
   return 2 * L.centerX - x;
 }
 const mirrorX = mirrorXRaw;
 
-// Left outer wall down into the outlane and drain funnel
+// Two pop bumpers flanking the castle corridor
+L.bumpers = [
+  { x: -4.4, y: 23.8 },
+  { x: 2.0, y: 23.8 }
+];
+
+/**
+ * P-O-K-A-L drop targets, split into two angled banks either side of the
+ * castle corridor: P-O-K climbs up the left, A-L mirrors on the right.
+ * `a` is the bank angle in playfield radians.
+ */
+const bankA = Math.atan2(3.6, 3.2); // ~48°
+L.targets = [
+  { letter: 'P', x: -5.37, y: 14.8, half: 0.55, a: bankA },
+  { letter: 'O', x: -4.3, y: 16.0, half: 0.55, a: bankA },
+  { letter: 'K', x: -3.23, y: 17.2, half: 0.55, a: bankA },
+  { letter: 'A', x: 1.8, y: 17.13, half: 0.55, a: -bankA },
+  { letter: 'L', x: 3.0, y: 15.78, half: 0.55, a: -bankA }
+];
+
+/* ------------------------------------------------------------------- castle */
+
+L.castle = {
+  // Gate the ball bashes open (a collider while closed)
+  gate: [-2.45, 28.45, 0.05, 28.45],
+  towers: [
+    { x: -2.95, y: 28.5, r: 0.62 },
+    { x: 0.55, y: 28.5, r: 0.62 }
+  ],
+  // Battlement walls running out from the towers
+  leftWall: [
+    [-5.2, 26.4],
+    [-3.7, 28.15],
+    [-2.55, 28.55]
+  ],
+  rightWall: [
+    [0.15, 28.55],
+    [1.3, 28.15],
+    [2.8, 26.4]
+  ]
+};
+
+// The trophy stands in the castle courtyard, behind the gate
+L.jackpot = { x: L.centerX, y: 30.4, r: 1.0 };
+
+// Locked balls are parked in the courtyard corners, visible through the
+// gate but clear of the trophy's collision reach — a released ball must not
+// collect a jackpot it never earned.
+L.lockSlots = [
+  { x: -2.5, y: 29.1 },
+  { x: 0.3, y: 29.1 }
+];
+
+/* ------------------------------------------------------------------- ramps */
+
+/**
+ * Wireform ramps. A ball crossing the capture sensor fast enough is lifted
+ * out of the 2D simulation and carried along `path` ([x, y, height] in
+ * playfield coordinates), then dropped back in at the far end. Left ramp
+ * feeds the right inlane and vice versa, Medieval Madness style.
+ */
+L.ramps = {
+  left: {
+    capture: [-7.5, 22.8, -6.35, 22.8],
+    minVy: 6.0,
+    exit: { x: 3.73, y: 12.2, vy: -4 },
+    path: [
+      [-6.9, 22.8, 0.5],
+      [-6.7, 26.0, 1.9],
+      [-5.6, 29.5, 3.1],
+      [-3.2, 32.0, 3.7],
+      [-0.5, 32.8, 3.9],
+      [2.2, 31.0, 3.4],
+      [4.3, 26.5, 2.5],
+      [4.9, 20.0, 1.6],
+      [4.4, 14.5, 0.9],
+      [3.73, 12.4, 0.55]
+    ]
+  },
+  right: {
+    capture: [4.4, 25.5, 6.3, 25.5],
+    minVy: 6.5,
+    exit: { x: -6.2, y: 11.8, vy: -4 },
+    path: [
+      [5.5, 25.5, 0.5],
+      [5.9, 29.0, 2.0],
+      [4.6, 32.6, 3.3],
+      [1.5, 34.6, 4.1],
+      [-2.0, 34.9, 4.3],
+      [-5.2, 33.4, 3.8],
+      [-7.6, 29.5, 2.8],
+      [-8.5, 24.0, 1.9],
+      [-8.2, 17.0, 1.1],
+      [-7.2, 13.4, 0.7],
+      [-6.2, 11.6, 0.5]
+    ]
+  }
+};
+
+/* ------------------------------------------------------------ wall polylines */
+
+// Left outer wall: flares out below the dome for the ramp lane, straightens
+// for the outlane, then funnels into the drain.
 L.leftWall = [
   [-L.outerX, L.domeY],
+  [-L.flareX, 27.5],
+  [-L.flareX, 13.2],
+  [-L.outerX, 10.8],
   [-L.outerX, 9],
   [-7.8, 4.2],
   [-3.3, -1.4]
@@ -111,36 +178,97 @@ L.rightWall = [
   [mirrorX(-3.3), -1.4]
 ];
 
-// Slingshot faces — the ball is kicked along the face normal, toward centre
-L.leftSling = [
-  [-7.6, L.slingTopY],
-  [-5.0, L.slingBotY]
+// Divider between the left orbit (outside) and the left ramp lane (inside)
+L.leftDivider = [
+  [-7.75, 14.8],
+  [-7.75, 23.8]
 ];
-L.rightSling = [
-  [mirrorX(-7.6), L.slingTopY],
-  [mirrorX(-5.0), L.slingBotY]
+// Inner wall of the ramp lane, keeping it clear of the bumper area
+L.leftRampInner = [
+  [-6.1, 18.6],
+  [-6.1, 22.8]
 ];
 
-// Inlane/outlane dividers, guiding returns onto the flippers
-L.leftGuide = [
-  [-5.0, L.slingBotY],
-  [-5.5, 5.2]
+/**
+ * One-way return gates at the bottom of each orbit: a FAST-falling ball (an
+ * orbit return) rides the wire down into the inlane, while ascending shots
+ * and slow dribbles swing straight through — dribbles then take their
+ * chances with the outlane, exactly like a real flap. Nothing can rest on
+ * the wire, because a resting ball no longer matches the speed filter.
+ */
+L.leftReturnGate = [
+  [-9.35, 14.4],
+  [-8.5, 13.4],
+  [-7.4, 12.85],
+  [-6.6, 12.5]
 ];
-L.rightGuide = [
-  [mirrorX(-5.0), L.slingBotY],
-  [mirrorX(-5.5), 5.2]
+L.rightReturnGate = [
+  [6.55, 14.4],
+  [5.7, 13.4],
+  [4.6, 12.85],
+  [4.2, 12.5]
 ];
+
+/**
+ * Inlane/outlane guide rails: the long arm walls off the outlane, the hook at
+ * the bottom curls around and drops the ball onto the flipper heel. Outside
+ * the rail the outlane runs straight into the drain — a real side exit.
+ */
+L.leftRail = [
+  [-7.08, 12.55],
+  [-7.08, 8.7],
+  [-6.65, 7.55],
+  [-5.95, 7.15],
+  [-5.3, 7.45]
+];
+L.rightRail = L.leftRail.map(([x, y]) => [mirrorX(x), y]);
+
+/**
+ * Slingshot triangles: T top, BO bottom-outer, BI bottom-inner.
+ * T→BI is the kicker face; the other two edges are plain walls.
+ */
+L.leftSlingPts = { T: [-4.95, 11.7], BO: [-4.72, 9.45], BI: [-3.75, 9.0] };
+L.rightSlingPts = {
+  T: [mirrorX(-4.95), 11.7],
+  BO: [mirrorX(-4.72), 9.45],
+  BI: [mirrorX(-3.75), 9.0]
+};
+// Kept as simple 2-point faces for the mesh flash lookup
+L.leftSling = [L.leftSlingPts.T, L.leftSlingPts.BI];
+L.rightSling = [L.rightSlingPts.T, L.rightSlingPts.BI];
+
+// Rubber posts protecting bank ends and the ramp-lane mouth
+L.posts = [
+  { x: -5.85, y: 14.2, r: 0.28 },
+  { x: -2.75, y: 17.9, r: 0.28 },
+  { x: 1.25, y: 17.9, r: 0.28 },
+  { x: 3.45, y: 14.6, r: 0.28 },
+  { x: -7.75, y: 24.05, r: 0.3 }
+];
+
+// Scoring switches: invisible sensors the ball rolls through.
+L.sensors = {
+  leftOrbit: [-9.35, 18, -8.0, 18],
+  rightOrbit: [4.6, 27.2, 6.5, 27.2],
+  leftRamp: L.ramps.left.capture,
+  rightRamp: L.ramps.right.capture,
+  inlaneLeft: [-6.9, 10.2, -5.4, 10.2],
+  inlaneRight: [mirrorXRaw(-5.4), 10.2, mirrorXRaw(-6.9), 10.2],
+  outLeft: [-8.85, 9.2, -7.35, 9.2],
+  outRight: [mirrorXRaw(-7.35), 9.2, mirrorXRaw(-8.85), 9.2]
+};
 
 /* ------------------------------------------------------------------ colliders */
 
 /**
  * Builds every collider and flipper into `world`.
  * `hooks` receives gameplay events: onBumper, onSling, onTarget, onJackpot,
- * onWall, onOrbit.
+ * onGate, onWall, onSensor, onFlipper.
  */
 export function buildColliders(world, hooks = {}) {
-  const refs = { targets: [], bumpers: [], flippers: {}, orbitGates: [] };
+  const refs = { targets: [], bumpers: [], flippers: {} };
   const wallOpts = { radius: 0.3, restitution: 0.4, friction: 0.05 };
+  const railOpts = { radius: 0.22, restitution: 0.42, friction: 0.04 };
   const hitWall = (v) => hooks.onWall && hooks.onWall(v);
 
   // Outer shell
@@ -160,19 +288,44 @@ export function buildColliders(world, hooks = {}) {
     segment(L.laneX, L.laneBottomY, L.outerX, L.laneBottomY, { ...wallOpts, restitution: 0.15 })
   );
 
-  // Slingshots — strong kick, awards points
+  // Orbit/ramp divider and ramp lane inner wall
+  world.add(chain(L.leftDivider, railOpts));
+  world.add(chain(L.leftRampInner, railOpts));
+
+  // Inlane/outlane guide rails (the hook returns)
+  world.add(chain(L.leftRail, railOpts));
+  world.add(chain(L.rightRail, railOpts));
+
+  // One-way orbit return gates: solid only for fast-falling balls. Once the
+  // wire catches a ball it keeps carrying it (rideGate) until the tip drops
+  // it into the inlane — without the hysteresis the first impact would kill
+  // the fall speed and release the ball mid-wire, over the outlane.
+  const gateFilter = (b) => {
+    if (b.vy < -6) {
+      b.rideGate = true;
+      return true;
+    }
+    if (b.rideGate && b.vy <= 1 && b.y > 12.2) return true;
+    b.rideGate = false;
+    return false;
+  };
+  const downOnly = { radius: 0.24, restitution: 0.16, friction: 0.1, filter: gateFilter };
+  world.add(chain(L.leftReturnGate, downOnly));
+  world.add(chain(L.rightReturnGate, downOnly));
+
+  // Slingshots: kicker face plus two plain edges
   const slingOpts = (side) => ({
-    radius: 0.32,
+    radius: 0.28,
     restitution: 0.62,
     kick: 13,
+    kickMin: 2.5,
     onHit: (v) => hooks.onSling && hooks.onSling(side, v)
   });
-  world.add(chain(L.leftSling, slingOpts('left')));
-  world.add(chain(L.rightSling, slingOpts('right')));
-
-  // Return guides
-  world.add(chain(L.leftGuide, wallOpts));
-  world.add(chain(L.rightGuide, wallOpts));
+  [['left', L.leftSlingPts], ['right', L.rightSlingPts]].forEach(([side, P]) => {
+    world.add(segment(P.T[0], P.T[1], P.BI[0], P.BI[1], slingOpts(side)));
+    world.add(segment(P.T[0], P.T[1], P.BO[0], P.BO[1], { ...railOpts, radius: 0.28 }));
+    world.add(segment(P.BO[0], P.BO[1], P.BI[0], P.BI[1], { ...railOpts, radius: 0.28 }));
+  });
 
   // Pop bumpers
   L.bumpers.forEach((b, i) => {
@@ -186,9 +339,11 @@ export function buildColliders(world, hooks = {}) {
     refs.bumpers.push(c);
   });
 
-  // P-O-K-A-L drop targets
+  // P-O-K / A-L drop targets (angled banks)
   L.targets.forEach((t, i) => {
-    const c = segment(t.x - t.half, t.y, t.x + t.half, t.y, {
+    const dx = Math.cos(t.a) * t.half;
+    const dy = Math.sin(t.a) * t.half;
+    const c = segment(t.x - dx, t.y - dy, t.x + dx, t.y + dy, {
       radius: 0.26,
       restitution: 0.34,
       id: `target${i}`,
@@ -198,7 +353,22 @@ export function buildColliders(world, hooks = {}) {
     refs.targets.push(c);
   });
 
-  // Jackpot trophy
+  // Castle: battlement walls, towers, bashable gate, trophy in the courtyard
+  world.add(chain(L.castle.leftWall, wallOpts));
+  world.add(chain(L.castle.rightWall, wallOpts));
+  L.castle.towers.forEach((t) => {
+    world.add(circle(t.x, t.y, t.r, { restitution: 0.5, onHit: hitWall }));
+  });
+  const [gax, gay, gbx, gby] = L.castle.gate;
+  refs.gate = world.add(
+    segment(gax, gay, gbx, gby, {
+      radius: 0.3,
+      restitution: 0.45,
+      id: 'gate',
+      onHit: (v, b) => hooks.onGate && hooks.onGate(v, b)
+    })
+  );
+
   const jack = circle(L.jackpot.x, L.jackpot.y, L.jackpot.r, {
     restitution: 0.55,
     kick: 8,
@@ -208,7 +378,7 @@ export function buildColliders(world, hooks = {}) {
   world.add(jack);
   refs.jackpot = jack;
 
-  // Decorative posts
+  // Rubber posts
   L.posts.forEach((p) => {
     world.add(circle(p.x, p.y, p.r, { restitution: 0.55, onHit: hitWall }));
   });
@@ -256,8 +426,8 @@ export function buildColliders(world, hooks = {}) {
 
 const TEX_W = 1024;
 const TEX_H = 2048;
-// Region of playfield space the texture covers
-const ART = { x0: -L.outerX - 0.6, x1: L.outerX + 0.6, y0: -2, y1: 42 };
+// Region of playfield space the texture covers (wider on the left for the flare)
+const ART = { x0: -L.flareX - 0.7, x1: L.outerX + 0.6, y0: -2, y1: 42 };
 
 const toU = (x) => ((x - ART.x0) / (ART.x1 - ART.x0)) * TEX_W;
 const toV = (y) => TEX_H - ((y - ART.y0) / (ART.y1 - ART.y0)) * TEX_H;
@@ -274,8 +444,6 @@ export function createPlayfieldCanvas(participants = [], logo = null) {
 
   const GOLD = '#f2c14e';
   const GOLD_DIM = 'rgba(242,193,78,.32)';
-  // Everything on the playfield lines up on its centre line; only the dome
-  // decoration follows the dome, which sits on the table's centre instead.
   const cx = L.centerX;
   const unitsX = (u) => (u / (ART.x1 - ART.x0)) * TEX_W;
   const unitsY = (u) => (u / (ART.y1 - ART.y0)) * TEX_H;
@@ -295,7 +463,7 @@ export function createPlayfieldCanvas(participants = [], logo = null) {
     g.fillStyle = grad;
     g.fillRect(0, 0, TEX_W, TEX_H);
   };
-  pool(cx, 28, 430, 'rgba(124,140,248,.20)');
+  pool(cx, 29, 430, 'rgba(124,140,248,.20)');
   pool(cx, 13.2, 400, 'rgba(242,193,78,.13)');
   pool(cx, 7, 300, 'rgba(242,193,78,.10)');
 
@@ -308,56 +476,108 @@ export function createPlayfieldCanvas(participants = [], logo = null) {
     g.stroke();
   }
 
-  /* ---- Orbit lanes either side of the target bank ---- */
-  g.strokeStyle = 'rgba(124,140,248,.28)';
-  g.lineWidth = 5;
-  [-7.6, L.laneX - 1.2].forEach((x) => {
+  /* ---- Castle forecourt: cobblestone half-rings before the gate ---- */
+  g.strokeStyle = 'rgba(180,190,220,.16)';
+  g.lineWidth = 3;
+  for (let r = 1.6; r <= 4.6; r += 0.75) {
     g.beginPath();
-    g.moveTo(toU(x), toV(13.5));
-    g.lineTo(toU(x), toV(24.5));
+    g.ellipse(toU(cx), toV(28.4), unitsX(r), unitsY(r), 0, 0.15 * Math.PI, 0.85 * Math.PI);
     g.stroke();
-  });
-
-  /* ---- Jackpot, high enough that the trophy doesn't cover it ---- */
+  }
+  g.fillStyle = 'rgba(220,228,255,.5)';
+  g.font = '700 24px "Space Grotesk", Inter, sans-serif';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  g.fillStyle = GOLD;
-  g.font = '700 26px "Space Grotesk", Inter, sans-serif';
-  g.letterSpacing = '8px';
-  g.shadowColor = 'rgba(242,193,78,.6)';
-  g.shadowBlur = 18;
-  g.fillText('JACKPOT', toU(cx), toV(36.2));
+  g.letterSpacing = '7px';
+  g.shadowColor = 'rgba(124,140,248,.7)';
+  g.shadowBlur = 14;
+  g.fillText('BORGEN', toU(cx), toV(25.0));
   g.shadowBlur = 0;
   g.letterSpacing = '0px';
 
-  g.strokeStyle = GOLD;
-  g.lineWidth = 4;
-  g.setLineDash([14, 10]);
+  /* ---- Castle corridor arrows ---- */
+  g.fillStyle = 'rgba(124,140,248,.35)';
+  for (let i = 0; i < 3; i++) {
+    const y = 19.6 + i * 1.6;
+    g.beginPath();
+    g.moveTo(toU(cx - 0.6), toV(y));
+    g.lineTo(toU(cx + 0.6), toV(y));
+    g.lineTo(toU(cx), toV(y + 0.85));
+    g.closePath();
+    g.fill();
+  }
+
+  /* ---- Orbit + ramp lane guides ---- */
+  g.strokeStyle = 'rgba(124,140,248,.28)';
+  g.lineWidth = 5;
   g.beginPath();
-  g.ellipse(toU(L.jackpot.x), toV(L.jackpot.y), unitsX(2.05), unitsY(2.05), 0, 0, Math.PI * 2);
+  g.moveTo(toU(-8.65), toV(13.5));
+  g.lineTo(toU(-8.65), toV(24.5));
   g.stroke();
-  g.setLineDash([]);
-
-  /* ---- Target bank ---- */
-  g.fillStyle = 'rgba(255,255,255,.34)';
-  g.font = '700 23px Inter, sans-serif';
-  g.letterSpacing = '6px';
-  g.fillText('SLÅ NER ALLA FEM', toU(cx), toV(21.3));
-  g.letterSpacing = '0px';
-
-  // A letter under each target so the bank reads as P-O-K-A-L on the table
-  g.font = '700 34px "Space Grotesk", Inter, sans-serif';
-  L.targets.forEach((t) => {
-    g.fillStyle = 'rgba(242,193,78,.5)';
-    g.fillText(t.letter, toU(t.x), toV(17.5));
+  g.beginPath();
+  g.moveTo(toU(5.55), toV(13.5));
+  g.lineTo(toU(5.55), toV(25.5));
+  g.stroke();
+  // Ramp lane arrows (gold, pointing up)
+  g.fillStyle = 'rgba(242,193,78,.4)';
+  [[-6.9, 16.2], [-6.9, 18.4], [-6.9, 20.6]].forEach(([x, y]) => {
+    g.beginPath();
+    g.moveTo(toU(x - 0.45), toV(y));
+    g.lineTo(toU(x + 0.45), toV(y));
+    g.lineTo(toU(x), toV(y + 0.8));
+    g.closePath();
+    g.fill();
   });
+  g.save();
+  g.translate(toU(-8.65), toV(19.5));
+  g.rotate(-Math.PI / 2);
+  g.fillStyle = 'rgba(124,140,248,.5)';
+  g.font = '700 20px Inter, sans-serif';
+  g.letterSpacing = '6px';
+  g.fillText('ORBIT', 0, 0);
+  g.restore();
+  g.save();
+  g.translate(toU(-6.55), toV(19.9));
+  g.rotate(-Math.PI / 2);
+  g.fillStyle = 'rgba(242,193,78,.55)';
+  g.font = '700 20px Inter, sans-serif';
+  g.letterSpacing = '6px';
+  g.fillText('RAMP', 0, 0);
+  g.restore();
+  g.save();
+  g.translate(toU(5.55), toV(20.2));
+  g.rotate(Math.PI / 2);
+  g.fillStyle = 'rgba(124,140,248,.5)';
+  g.font = '700 20px Inter, sans-serif';
+  g.letterSpacing = '6px';
+  g.fillText('ORBIT · RAMP', 0, -14);
+  g.restore();
+
+  /* ---- Target banks: a letter in front of each target's face ---- */
+  g.font = '700 30px "Space Grotesk", Inter, sans-serif';
+  L.targets.forEach((t) => {
+    const off = 1.05;
+    const lx = t.x + Math.sin(t.a) * off;
+    const ly = t.y - Math.cos(t.a) * off;
+    g.fillStyle = 'rgba(242,193,78,.55)';
+    g.fillText(t.letter, toU(lx), toV(ly));
+  });
+  g.fillStyle = 'rgba(255,255,255,.3)';
+  g.font = '700 19px Inter, sans-serif';
+  g.letterSpacing = '4px';
+  g.save();
+  g.translate(toU(-4.9), toV(13.4));
+  g.rotate(-bankA * 0.9);
+  g.fillText('SLÅ NER ALLA FEM', 0, 0);
+  g.restore();
+  g.letterSpacing = '0px';
 
   /* ---- Hero logo, centred in the lower playfield ---- */
   if (logo && logo.width) {
-    const w = 7.8;
+    const w = 6.6;
     const h = (w * logo.height) / logo.width;
     const px = toU(cx - w / 2);
-    const py = toV(13.2 + h / 2);
+    const py = toV(11.9 + h / 2);
     g.save();
     g.globalAlpha = 0.34;
     g.shadowColor = 'rgba(242,193,78,.85)';
@@ -370,37 +590,37 @@ export function createPlayfieldCanvas(participants = [], logo = null) {
   } else {
     g.fillStyle = GOLD;
     g.font = '700 54px "Space Grotesk", Inter, sans-serif';
-    g.fillText('PEKKAS POKAL', toU(cx), toV(13.6));
-    g.fillStyle = 'rgba(255,255,255,.45)';
-    g.font = '600 22px Inter, sans-serif';
-    g.letterSpacing = '8px';
-    g.fillText('FLIPPER · 2025', toU(cx), toV(12.2));
-    g.letterSpacing = '0px';
+    g.fillText('PEKKAS POKAL', toU(cx), toV(12.6));
   }
 
-  /* ---- Inlane arrows pointing at the flippers ---- */
+  /* ---- Inlane / outlane labels ---- */
   g.fillStyle = 'rgba(242,193,78,.30)';
-  [-1, 1].forEach((s) => {
-    const ax = cx + s * 4.3;
-    for (let i = 0; i < 3; i++) {
-      const y = 11.4 - i * 1.25;
+  [[-6.15, 'in'], [3.75, 'in']].forEach(([ax]) => {
+    for (let i = 0; i < 2; i++) {
+      const y = 11.6 - i * 1.2;
       g.beginPath();
-      g.moveTo(toU(ax - 0.55), toV(y));
-      g.lineTo(toU(ax + 0.55), toV(y));
-      g.lineTo(toU(ax), toV(y - 0.72));
+      g.moveTo(toU(ax - 0.45), toV(y));
+      g.lineTo(toU(ax + 0.45), toV(y));
+      g.lineTo(toU(ax), toV(y - 0.65));
       g.closePath();
       g.fill();
     }
   });
+  g.fillStyle = 'rgba(242,109,141,.5)';
+  g.font = '700 19px Inter, sans-serif';
+  g.letterSpacing = '3px';
+  g.fillText('UT', toU(-8.05), toV(10.6));
+  g.fillText('UT', toU(mirrorX(-8.05)), toV(10.6));
+  g.letterSpacing = '0px';
 
   /* ---- Roll of honour down the left rail ---- */
   if (participants.length) {
     g.save();
     g.fillStyle = 'rgba(255,255,255,.15)';
-    g.font = '600 18px Inter, sans-serif';
+    g.font = '600 17px Inter, sans-serif';
     g.textAlign = 'left';
     participants.slice(0, 13).forEach((name, i) => {
-      g.fillText(name.toUpperCase(), toU(-8.78), toV(25.2 - i * 0.92));
+      g.fillText(name.toUpperCase(), toU(-9.55), toV(26.3 - i * 0.92));
     });
     g.restore();
     g.textAlign = 'center';

@@ -91,6 +91,19 @@ class Sfx {
     [0, 70, 140, 210, 320].forEach((d, i) => setTimeout(() => this.tone(392 * 2 ** (i / 6), 0.2, 'square', 0.4), d));
   }
   orbit() { this.tone(340, 0.14, 'sawtooth', 0.3, 500); }
+  ramp() {
+    this.tone(240, 0.34, 'sawtooth', 0.4, 640);
+    setTimeout(() => this.tone(660, 0.18, 'triangle', 0.35, 220), 180);
+  }
+  gate() {
+    this.noise(0.09, 0.5, 340);
+    this.tone(95, 0.22, 'square', 0.5, -30);
+  }
+  gateDown() {
+    this.noise(0.2, 0.55, 240);
+    [0, 110, 220].forEach((d, i) => setTimeout(() => this.tone(147 * (i + 1), 0.22, 'square', 0.5), d));
+  }
+  outlane() { this.tone(330, 0.3, 'sine', 0.4, -180); }
   combo(n) { this.tone(440 * 1.25 ** Math.min(n, 6), 0.12, 'square', 0.45, 180); }
   lock() {
     this.tone(120, 0.3, 'square', 0.55, -40);
@@ -266,9 +279,13 @@ export async function createPinball(container, opts = {}) {
   });
 
   // Bumper ring materials are cloned so each bumper can show its own
-  // charged state on the way to lighting the lock.
+  // charged state on the way to lighting the lock. Sling faces likewise,
+  // since the shared glow material now also colours the castle flags.
   refs.bumpers.forEach((b) => {
     b.ring.material = b.ring.material.clone();
+  });
+  [refs.leftSling, refs.rightSling].forEach((m) => {
+    m.material = m.material.clone();
   });
 
   /* ---- Lights ---- */
@@ -312,11 +329,11 @@ export async function createPinball(container, opts = {}) {
    * five and the left orbit starts FINALEN, the wizard mode.
    */
   const MODES = [
-    { id: 'gokart', year: 2012, name: 'GOKART', hint: 'Kör 3 varv i orbit', goal: 3, time: 35 },
-    { id: 'femkamp', year: 2013, name: 'FEMKAMP', hint: 'Träffa alla 5 olika skott', goal: 5, time: 60 },
+    { id: 'gokart', year: 2012, name: 'GOKART', hint: 'Kör 3 varv — orbit eller ramp', goal: 3, time: 35 },
+    { id: 'femkamp', year: 2013, name: 'FEMKAMP', hint: 'Träffa 5 olika skott', goal: 5, time: 60 },
     { id: 'pingis', year: 2019, name: 'PINGIS', hint: '12 bumperträffar', goal: 12, time: 35 },
     { id: 'skytte', year: 2022, name: 'SKYTTE', hint: 'Fäll P→O→K→A→L i ordning', goal: 5, time: 45 },
-    { id: 'fiske', year: 2024, name: 'FISKE', hint: '3 napp på pokalen', goal: 3, time: 35 }
+    { id: 'fiske', year: 2024, name: 'FISKE', hint: '3 napp på pokalen i borgen', goal: 3, time: 40 }
   ];
 
   const state = {
@@ -335,13 +352,18 @@ export async function createPinball(container, opts = {}) {
     lastToast: 0,
 
     // Locks & multiball
-    bumperHits: [0, 0, 0],
-    bumperLit: [false, false, false],
+    bumperHits: [0, 0],
+    bumperLit: [false, false],
     lockLit: false,
     locked: 0,
     multiball: false,
     jackpotLit: false,
     mbSaveUntil: 0,
+
+    // Castle gate: bashed open with 3 hits, or held open by locks/modes
+    gate: { hits: 0, until: 0 },
+    // Balls riding a wireform ramp, outside the 2D simulation
+    riders: [],
 
     // Grenar (modes)
     modeDone: new Set(),
@@ -353,7 +375,7 @@ export async function createPinball(container, opts = {}) {
     combo: { n: 0, t: 0 },
     bonusX: 1,
     inlanes: { left: false, right: false },
-    perBall: { bumps: 0, targets: 0, orbits: 0 },
+    perBall: { bumps: 0, targets: 0, orbits: 0, ramps: 0 },
     extraBalls: 0,
     extraBallGiven: false,
     superUntil: 0,
@@ -467,16 +489,17 @@ export async function createPinball(container, opts = {}) {
     const m = state.mode;
     if (!m || m.wizard) return;
     const { id } = m.def;
+    const isLap =
+      kind === 'leftOrbit' || kind === 'rightOrbit' || kind === 'leftRamp' || kind === 'rightRamp';
     if (
-      (id === 'gokart' && (kind === 'leftOrbit' || kind === 'rightOrbit')) ||
+      (id === 'gokart' && isLap) ||
       (id === 'pingis' && kind === 'bumper') ||
       (id === 'fiske' && kind === 'jackpot')
     ) {
       m.progress++;
     } else if (id === 'femkamp') {
-      const bucket = kind === 'leftOrbit' || kind === 'rightOrbit' ? kind : kind;
-      if (!m.seen.has(bucket)) {
-        m.seen.add(bucket);
+      if (!m.seen.has(kind)) {
+        m.seen.add(kind);
         m.progress = m.seen.size;
         toast(`FEMKAMP ${m.progress}/5`);
       }
@@ -498,7 +521,7 @@ export async function createPinball(container, opts = {}) {
       // Charge the bumpers toward lighting the lock
       if (!state.multiball && state.locked < 2 && !(state.mode && state.mode.wizard)) {
         state.bumperHits[i]++;
-        if (state.bumperHits[i] >= 4 && !state.bumperLit[i]) {
+        if (state.bumperHits[i] >= 6 && !state.bumperLit[i]) {
           state.bumperLit[i] = true;
           refs.bumpers[i].ring.material.emissiveIntensity = 2.6;
           toast('Bumper laddad!');
@@ -506,11 +529,30 @@ export async function createPinball(container, opts = {}) {
         if (state.bumperLit.every(Boolean) && !state.lockLit) {
           state.lockLit = true;
           sfx.modeStart();
-          toast('LÅS TÄNT — SKJUT POKALEN!', true);
+          toast('LÅS TÄNT — PORTEN ÖPPNAS!', true);
           updateStatus();
         }
       }
       modeEvent('bumper');
+    },
+    onGate(v, _b) {
+      if (v < 1.2) return;
+      const now = performance.now();
+      if (now - (state.sensorLast.gate || 0) < 350) return;
+      state.sensorLast.gate = now;
+      state.gate.hits++;
+      addScore(750);
+      sfx.gate();
+      startShake(0.5, 0);
+      if (state.gate.hits >= 3) {
+        state.gate.hits = 0;
+        state.gate.until = now + 9000;
+        sfx.gateDown();
+        flash(null, refs.castle.lamp, 3.2, 0.6);
+        toast('PORTEN NERE — STORMA BORGEN!', true);
+      } else {
+        toast(state.gate.hits === 1 ? 'PORTEN SKAKAR!' : 'EN SMÄLL TILL!');
+      }
     },
     onSling(side, v) {
       if (v < 1) return;
@@ -612,11 +654,28 @@ export async function createPinball(container, opts = {}) {
       comboShot();
       modeEvent('jackpot');
     },
-    onSensor(id, _v, _b) {
+    onSensor(id, _v, b) {
       const now = performance.now();
       if (now - (state.sensorLast[id] || 0) < 700) return;
       state.sensorLast[id] = now;
       if (state.phase !== 'play') return;
+
+      // Wireform ramps: a fast, climbing ball is captured and carried across
+      if (id === 'leftRamp' || id === 'rightRamp') {
+        const side = id === 'leftRamp' ? 'left' : 'right';
+        if (b && b.live && b.vy > L.ramps[side].minVy) captureRamp(side, b);
+        return;
+      }
+
+      // Outlanes: the ball is on its way out past the flipper
+      if (id === 'outLeft' || id === 'outRight') {
+        if (b && b.vy < 0) {
+          addScore(500);
+          sfx.outlane();
+          toast('UTBANAN!');
+        }
+        return;
+      }
 
       if (id === 'inlaneLeft' || id === 'inlaneRight') {
         const side = id === 'inlaneLeft' ? 'left' : 'right';
@@ -791,10 +850,10 @@ export async function createPinball(container, opts = {}) {
     updateStatus();
 
     if (state.locked >= 2) {
-      toast('BOLL 2 LÅST…', true);
+      toast('BOLL 2 LÅST I BORGEN…', true);
       setTimeout(startMultiball, 900);
     } else {
-      toast(`BOLL LÅST ${state.locked}/2`, true);
+      toast(`BOLL LÅST I BORGEN ${state.locked}/2`, true);
       serveBall(700);
     }
   }
@@ -808,16 +867,73 @@ export async function createPinball(container, opts = {}) {
     toast('MULTIBALL!', true);
     bloom.strength = 0.72;
 
-    // Release the locked balls into play
-    L.lockSlots.forEach((slot, i) => {
+    // The locked balls burst out through the castle gate into the forecourt.
+    // They spawn just below the gate mouth: the courtyard itself is too
+    // cramped to release into without clipping the towers or the trophy.
+    [
+      { x: -1.9, y: 27.0, vx: -4 },
+      { x: 0.2, y: 27.0, vx: 4 }
+    ].forEach((spot, i) => {
       lockMeshes[i].visible = false;
       const nb = new Ball(L.ballRadius);
-      nb.place(slot.x, slot.y, 7 + i * 2, -5);
+      nb.place(spot.x, spot.y, spot.vx, -9);
       nb.live = true;
       state.balls.push(nb);
     });
     state.locked = 0;
     updateStatus();
+  }
+
+  /* ======================= Wireform ramps ======================= */
+
+  /**
+   * Lifts a ball out of the 2D world and rides it along the wireform.
+   * The mesh follows the 3D curve; on arrival the ball rejoins the
+   * simulation at the opposite inlane, Medieval Madness style.
+   */
+  function captureRamp(side, b) {
+    const idx = state.balls.indexOf(b);
+    if (idx < 0) return;
+    state.balls.splice(idx, 1);
+    b.live = false;
+    state.riders.push({ ball: b, side, t: 0, dur: side === 'left' ? 2.0 : 2.4 });
+
+    addScore(3000);
+    state.perBall.ramps++;
+    sfx.ramp();
+    comboShot();
+    modeEvent(side === 'left' ? 'leftRamp' : 'rightRamp');
+    toast(side === 'left' ? 'KUNGSVÄGEN!' : 'VALLGRAVEN!');
+
+    // Like the orbits, a ramp relights the multiball jackpot
+    if (state.multiball && !state.jackpotLit) {
+      state.jackpotLit = true;
+      toast('JACKPOT TÄND — SKJUT POKALEN!', true);
+      updateStatus();
+    }
+  }
+
+  function releaseRider(r) {
+    const ex = L.ramps[r.side].exit;
+    r.ball.place(ex.x, ex.y, r.side === 'left' ? -0.6 : 0.6, ex.vy);
+    r.ball.live = true;
+    state.balls.push(r.ball);
+  }
+
+  /* ======================== Castle gate ========================= */
+
+  /**
+   * The gate is open while something inside the castle is wanted: a lit
+   * lock, a lit multiball jackpot, FISKE or FINALEN — or for a while after
+   * being bashed down with three hits.
+   */
+  function gateIsOpen() {
+    return (
+      state.lockLit ||
+      (state.multiball && state.jackpotLit) ||
+      (state.mode && (state.mode.wizard || state.mode.def.id === 'fiske')) ||
+      performance.now() < state.gate.until
+    );
   }
 
   function endMultiball() {
@@ -893,12 +1009,14 @@ export async function createPinball(container, opts = {}) {
     if (idx >= 0) state.balls.splice(idx, 1);
     b.live = false;
 
-    if (state.balls.length >= 1) {
+    // A ball riding a wireform still counts as in play
+    const inPlay = state.balls.length + state.riders.length;
+    if (inPlay >= 1) {
       // Multiball continues — respawn during the grace window
       if (performance.now() < state.mbSaveUntil) {
         toast('Boll räddad!');
         serveBall(400);
-      } else if (state.balls.length === 1 && state.multiball && !(state.mode && state.mode.wizard)) {
+      } else if (inPlay === 1 && state.multiball && !(state.mode && state.mode.wizard)) {
         endMultiball();
       }
       return;
@@ -929,7 +1047,8 @@ export async function createPinball(container, opts = {}) {
 
     // End-of-ball bonus
     const pb = state.perBall;
-    const bonus = (pb.bumps * 50 + pb.targets * 300 + pb.orbits * 500) * state.bonusX;
+    const bonus =
+      (pb.bumps * 50 + pb.targets * 300 + pb.orbits * 500 + pb.ramps * 400) * state.bonusX;
     if (bonus > 0) {
       setTimeout(() => {
         state.score += bonus;
@@ -938,7 +1057,7 @@ export async function createPinball(container, opts = {}) {
         toast(`BONUS +${fmt(bonus)}${state.bonusX > 1 ? ` (×${state.bonusX})` : ''}`, true);
       }, 700);
     }
-    state.perBall = { bumps: 0, targets: 0, orbits: 0 };
+    state.perBall = { bumps: 0, targets: 0, orbits: 0, ramps: 0 };
     state.bonusX = 1;
     state.inlanes = { left: false, right: false };
     state.combo = { n: 0, t: 0 };
@@ -1000,13 +1119,15 @@ export async function createPinball(container, opts = {}) {
     state.banksDone = 0;
     state.tilted = false;
     state.nudges = [];
-    state.bumperHits = [0, 0, 0];
-    state.bumperLit = [false, false, false];
+    state.bumperHits = [0, 0];
+    state.bumperLit = [false, false];
     state.lockLit = false;
     state.locked = 0;
     state.multiball = false;
     state.jackpotLit = false;
     state.mbSaveUntil = 0;
+    state.gate = { hits: 0, until: 0 };
+    state.riders = [];
     state.modeDone = new Set();
     state.mode = null;
     state.modeStartLit = false;
@@ -1014,7 +1135,7 @@ export async function createPinball(container, opts = {}) {
     state.combo = { n: 0, t: 0 };
     state.bonusX = 1;
     state.inlanes = { left: false, right: false };
-    state.perBall = { bumps: 0, targets: 0, orbits: 0 };
+    state.perBall = { bumps: 0, targets: 0, orbits: 0, ramps: 0 };
     state.extraBalls = 0;
     state.extraBallGiven = false;
     state.superUntil = 0;
@@ -1203,7 +1324,7 @@ export async function createPinball(container, opts = {}) {
   const pitch = 67 * (Math.PI / 180);
   const dir = new THREE.Vector3(0, Math.sin(pitch), Math.cos(pitch));
   const corners = [];
-  for (const x of [-L.outerX - 0.35, L.outerX + 0.35]) {
+  for (const x of [-L.flareX - 0.35, L.outerX + 0.35]) {
     for (const z of [0.5, -41.5]) {
       corners.push(new THREE.Vector3(x, 0, z));
       corners.push(new THREE.Vector3(x, 2, z));
@@ -1322,6 +1443,34 @@ export async function createPinball(container, opts = {}) {
       }
     }
 
+    // Riders travel their wireform, then rejoin the simulation
+    if (state.phase === 'play') {
+      for (let ri = state.riders.length - 1; ri >= 0; ri--) {
+        const r = state.riders[ri];
+        r.t += dtRaw / r.dur;
+        if (r.t >= 1) {
+          state.riders.splice(ri, 1);
+          releaseRider(r);
+        }
+      }
+    }
+
+    // Castle gate: the collider blocks only while the gate is closed, and the
+    // drawbridge/portcullis animate toward the current state.
+    {
+      const open = gateIsOpen();
+      colliderRefs.gate.enabled = !open;
+      const k = Math.min(1, dtRaw * 6);
+      const { bridge } = refs.castle;
+      const wantRot = open ? 0.04 : -Math.PI / 2 + 0.12;
+      bridge.rotation.x += (wantRot - bridge.rotation.x) * k;
+      const port = refs.castle.portcullis;
+      const wantY = open ? 3.35 : 1.88;
+      port.position.y += (wantY - port.position.y) * k;
+      refs.castle.lamp.intensity +=
+        ((open ? 1.4 : 0.6) - refs.castle.lamp.intensity) * k;
+    }
+
     // Mode HUD
     if (state.mode) {
       const m = state.mode;
@@ -1334,21 +1483,32 @@ export async function createPinball(container, opts = {}) {
       hud.modeTime.classList.toggle('urgent', secs <= 10);
     }
 
-    // Ball transforms + rolling spin (mesh pool)
-    for (let i = 0; i < ballMeshes.length; i++) {
-      const mesh = ballMeshes[i];
-      const b = state.balls[i];
-      if (b && b.live) {
-        mesh.visible = true;
-        mesh.position.set(b.x, L.ballRadius + 0.04, -b.y);
-        if (b.speed > 0.01) {
-          const axis = new THREE.Vector3(-b.vy, 0, -b.vx).normalize();
-          mesh.rotateOnWorldAxis(axis, (b.speed * dtRaw) / L.ballRadius);
-        }
-      } else {
-        mesh.visible = false;
+    // Ball transforms + rolling spin (mesh pool). Balls riding a wireform are
+    // drawn at their 3D curve position instead of on the playfield plane.
+    let meshIdx = 0;
+    for (const b of state.balls) {
+      if (!b.live || meshIdx >= ballMeshes.length) continue;
+      const mesh = ballMeshes[meshIdx++];
+      mesh.visible = true;
+      mesh.position.set(b.x, L.ballRadius + 0.04, -b.y);
+      if (b.speed > 0.01) {
+        const axis = new THREE.Vector3(-b.vy, 0, -b.vx).normalize();
+        mesh.rotateOnWorldAxis(axis, (b.speed * dtRaw) / L.ballRadius);
       }
     }
+    for (const r of state.riders) {
+      if (meshIdx >= ballMeshes.length) break;
+      const mesh = ballMeshes[meshIdx++];
+      mesh.visible = true;
+      const p = refs.rampCurves[r.side].getPointAt(Math.min(1, r.t));
+      mesh.position.set(p.x, p.y + L.ballRadius, p.z);
+      const tan = refs.rampCurves[r.side].getTangentAt(Math.min(1, r.t));
+      mesh.rotateOnWorldAxis(
+        new THREE.Vector3(tan.z, 0, -tan.x).normalize(),
+        (dtRaw * 16) / (2 * Math.PI * L.ballRadius)
+      );
+    }
+    for (; meshIdx < ballMeshes.length; meshIdx++) ballMeshes[meshIdx].visible = false;
 
     // Flippers
     // rotation.y = +angle, NOT -angle: the playfield→world mapping (y → −z)
@@ -1452,7 +1612,15 @@ export async function createPinball(container, opts = {}) {
     },
     hitTarget(i) {
       hooks.onTarget(i, 3);
-    }
+    },
+    hitGate() {
+      state.sensorLast.gate = 0;
+      hooks.onGate(3, state.balls[0]);
+    },
+    rideRamp(side) {
+      if (state.balls[0]) captureRamp(side, state.balls[0]);
+    },
+    gateIsOpen
   };
 
   /* ---- Teardown ---- */

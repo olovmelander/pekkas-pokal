@@ -101,13 +101,21 @@ Släpp avfyraren när mätaren står i det turkosa fältet för en **skill shot*
 och skjut vänster orbit inom tre sekunder för en **super skill shot** (15 000).
 Fyra nudgar för snabbt ger TILT och dödar flipprarna för den bollen.
 
-**Regler (à la Medieval Madness)**
+**Bordet (à la Medieval Madness)**
+
+Högst upp står **BORGEN** med torn, port och pokalen på borggården. Två
+flippervägar korsar bordet som äkta wireform-ramper: **Kungsvägen** (vänster
+rampfil, bredvid vänster orbit) och **Vallgraven** (ett hårt skott i höger
+orbit) — bollen lyfter ur spelplanen och åker över borgen till motsatt
+inbana. Nedtill finns riktiga **utbanor**: bollen kan rulla ut vid sidan av
+flipprarna, precis som på ett riktigt bord.
 
 | Moment | Så funkar det |
 | --- | --- |
-| **Grenar** | Fäll hela POKAL-banken → skjut vänster orbit för att starta en gren på tid: Gokart '12, Femkamp '13, Pingis '19, Skytte '22 (träffa målen i ordning!), Fiske '24. Klarad gren = 15 000 och en tänd årsbricka. |
+| **Porten** | Tre smällar på borgporten fäller vindbryggan i 9 sekunder. Porten öppnas också av tänt lås, tänd jackpot, FISKE och FINALEN. |
+| **Grenar** | Fäll hela POKAL-banken (P-O-K till vänster, A-L till höger) → skjut vänster orbit för att starta en gren på tid: Gokart '12 (varv: orbit/ramp), Femkamp '13, Pingis '19, Skytte '22 (i ordning!), Fiske '24 (pokalen i borgen). Klarad gren = 15 000 och en tänd årsbricka. |
 | **FINALEN** | Klara alla fem grenar → wizard mode: 60 sekunder multiball där **allt räknas ×5**. |
-| **Multiball** | Bumperträffar laddar låset — när det lyser låser pokalen bollar. Två låsta bollar startar multiball med jackpot (25 000) i pokalen; orbits tänder om jackpotten. |
+| **Multiball** | Bumperträffar laddar låset — då öppnas porten och pokalen låser bollar i borgen. Två låsta bollar startar multiball med jackpot (25 000) i pokalen; orbits och ramper tänder om jackpotten. |
 | **Kombo** | Träffar inom 3,5 sekunder kedjar: 1 000 × 2 per steg, upp till ×16. |
 | **Bonus** | Inbanorna höjer bonusmultiplikatorn (upp till ×6) som multiplicerar slutbonusen per boll. |
 | **Extraboll** | Två klarade grenar ger en extra boll. |
