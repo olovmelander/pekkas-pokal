@@ -1,7 +1,33 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
+import { readdirSync, writeFileSync, mkdirSync, existsSync } from 'fs';
+
+/**
+ * Lists the years that have a photo in public/photos/ so the app can load them
+ * with one request instead of probing (and 404-ing on) every year.
+ * Missing manifest is fine — the app falls back to probing.
+ */
+function photoManifest() {
+  return {
+    name: 'photo-manifest',
+    closeBundle() {
+      const src = resolve(__dirname, 'public/photos');
+      const outDir = resolve(__dirname, 'dist/photos');
+      if (!existsSync(src)) return;
+      const years = readdirSync(src)
+        .map((f) => /^(\d{4})\.(jpe?g|png|webp)$/i.exec(f))
+        .filter(Boolean)
+        .map((m) => ({ year: Number(m[1]), ext: m[2].toLowerCase() }))
+        .sort((a, b) => b.year - a.year);
+      mkdirSync(outDir, { recursive: true });
+      writeFileSync(resolve(outDir, 'index.json'), JSON.stringify(years));
+    }
+  };
+}
 
 export default defineConfig({
+  plugins: [photoManifest()],
+
   // Base path for GitHub Pages - repository name
   base: process.env.NODE_ENV === 'production' 
     ? '/pekkas-pokal/'  // Replace with your actual repository name

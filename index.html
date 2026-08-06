@@ -9,6 +9,22 @@
     <meta name="theme-color" content="#0b0e1a" />
     <link rel="manifest" href="manifest.json" />
     <link rel="icon" href="icon-192.svg" type="image/svg+xml" />
+    <link rel="canonical" href="https://olovmelander.github.io/pekkas-pokal/" />
+
+    <!-- Share cards -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Pekkas Pokal" />
+    <meta property="og:title" content="Pekkas Pokal" />
+    <meta property="og:description" content="Den årliga tävlingen mellan vänner sedan 2011. Medaljliga, historik, utmärkelser och statistik." />
+    <meta property="og:url" content="https://olovmelander.github.io/pekkas-pokal/" />
+    <meta property="og:image" content="https://olovmelander.github.io/pekkas-pokal/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:locale" content="sv_SE" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Pekkas Pokal" />
+    <meta name="twitter:description" content="Den årliga tävlingen mellan vänner sedan 2011. Medaljliga, historik, utmärkelser och statistik." />
+    <meta name="twitter:image" content="https://olovmelander.github.io/pekkas-pokal/og-image.png" />
 
     <!-- Typography -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -196,12 +212,12 @@
             <table class="medal-table" id="medal-table">
               <thead>
                 <tr>
-                  <th class="rank-col">#</th>
-                  <th class="name-col">Deltagare</th>
-                  <th class="num-col"><span class="medal-dot gold"></span>Guld</th>
-                  <th class="num-col"><span class="medal-dot silver"></span>Silver</th>
-                  <th class="num-col"><span class="medal-dot bronze"></span>Brons</th>
-                  <th class="num-col">Totalt</th>
+                  <th class="rank-col sortable" data-sort="rank" aria-sort="descending" title="Sortera">#<span class="sort-arrow"></span></th>
+                  <th class="name-col sortable" data-sort="name" aria-sort="none" title="Sortera">Deltagare<span class="sort-arrow"></span></th>
+                  <th class="num-col sortable" data-sort="gold" aria-sort="none" title="Sortera"><span class="medal-dot gold"></span>Guld<span class="sort-arrow"></span></th>
+                  <th class="num-col sortable" data-sort="silver" aria-sort="none" title="Sortera"><span class="medal-dot silver"></span>Silver<span class="sort-arrow"></span></th>
+                  <th class="num-col sortable" data-sort="bronze" aria-sort="none" title="Sortera"><span class="medal-dot bronze"></span>Brons<span class="sort-arrow"></span></th>
+                  <th class="num-col sortable" data-sort="total" aria-sort="none" title="Sortera">Totalt<span class="sort-arrow"></span></th>
                   <th class="bar-col">Fördelning</th>
                 </tr>
               </thead>
@@ -295,6 +311,39 @@
           </div>
           <div class="heatmap-legend" id="heatmap-legend"></div>
         </div>
+
+        <!-- Head to head -->
+        <div class="card reveal" id="h2h-card">
+          <div class="card-head">
+            <h2>Duellen</h2>
+            <p class="card-sub">Vem har placerat sig högst när ni båda ställt upp?</p>
+          </div>
+          <div class="h2h-pickers">
+            <label class="h2h-picker">
+              <span class="filter-label">Deltagare 1</span>
+              <select id="h2h-a" class="select"></select>
+            </label>
+            <span class="h2h-vs" aria-hidden="true">VS</span>
+            <label class="h2h-picker">
+              <span class="filter-label">Deltagare 2</span>
+              <select id="h2h-b" class="select"></select>
+            </label>
+          </div>
+          <div id="h2h-result"></div>
+        </div>
+
+        <!-- Elo -->
+        <div class="card chart-card reveal">
+          <div class="card-head">
+            <h2>Elo-rating genom åren</h2>
+            <p class="card-sub">
+              Varje tävling räknas som en serie dueller — alla startar på 1500.
+              Att slå ett stort startfält ger mer än att slå ett litet.
+            </p>
+          </div>
+          <div class="chart-wrap tall"><canvas id="elo-chart"></canvas></div>
+          <div class="elo-standings" id="elo-standings"></div>
+        </div>
       </section>
     </main>
 
@@ -325,6 +374,22 @@
         <span>Statistik</span>
       </button>
     </nav>
+
+    <!-- Modal (participant profile / year detail) -->
+    <div class="modal-backdrop" id="modal" hidden>
+      <div
+        class="modal-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+        tabindex="-1"
+      >
+        <button class="modal-close" id="modal-close" aria-label="Stäng">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+        <div id="modal-body"></div>
+      </div>
+    </div>
 
     <!-- Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>

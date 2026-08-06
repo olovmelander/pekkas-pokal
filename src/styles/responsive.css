@@ -138,6 +138,56 @@
   .filter-actions .btn {
     width: 100%;
   }
+
+  /* Modal goes full-bleed sheet on phones */
+  .modal-backdrop {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .modal-panel {
+    width: 100%;
+    max-height: 92dvh;
+    padding: var(--sp-5) var(--sp-4) calc(var(--sp-6) + env(safe-area-inset-bottom));
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    transform: translateY(100%);
+  }
+
+  .pf-avatar {
+    width: 50px;
+    height: 50px;
+  }
+
+  .pf-stats {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .pf-rivals {
+    gap: var(--sp-4);
+  }
+
+  /* Head to head stacks */
+  .h2h-pickers {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--sp-3);
+  }
+
+  .h2h-vs {
+    padding: 0;
+    text-align: center;
+  }
+
+  .h2h-list {
+    max-height: none;
+  }
+
+  .tl-photo {
+    width: calc(100% + var(--sp-4) * 2);
+    margin-left: calc(var(--sp-4) * -1);
+    margin-right: calc(var(--sp-4) * -1);
+    height: 150px;
+  }
 }
 
 /* ---------- Small phones ---------- */

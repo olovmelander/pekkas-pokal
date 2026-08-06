@@ -72,6 +72,36 @@
   }
 
   /* ======================================================================
+     App state
+     ====================================================================== */
+
+  const App = {
+    data: null,
+    stats: null,
+    event: null,
+    facts: [],
+    elo: null, // { current: [...], history: {id: {year: rating}}, years: [] }
+    h2h: { a: null, b: null },
+    achievements: null, // { byName: {name: [ids]}, defs: [...] }
+    charts: {},
+    chartBuilders: {},
+    map: null,
+    mapTiles: null,
+    mapMarkers: [],
+    tourTimer: null,
+    tickerTimer: null,
+    tickerIndex: 0,
+    countdownTimer: null,
+    photos: null,
+    medalSort: { key: 'rank', dir: 1 },
+    filters: { participants: new Set(), years: new Set() },
+    achCategory: 'all',
+    currentView: 'overview',
+    modalChart: null,
+    lastFocus: null
+  };
+
+  /* ======================================================================
      Data loading & processing
      ====================================================================== */
 
@@ -200,6 +230,40 @@
     return processData(headers, rows);
   }
 
+  /**
+   * Fallback used only when event.json can't be read. The live announcement
+   * lives in public/event.json — see README for how to update it.
+   */
+  const DEFAULT_EVENT = {
+    date: '2026-08-06T18:00:00',
+    location: 'Barcelona, Spanien',
+    coords: [41.3874, 2.1686],
+    hosts: ['Per Olsson', 'Per Vikman']
+  };
+
+  /**
+   * Upcoming event, loaded from event.json so a new competition can be
+   * announced by editing one file — no code change, no rebuild knowledge.
+   * Falls back to DEFAULT_EVENT when the file is missing or malformed.
+   */
+  async function loadEvent() {
+    try {
+      const url = new URL('event.json', document.baseURI).toString();
+      const res = await fetch(url, { cache: 'no-cache' });
+      if (res.ok) {
+        const json = await res.json();
+        if (json && typeof json === 'object') {
+          if (!json.date) return null; // explicitly cleared → use forecast
+          const d = new Date(json.date);
+          if (!isNaN(d.getTime())) return json;
+        }
+      }
+    } catch (e) {
+      /* fall through to the built-in default */
+    }
+    return DEFAULT_EVENT;
+  }
+
 
   /* ======================================================================
      Derived statistics
@@ -270,6 +334,112 @@
     return { per, medalRank, real, byYearAsc, latest, champion };
   }
 
+  /**
+   * Elo ratings across every edition.
+   *
+   * Each competition is scored as a round-robin: every pair of starters is one
+   * matchup, won by whoever placed higher. Each pair is worth K/(n-1) so a
+   * 12-player year can't swing ratings more than a 3-player year.
+   */
+  function computeElo(data, stats) {
+    // High for Elo, deliberately: with only ~14 editions a chess-sized K
+    // leaves everyone bunched within a few points of 1500.
+    const K = 90;
+    const START = 1500;
+    const ratings = {};
+    const history = {};
+    const played = {};
+    data.participants.forEach((p) => {
+      ratings[p.id] = START;
+      history[p.id] = {};
+      played[p.id] = 0;
+    });
+
+    const years = [];
+    stats.byYearAsc.forEach((comp) => {
+      const ids = Object.keys(comp.scores);
+      if (ids.length < 2) return;
+      years.push(comp.year);
+
+      const delta = {};
+      ids.forEach((id) => (delta[id] = 0));
+      const k = K / (ids.length - 1);
+
+      for (let i = 0; i < ids.length; i++) {
+        for (let j = i + 1; j < ids.length; j++) {
+          const a = ids[i];
+          const b = ids[j];
+          const expA = 1 / (1 + 10 ** ((ratings[b] - ratings[a]) / 400));
+          // Lower placement number wins; ties share the point
+          const posA = comp.scores[a];
+          const posB = comp.scores[b];
+          const scoreA = posA === posB ? 0.5 : posA < posB ? 1 : 0;
+          delta[a] += k * (scoreA - expA);
+          delta[b] += k * (1 - scoreA - (1 - expA));
+        }
+      }
+
+      ids.forEach((id) => {
+        ratings[id] += delta[id];
+        played[id]++;
+      });
+      // Snapshot every rated player so the chart draws continuous lines
+      data.participants.forEach((p) => {
+        if (played[p.id] > 0) history[p.id][comp.year] = Math.round(ratings[p.id]);
+      });
+    });
+
+    const current = data.participants
+      .filter((p) => played[p.id] > 0)
+      .map((p) => {
+        const yearsPlayed = Object.keys(history[p.id]).map(Number).sort((a, b) => a - b);
+        const last = yearsPlayed[yearsPlayed.length - 1];
+        const prev = yearsPlayed[yearsPlayed.length - 2];
+        return {
+          participant: p,
+          rating: Math.round(ratings[p.id]),
+          peak: Math.max(...Object.values(history[p.id])),
+          change: prev != null ? history[p.id][last] - history[p.id][prev] : 0,
+          starts: played[p.id]
+        };
+      })
+      .sort((a, b) => b.rating - a.rating);
+
+    return { current, history, years };
+  }
+
+  /**
+   * Head-to-head record between two participants across every year both started.
+   */
+  function headToHead(idA, idB) {
+    const meetings = [];
+    let winsA = 0;
+    let winsB = 0;
+    App.stats.byYearAsc.forEach((comp) => {
+      const posA = comp.scores[idA];
+      const posB = comp.scores[idB];
+      if (posA == null || posB == null) return;
+      if (posA < posB) winsA++;
+      else if (posB < posA) winsB++;
+      meetings.push({ year: comp.year, name: comp.name.trim(), posA, posB });
+    });
+    return { meetings, winsA, winsB };
+  }
+
+  /**
+   * Every opponent record for one participant, best record first.
+   */
+  function rivalRecords(id) {
+    return App.data.participants
+      .filter((p) => p.id !== id)
+      .map((p) => {
+        const r = headToHead(id, p.id);
+        return { opponent: p, ...r, total: r.meetings.length };
+      })
+      .filter((r) => r.total > 0)
+      .sort((a, b) => b.winsA - b.winsB - (a.winsA - a.winsB) || b.total - a.total);
+  }
+
   function computeFacts(data, stats) {
     const facts = [];
     const rows = Object.values(stats.per).filter((s) => s.starts > 0);
@@ -327,27 +497,6 @@
     return facts;
   }
 
-  /* ======================================================================
-     App state
-     ====================================================================== */
-
-  const App = {
-    data: null,
-    stats: null,
-    facts: [],
-    achievements: null, // { byName: {name: [ids]}, defs: [...] }
-    charts: {},
-    chartBuilders: {},
-    map: null,
-    mapTiles: null,
-    mapMarkers: [],
-    tourTimer: null,
-    tickerTimer: null,
-    tickerIndex: 0,
-    filters: { participants: new Set(), years: new Set() },
-    achCategory: 'all',
-    currentView: 'overview'
-  };
 
   const LOCATION_COORDS = {
     Varggropen: [63.2968, 18.7424],
@@ -476,30 +625,22 @@
     }
   }
 
-  /**
-   * Confirmed upcoming competition. Update (or set to null) when the next
-   * event is announced — this always wins over the mid-August forecast.
-   * The date is interpreted in the viewer's local timezone.
-   */
-  const UPCOMING_EVENT = {
-    date: '2026-08-06T18:00:00',
-    location: 'Barcelona, Spanien',
-    hosts: ['Per Olsson', 'Per Vikman']
-  };
-
   function nextEventDate(stats) {
     const now = new Date();
+    const { event } = App;
 
     // A confirmed event is shown from announcement until 24h after start
-    if (UPCOMING_EVENT) {
-      const d = new Date(UPCOMING_EVENT.date);
+    if (event && event.date) {
+      const d = new Date(event.date);
       if (!isNaN(d.getTime()) && now - d < 24 * 3600 * 1000) {
         return {
           date: d,
           confirmed: true,
           comp: null,
-          location: UPCOMING_EVENT.location || '',
-          hosts: (UPCOMING_EVENT.hosts || []).join(' & ')
+          name: event.name || '',
+          note: event.note || '',
+          location: event.location || '',
+          hosts: (event.hosts || []).join(' & ')
         };
       }
     }
@@ -804,6 +945,14 @@
       popupAnchor: [0, -26]
     });
 
+    const nextIcon = L.divIcon({
+      className: '',
+      html: `<div class="map-pin map-pin-next"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="8"/></svg></div>`,
+      iconSize: [30, 30],
+      iconAnchor: [15, 28],
+      popupAnchor: [0, -26]
+    });
+
     const locations = {};
     App.stats.real.forEach((comp) => {
       const coords = LOCATION_COORDS[comp.location];
@@ -826,16 +975,18 @@
     });
 
     // Pin for the confirmed upcoming event, if its location is known
-    if (UPCOMING_EVENT && UPCOMING_EVENT.location) {
-      const coords = LOCATION_COORDS[UPCOMING_EVENT.location];
-      if (coords && !locations[UPCOMING_EVENT.location]) {
-        const d = new Date(UPCOMING_EVENT.date);
-        const marker = L.marker(coords, { icon: pinIcon }).addTo(App.map);
-        const hosts = (UPCOMING_EVENT.hosts || []).join(' & ');
+    const { event } = App;
+    if (event && event.location) {
+      const coords = event.coords || LOCATION_COORDS[event.location];
+      if (coords && !locations[event.location]) {
+        const d = new Date(event.date);
+        const marker = L.marker(coords, { icon: nextIcon }).addTo(App.map);
+        const hosts = (event.hosts || []).join(' & ');
         marker.bindPopup(
-          `<div style="font-weight:700;margin-bottom:4px">${esc(UPCOMING_EVENT.location)}</div>` +
-            `<div><strong>${d.getFullYear()}</strong> · Årets tävling${hosts ? ` — arrangeras av ${esc(hosts)}` : ''}</div>`
+          `<div style="font-weight:700;margin-bottom:4px">${esc(event.location)}</div>` +
+            `<div><strong>${d.getFullYear()}</strong> · Nästa tävling${hosts ? ` — arrangeras av ${esc(hosts)}` : ''}</div>`
         );
+        marker.getElement()?.classList.add('map-pin-next');
         App.mapMarkers.push(marker);
       }
     }
@@ -895,9 +1046,9 @@
         return `
         <div class="podium-place podium-${place}">
           ${place === 1 ? '<div class="podium-crown">👑</div>' : ''}
-          <div class="podium-avatar">${esc(initials(s.participant.name))}</div>
+          <button class="podium-avatar" data-person="${s.participant.id}" aria-label="Visa profil för ${esc(s.participant.name)}">${esc(initials(s.participant.name))}</button>
           <div>
-            <div class="podium-name">${esc(s.participant.name)}</div>
+            <div class="podium-name">${personLink(s.participant.name, s.participant.id)}</div>
             <div class="podium-medals">${s.gold} guld · ${s.silver} silver · ${s.bronze} brons</div>
           </div>
           <div class="podium-block">${place}</div>
@@ -905,25 +1056,8 @@
       })
       .join('');
 
-    const maxTotal = Math.max(...rank.map((s) => s.total), 1);
-    $('#medal-table tbody').innerHTML = rank
-      .map((s, i) => {
-        const r = i + 1;
-        const g = (s.gold / maxTotal) * 100;
-        const sv = (s.silver / maxTotal) * 100;
-        const b = (s.bronze / maxTotal) * 100;
-        return `
-        <tr>
-          <td class="rank-col"><span class="rank-badge ${r <= 3 ? `r${r}` : ''}">${r}</span></td>
-          <td><div class="person-cell"><span class="avatar" style="border-color:hsl(${nameHue(s.participant.name)} 60% 60% / .6)">${esc(initials(s.participant.name))}</span>${esc(s.participant.name)}</div></td>
-          <td class="num-col">${s.gold}</td>
-          <td class="num-col">${s.silver}</td>
-          <td class="num-col">${s.bronze}</td>
-          <td class="num-col">${s.total}</td>
-          <td class="bar-col"><div class="medal-bar"><span class="g" style="width:${g}%"></span><span class="s" style="width:${sv}%"></span><span class="b" style="width:${b}%"></span></div></td>
-        </tr>`;
-      })
-      .join('');
+    renderMedalTable();
+    initMedalSort();
 
     registerChart('medal-chart', () => {
       const withMedals = rank.filter((s) => s.total > 0);
@@ -947,6 +1081,69 @@
           }
         }
       };
+    });
+  }
+
+  const MEDAL_SORTERS = {
+    rank: null, // Olympic order, as computed
+    name: (a, b) => a.participant.name.localeCompare(b.participant.name, 'sv'),
+    gold: (a, b) => b.gold - a.gold,
+    silver: (a, b) => b.silver - a.silver,
+    bronze: (a, b) => b.bronze - a.bronze,
+    total: (a, b) => b.total - a.total
+  };
+
+  function renderMedalTable() {
+    const base = App.stats.medalRank;
+    const { key, dir } = App.medalSort;
+    const olympicRank = new Map(base.map((s, i) => [s.participant.id, i + 1]));
+
+    const rows = [...base];
+    if (MEDAL_SORTERS[key]) {
+      rows.sort((a, b) => MEDAL_SORTERS[key](a, b) * dir);
+    } else if (dir === -1) {
+      rows.reverse();
+    }
+
+    const maxTotal = Math.max(...base.map((s) => s.total), 1);
+    $('#medal-table tbody').innerHTML = rows
+      .map((s) => {
+        const r = olympicRank.get(s.participant.id);
+        const g = (s.gold / maxTotal) * 100;
+        const sv = (s.silver / maxTotal) * 100;
+        const b = (s.bronze / maxTotal) * 100;
+        return `
+        <tr>
+          <td class="rank-col"><span class="rank-badge ${r <= 3 ? `r${r}` : ''}">${r}</span></td>
+          <td><div class="person-cell"><span class="avatar" style="border-color:hsl(${nameHue(s.participant.name)} 60% 60% / .6)">${esc(initials(s.participant.name))}</span>${personLink(s.participant.name, s.participant.id)}</div></td>
+          <td class="num-col">${s.gold}</td>
+          <td class="num-col">${s.silver}</td>
+          <td class="num-col">${s.bronze}</td>
+          <td class="num-col">${s.total}</td>
+          <td class="bar-col"><div class="medal-bar"><span class="g" style="width:${g}%"></span><span class="s" style="width:${sv}%"></span><span class="b" style="width:${b}%"></span></div></td>
+        </tr>`;
+      })
+      .join('');
+
+    $$('#medal-table thead th[data-sort]').forEach((th) => {
+      const active = th.getAttribute('data-sort') === key;
+      th.classList.toggle('sorted', active);
+      th.setAttribute('aria-sort', active ? (dir === 1 ? 'descending' : 'ascending') : 'none');
+      const arrow = th.querySelector('.sort-arrow');
+      if (arrow) arrow.textContent = active ? (dir === 1 ? '↓' : '↑') : '';
+    });
+  }
+
+  function initMedalSort() {
+    $$('#medal-table thead th[data-sort]').forEach((th) => {
+      if (th.dataset.bound) return;
+      th.dataset.bound = '1';
+      th.addEventListener('click', () => {
+        const key = th.getAttribute('data-sort');
+        if (App.medalSort.key === key) App.medalSort.dir *= -1;
+        else App.medalSort = { key, dir: key === 'name' ? 1 : 1 };
+        renderMedalTable();
+      });
     });
   }
 
@@ -979,7 +1176,9 @@
             if (!entry) return '';
             const p = App.data.participants.find((x) => x.id === entry[0]);
             const cls = pos === 1 ? 'gold' : pos === 2 ? 'silver' : 'bronze';
-            return `<span class="tl-medal"><span class="medal-dot ${cls}"></span>${esc(p ? shortName(p.name) : '?')}</span>`;
+            return `<span class="tl-medal"><span class="medal-dot ${cls}"></span>${
+              p ? personLink(shortName(p.name), p.id) : '?'
+            }</span>`;
           })
           .join('');
 
@@ -988,17 +1187,74 @@
         return `
         <div class="tl-item ${comp.year === latestYear ? 'latest' : ''} stagger" style="--stagger-i:${Math.min(idx, 10)}">
           <div class="card tl-card">
+            <img class="tl-photo" data-photo-year="${comp.year}" alt="Foto från ${comp.year}" hidden />
             <div class="tl-top">
-              <span class="tl-year">${comp.year}</span>
+              <button class="tl-year tl-year-btn" data-year="${comp.year}" title="Visa alla resultat från ${comp.year}">${comp.year}</button>
               <span class="tl-name">${esc(comp.name.trim())}</span>
               ${comp.location ? `<span class="tl-loc">${ICONS.pin} ${esc(comp.location)}</span>` : ''}
             </div>
             <div class="tl-podium">${podium}</div>
-            <div class="tl-host">${comp.participantCount} deltagare${hosts ? ` · Arrangörer: ${esc(hosts)}` : ''}</div>
+            <div class="tl-foot">
+              <span class="tl-host">${comp.participantCount} deltagare${hosts ? ` · Arrangörer: ${esc(hosts)}` : ''}</span>
+              <button class="tl-more" data-year="${comp.year}">Alla resultat →</button>
+            </div>
           </div>
         </div>`;
       })
       .join('');
+
+    loadTimelinePhotos();
+  }
+
+  /**
+   * Photos are convention-based: drop <year>.jpg into public/photos/ and it
+   * appears here — nothing to register. The build writes photos/index.json so
+   * production needs one request; without it we fall back to probing.
+   */
+  async function loadTimelinePhotos() {
+    try {
+      const url = new URL('photos/index.json', document.baseURI).toString();
+      const res = await fetch(url, { cache: 'no-cache' });
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list)) {
+          App.photos = {};
+          list.forEach((p) => {
+            App.photos[p.year] = `photos/${p.year}.${p.ext || 'jpg'}`;
+          });
+          Object.keys(App.photos).forEach((year) => showTimelinePhoto(year, App.photos[year]));
+          return;
+        }
+      }
+    } catch (e) {
+      /* no manifest — probe instead */
+    }
+
+    $$('.tl-photo[data-photo-year]').forEach((img) => {
+      const year = img.getAttribute('data-photo-year');
+      probePhoto(year, (src) => showTimelinePhoto(year, src));
+    });
+  }
+
+  function probePhoto(year, onFound) {
+    const src = new URL(`photos/${year}.jpg`, document.baseURI).toString();
+    const probe = new Image();
+    probe.onload = () => onFound(src);
+    probe.src = src;
+  }
+
+  function showTimelinePhoto(year, src) {
+    const img = $(`.tl-photo[data-photo-year="${year}"]`);
+    if (!img) return;
+    img.src = new URL(src, document.baseURI).toString();
+    img.hidden = false;
+    const card = img.closest('.tl-card');
+    if (card) card.classList.add('has-photo');
+  }
+
+  function photoFor(year) {
+    if (App.photos && App.photos[year]) return App.photos[year];
+    return null;
   }
 
   /* ======================================================================
@@ -1082,7 +1338,11 @@
           <div class="pcard-top">
             <span class="avatar" style="width:42px;height:42px;font-size:.85rem;border-color:hsl(${nameHue(name)} 60% 60% / .6)">${esc(initials(name))}</span>
             <div>
-              <div class="pcard-name">${esc(name)}</div>
+              <div class="pcard-name">${
+  (App.data.participants.find((p) => p.name === name) || {}).id
+    ? personLink(name, App.data.participants.find((p) => p.name === name).id)
+    : esc(name)
+  }</div>
               <div class="pcard-sub">${ids.length} utmärkelser</div>
             </div>
             <div class="pcard-points"><div class="val">${pts}</div><div class="lbl">poäng</div></div>
@@ -1281,7 +1541,7 @@
           <div class="ccard-top">
             <span class="avatar" style="border-color:hsl(${nameHue(p.name)} 60% 60% / .6)">${esc(initials(p.name))}</span>
             <div>
-              <div class="ccard-name">${esc(p.name)}</div>
+              <div class="ccard-name">${personLink(p.name, p.id)}</div>
               <div class="ccard-medals">🥇 ${golds} · ${positions.length} starter i urvalet</div>
             </div>
           </div>
@@ -1423,7 +1683,7 @@
             return `<td class="hm-cell ${cls}" ${cellColor(pos, y)} title="${esc(title)}">${pos}</td>`;
           })
           .join('');
-        return `<tr><th class="hm-name" title="${esc(p.name)}">${esc(shortName(p.name))}</th>${cells}</tr>`;
+        return `<tr><th class="hm-name" title="${esc(p.name)}">${personLink(shortName(p.name), p.id)}</th>${cells}</tr>`;
       })
       .join('');
 
@@ -1435,6 +1695,418 @@
       <span class="item"><span class="swatch" style="background:linear-gradient(140deg,var(--bronze),var(--bronze-deep))"></span>Brons</span>
       <span class="item"><span class="swatch" style="background:linear-gradient(90deg,hsl(210 60% 50% / .3),hsl(0 60% 50% / .3))"></span>Mitten → sist</span>
       <span class="item">· = deltog ej</span>`;
+  }
+
+  /* ======================================================================
+     Rendering — Duellen (head to head)
+     ====================================================================== */
+
+  function renderH2HControls() {
+    const starters = App.data.participants.filter((p) => App.stats.per[p.id].starts > 0);
+    if (starters.length < 2) return;
+
+    // Default to the two most successful competitors
+    const rank = App.stats.medalRank;
+    App.h2h.a = rank[0] ? rank[0].participant.id : starters[0].id;
+    App.h2h.b = rank[1] ? rank[1].participant.id : starters[1].id;
+
+    const options = (selected) =>
+      starters
+        .map(
+          (p) =>
+            `<option value="${p.id}" ${p.id === selected ? 'selected' : ''}>${esc(p.name)}</option>`
+        )
+        .join('');
+
+    $('#h2h-a').innerHTML = options(App.h2h.a);
+    $('#h2h-b').innerHTML = options(App.h2h.b);
+
+    $('#h2h-a').addEventListener('change', (e) => {
+      App.h2h.a = e.target.value;
+      renderH2H();
+    });
+    $('#h2h-b').addEventListener('change', (e) => {
+      App.h2h.b = e.target.value;
+      renderH2H();
+    });
+
+    renderH2H();
+  }
+
+  function renderH2H() {
+    const { a, b } = App.h2h;
+    const pa = App.data.participants.find((p) => p.id === a);
+    const pb = App.data.participants.find((p) => p.id === b);
+    if (!pa || !pb) return;
+
+    if (a === b) {
+      $('#h2h-result').innerHTML =
+        '<p class="h2h-empty">Välj två olika deltagare för att se duellen.</p>';
+      return;
+    }
+
+    const { meetings, winsA, winsB } = headToHead(a, b);
+    if (!meetings.length) {
+      $('#h2h-result').innerHTML = `<p class="h2h-empty">${esc(shortName(pa.name))} och ${esc(
+        shortName(pb.name)
+      )} har aldrig ställt upp samma år.</p>`;
+      return;
+    }
+
+    const total = winsA + winsB;
+    const pctA = total ? (winsA / total) * 100 : 50;
+    const leader = winsA > winsB ? pa : winsB > winsA ? pb : null;
+
+    const rows = meetings
+      .slice()
+      .reverse()
+      .map((m) => {
+        const aWon = m.posA < m.posB;
+        const tie = m.posA === m.posB;
+        return `
+        <li class="h2h-row">
+          <span class="h2h-cell ${!tie && aWon ? 'win' : ''}">${m.posA}</span>
+          <span class="h2h-year"><button class="h2h-year-btn" data-year="${m.year}">${m.year}</button><small>${esc(m.name)}</small></span>
+          <span class="h2h-cell ${!tie && !aWon ? 'win' : ''}">${m.posB}</span>
+        </li>`;
+      })
+      .join('');
+
+    $('#h2h-result').innerHTML = `
+      <div class="h2h-score">
+        <div class="h2h-side">
+          <span class="avatar" style="border-color:hsl(${nameHue(pa.name)} 60% 60% / .6)">${esc(initials(pa.name))}</span>
+          <span class="h2h-num">${winsA}</span>
+        </div>
+        <div class="h2h-bar" role="img" aria-label="${winsA} mot ${winsB}">
+          <span class="h2h-bar-a" style="width:${pctA}%"></span>
+        </div>
+        <div class="h2h-side right">
+          <span class="h2h-num">${winsB}</span>
+          <span class="avatar" style="border-color:hsl(${nameHue(pb.name)} 60% 60% / .6)">${esc(initials(pb.name))}</span>
+        </div>
+      </div>
+      <p class="h2h-verdict">
+        ${
+  leader
+    ? `<strong>${esc(shortName(leader.name))}</strong> leder duellen efter ${total} gemensamma tävlingar.`
+    : `Helt jämnt efter ${total} gemensamma tävlingar.`
+  }
+      </p>
+      <ul class="h2h-list">${rows}</ul>`;
+  }
+
+  /* ======================================================================
+     Rendering — Elo
+     ====================================================================== */
+
+  function renderElo() {
+    const { current, history, years } = App.elo;
+
+    $('#elo-standings').innerHTML = current
+      .map((e, i) => {
+        const dir = e.change > 0 ? 'up' : e.change < 0 ? 'down' : '';
+        const sign = e.change > 0 ? '+' : '';
+        return `
+        <div class="elo-row" title="${esc(e.participant.name)} · ${e.starts} starter · högsta ${e.peak}">
+          <span class="elo-rank">${i + 1}</span>
+          <span class="elo-name">${personLink(shortName(e.participant.name), e.participant.id)}</span>
+          <span class="elo-rating">${e.rating}</span>
+          <span class="elo-change ${dir}">${e.change ? `${sign}${e.change}` : '–'}</span>
+        </div>`;
+      })
+      .join('');
+
+    registerChart('elo-chart', () => {
+      // Only chart the top ratings, otherwise the lines turn to spaghetti
+      const shown = current.slice(0, 8);
+      return {
+        type: 'line',
+        data: {
+          labels: years,
+          datasets: shown.map((e, i) => ({
+            label: shortName(e.participant.name),
+            data: years.map((y) => history[e.participant.id][y] ?? null),
+            borderColor: PALETTE[i % PALETTE.length],
+            backgroundColor: PALETTE[i % PALETTE.length],
+            tension: 0.32,
+            spanGaps: true,
+            borderWidth: 2,
+            pointRadius: 2.5,
+            pointHoverRadius: 6
+          }))
+        },
+        options: {
+          maintainAspectRatio: false,
+          interaction: { mode: 'nearest', intersect: false },
+          plugins: {
+            legend: { position: 'bottom' },
+            tooltip: {
+              displayColors: true,
+              callbacks: { label: (c) => ` ${c.dataset.label}: ${c.parsed.y}` }
+            }
+          },
+          scales: {
+            x: { grid: { display: false } },
+            y: { grid: { color: cssVar('--chart-grid') } }
+          }
+        }
+      };
+    });
+  }
+
+  /* ======================================================================
+     Modal — participant profiles & year details
+     ====================================================================== */
+
+  function personLink(name, id) {
+    return `<button class="person-link" data-person="${esc(id)}" title="Visa profil för ${esc(name)}">${esc(name)}</button>`;
+  }
+
+  function openModal(html, onMount) {
+    const modal = $('#modal');
+    App.lastFocus = document.activeElement;
+    $('#modal-body').innerHTML = html;
+    modal.hidden = false;
+    document.body.style.overflow = 'hidden';
+    requestAnimationFrame(() => {
+      modal.classList.add('open');
+      $('.modal-panel').focus();
+      if (onMount) onMount();
+    });
+  }
+
+  function closeModal() {
+    const modal = $('#modal');
+    if (modal.hidden) return;
+    modal.classList.remove('open');
+    if (App.modalChart) {
+      App.modalChart.destroy();
+      App.modalChart = null;
+    }
+    document.body.style.overflow = '';
+    setTimeout(() => {
+      modal.hidden = true;
+      $('#modal-body').innerHTML = '';
+      if (App.lastFocus && App.lastFocus.focus) App.lastFocus.focus();
+    }, 200);
+  }
+
+  function medalClassFor(pos) {
+    return pos === 1 ? 'gold' : pos === 2 ? 'silver' : pos === 3 ? 'bronze' : '';
+  }
+
+  function renderProfile(id) {
+    const p = App.data.participants.find((x) => x.id === id);
+    if (!p) return;
+    const s = App.stats.per[id];
+    if (!s || s.starts === 0) return;
+
+    const elo = App.elo.current.find((e) => e.participant.id === id);
+    const achIds = (App.achievements.byName[p.name] || []).filter(Boolean);
+    const points = achIds.reduce((sum, aid) => sum + (App.achievements.defById[aid].points || 0), 0);
+
+    const years = Object.keys(s.yearPositions).map(Number).sort((a, b) => a - b);
+    const rivals = rivalRecords(id);
+    const best = rivals.filter((r) => r.winsA > r.winsB).slice(0, 3);
+    const worst = rivals
+      .filter((r) => r.winsB > r.winsA)
+      .slice(-3)
+      .reverse();
+
+    const stat = (val, label) =>
+      `<div class="pf-stat"><div class="val">${esc(String(val))}</div><div class="lbl">${esc(label)}</div></div>`;
+
+    const rivalRow = (r) => `
+      <li>
+        <span class="pf-rival-name">${personLink(shortName(r.opponent.name), r.opponent.id)}</span>
+        <span class="pf-rival-score ${r.winsA > r.winsB ? 'up' : r.winsA < r.winsB ? 'down' : ''}">
+          ${r.winsA}–${r.winsB}
+        </span>
+      </li>`;
+
+    const yearRows = years
+      .slice()
+      .reverse()
+      .map((y) => {
+        const pos = s.yearPositions[y];
+        const comp = App.stats.real.find((c) => c.year === y);
+        const cls = medalClassFor(pos);
+        return `
+          <li>
+            <button class="pf-year-row" data-year="${y}">
+              <span class="pf-year">${y}</span>
+              <span class="pf-comp">${esc(comp ? comp.name.trim() : '')}</span>
+              <span class="pf-pos ${cls}">${pos}</span>
+            </button>
+          </li>`;
+      })
+      .join('');
+
+    const badges = achIds
+      .map((aid) => {
+        const d = App.achievements.defById[aid];
+        return `<span class="badge rarity-${esc(d.rarity)}" title="${esc(d.name)} — ${esc(d.desc)}">${d.icon}</span>`;
+      })
+      .join('');
+
+    const html = `
+      <div class="pf-head">
+        <span class="avatar pf-avatar" style="border-color:hsl(${nameHue(p.name)} 60% 60% / .7)">${esc(initials(p.name))}</span>
+        <div>
+          <h2 id="modal-title" class="pf-name">${esc(p.name)}</h2>
+          <p class="pf-sub">${s.starts} starter · ${s.gold} guld · ${s.silver} silver · ${s.bronze} brons</p>
+        </div>
+      </div>
+
+      <div class="pf-stats">
+        ${stat(elo ? elo.rating : '—', 'Elo')}
+        ${stat(s.avg != null ? s.avg.toFixed(1) : '—', 'Snitt')}
+        ${stat(s.best != null ? s.best : '—', 'Bästa')}
+        ${stat(s.total, 'Medaljer')}
+        ${stat(points, 'Poäng')}
+        ${stat(s.hostCount, 'Värdskap')}
+      </div>
+
+      <div class="pf-section">
+        <h3>Placering per år</h3>
+        <div class="chart-wrap pf-chart"><canvas id="pf-chart"></canvas></div>
+      </div>
+
+      ${
+  badges
+    ? `<div class="pf-section">
+              <h3>Utmärkelser <span class="pf-count">${achIds.length}</span></h3>
+              <div class="pcard-badges">${badges}</div>
+            </div>`
+    : ''
+  }
+
+      ${
+  best.length || worst.length
+    ? `<div class="pf-section pf-rivals">
+              ${best.length ? `<div><h3>Äger</h3><ul class="pf-rival-list">${best.map(rivalRow).join('')}</ul></div>` : ''}
+              ${worst.length ? `<div><h3>Ägd av</h3><ul class="pf-rival-list">${worst.map(rivalRow).join('')}</ul></div>` : ''}
+            </div>`
+    : ''
+  }
+
+      <div class="pf-section">
+        <h3>Alla resultat</h3>
+        <ul class="pf-years">${yearRows}</ul>
+      </div>`;
+
+    openModal(html, () => {
+      const canvas = document.getElementById('pf-chart');
+      if (!canvas || typeof Chart === 'undefined') return;
+      const maxPos = Math.max(...Object.values(s.yearPositions), 4);
+      App.modalChart = new Chart(canvas, {
+        type: 'line',
+        data: {
+          labels: years,
+          datasets: [
+            {
+              data: years.map((y) => s.yearPositions[y]),
+              borderColor: cssVar('--accent-2'),
+              backgroundColor: `${cssVar('--accent-2')}22`,
+              fill: true,
+              tension: 0.32,
+              borderWidth: 2.5,
+              pointRadius: 4,
+              pointHoverRadius: 6,
+              pointBackgroundColor: years.map((y) =>
+                s.yearPositions[y] <= 3 ? cssVar('--gold') : cssVar('--accent-2')
+              ),
+              pointBorderColor: 'transparent'
+            }
+          ]
+        },
+        options: {
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: (c) => ` Plats ${c.parsed.y}` } }
+          },
+          scales: {
+            x: { grid: { display: false } },
+            y: {
+              reverse: true,
+              min: 1,
+              suggestedMax: maxPos,
+              grid: { color: cssVar('--chart-grid') },
+              ticks: { precision: 0 }
+            }
+          }
+        }
+      });
+    });
+  }
+
+  function renderYearDetail(year) {
+    const comp = App.data.competitions.find((c) => c.year === Number(year));
+    if (!comp) return;
+
+    const results = Object.entries(comp.scores)
+      .map(([pid, pos]) => ({
+        participant: App.data.participants.find((x) => x.id === pid),
+        pos
+      }))
+      .filter((r) => r.participant)
+      .sort((a, b) => a.pos - b.pos);
+
+    const hosts = [comp.arranger3rd, comp.arrangerSecondLast].filter(Boolean).join(' & ');
+    const photo = photoFor(comp.year);
+
+    const rows = results
+      .map(
+        (r) => `
+        <li class="yd-row">
+          <span class="yd-pos ${medalClassFor(r.pos)}">${r.pos}</span>
+          <span class="avatar yd-avatar" style="border-color:hsl(${nameHue(r.participant.name)} 60% 60% / .6)">${esc(initials(r.participant.name))}</span>
+          <span class="yd-name">${personLink(r.participant.name, r.participant.id)}</span>
+        </li>`
+      )
+      .join('');
+
+    const html = `
+      <div class="yd-head">
+        <span class="yd-year">${comp.year}</span>
+        <h2 id="modal-title" class="yd-title">${esc(comp.name.trim())}</h2>
+        <p class="yd-meta">
+          ${comp.location ? `${ICONS.pin} ${esc(comp.location)} · ` : ''}${comp.participantCount} deltagare${
+    hosts ? ` · Arrangörer: ${esc(hosts)}` : ''
+  }
+        </p>
+      </div>
+      ${photo ? `<img class="yd-photo" src="${esc(photo)}" alt="Foto från ${comp.year}" />` : ''}
+      <ul class="yd-results">${rows}</ul>`;
+
+    openModal(html);
+  }
+
+  function initModal() {
+    $('#modal-close').addEventListener('click', closeModal);
+    $('#modal').addEventListener('click', (e) => {
+      if (e.target === $('#modal')) closeModal();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeModal();
+    });
+
+    // Delegated: any person link or year row anywhere in the app
+    document.addEventListener('click', (e) => {
+      const person = e.target.closest('[data-person]');
+      if (person) {
+        e.preventDefault();
+        renderProfile(person.getAttribute('data-person'));
+        return;
+      }
+      const year = e.target.closest('[data-year]');
+      if (year) {
+        e.preventDefault();
+        renderYearDetail(year.getAttribute('data-year'));
+      }
+    });
   }
 
   /* ======================================================================
@@ -1521,16 +2193,20 @@
   async function init() {
     try {
       setLoadingStatus('Hämtar resultat…');
-      App.data = await loadData();
+      const [data, event] = await Promise.all([loadData(), loadEvent()]);
+      App.data = data;
+      App.event = event;
 
       setLoadingStatus('Beräknar statistik…');
       App.stats = computeStats(App.data);
+      App.elo = computeElo(App.data, App.stats);
       App.facts = computeFacts(App.data, App.stats);
       computeAchievements();
 
       setLoadingStatus('Bygger vyer…');
       applyChartTheme();
       initNav();
+      initModal();
 
       renderHero();
       renderCountdown();
@@ -1542,6 +2218,8 @@
       renderAchievements();
       renderFilters();
       renderStatsView();
+      renderH2HControls();
+      renderElo();
       initMap();
 
       $('#theme-toggle').addEventListener('click', toggleTheme);
