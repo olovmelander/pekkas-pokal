@@ -28,9 +28,11 @@ function photoManifest() {
 export default defineConfig({
   plugins: [photoManifest()],
 
-  // Base path for GitHub Pages - repository name
-  base: process.env.NODE_ENV === 'production' 
-    ? '/pekkas-pokal/'  // Replace with your actual repository name
+  // Base path for GitHub Pages - repository name.
+  // PAGES_BASE overrides it, so the same build can target a mirror repo
+  // (e.g. PAGES_BASE=/pekkas-pokal-live/ npm run build).
+  base: process.env.NODE_ENV === 'production'
+    ? (process.env.PAGES_BASE || '/pekkas-pokal/')
     : '/',
   
   // Root directory
