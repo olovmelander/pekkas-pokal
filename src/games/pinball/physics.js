@@ -47,9 +47,14 @@ export function segment(ax, ay, bx, by, opts = {}) {
     restitution: opts.restitution ?? 0.42,
     friction: opts.friction ?? 0.04,
     kick: opts.kick ?? 0,
+    kickMin: opts.kickMin ?? 0,
     // A sensor detects the ball passing through without touching it —
     // used for orbit shots, inlane rollovers and other scoring switches.
     sensor: opts.sensor ?? false,
+    // One-way gates: collide only when `filter(ball)` is true, e.g. only for
+    // descending balls. This is how a real orbit keeps its return path from
+    // dumping every ball into the outlane.
+    filter: opts.filter || null,
     id: opts.id || null,
     onHit: opts.onHit || null,
     enabled: true
@@ -65,7 +70,9 @@ export function circle(cx, cy, radius, opts = {}) {
     restitution: opts.restitution ?? 0.5,
     friction: opts.friction ?? 0.02,
     kick: opts.kick ?? 0,
+    kickMin: opts.kickMin ?? 0,
     sensor: opts.sensor ?? false,
+    filter: opts.filter || null,
     id: opts.id || null,
     onHit: opts.onHit || null,
     enabled: true
@@ -374,6 +381,8 @@ export class World {
   }
 
   resolve(ball, c) {
+    if (c.filter && !c.filter(ball)) return false;
+
     let qx;
     let qy;
 
@@ -422,7 +431,9 @@ export class World {
       ball.vx -= tx * vt * c.friction;
       ball.vy -= ty * vt * c.friction;
 
-      if (c.kick) {
+      // Kickers only fire above their trigger speed — a real slingshot
+      // ignores a ball dribbling against its rubber.
+      if (c.kick && -vn > (c.kickMin ?? 0)) {
         ball.vx += nx * c.kick;
         ball.vy += ny * c.kick;
       }

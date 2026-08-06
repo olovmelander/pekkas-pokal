@@ -6,7 +6,7 @@
  * extruded upward and dropped straight in.
  */
 
-import { L, mirrorX } from './table.js';
+import { L, ART, mirrorX } from './table.js';
 
 /** Extruding a shape drawn in playfield space lands it flat, height along +Y. */
 function flatten(geo) {
@@ -96,6 +96,24 @@ export function createMaterials(THREE, playfieldTexture) {
       metalness: 0.9,
       envMapIntensity: 0.5
     }),
+    stone: new THREE.MeshStandardMaterial({
+      color: 0x8b93ad,
+      roughness: 0.82,
+      metalness: 0.12,
+      envMapIntensity: 0.25
+    }),
+    stoneDark: new THREE.MeshStandardMaterial({
+      color: 0x5c6480,
+      roughness: 0.85,
+      metalness: 0.1,
+      envMapIntensity: 0.2
+    }),
+    wood: new THREE.MeshStandardMaterial({
+      color: 0x8a5a2b,
+      roughness: 0.7,
+      metalness: 0.05,
+      envMapIntensity: 0.2
+    }),
     gold: new THREE.MeshStandardMaterial({
       color: 0xf2c14e,
       roughness: 0.26,
@@ -143,6 +161,174 @@ export function createMaterials(THREE, playfieldTexture) {
   };
 }
 
+/* ------------------------------------------------------------------- ramps */
+
+/** World-space curve for a ramp path ([x, y, h] playfield triples). */
+export function rampCurve(THREE, path) {
+  return new THREE.CatmullRomCurve3(
+    path.map(([x, y, h]) => new THREE.Vector3(x, h, -y)),
+    false,
+    'catmullrom',
+    0.35
+  );
+}
+
+/**
+ * A wireform habitrail: two chrome tubes riding either side of the curve,
+ * with periodic U-shaped cross ties. The Medieval Madness look.
+ */
+function buildWireform(THREE, curve, materials) {
+  const g = new THREE.Group();
+  const railR = 0.07;
+  const halfGap = 0.34;
+
+  // Offset each rail horizontally, perpendicular to the path direction
+  [-1, 1].forEach((side) => {
+    const pts = [];
+    for (let i = 0; i <= 60; i++) {
+      const t = i / 60;
+      const p = curve.getPointAt(t);
+      const tan = curve.getTangentAt(t);
+      const perp = new THREE.Vector3(-tan.z, 0, tan.x);
+      const l = perp.length() || 1;
+      pts.push(p.clone().addScaledVector(perp.multiplyScalar(1 / l), side * halfGap));
+    }
+    const railCurve = new THREE.CatmullRomCurve3(pts);
+    const tube = new THREE.Mesh(new THREE.TubeGeometry(railCurve, 90, railR, 7, false), materials.chrome);
+    g.add(tube);
+  });
+
+  // Cross ties: shallow U-loops under the ball path
+  for (let i = 1; i < 12; i++) {
+    const t = i / 12;
+    const p = curve.getPointAt(t);
+    const tan = curve.getTangentAt(t);
+    const tie = new THREE.Mesh(
+      new THREE.TorusGeometry(halfGap, 0.045, 6, 14, Math.PI),
+      materials.rail
+    );
+    tie.position.copy(p).y -= 0.06;
+    tie.rotation.z = Math.PI; // open side up
+    tie.rotation.y = Math.atan2(tan.x, tan.z) + Math.PI / 2;
+    g.add(tie);
+  }
+  return g;
+}
+
+/* ------------------------------------------------------------------ castle */
+
+/**
+ * The castle: two round towers with golden cone roofs, a crenellated gate
+ * house, a drawbridge that lowers when the gate opens, and pennant flags.
+ */
+function buildCastle(THREE, materials) {
+  const g = new THREE.Group();
+  const refs = {};
+  const towerH = 3.0;
+
+  L.castle.towers.forEach((t) => {
+    const tower = new THREE.Mesh(
+      new THREE.CylinderGeometry(t.r + 0.12, t.r + 0.22, towerH, 18),
+      materials.stone
+    );
+    tower.position.set(t.x, towerH / 2, -t.y);
+    tower.castShadow = true;
+    g.add(tower);
+
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(t.r + 0.3, 1.1, 18), materials.gold);
+    roof.position.set(t.x, towerH + 0.55, -t.y);
+    roof.castShadow = true;
+    g.add(roof);
+
+    // Pennant flag
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.9, 6), materials.chrome);
+    pole.position.set(t.x, towerH + 1.5, -t.y);
+    g.add(pole);
+    const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.3), materials.blueGlow);
+    flag.position.set(t.x + 0.28, towerH + 1.75, -t.y);
+    flag.material = materials.blueGlow;
+    g.add(flag);
+  });
+
+  // Battlement walls above the physics walls
+  const wallH = 2.1;
+  [L.castle.leftWall, L.castle.rightWall].forEach((pts) => {
+    for (let i = 0; i < pts.length - 1; i++) {
+      const [ax, ay] = pts[i];
+      const [bx, by] = pts[i + 1];
+      const lenW = Math.hypot(bx - ax, by - ay);
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(lenW, wallH, 0.5), materials.stone);
+      wall.position.set((ax + bx) / 2, wallH / 2, -(ay + by) / 2);
+      wall.rotation.y = Math.atan2(by - ay, bx - ax);
+      wall.castShadow = true;
+      g.add(wall);
+      // Crenellations: small merlon blocks along the top
+      const n = Math.max(2, Math.round(lenW / 0.55));
+      for (let k = 0; k < n; k += 2) {
+        const f = (k + 0.5) / n;
+        const merlon = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.3, 0.5), materials.stoneDark);
+        merlon.position.set(
+          ax + (bx - ax) * f,
+          wallH + 0.15,
+          -(ay + (by - ay) * f)
+        );
+        merlon.rotation.y = Math.atan2(by - ay, bx - ax);
+        g.add(merlon);
+      }
+    }
+  });
+
+  // Gate house: an arch over the gate opening
+  const [gax, gay, gbx] = L.castle.gate;
+  const gateW = Math.abs(gbx - gax);
+  const gateCx = (gax + gbx) / 2;
+  const lintel = new THREE.Mesh(new THREE.BoxGeometry(gateW + 0.7, 0.55, 0.65), materials.stoneDark);
+  lintel.position.set(gateCx, 2.15, -gay);
+  lintel.castShadow = true;
+  g.add(lintel);
+  const crown = new THREE.Mesh(new THREE.BoxGeometry(gateW + 0.4, 0.28, 0.6), materials.stone);
+  crown.position.set(gateCx, 2.55, -gay);
+  g.add(crown);
+
+  // Portcullis: drops with the gate closed, lifts when it opens
+  const portcullis = new THREE.Group();
+  for (let i = 0; i <= 4; i++) {
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.85, 6), materials.rail);
+    bar.position.set(gax + (gateW * i) / 4, -0.92, 0);
+    portcullis.add(bar);
+  }
+  const cross = new THREE.Mesh(new THREE.BoxGeometry(gateW + 0.15, 0.09, 0.09), materials.rail);
+  cross.position.set(gateCx, -0.8, 0);
+  portcullis.add(cross);
+  // Bars are laid out in absolute playfield x, so the group only lifts them
+  portcullis.position.set(0, 1.88, -gay);
+  g.add(portcullis);
+  refs.portcullis = portcullis;
+
+  // Drawbridge: hinged plank in front of the gate
+  const bridge = new THREE.Group();
+  const plank = new THREE.Mesh(new THREE.BoxGeometry(gateW + 0.3, 0.12, 1.9), materials.wood);
+  plank.position.z = -0.95;
+  bridge.add(plank);
+  [0.32, -0.32].forEach((off) => {
+    const strap = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.14, 1.9), materials.rail);
+    strap.position.set(off * gateW, 0.02, -0.95);
+    bridge.add(strap);
+  });
+  bridge.position.set(gateCx, 0.1, -(gay - 0.35));
+  bridge.rotation.x = -Math.PI / 2 + 0.12; // raised (closed)
+  g.add(bridge);
+  refs.bridge = bridge;
+
+  // Courtyard glow
+  const lamp = new THREE.PointLight(0xf2c14e, 0.6, 9, 2);
+  lamp.position.set(L.centerX, 2.6, -(gay + 1.6));
+  g.add(lamp);
+  refs.lamp = lamp;
+
+  return { group: g, refs };
+}
+
 /* ------------------------------------------------------------------ builder */
 
 export function buildTable(THREE, mergeGeometries, materials) {
@@ -150,24 +336,22 @@ export function buildTable(THREE, mergeGeometries, materials) {
   const refs = { bumpers: [], targets: [], flippers: {}, lights: [] };
 
   /* ---- Playfield ---- */
-  const artW = L.outerX * 2 + 1.2;
-  const artH = 44;
-  // No extra spin: the plane's +y becomes world -z, which is up-table, so the
-  // canvas lands the right way up with the title at the top of the playfield.
+  const artW = ART.x1 - ART.x0;
+  const artH = ART.y1 - ART.y0;
   const playfield = new THREE.Mesh(
     flatten(new THREE.PlaneGeometry(artW, artH, 1, 1)),
     materials.playfield
   );
-  // PlaneGeometry is centred; ART spans y -2..42 → centre 20
-  playfield.position.set(0, 0, -20);
+  playfield.position.set((ART.x0 + ART.x1) / 2, 0, -(ART.y0 + ART.y1) / 2);
   playfield.receiveShadow = true;
   group.add(playfield);
 
   /* ---- Walls ---- */
   const wallShapes = [];
-  const pushChain = (pts, r = 0.3) => {
+  const railShapes = [];
+  const pushChain = (pts, r = 0.3, into = wallShapes) => {
     for (let i = 0; i < pts.length - 1; i++) {
-      wallShapes.push(capsuleShape(THREE, pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], r));
+      into.push(capsuleShape(THREE, pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], r));
     }
   };
   const pushArc = (cx, cy, radius, from, to, steps, r = 0.3) => {
@@ -187,8 +371,15 @@ export function buildTable(THREE, mergeGeometries, materials) {
   pushChain([[L.laneX, L.laneBottomY], [L.outerX, L.laneBottomY]]);
   pushArc(0, L.domeY, L.domeOuterR, 0, 180 * D, 34);
   pushArc(0, L.domeY, L.domeInnerR, 0, 130 * D, 22);
-  pushChain(L.leftGuide);
-  pushChain(L.rightGuide);
+
+  // Lane dividers and guide rails, slimmer and lower than the outer walls
+  pushChain(L.leftDivider, 0.22, railShapes);
+  pushChain(L.leftRampInner, 0.22, railShapes);
+  pushChain(L.leftRail, 0.22, railShapes);
+  pushChain(L.rightRail, 0.22, railShapes);
+  // One-way return gates read as thin wires
+  pushChain(L.leftReturnGate, 0.09, railShapes);
+  pushChain(L.rightReturnGate, 0.09, railShapes);
 
   const wallGeos = wallShapes.map((s) =>
     flatten(new THREE.ExtrudeGeometry(s, { depth: L.wallH, bevelEnabled: false }))
@@ -198,18 +389,39 @@ export function buildTable(THREE, mergeGeometries, materials) {
   walls.receiveShadow = true;
   group.add(walls);
 
-  /* ---- Slingshots (glowing rubber faces) ---- */
-  [L.leftSling, L.rightSling].forEach((s) => {
-    const geo = flatten(
-      new THREE.ExtrudeGeometry(capsuleShape(THREE, s[0][0], s[0][1], s[1][0], s[1][1], 0.32), {
-        depth: L.wallH,
-        bevelEnabled: false
-      })
+  const railGeos = railShapes.map((s) =>
+    flatten(new THREE.ExtrudeGeometry(s, { depth: 1.0, bevelEnabled: false }))
+  );
+  const rails = new THREE.Mesh(mergeGeometries(railGeos), materials.chrome);
+  rails.castShadow = true;
+  group.add(rails);
+
+  /* ---- Slingshots: rubber triangle body + glowing kicker face ---- */
+  [['leftSling', L.leftSlingPts], ['rightSling', L.rightSlingPts]].forEach(([name, P]) => {
+    const tri = new THREE.Shape();
+    tri.moveTo(P.T[0], P.T[1]);
+    tri.lineTo(P.BO[0], P.BO[1]);
+    tri.lineTo(P.BI[0], P.BI[1]);
+    tri.closePath();
+    const body = new THREE.Mesh(
+      flatten(new THREE.ExtrudeGeometry(tri, { depth: L.wallH * 0.8, bevelEnabled: false })),
+      materials.rubber
     );
-    const mesh = new THREE.Mesh(geo, materials.blueGlow);
-    mesh.castShadow = true;
-    group.add(mesh);
-    refs[s === L.leftSling ? 'leftSling' : 'rightSling'] = mesh;
+    body.castShadow = true;
+    group.add(body);
+
+    const face = new THREE.Mesh(
+      flatten(
+        new THREE.ExtrudeGeometry(
+          capsuleShape(THREE, P.T[0], P.T[1], P.BI[0], P.BI[1], 0.24),
+          { depth: L.wallH * 0.85, bevelEnabled: false }
+        )
+      ),
+      materials.blueGlow
+    );
+    face.castShadow = true;
+    group.add(face);
+    refs[name] = face;
   });
 
   /* ---- Posts ---- */
@@ -252,43 +464,27 @@ export function buildTable(THREE, mergeGeometries, materials) {
     cap.castShadow = true;
     g.add(cap);
 
-    let trophy = null;
-    if (b.trophy) {
-      // The centre bumper is a proper golden pokal on a plinth
-      const plinth = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.52, 0.66, 0.24, 22),
-        materials.rubber
-      );
-      plinth.position.y = 0.99;
-      plinth.castShadow = true;
-      g.add(plinth);
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(L.bumperR * 0.6, 22, 14, 0, Math.PI * 2, 0, Math.PI / 2),
+      materials.goldGlow
+    );
+    dome.position.y = 0.94;
+    dome.castShadow = true;
+    g.add(dome);
 
-      trophy = buildTrophy(THREE, materials.gold, 1.5);
-      trophy.position.y = 1.06;
-      g.add(trophy);
-    } else {
-      const dome = new THREE.Mesh(
-        new THREE.SphereGeometry(L.bumperR * 0.6, 22, 14, 0, Math.PI * 2, 0, Math.PI / 2),
-        materials.goldGlow
-      );
-      dome.position.y = 0.94;
-      dome.castShadow = true;
-      g.add(dome);
-      trophy = dome;
-    }
-
-    const light = new THREE.PointLight(0xf2c14e, b.trophy ? 0.55 : 0, b.trophy ? 9 : 7, 2);
+    const light = new THREE.PointLight(0xf2c14e, 0, 7, 2);
     light.position.y = 1.9;
     g.add(light);
 
     group.add(g);
-    refs.bumpers.push({ group: g, ring, trophy, light, base: b.trophy ? 0.55 : 0, isTrophy: !!b.trophy });
+    refs.bumpers.push({ group: g, ring, trophy: dome, light, base: 0, isTrophy: false });
   });
 
-  /* ---- Drop targets ---- */
+  /* ---- Drop targets (angled banks) ---- */
   L.targets.forEach((t) => {
     const g = new THREE.Group();
     g.position.set(t.x, 0, -t.y);
+    g.rotation.y = t.a;
     const face = new THREE.Mesh(
       new THREE.BoxGeometry(t.half * 2, 1.15, 0.42),
       materials.targetUp.clone()
@@ -300,19 +496,24 @@ export function buildTable(THREE, mergeGeometries, materials) {
     refs.targets.push({ group: g, face, down: false });
   });
 
-  /* ---- Jackpot trophy ---- */
+  /* ---- Castle ---- */
+  const castle = buildCastle(THREE, materials);
+  group.add(castle.group);
+  refs.castle = castle.refs;
+
+  /* ---- Jackpot trophy in the courtyard ---- */
   {
     const g = new THREE.Group();
     g.position.set(L.jackpot.x, 0, -L.jackpot.y);
 
     const base = new THREE.Mesh(
       new THREE.CylinderGeometry(L.jackpot.r, L.jackpot.r * 1.1, 0.42, 26),
-      materials.rubber
+      materials.stoneDark
     );
     base.position.y = 0.21;
     g.add(base);
 
-    const trophy = buildTrophy(THREE, materials.gold, 1.85);
+    const trophy = buildTrophy(THREE, materials.gold, 1.75);
     trophy.position.y = 0.42;
     g.add(trophy);
 
@@ -330,6 +531,51 @@ export function buildTable(THREE, mergeGeometries, materials) {
 
     group.add(g);
     refs.jackpot = { group: g, trophy, halo, light };
+  }
+
+  /* ---- Wireform ramps ---- */
+  refs.rampCurves = {};
+  ['left', 'right'].forEach((side) => {
+    const curve = rampCurve(THREE, L.ramps[side].path);
+    refs.rampCurves[side] = curve;
+    group.add(buildWireform(THREE, curve, materials));
+
+    // Entrance portal: a golden arch at the capture point
+    const p0 = curve.getPointAt(0);
+    const arch = new THREE.Mesh(
+      new THREE.TorusGeometry(0.62, 0.09, 8, 18, Math.PI),
+      materials.goldGlow
+    );
+    arch.position.set(p0.x, 0.35, p0.z);
+    const tan = curve.getTangentAt(0);
+    arch.rotation.y = Math.atan2(tan.x, tan.z) + Math.PI / 2;
+    group.add(arch);
+  });
+
+  /* ---- Apron: the angled plate over the drain ---- */
+  {
+    const apron = new THREE.Shape();
+    apron.moveTo(-4.4, -1.6);
+    apron.lineTo(2.0, -1.6);
+    apron.lineTo(0.2, 3.4);
+    apron.lineTo(-2.6, 3.4);
+    apron.closePath();
+    const mesh = new THREE.Mesh(
+      flatten(new THREE.ExtrudeGeometry(apron, { depth: 0.7, bevelEnabled: false })),
+      materials.stoneDark
+    );
+    mesh.castShadow = true;
+    group.add(mesh);
+    const trim = new THREE.Mesh(
+      flatten(
+        new THREE.ExtrudeGeometry(capsuleShape(THREE, -2.6, 3.4, 0.2, 3.4, 0.12), {
+          depth: 0.85,
+          bevelEnabled: false
+        })
+      ),
+      materials.gold
+    );
+    group.add(trim);
   }
 
   /* ---- Flippers ---- */
