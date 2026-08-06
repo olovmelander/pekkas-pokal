@@ -108,7 +108,8 @@ flippervägar korsar bordet som äkta wireform-ramper: **Kungsvägen** (vänster
 rampfil, bredvid vänster orbit) och **Vallgraven** (ett hårt skott i höger
 orbit) — bollen lyfter ur spelplanen och åker över borgen till motsatt
 inbana. Nedtill finns riktiga **utbanor**: bollen kan rulla ut vid sidan av
-flipprarna, precis som på ett riktigt bord.
+flipprarna, precis som på ett riktigt bord. Fysiken är stämd efter en äkta
+maskins 6,5°-lutning, så bollen har fart och flipprarna smäller.
 
 | Moment | Så funkar det |
 | --- | --- |
@@ -117,6 +118,7 @@ flipprarna, precis som på ett riktigt bord.
 | **FINALEN** | Klara alla fem grenar → wizard mode: 60 sekunder multiball där **allt räknas ×5**. |
 | **Multiball** | Bumperträffar laddar låset — då öppnas porten och pokalen låser bollar i borgen. Två låsta bollar startar multiball med jackpot (25 000) i pokalen; orbits och ramper tänder om jackpotten. |
 | **Kombo** | Träffar inom 3,5 sekunder kedjar: 1 000 × 2 per steg, upp till ×16. |
+| **Kickback** | Vänster utbana har en kickback som skjuter tillbaka bollen — tänd vid varje ny boll, tänds om när båda inbanorna rullats. |
 | **Bonus** | Inbanorna höjer bonusmultiplikatorn (upp till ×6) som multiplicerar slutbonusen per boll. |
 | **Extraboll** | Två klarade grenar ger en extra boll. |
 
