@@ -362,7 +362,9 @@
     Stockholm: [59.3556, 18.0993],
     Själevad: [63.2888, 18.5974],
     'Eskilstuna/Västerås': [59.6008, 16.5992],
-    Uppsala: [59.8586, 17.6389]
+    Uppsala: [59.8586, 17.6389],
+    Barcelona: [41.3874, 2.1686],
+    'Barcelona, Spanien': [41.3874, 2.1686]
   };
 
   /* ======================================================================
@@ -474,10 +476,36 @@
     }
   }
 
+  /**
+   * Confirmed upcoming competition. Update (or set to null) when the next
+   * event is announced — this always wins over the mid-August forecast.
+   * The date is interpreted in the viewer's local timezone.
+   */
+  const UPCOMING_EVENT = {
+    date: '2026-08-06T18:00:00',
+    location: 'Barcelona, Spanien',
+    hosts: ['Per Olsson', 'Per Vikman']
+  };
+
   function nextEventDate(stats) {
+    const now = new Date();
+
+    // A confirmed event is shown from announcement until 24h after start
+    if (UPCOMING_EVENT) {
+      const d = new Date(UPCOMING_EVENT.date);
+      if (!isNaN(d.getTime()) && now - d < 24 * 3600 * 1000) {
+        return {
+          date: d,
+          confirmed: true,
+          comp: null,
+          location: UPCOMING_EVENT.location || '',
+          hosts: (UPCOMING_EVENT.hosts || []).join(' & ')
+        };
+      }
+    }
+
     const dated = stats.byYearAsc.filter((c) => c.date);
     const last = dated[dated.length - 1];
-    const now = new Date();
     const year = now.getFullYear();
     if (last && last.date >= now) return { date: last.date, confirmed: true, comp: last };
 
@@ -500,39 +528,69 @@
   function renderCountdown() {
     const next = nextEventDate(App.stats);
     const tag = $('#countdown-tag');
-    tag.textContent = next.confirmed ? 'bekräftad' : 'prognos';
 
     const { latest } = App.stats;
-    const hosts = latest
-      ? [latest.arranger3rd, latest.arrangerSecondLast].filter(Boolean).join(' & ')
-      : '';
+    const hosts =
+      next.hosts ||
+      (latest ? [latest.arranger3rd, latest.arrangerSecondLast].filter(Boolean).join(' & ') : '');
+
     const dateStr = next.date.toLocaleDateString('sv-SE', {
       weekday: 'long',
       day: 'numeric',
       month: 'long',
       year: 'numeric'
     });
-    $('#countdown-note').textContent = hosts
-      ? `${dateStr} — arrangeras av ${hosts}.`
-      : dateStr;
+    const timeStr = next.date.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+    const where = next.location ? ` · ${next.location}` : '';
+    const baseNote = `${dateStr} kl ${timeStr}${where}${hosts ? ` — arrangeras av ${hosts}.` : ''}`;
+
+    const nums = [$('#cd-days'), $('#cd-hours'), $('#cd-mins')];
+    const labels = $$('#countdown .count-label');
+    const setSegs = (values, labelTexts) => {
+      values.forEach((v, i) => (nums[i].textContent = v));
+      labelTexts.forEach((t, i) => (labels[i] && (labels[i].textContent = t)));
+    };
 
     const tick = () => {
-      const ms = next.date - new Date();
+      const now = new Date();
+      const ms = next.date - now;
+
       if (ms <= 0) {
-        $('#cd-days').textContent = '0';
-        $('#cd-hours').textContent = '0';
-        $('#cd-mins').textContent = '0';
+        // Event has started
+        tag.textContent = 'pågår';
+        setSegs(['🏆', '🏆', '🏆'], ['', '', '']);
+        $('#countdown-note').textContent = next.location
+          ? `Tävlingen pågår just nu i ${next.location}!`
+          : 'Tävlingen pågår just nu!';
         return;
       }
-      const days = Math.floor(ms / 86400000);
-      const hours = Math.floor((ms % 86400000) / 3600000);
-      const mins = Math.floor((ms % 3600000) / 60000);
-      $('#cd-days').textContent = String(days);
-      $('#cd-hours').textContent = String(hours).padStart(2, '0');
-      $('#cd-mins').textContent = String(mins).padStart(2, '0');
+
+      const isToday = next.date.toDateString() === now.toDateString();
+      tag.textContent = next.confirmed ? (isToday ? 'idag!' : 'bekräftad') : 'prognos';
+      $('#countdown-note').textContent = baseNote;
+
+      if (ms < 86400000) {
+        // Final day: hours / minutes / seconds
+        const hours = Math.floor(ms / 3600000);
+        const mins = Math.floor((ms % 3600000) / 60000);
+        const secs = Math.floor((ms % 60000) / 1000);
+        setSegs(
+          [String(hours), String(mins).padStart(2, '0'), String(secs).padStart(2, '0')],
+          ['tim', 'min', 'sek']
+        );
+      } else {
+        const days = Math.floor(ms / 86400000);
+        const hours = Math.floor((ms % 86400000) / 3600000);
+        const mins = Math.floor((ms % 3600000) / 60000);
+        setSegs(
+          [String(days), String(hours).padStart(2, '0'), String(mins).padStart(2, '0')],
+          ['dagar', 'tim', 'min']
+        );
+      }
     };
     tick();
-    setInterval(tick, 30000);
+    if (App.countdownTimer) clearInterval(App.countdownTimer);
+    App.countdownTimer = setInterval(tick, 1000);
   }
 
   function renderTicker() {
@@ -766,6 +824,21 @@
       marker.bindPopup(`<div style="font-weight:700;margin-bottom:4px">${esc(name)}</div>${rows}`);
       App.mapMarkers.push(marker);
     });
+
+    // Pin for the confirmed upcoming event, if its location is known
+    if (UPCOMING_EVENT && UPCOMING_EVENT.location) {
+      const coords = LOCATION_COORDS[UPCOMING_EVENT.location];
+      if (coords && !locations[UPCOMING_EVENT.location]) {
+        const d = new Date(UPCOMING_EVENT.date);
+        const marker = L.marker(coords, { icon: pinIcon }).addTo(App.map);
+        const hosts = (UPCOMING_EVENT.hosts || []).join(' & ');
+        marker.bindPopup(
+          `<div style="font-weight:700;margin-bottom:4px">${esc(UPCOMING_EVENT.location)}</div>` +
+            `<div><strong>${d.getFullYear()}</strong> · Årets tävling${hosts ? ` — arrangeras av ${esc(hosts)}` : ''}</div>`
+        );
+        App.mapMarkers.push(marker);
+      }
+    }
 
     $('#map-tour-btn').addEventListener('click', toggleMapTour);
   }
