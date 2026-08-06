@@ -140,3 +140,4 @@ Push till `main` kör [`.github/workflows/deploy.yml`](.github/workflows/deploy.
 som bygger projektet och publicerar till GitHub Pages. Inget manuellt steg behövs.
 
 <!-- Deploy retrigger: 2026-08-06T18:40:05Z -->
+<!-- Deploy retrigger: 2026-08-06T19:54:40Z -->
