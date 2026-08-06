@@ -74,6 +74,32 @@ Bilden dyker upp automatiskt högst upp på det årets kort i Historik och i
 resultatrutan. Saknas en bild händer ingenting — inget att konfigurera.
 Liggande format och ca 1200 px bredd fungerar bäst.
 
+### 4. Spel
+
+Fliken **Spel** innehåller ett spel per år. 2025 är *Pekkas Pokal Flipper* — ett
+flipperspel i Three.js som byggs helt i webbläsaren (ingen bild- eller
+ljudfil laddas ner, bara Three.js självt, och först när man öppnar spelet).
+
+Att lägga till ett nytt års spel:
+
+1. Skapa modulen under `src/games/<spel>/index.js` och exportera en funktion
+   `createX(container, opts)` som returnerar `{ destroy() }`.
+2. Lägg till en rad i `GAMES` i [`src/scripts/app.js`](src/scripts/app.js) med
+   `year`, `title`, `tagline`, `icon` och sökvägen i `module`.
+
+År utan spel visas automatiskt som "inte byggt än".
+
+**Kontroller i flipperspelet**
+
+| | Mobil | Dator |
+| --- | --- | --- |
+| Flippers | Vänster/höger halva av skärmen (fungerar samtidigt) | ←/→, A/D eller Z/M |
+| Avfyrare | Håll för kraft, släpp för att skjuta | Mellanslag |
+| Nudga | Knappen NUDGA | N |
+
+Släpp avfyraren när mätaren står i det turkosa fältet för en **skill shot**.
+Fyra nudgar för snabbt ger TILT och dödar flipprarna för den bollen.
+
 ---
 
 ## Utveckling
@@ -93,7 +119,8 @@ npm run lint     # ESLint
 | `src/scripts/app.js` | Hela applikationen: dataladdning, statistik, Elo, rendering |
 | `src/scripts/achievement-engine.js` | Beräknar vilka utmärkelser varje deltagare låst upp |
 | `src/data/achievements.js` | Definitioner av alla utmärkelser |
-| `src/styles/` | `main` (tokens/teman), `layout`, `components`, `animations`, `responsive` |
+| `src/styles/` | `main` (tokens/teman), `layout`, `components`, `animations`, `games`, `responsive` |
+| `src/games/pinball/` | Flipperspelet: `physics` (2D-kollision), `table` (layout + banans grafik), `meshes` (3D), `index` (spelloop) |
 | `public/` | Statiska filer: `event.json`, `manifest.json`, ikoner, `og-image.png`, `photos/` |
 
 Data hämtas från `competition-data.csv` vid sidladdning. Om filen inte går att
