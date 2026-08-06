@@ -73,9 +73,28 @@ L.posts = [
   { x: L.centerX + 5.2, y: 22.6, r: 0.3 }
 ];
 
+// Scoring switches: invisible sensors the ball rolls through.
+// Orbits are the open lanes either side of the target bank; inlanes are the
+// return channels that feed the flippers.
+L.sensors = {
+  leftOrbit: [-8.6, 18, -6.6, 18],
+  rightOrbit: [4.2, 18, 6.2, 18],
+  inlaneLeft: [-5.55, 6.6, -4.35, 7.1],
+  inlaneRight: [mirrorXRaw(-5.55), 6.6, mirrorXRaw(-4.35), 7.1]
+};
+
+// Where locked balls are parked while waiting for multiball
+L.lockSlots = [
+  { x: -7.6, y: 27.4 },
+  { x: -6.7, y: 29.6 }
+];
+
 /* ------------------------------------------------------------ wall polylines */
 
-const mirrorX = (x) => 2 * L.centerX - x;
+function mirrorXRaw(x) {
+  return 2 * L.centerX - x;
+}
+const mirrorX = mirrorXRaw;
 
 // Left outer wall down into the outlane and drain funnel
 L.leftWall = [
@@ -184,7 +203,7 @@ export function buildColliders(world, hooks = {}) {
     restitution: 0.55,
     kick: 8,
     id: 'jackpot',
-    onHit: (v) => hooks.onJackpot && hooks.onJackpot(v)
+    onHit: (v, b) => hooks.onJackpot && hooks.onJackpot(v, b)
   });
   world.add(jack);
   refs.jackpot = jack;
@@ -192,6 +211,19 @@ export function buildColliders(world, hooks = {}) {
   // Decorative posts
   L.posts.forEach((p) => {
     world.add(circle(p.x, p.y, p.r, { restitution: 0.55, onHit: hitWall }));
+  });
+
+  // Scoring switches (sensors). The game layer debounces them.
+  refs.sensors = {};
+  Object.entries(L.sensors).forEach(([id, [ax, ay, bx, by]]) => {
+    refs.sensors[id] = world.add(
+      segment(ax, ay, bx, by, {
+        radius: 0.3,
+        sensor: true,
+        id,
+        onHit: (v, b) => hooks.onSensor && hooks.onSensor(id, v, b)
+      })
+    );
   });
 
   // Flippers
