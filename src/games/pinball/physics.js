@@ -129,10 +129,10 @@ export class Flipper {
     this.omega = 0;
     this.pressed = false;
     this.radius = opts.radius ?? 0.42;
-    this.restitution = opts.restitution ?? 0.36;
+    this.restitution = opts.restitution ?? 0.42;
     // Up-swing is much faster than the return, like a real solenoid
-    this.upSpeed = opts.upSpeed ?? 34;
-    this.downSpeed = opts.downSpeed ?? 16;
+    this.upSpeed = opts.upSpeed ?? 40;
+    this.downSpeed = opts.downSpeed ?? 20;
     this.onHit = opts.onHit || null;
     this.enabled = true;
   }
@@ -209,8 +209,8 @@ export class Flipper {
       const tx = -ny;
       const ty = nx;
       const vt = (ball.vx - contactVx) * tx + (ball.vy - contactVy) * ty;
-      ball.vx -= tx * vt * 0.08;
-      ball.vy -= ty * vt * 0.08;
+      ball.vx -= tx * vt * 0.05;
+      ball.vy -= ty * vt * 0.05;
 
       if (this.onHit) this.onHit(Math.abs(vn));
     }

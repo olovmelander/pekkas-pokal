@@ -535,12 +535,13 @@ export function buildTable(THREE, mergeGeometries, materials) {
 
   /* ---- Wireform ramps ---- */
   refs.rampCurves = {};
+  refs.rampArches = {};
   ['left', 'right'].forEach((side) => {
     const curve = rampCurve(THREE, L.ramps[side].path);
     refs.rampCurves[side] = curve;
     group.add(buildWireform(THREE, curve, materials));
 
-    // Entrance portal: a golden arch at the capture point
+    // Entrance portal: a golden arch at the capture point, flashed on capture
     const p0 = curve.getPointAt(0);
     const arch = new THREE.Mesh(
       new THREE.TorusGeometry(0.62, 0.09, 8, 18, Math.PI),
@@ -550,6 +551,7 @@ export function buildTable(THREE, mergeGeometries, materials) {
     const tan = curve.getTangentAt(0);
     arch.rotation.y = Math.atan2(tan.x, tan.z) + Math.PI / 2;
     group.add(arch);
+    refs.rampArches[side] = arch;
   });
 
   /* ---- Apron: the angled plate over the drain ---- */

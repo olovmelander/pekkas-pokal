@@ -58,10 +58,13 @@ function mirrorXRaw(x) {
 }
 const mirrorX = mirrorXRaw;
 
-// Two pop bumpers flanking the castle corridor
+// Pop bumper nest: two flanking the castle corridor and a third in the
+// upper-left pocket where orbit returns and castle rejects pour through —
+// a nest with mutual rebounds keeps the action alive (rubber, not steel).
 L.bumpers = [
   { x: -4.4, y: 23.8 },
-  { x: 2.0, y: 23.8 }
+  { x: 2.0, y: 23.8 },
+  { x: -6.3, y: 25.2 }
 ];
 
 /**
@@ -121,9 +124,9 @@ L.lockSlots = [
  */
 L.ramps = {
   left: {
-    capture: [-7.5, 22.8, -6.35, 22.8],
-    minVy: 6.0,
-    exit: { x: 3.73, y: 12.2, vy: -4 },
+    capture: [-7.6, 22.8, -6.25, 22.8],
+    minVy: 5.0,
+    exit: { x: 3.73, y: 12.2, vx: -1.2, vy: -7 },
     path: [
       [-6.9, 22.8, 0.5],
       [-6.7, 26.0, 1.9],
@@ -138,9 +141,9 @@ L.ramps = {
     ]
   },
   right: {
-    capture: [4.4, 25.5, 6.3, 25.5],
-    minVy: 6.5,
-    exit: { x: -6.2, y: 11.8, vy: -4 },
+    capture: [4.3, 25.5, 6.4, 25.5],
+    minVy: 5.5,
+    exit: { x: -6.2, y: 11.8, vx: 1.2, vy: -7 },
     path: [
       [5.5, 25.5, 0.5],
       [5.9, 29.0, 2.0],
@@ -217,9 +220,8 @@ L.rightReturnGate = [
 L.leftRail = [
   [-7.08, 12.55],
   [-7.08, 8.7],
-  [-6.65, 7.55],
-  [-5.95, 7.15],
-  [-5.3, 7.45]
+  [-6.5, 7.9],
+  [-5.35, 7.55]
 ];
 L.rightRail = L.leftRail.map(([x, y]) => [mirrorX(x), y]);
 
@@ -301,7 +303,7 @@ export function buildColliders(world, hooks = {}) {
   // it into the inlane — without the hysteresis the first impact would kill
   // the fall speed and release the ball mid-wire, over the outlane.
   const gateFilter = (b) => {
-    if (b.vy < -6) {
+    if (b.vy < -10) {
       b.rideGate = true;
       return true;
     }
@@ -317,9 +319,9 @@ export function buildColliders(world, hooks = {}) {
   const slingOpts = (side) => ({
     radius: 0.28,
     restitution: 0.62,
-    kick: 13,
+    kick: 15,
     kickMin: 2.5,
-    onHit: (v) => hooks.onSling && hooks.onSling(side, v)
+    onHit: (v, ball) => hooks.onSling && hooks.onSling(side, v, ball)
   });
   [['left', L.leftSlingPts], ['right', L.rightSlingPts]].forEach(([side, P]) => {
     world.add(segment(P.T[0], P.T[1], P.BI[0], P.BI[1], slingOpts(side)));
@@ -327,13 +329,14 @@ export function buildColliders(world, hooks = {}) {
     world.add(segment(P.BO[0], P.BO[1], P.BI[0], P.BI[1], { ...railOpts, radius: 0.28 }));
   });
 
-  // Pop bumpers
+  // Pop bumpers — hot: a real pop fires on the lightest skirt touch and
+  // throws the ball hard enough to ricochet around the nest
   L.bumpers.forEach((b, i) => {
     const c = circle(b.x, b.y, L.bumperR, {
-      restitution: 0.52,
-      kick: 17,
+      restitution: 0.6,
+      kick: 22,
       id: `bumper${i}`,
-      onHit: (v) => hooks.onBumper && hooks.onBumper(i, v)
+      onHit: (v, ball) => hooks.onBumper && hooks.onBumper(i, v, ball)
     });
     world.add(c);
     refs.bumpers.push(c);

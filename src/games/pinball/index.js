@@ -287,6 +287,9 @@ export async function createPinball(container, opts = {}) {
   [refs.leftSling, refs.rightSling].forEach((m) => {
     m.material = m.material.clone();
   });
+  Object.values(refs.rampArches).forEach((m) => {
+    m.material = m.material.clone();
+  });
 
   /* ---- Lights ---- */
   scene.add(new THREE.AmbientLight(0x9fb0ff, 0.16));
@@ -321,7 +324,12 @@ export async function createPinball(container, opts = {}) {
   composer.addPass(new OutputPass());
 
   /* ---- Physics ---- */
-  const world = new World({ gravity: 27, damping: 0.2, maxSpeed: 64 });
+  // Real machines pitch the playfield at 6.5°. At this table's scale
+  // (≈35 units ≈ a 42" playfield) that is g·sin(6.5°) ≈ 36.5 units/s² —
+  // noticeably livelier than a shallow slope, so the ball actually runs off
+  // a raised flipper instead of dawdling. Damping stays low: a waxed
+  // playfield barely slows a rolling ball.
+  const world = new World({ gravity: 36.5, damping: 0.1, maxSpeed: 80 });
 
   /**
    * Grenar — the mode ladder, named after the group's real competitions.
@@ -352,8 +360,8 @@ export async function createPinball(container, opts = {}) {
     lastToast: 0,
 
     // Locks & multiball
-    bumperHits: [0, 0],
-    bumperLit: [false, false],
+    bumperHits: [0, 0, 0],
+    bumperLit: [false, false, false],
     lockLit: false,
     locked: 0,
     multiball: false,
@@ -379,6 +387,9 @@ export async function createPinball(container, opts = {}) {
     extraBalls: 0,
     extraBallGiven: false,
     superUntil: 0,
+    // Left-outlane kickback: lit at the start of every ball, relit by
+    // completing both inlanes
+    kickback: true,
     sensorLast: {}
   };
 
@@ -433,6 +444,7 @@ export async function createPinball(container, opts = {}) {
     } else {
       const locks = '●'.repeat(state.locked) + '○'.repeat(Math.max(0, 2 - state.locked));
       const bits = [`LÅS ${locks}`];
+      if (state.kickback) bits.push('KICKBACK');
       if (state.bonusX > 1) bits.push(`BONUS ×${state.bonusX}`);
       if (state.modeStartLit) bits.push('GREN: V. ORBIT');
       hud.substatus.textContent = bits.join(' · ');
@@ -511,17 +523,18 @@ export async function createPinball(container, opts = {}) {
 
   const hooks = {
     onBumper(i, v) {
-      if (v < 1) return;
+      if (v < 0.6) return;
       const b = refs.bumpers[i];
-      addScore(b.isTrophy ? 400 : 120);
+      addScore(150);
       state.perBall.bumps++;
       sfx.bumper();
-      flash(b.trophy, b.light, b.isTrophy ? 6 : 4.2, b.base);
+      flash(b.trophy, b.light, 4.6, b.base);
+      b.group.scale.setScalar(1.18);
 
       // Charge the bumpers toward lighting the lock
       if (!state.multiball && state.locked < 2 && !(state.mode && state.mode.wizard)) {
         state.bumperHits[i]++;
-        if (state.bumperHits[i] >= 6 && !state.bumperLit[i]) {
+        if (state.bumperHits[i] >= 4 && !state.bumperLit[i]) {
           state.bumperLit[i] = true;
           refs.bumpers[i].ring.material.emissiveIntensity = 2.6;
           toast('Bumper laddad!');
@@ -554,10 +567,12 @@ export async function createPinball(container, opts = {}) {
         toast(state.gate.hits === 1 ? 'PORTEN SKAKAR!' : 'EN SMÄLL TILL!');
       }
     },
-    onSling(side, v) {
+    onSling(side, v, ball) {
       if (v < 1) return;
       addScore(60);
       sfx.sling();
+      // Real sling rubber never throws twice the same way
+      if (ball) ball.vx += (Math.random() - 0.5) * 2.5;
       const mesh = side === 'left' ? refs.leftSling : refs.rightSling;
       if (mesh) {
         mesh.material.emissiveIntensity = 4;
@@ -667,13 +682,24 @@ export async function createPinball(container, opts = {}) {
         return;
       }
 
-      // Outlanes: the ball is on its way out past the flipper
+      // Outlanes: the ball is on its way out past the flipper — unless the
+      // left kickback is lit, which fires it straight back up the lane
       if (id === 'outLeft' || id === 'outRight') {
-        if (b && b.vy < 0) {
-          addScore(500);
-          sfx.outlane();
-          toast('UTBANAN!');
+        if (!b || b.vy >= 0) return;
+        if (id === 'outLeft' && state.kickback) {
+          state.kickback = false;
+          b.vy = 38;
+          b.vx = 0.4;
+          addScore(1000);
+          sfx.launch();
+          startShake(0.6, -1);
+          toast('KICKBACK!', true);
+          updateStatus();
+          return;
         }
+        addScore(500);
+        sfx.outlane();
+        toast('UTBANAN!');
         return;
       }
 
@@ -686,7 +712,9 @@ export async function createPinball(container, opts = {}) {
             state.inlanes.left = false;
             state.inlanes.right = false;
             state.bonusX = Math.min(6, state.bonusX + 1);
-            toast(`BONUS ×${state.bonusX}`, state.bonusX >= 3);
+            const relit = !state.kickback;
+            state.kickback = true;
+            toast(relit ? `BONUS ×${state.bonusX} — KICKBACK TÄND` : `BONUS ×${state.bonusX}`, state.bonusX >= 3);
             updateStatus();
           }
         }
@@ -896,7 +924,15 @@ export async function createPinball(container, opts = {}) {
     if (idx < 0) return;
     state.balls.splice(idx, 1);
     b.live = false;
-    state.riders.push({ ball: b, side, t: 0, dur: side === 'left' ? 2.0 : 2.4 });
+    // A hard shot rides the wireform visibly faster than a clean minimum
+    const base = side === 'left' ? 22 : 27;
+    const dur = clamp(base / Math.max(9, b.speed), 0.9, 2.1);
+    state.riders.push({ ball: b, side, t: 0, dur });
+    const arch = refs.rampArches && refs.rampArches[side];
+    if (arch) {
+      arch.material.emissiveIntensity = 3.2;
+      flashes.push({ mat: arch.material, base: 0.95, t: 0 });
+    }
 
     addScore(3000);
     state.perBall.ramps++;
@@ -915,7 +951,7 @@ export async function createPinball(container, opts = {}) {
 
   function releaseRider(r) {
     const ex = L.ramps[r.side].exit;
-    r.ball.place(ex.x, ex.y, r.side === 'left' ? -0.6 : 0.6, ex.vy);
+    r.ball.place(ex.x, ex.y, ex.vx || 0, ex.vy);
     r.ball.live = true;
     state.balls.push(r.ball);
   }
@@ -957,7 +993,7 @@ export async function createPinball(container, opts = {}) {
       nb.live = true;
       state.balls.push(nb);
       setTimeout(() => {
-        if (nb.live && nb.x > L.laneX) nb.vy = 52 + Math.random() * 8;
+        if (nb.live && nb.x > L.laneX) nb.vy = 58 + Math.random() * 8;
       }, 500);
     }, delay);
   }
@@ -968,6 +1004,7 @@ export async function createPinball(container, opts = {}) {
     nb.place(L.laneBallX, L.laneBottomY + L.laneWallR + L.ballRadius + 0.06, 0, 0);
     nb.live = true;
     state.balls = [nb];
+    state.kickback = true;
     state.phase = 'launch';
     state.power = 0;
     state.charging = false;
@@ -977,12 +1014,13 @@ export async function createPinball(container, opts = {}) {
   }
 
   function launchBall() {
-    // Looping the habitrail costs ~48 u/s of climb, so every launch clears it.
-    // The meter is a timing skill shot instead of a power that can strand you.
+    // Looping the habitrail at 6.5° pitch costs ~53 u/s of climb, so every
+    // launch clears it. The meter is a timing skill shot instead of a power
+    // that can strand you.
     const p = clamp(state.power, 0, 1);
     const b = state.balls[0];
     if (!b) return;
-    b.vy = 51 + p * 11;
+    b.vy = 57 + p * 11;
     b.vx = 0;
     state.phase = 'play';
     state.ballSaveUntil = performance.now() + BALL_SAVE_MS;
@@ -1119,8 +1157,8 @@ export async function createPinball(container, opts = {}) {
     state.banksDone = 0;
     state.tilted = false;
     state.nudges = [];
-    state.bumperHits = [0, 0];
-    state.bumperLit = [false, false];
+    state.bumperHits = [0, 0, 0];
+    state.bumperLit = [false, false, false];
     state.lockLit = false;
     state.locked = 0;
     state.multiball = false;
@@ -1139,6 +1177,7 @@ export async function createPinball(container, opts = {}) {
     state.extraBalls = 0;
     state.extraBallGiven = false;
     state.superUntil = 0;
+    state.kickback = true;
     lockMeshes.forEach((m) => (m.visible = false));
     refs.bumpers.forEach((bm) => {
       bm.ring.material.emissiveIntensity = 0.95;
@@ -1291,11 +1330,11 @@ export async function createPinball(container, opts = {}) {
       return;
     }
     const dir = Math.random() < 0.5 ? -1 : 1;
-    world.nudgeX = dir * 35 + (Math.random() - 0.5) * 20;
-    world.nudgeY = 34;
+    world.nudgeX = dir * 40 + (Math.random() - 0.5) * 22;
+    world.nudgeY = 38;
     state.balls.forEach((b) => {
-      b.vx += dir * 2.5 + (Math.random() - 0.5) * 3;
-      b.vy += 2.6;
+      b.vx += dir * 2.8 + (Math.random() - 0.5) * 3;
+      b.vy += 3;
     });
     setTimeout(() => {
       world.nudgeX = 0;
@@ -1413,7 +1452,7 @@ export async function createPinball(container, opts = {}) {
           if (b.x > L.laneX && b.y < L.domeY && b.speed < 4) {
             b.laneFor = (b.laneFor || 0) + FIXED;
             if (b.laneFor > 1.4) {
-              b.vy = 52;
+              b.vy = 58;
               b.vx = 0;
               b.laneFor = 0;
               sfx.launch();
@@ -1422,13 +1461,16 @@ export async function createPinball(container, opts = {}) {
             b.laneFor = 0;
           }
 
-          // Rescue a ball wedged somewhere with no energy
-          if (b.speed < 0.9) {
+          // Ball search: a wedged ball gets shaken loose toward open
+          // playfield, like a real machine hunting for a lost ball
+          if (b.speed < 1.1 && !(b.x > L.laneX && b.y < 4)) {
             b.stuckFor = (b.stuckFor || 0) + FIXED;
-            if (b.stuckFor > 3.4) {
-              b.vx += (Math.random() - 0.5) * 10;
-              b.vy += 7;
+            if (b.stuckFor > 2.2) {
+              b.vx += clamp((L.centerX - b.x) * 0.9, -6, 6) + (Math.random() - 0.5) * 4;
+              b.vy += b.y > 20 ? -5 : 6;
               b.stuckFor = 0;
+              startShake(0.4, 0);
+              sfx.wall();
             }
           } else {
             b.stuckFor = 0;
