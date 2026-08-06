@@ -5,9 +5,12 @@ on:
     branches: ["main"]
   workflow_dispatch:
 
-# Publishing pushes a branch, so this needs write access to contents.
+# contents: push the gh-pages branch; pages + id-token: the artifact
+# deployment path via the vendored patient action.
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 concurrency:
   group: "pages"
@@ -78,3 +81,33 @@ jobs:
             gh-pages
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Second delivery path: artifact deployment with a patient timeout.
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './dist'
+
+  deploy-patient:
+    # Artifact deployment through the vendored deploy-pages with the 10-minute
+    # ceiling raised (see .github/actions/deploy-pages-patient). On days when
+    # the Pages queue takes 10-25 minutes to process a deployment, the stock
+    # action cancels deployments that would have succeeded. This job may fail
+    # quickly if the Pages source is set to branch mode — the branch publish
+    # above covers that case; the two paths are independent and whichever
+    # lands first wins.
+    needs: build-and-publish
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout (for the vendored action)
+        uses: actions/checkout@v4
+
+      - name: Deploy to GitHub Pages (patient)
+        id: deployment
+        uses: ./.github/actions/deploy-pages-patient
+        with:
+          timeout: 2700000
+          error_count: 60
