@@ -48,6 +48,7 @@ jobs:
           cp -r src/styles dist/src/
           cp -r src/scripts dist/src/
           cp -r src/data dist/src/
+          cp -r src/games dist/src/
           
       - name: Setup Pages
         uses: actions/configure-pages@v4

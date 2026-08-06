@@ -1,0 +1,593 @@
+/* ==========================================================================
+   Pekkas Pokal — Spel: year grid, game stage, pinball HUD
+   ========================================================================== */
+
+/* ---------------------------------------------------------------- year grid */
+
+.game-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
+  gap: var(--sp-4);
+}
+
+.game-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-1);
+  padding: var(--sp-5);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  backdrop-filter: var(--card-blur);
+  -webkit-backdrop-filter: var(--card-blur);
+  text-align: left;
+  overflow: hidden;
+  transition: transform var(--t-med) var(--ease-out), border-color var(--t-med),
+    box-shadow var(--t-med);
+}
+
+.game-card.playable {
+  cursor: pointer;
+  border-color: color-mix(in srgb, var(--gold) 40%, var(--border));
+  box-shadow: var(--shadow-1), var(--glow-gold);
+}
+
+.game-card.playable::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 90% at 80% 0%, rgba(242, 193, 78, 0.16), transparent 60%);
+  pointer-events: none;
+}
+
+.game-card.playable:hover {
+  transform: translateY(-4px);
+}
+
+.game-card.playable:active {
+  transform: translateY(-1px) scale(0.99);
+}
+
+.game-card.soon {
+  opacity: 0.55;
+}
+
+.game-badge {
+  position: absolute;
+  top: var(--sp-4);
+  right: var(--sp-4);
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  background: linear-gradient(140deg, var(--gold), var(--gold-deep));
+  color: var(--accent-contrast);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.game-icon {
+  font-size: 1.9rem;
+  line-height: 1;
+  margin-bottom: var(--sp-2);
+}
+
+.game-year {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-sm);
+  letter-spacing: 0.1em;
+  color: var(--accent);
+}
+
+.game-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-lg);
+  line-height: 1.2;
+}
+
+.game-tagline {
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  color: var(--text-2);
+}
+
+.game-play {
+  margin-top: var(--sp-3);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--accent);
+  transition: transform var(--t-fast);
+}
+
+.game-card.playable:hover .game-play {
+  transform: translateX(3px);
+}
+
+/* --------------------------------------------------------------- game stage */
+
+body.game-open {
+  overflow: hidden;
+}
+
+.game-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: #05070f;
+  display: flex;
+  overscroll-behavior: none;
+}
+
+.game-stage[hidden] {
+  display: none;
+}
+
+.game-mount {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.game-close {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: 12px;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: #cfd6f5;
+  background: rgba(12, 16, 32, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(8px);
+  transition: color var(--t-fast), transform var(--t-fast);
+}
+
+.game-close:hover {
+  color: var(--gold);
+  transform: rotate(90deg);
+}
+
+.game-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-4);
+  background: #05070f;
+  color: #a7aecb;
+  font-size: var(--text-sm);
+  text-align: center;
+  padding: var(--sp-5);
+}
+
+.game-loading[hidden] {
+  display: none;
+}
+
+.game-spinner {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 3px solid rgba(242, 193, 78, 0.22);
+  border-top-color: #f2c14e;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ------------------------------------------------------------- pinball view */
+
+.pb-canvas {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.pb-canvas canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* The UI layer is click-through except for its own controls */
+.pb-ui {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  font-family: var(--font-body);
+  color: #eef1ff;
+}
+
+.pb-ui button {
+  pointer-events: auto;
+}
+
+/* ---- Top bar ---- */
+
+.pb-top {
+  position: absolute;
+  top: max(10px, env(safe-area-inset-top));
+  left: 12px;
+  right: 62px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+
+.pb-score {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(1.7rem, 7vw, 2.6rem);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  text-shadow: 0 0 22px rgba(242, 193, 78, 0.55);
+}
+
+.pb-hi {
+  margin-top: 2px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: rgba(190, 199, 233, 0.65);
+}
+
+.pb-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.pb-mult {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.15rem;
+  color: #f2c14e;
+  text-shadow: 0 0 16px rgba(242, 193, 78, 0.6);
+}
+
+.pb-balls {
+  display: flex;
+  gap: 5px;
+}
+
+.pb-ball-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+.pb-ball-dot.on {
+  background: linear-gradient(140deg, #fff, #b9c2e8);
+  box-shadow: 0 0 10px rgba(210, 220, 255, 0.75);
+}
+
+/* ---- P-O-K-A-L progress ---- */
+
+.pb-pokal {
+  position: absolute;
+  top: calc(max(10px, env(safe-area-inset-top)) + 62px);
+  left: 12px;
+  display: flex;
+  gap: 5px;
+}
+
+.pb-letter {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: rgba(190, 199, 233, 0.5);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all var(--t-med) var(--ease-spring);
+}
+
+.pb-letter.lit {
+  color: #241a05;
+  background: linear-gradient(140deg, #f2c14e, #d99a2b);
+  border-color: transparent;
+  box-shadow: 0 0 14px rgba(242, 193, 78, 0.7);
+  transform: translateY(-2px);
+}
+
+/* ---- Toast ---- */
+
+.pb-toast {
+  position: absolute;
+  left: 50%;
+  top: 26%;
+  transform: translate(-50%, -6px);
+  padding: 0.5rem 1.1rem;
+  border-radius: var(--r-pill);
+  background: rgba(10, 14, 28, 0.78);
+  border: 1px solid rgba(242, 193, 78, 0.34);
+  backdrop-filter: blur(8px);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity var(--t-med), transform var(--t-med) var(--ease-out);
+}
+
+.pb-toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.pb-toast.big {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  color: #f2c14e;
+  border-color: rgba(242, 193, 78, 0.7);
+  box-shadow: 0 0 34px rgba(242, 193, 78, 0.35);
+}
+
+/* ---- Overlay ---- */
+
+.pb-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-5);
+  background: rgba(5, 7, 15, 0.82);
+  backdrop-filter: blur(10px);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--t-med), visibility var(--t-med);
+}
+
+.pb-overlay.show {
+  opacity: 1;
+  visibility: visible;
+}
+
+.pb-panel {
+  max-width: 380px;
+  text-align: center;
+  color: #eef1ff;
+}
+
+.pb-panel h2 {
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 6vw, 2rem);
+  font-weight: 700;
+  background: linear-gradient(120deg, #f2c14e, #fff0c8 55%, #d99a2b);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.pb-panel p {
+  margin-top: var(--sp-3);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: #a7aecb;
+}
+
+.pb-scoreline {
+  margin-top: var(--sp-4);
+}
+
+.pb-scoreline span {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 2.4rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+
+.pb-scoreline small {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(190, 199, 233, 0.6);
+}
+
+.pb-btn {
+  margin-top: var(--sp-5);
+  padding: 0.8rem 2rem;
+  border-radius: var(--r-pill);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #241a05;
+  background: linear-gradient(140deg, #f2c14e, #d99a2b);
+  border: none;
+  box-shadow: 0 8px 26px rgba(242, 193, 78, 0.36);
+  transition: transform var(--t-fast) var(--ease-out), box-shadow var(--t-fast);
+}
+
+.pb-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(242, 193, 78, 0.46);
+}
+
+.pb-btn:active {
+  transform: scale(0.97);
+}
+
+/* ---- Plunger ---- */
+
+.pb-plunger {
+  position: absolute;
+  left: 50%;
+  bottom: calc(18px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(300px, 76vw);
+  text-align: center;
+  pointer-events: none;
+}
+
+.pb-plunger[hidden] {
+  display: none;
+}
+
+.pb-plunger-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(190, 199, 233, 0.8);
+  margin-bottom: 8px;
+  animation: pb-breathe 2s ease-in-out infinite;
+}
+
+@keyframes pb-breathe {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+.pb-power {
+  height: 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+
+.pb-power span {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #d99a2b, #f2c14e, #fff0c8);
+  box-shadow: 0 0 18px rgba(242, 193, 78, 0.7);
+}
+
+/* ---- Nudge + mute ---- */
+
+.pb-controls {
+  position: absolute;
+  left: 50%;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 15;
+}
+
+.pb-controls[hidden] {
+  display: none;
+}
+
+.pb-nudge {
+  padding: 0.5rem 1.5rem;
+  border-radius: var(--r-pill);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: rgba(220, 226, 250, 0.9);
+  background: rgba(12, 16, 32, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(8px);
+  transition: color var(--t-fast), border-color var(--t-fast), transform var(--t-fast);
+}
+
+.pb-nudge:active {
+  transform: scale(0.94);
+  color: #f2c14e;
+  border-color: rgba(242, 193, 78, 0.6);
+}
+
+.pb-mute {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: 60px;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  color: rgba(220, 226, 250, 0.85);
+  background: rgba(12, 16, 32, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+
+.pb-mute.off {
+  color: rgba(190, 199, 233, 0.4);
+}
+
+.pb-mute.off .pb-wave {
+  display: none;
+}
+
+/* ---- Landscape / desktop: keep the table portrait and centred ---- */
+
+@media (min-aspect-ratio: 1/1) {
+  .game-mount {
+    max-width: min(56vh, 100%);
+    margin: 0 auto;
+  }
+
+  .game-stage {
+    background:
+      radial-gradient(80% 60% at 50% 0%, rgba(124, 140, 248, 0.08), transparent 70%),
+      #05070f;
+  }
+}
+
+@media (max-width: 420px) {
+  .pb-letter {
+    width: 20px;
+    height: 20px;
+    font-size: 0.62rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pb-plunger-label {
+    animation: none;
+    opacity: 0.9;
+  }
+}
+
+/* Skill-shot band on the plunger meter */
+.pb-power {
+  position: relative;
+}
+
+.pb-skill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 68%;
+  width: 18%;
+  background: rgba(79, 209, 197, 0.5);
+  box-shadow: 0 0 12px rgba(79, 209, 197, 0.7);
+}
+
+.pb-power span {
+  position: relative;
+  z-index: 1;
+}

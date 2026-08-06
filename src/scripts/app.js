@@ -98,7 +98,8 @@
     achCategory: 'all',
     currentView: 'overview',
     modalChart: null,
-    lastFocus: null
+    lastFocus: null,
+    game: null
   };
 
   /* ======================================================================
@@ -1856,6 +1857,105 @@
   }
 
   /* ======================================================================
+     Rendering — Spel
+     ====================================================================== */
+
+  /**
+   * One game per year. Entries without a `module` render as coming soon —
+   * add one here as each year's game gets built.
+   */
+  const GAMES = [
+    {
+      year: 2025,
+      title: 'Pekkas Pokal Flipper',
+      competition: 'Flipper',
+      tagline: 'Ett fullstort flipperspel i 3D. Tre bollar, fem mål och en pokal.',
+      icon: '🎯',
+      module: 'src/games/pinball/index.js'
+    }
+  ];
+
+  function renderGames() {
+    const byYear = {};
+    GAMES.forEach((g) => (byYear[g.year] = g));
+
+    const cards = App.data.competitions
+      .filter((c) => !c.isCovid && c.participantCount > 0)
+      .map((comp) => {
+        const game = byYear[comp.year];
+        if (game) {
+          return `
+          <button class="game-card playable" data-game="${comp.year}">
+            <span class="game-badge">Spelbar</span>
+            <span class="game-icon">${game.icon}</span>
+            <span class="game-year">${comp.year}</span>
+            <span class="game-title">${esc(game.title)}</span>
+            <span class="game-tagline">${esc(game.tagline)}</span>
+            <span class="game-play">Spela nu →</span>
+          </button>`;
+        }
+        return `
+        <div class="game-card soon">
+          <span class="game-icon">🔒</span>
+          <span class="game-year">${comp.year}</span>
+          <span class="game-title">${esc(comp.name.trim())}</span>
+          <span class="game-tagline">Spelet för det här året är inte byggt än.</span>
+        </div>`;
+      })
+      .join('');
+
+    $('#game-grid').innerHTML = cards;
+
+    $('#game-grid').addEventListener('click', (e) => {
+      const card = e.target.closest('[data-game]');
+      if (card) launchGame(Number(card.getAttribute('data-game')));
+    });
+    $('#game-close').addEventListener('click', closeGame);
+  }
+
+  async function launchGame(year) {
+    const game = GAMES.find((g) => g.year === year);
+    if (!game || App.game) return;
+
+    const stage = $('#game-stage');
+    const loading = $('#game-loading');
+    stage.hidden = false;
+    loading.hidden = false;
+    document.body.classList.add('game-open');
+
+    try {
+      const url = new URL(game.module, document.baseURI).href;
+      const mod = await import(/* @vite-ignore */ url);
+      const create = mod.createPinball || mod.default;
+      App.game = await create($('#game-mount'), {
+        participants: App.data.participants
+          .filter((p) => App.stats.per[p.id].starts > 0)
+          .map((p) => p.name)
+      });
+      loading.hidden = true;
+    } catch (err) {
+      console.error('Game failed to load:', err);
+      $('#game-loading-text').textContent =
+        'Kunde inte ladda spelet. Kontrollera nätverket och försök igen.';
+      $('.game-spinner').style.display = 'none';
+    }
+  }
+
+  function closeGame() {
+    if (App.game) {
+      App.game.destroy();
+      App.game = null;
+    }
+    $('#game-mount').innerHTML = '';
+    $('#game-stage').hidden = true;
+    $('#game-loading').hidden = false;
+    const spinner = $('.game-spinner');
+    if (spinner) spinner.style.display = '';
+    $('#game-loading-text').textContent = 'Bygger bordet…';
+    document.body.classList.remove('game-open');
+  }
+
+  /* ======================================================================
      Modal — participant profiles & year details
      ====================================================================== */
 
@@ -2090,7 +2190,9 @@
       if (e.target === $('#modal')) closeModal();
     });
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeModal();
+      if (e.key !== 'Escape') return;
+      if (App.game) closeGame();
+      else closeModal();
     });
 
     // Delegated: any person link or year row anywhere in the app
@@ -2125,6 +2227,7 @@
 
     // Leaflet needs a size refresh when its container becomes visible
     if (id === 'overview' && App.map) setTimeout(() => App.map.invalidateSize(), 60);
+    if (id !== 'games' && App.game) closeGame();
 
     observeReveals();
   }
@@ -2149,7 +2252,7 @@
     window.addEventListener('resize', positionNavIndicator);
 
     const hash = location.hash.replace('#', '');
-    if (['overview', 'medals', 'history', 'achievements', 'stats'].includes(hash)) {
+    if (['overview', 'medals', 'history', 'achievements', 'stats', 'games'].includes(hash)) {
       App.currentView = hash;
     }
   }
@@ -2220,6 +2323,7 @@
       renderStatsView();
       renderH2HControls();
       renderElo();
+      renderGames();
       initMap();
 
       $('#theme-toggle').addEventListener('click', toggleTheme);
