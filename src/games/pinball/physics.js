@@ -47,6 +47,9 @@ export function segment(ax, ay, bx, by, opts = {}) {
     restitution: opts.restitution ?? 0.42,
     friction: opts.friction ?? 0.04,
     kick: opts.kick ?? 0,
+    // A sensor detects the ball passing through without touching it —
+    // used for orbit shots, inlane rollovers and other scoring switches.
+    sensor: opts.sensor ?? false,
     id: opts.id || null,
     onHit: opts.onHit || null,
     enabled: true
@@ -62,6 +65,7 @@ export function circle(cx, cy, radius, opts = {}) {
     restitution: opts.restitution ?? 0.5,
     friction: opts.friction ?? 0.02,
     kick: opts.kick ?? 0,
+    sensor: opts.sensor ?? false,
     id: opts.id || null,
     onHit: opts.onHit || null,
     enabled: true
@@ -257,18 +261,76 @@ export class World {
   }
 
   /**
-   * Advances the simulation. Splits dt into substeps sized so the ball can
-   * never move more than a fraction of its radius per step — without this a
-   * hard shot passes straight through a wall.
+   * Advances the simulation for one or more balls (multiball). Splits dt into
+   * substeps sized so the fastest ball can never move more than a fraction of
+   * its radius per step — without this a hard shot passes straight through a
+   * wall.
    */
-  step(ball, dt) {
-    const speed = Math.max(ball.speed, 1);
-    const steps = clamp(Math.ceil((speed * dt) / (ball.radius * 0.35)), 1, 24);
+  step(balls, dt) {
+    const list = Array.isArray(balls) ? balls : [balls];
+    let top = 1;
+    let radius = 0.6;
+    for (const b of list) {
+      if (b.live && b.speed > top) top = b.speed;
+      ({ radius } = b);
+    }
+    const steps = clamp(Math.ceil((top * dt) / (radius * 0.35)), 1, 24);
     const sdt = dt / steps;
 
     for (let i = 0; i < steps; i++) {
       this.flippers.forEach((f) => f.update(sdt));
-      if (ball.live) this.integrate(ball, sdt);
+      for (const b of list) {
+        if (b.live) this.integrate(b, sdt);
+      }
+      if (list.length > 1) this.collideBalls(list);
+    }
+  }
+
+  /**
+   * Elastic equal-mass collision between live balls — what makes multiball
+   * feel like metal instead of ghosts passing through each other.
+   */
+  collideBalls(list) {
+    for (let i = 0; i < list.length; i++) {
+      const a = list[i];
+      if (!a.live) continue;
+      for (let j = i + 1; j < list.length; j++) {
+        const b = list[j];
+        if (!b.live) continue;
+
+        let dx = b.x - a.x;
+        let dy = b.y - a.y;
+        let dist = len(dx, dy);
+        const minDist = a.radius + b.radius;
+        if (dist >= minDist) continue;
+
+        if (dist < 1e-6) {
+          dx = 1;
+          dy = 0;
+          dist = 1;
+        }
+        const nx = dx / dist;
+        const ny = dy / dist;
+
+        // Separate evenly
+        const push = (minDist - dist) / 2;
+        a.x -= nx * push;
+        a.y -= ny * push;
+        b.x += nx * push;
+        b.y += ny * push;
+
+        // Exchange the normal components (equal mass), slightly inelastic
+        const van = a.vx * nx + a.vy * ny;
+        const vbn = b.vx * nx + b.vy * ny;
+        if (van - vbn > 0) {
+          const e = 0.92;
+          const impulse = ((van - vbn) * (1 + e)) / 2;
+          a.vx -= nx * impulse;
+          a.vy -= ny * impulse;
+          b.vx += nx * impulse;
+          b.vy += ny * impulse;
+        }
+      }
     }
   }
 
@@ -329,6 +391,12 @@ export class World {
     let dist = len(dx, dy);
     const minDist = ball.radius + c.radius;
     if (dist >= minDist) return false;
+
+    // Sensors only observe — no bounce, no depenetration
+    if (c.sensor) {
+      if (c.onHit) c.onHit(ball.speed, ball);
+      return false;
+    }
 
     if (dist < 1e-6) {
       dx = 0;

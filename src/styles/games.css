@@ -620,3 +620,115 @@ body.game-open {
     animation: none;
   }
 }
+
+/* ---- Grenar (mode ladder) chips ---- */
+
+.pb-grenar {
+  position: absolute;
+  top: calc(max(10px, env(safe-area-inset-top)) + 92px);
+  left: 12px;
+  display: flex;
+  gap: 4px;
+}
+
+.pb-gren {
+  display: grid;
+  place-items: center;
+  min-width: 24px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 5px;
+  font-size: 0.58rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: rgba(190, 199, 233, 0.45);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  transition: all var(--t-med) var(--ease-spring);
+}
+
+.pb-gren.won {
+  color: #241a05;
+  background: linear-gradient(140deg, #f2c14e, #d99a2b);
+  border-color: transparent;
+  box-shadow: 0 0 10px rgba(242, 193, 78, 0.6);
+}
+
+.pb-gren.active {
+  color: #dfe5ff;
+  border-color: rgba(124, 140, 248, 0.8);
+  box-shadow: 0 0 12px rgba(124, 140, 248, 0.55);
+  animation: pb-gren-pulse 1s ease-in-out infinite;
+}
+
+@keyframes pb-gren-pulse {
+  50% { transform: translateY(-1px); }
+}
+
+/* ---- Active mode banner ---- */
+
+.pb-mode {
+  position: absolute;
+  top: calc(max(10px, env(safe-area-inset-top)) + 118px);
+  left: 12px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0.35rem 0.8rem;
+  border-radius: var(--r-pill);
+  background: rgba(10, 14, 28, 0.72);
+  border: 1px solid rgba(124, 140, 248, 0.5);
+  backdrop-filter: blur(8px);
+}
+
+.pb-mode[hidden] {
+  display: none;
+}
+
+.pb-mode-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #aeb9ff;
+}
+
+.pb-mode-task {
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: rgba(210, 217, 245, 0.8);
+}
+
+.pb-mode-time {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+
+.pb-mode-time.urgent {
+  color: #f26d8d;
+  animation: pb-time-blink 0.5s steps(2) infinite;
+}
+
+@keyframes pb-time-blink {
+  50% { opacity: 0.4; }
+}
+
+/* ---- Substatus (locks, bonus, hints) ---- */
+
+.pb-substatus {
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: rgba(242, 193, 78, 0.85);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* ---- Extra ball dot ---- */
+
+.pb-ball-dot.extra {
+  background: linear-gradient(140deg, #f2c14e, #d99a2b);
+  box-shadow: 0 0 10px rgba(242, 193, 78, 0.8);
+}

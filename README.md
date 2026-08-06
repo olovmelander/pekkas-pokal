@@ -97,8 +97,20 @@ Att lägga till ett nytt års spel:
 | Avfyrare | Håll för kraft, släpp för att skjuta | Mellanslag |
 | Nudga | Knappen NUDGA | N |
 
-Släpp avfyraren när mätaren står i det turkosa fältet för en **skill shot**.
+Släpp avfyraren när mätaren står i det turkosa fältet för en **skill shot** —
+och skjut vänster orbit inom tre sekunder för en **super skill shot** (15 000).
 Fyra nudgar för snabbt ger TILT och dödar flipprarna för den bollen.
+
+**Regler (à la Medieval Madness)**
+
+| Moment | Så funkar det |
+| --- | --- |
+| **Grenar** | Fäll hela POKAL-banken → skjut vänster orbit för att starta en gren på tid: Gokart '12, Femkamp '13, Pingis '19, Skytte '22 (träffa målen i ordning!), Fiske '24. Klarad gren = 15 000 och en tänd årsbricka. |
+| **FINALEN** | Klara alla fem grenar → wizard mode: 60 sekunder multiball där **allt räknas ×5**. |
+| **Multiball** | Bumperträffar laddar låset — när det lyser låser pokalen bollar. Två låsta bollar startar multiball med jackpot (25 000) i pokalen; orbits tänder om jackpotten. |
+| **Kombo** | Träffar inom 3,5 sekunder kedjar: 1 000 × 2 per steg, upp till ×16. |
+| **Bonus** | Inbanorna höjer bonusmultiplikatorn (upp till ×6) som multiplicerar slutbonusen per boll. |
+| **Extraboll** | Två klarade grenar ger en extra boll. |
 
 ---
 
