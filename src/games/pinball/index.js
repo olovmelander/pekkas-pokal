@@ -584,6 +584,35 @@ export async function createPinball(container, opts = {}) {
     }
   }
 
+  /* ---- Shake: physical jolt of the 3D table plus a screen shake ---- */
+  const shake = { t: 99, dur: 0, mag: 0, dirX: 0 };
+
+  function startShake(mag, dirX) {
+    shake.t = 0;
+    shake.dur = 0.42;
+    shake.mag = mag;
+    shake.dirX = dirX;
+    // CSS shake on the whole stage (canvas + HUD); restart if mid-animation
+    container.classList.remove('pb-shake');
+    void container.offsetWidth;
+    container.classList.add('pb-shake');
+    if (navigator.vibrate) navigator.vibrate(mag > 1 ? [40, 40, 60] : 25);
+  }
+
+  function updateShake(dt) {
+    if (shake.t >= shake.dur) {
+      tableGroup.position.set(0, 0, 0);
+      tableGroup.rotation.z = 0;
+      return;
+    }
+    shake.t += dt;
+    const damp = Math.max(0, 1 - shake.t / shake.dur) ** 1.6;
+    tableGroup.position.x =
+      (Math.sin(shake.t * 56) * 0.24 + shake.dirX * 0.3) * damp * shake.mag;
+    tableGroup.position.z = Math.sin(shake.t * 47 + 1.7) * 0.16 * damp * shake.mag;
+    tableGroup.rotation.z = Math.sin(shake.t * 50) * 0.008 * damp * shake.mag;
+  }
+
   function doNudge() {
     if (state.phase !== 'play' || state.tilted) return;
     const now = performance.now();
@@ -594,18 +623,21 @@ export async function createPinball(container, opts = {}) {
       state.tilted = true;
       flipL.pressed = false;
       flipR.pressed = false;
+      startShake(2.2, 0);
       toast('TILT — flipprarna är döda', true);
       sfx.drain();
       return;
     }
-    world.nudgeX = (Math.random() - 0.5) * 70;
+    const dir = Math.random() < 0.5 ? -1 : 1;
+    world.nudgeX = dir * 35 + (Math.random() - 0.5) * 20;
     world.nudgeY = 34;
-    ball.vx += (Math.random() - 0.5) * 5;
+    ball.vx += dir * 2.5 + (Math.random() - 0.5) * 3;
     ball.vy += 2.6;
     setTimeout(() => {
       world.nudgeX = 0;
       world.nudgeY = 0;
     }, 90);
+    startShake(1, dir);
     sfx.wall();
     toast('Nudge');
   }
@@ -742,8 +774,15 @@ export async function createPinball(container, opts = {}) {
     refs.ball.visible = ball.live;
 
     // Flippers
-    refs.flippers.left.rotation.y = -flipL.angle;
-    refs.flippers.right.rotation.y = -flipR.angle;
+    // rotation.y = +angle, NOT -angle: the playfield→world mapping (y → −z)
+    // is a reflection, and a positive Y-rotation already sweeps +x toward −z,
+    // which is exactly playfield-counterclockwise. Negating the angle mirrors
+    // the visual flipper against the physics one — it looks like it swings
+    // down while the real (invisible) flipper swings up.
+    refs.flippers.left.rotation.y = flipL.angle;
+    refs.flippers.right.rotation.y = flipR.angle;
+
+    updateShake(dtRaw);
 
     // Plunger pull-back
     if (refs.plunger) {
@@ -817,6 +856,7 @@ export async function createPinball(container, opts = {}) {
     window.removeEventListener('keydown', onKeyDown);
     window.removeEventListener('keyup', onKeyUp);
     clearTimeout(state.lastToast);
+    container.classList.remove('pb-shake');
 
     scene.traverse((o) => {
       if (o.geometry) o.geometry.dispose();
