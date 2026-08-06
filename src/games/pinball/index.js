@@ -201,7 +201,13 @@ export async function createPinball(container, opts = {}) {
       /* fonts are cosmetic */
     }
   }
-  const { canvas: pfCanvas } = createPlayfieldCanvas(participants);
+  const logo = await new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = new URL('logo-pekkas-pokal.png', document.baseURI).toString();
+  });
+  const { canvas: pfCanvas } = createPlayfieldCanvas(participants, logo);
   const pfTexture = new THREE.CanvasTexture(pfCanvas);
   pfTexture.colorSpace = THREE.SRGBColorSpace;
   pfTexture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
@@ -302,10 +308,10 @@ export async function createPinball(container, opts = {}) {
 
   /* ---- Effects ---- */
   const flashes = [];
-  function flash(obj, light, strength = 3) {
+  function flash(obj, light, strength = 3, base = 0) {
     if (light) {
       light.intensity = strength;
-      flashes.push({ light, t: 0 });
+      flashes.push({ light, base, t: 0 });
     }
     if (obj) obj.scale.multiplyScalar(1.13);
   }
@@ -318,10 +324,11 @@ export async function createPinball(container, opts = {}) {
   const hooks = {
     onBumper(i, v) {
       if (v < 1) return;
-      addScore(120);
-      sfx.bumper();
       const b = refs.bumpers[i];
-      flash(b.trophy, b.light, 4.2);
+      addScore(b.isTrophy ? 400 : 120);
+      sfx.bumper();
+      flash(b.trophy, b.light, b.isTrophy ? 6 : 4.2, b.base);
+      if (b.isTrophy) toast('Pokalen +400');
     },
     onSling(side, v) {
       if (v < 1) return;
@@ -359,7 +366,7 @@ export async function createPinball(container, opts = {}) {
       const lit = state.banksDone > 0;
       addScore(lit ? 25000 : 2500);
       sfx.jackpot();
-      flash(refs.jackpot.trophy, refs.jackpot.light, 6);
+      flash(refs.jackpot.trophy, refs.jackpot.light, 5, 0.85);
       toast(lit ? 'JACKPOT!' : 'Pokalen träffad', lit);
     },
     onWall(v) {
@@ -756,8 +763,8 @@ export async function createPinball(container, opts = {}) {
     const t = now / 1000;
     refs.jackpot.trophy.rotation.y = t * 0.9;
     refs.jackpot.halo.scale.setScalar(1 + Math.sin(t * 2.4) * 0.06);
-    refs.bumpers.forEach((b, i) => {
-      b.trophy.rotation.y = t * 1.4 + i;
+    refs.bumpers.forEach((b) => {
+      if (b.isTrophy) b.trophy.rotation.y = t * 1.1;
       b.group.scale.lerp(new THREE.Vector3(1, 1, 1), Math.min(1, dtRaw * 9));
     });
 
@@ -765,8 +772,8 @@ export async function createPinball(container, opts = {}) {
       const f = flashes[i];
       f.t += dtRaw;
       if (f.light) {
-        f.light.intensity = Math.max(0, f.light.intensity - dtRaw * 14);
-        if (f.light.intensity <= 0.01) flashes.splice(i, 1);
+        f.light.intensity = Math.max(f.base || 0, f.light.intensity - dtRaw * 14);
+        if (f.light.intensity <= (f.base || 0) + 0.01) flashes.splice(i, 1);
       } else if (f.mat) {
         f.mat.emissiveIntensity = Math.max(f.base, f.mat.emissiveIntensity - dtRaw * 16);
         if (f.mat.emissiveIntensity <= f.base + 0.01) flashes.splice(i, 1);

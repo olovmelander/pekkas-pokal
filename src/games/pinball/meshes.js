@@ -48,6 +48,32 @@ export function trophyGeometry(THREE) {
   return new THREE.LatheGeometry(profile, 40);
 }
 
+/**
+ * A full trophy: cup, handles and plinth. Handles are what make it read as a
+ * pokal rather than a vase at a glance.
+ */
+export function buildTrophy(THREE, material, scale = 1) {
+  const g = new THREE.Group();
+
+  const cup = new THREE.Mesh(trophyGeometry(THREE), material);
+  cup.castShadow = true;
+  g.add(cup);
+
+  // A torus already lies in XY, which is the plane a trophy handle sits in.
+  // Each arc spans 1.3π, rotated so its opening faces the cup.
+  const handleGeo = new THREE.TorusGeometry(0.3, 0.07, 10, 24, Math.PI * 1.3);
+  [-1, 1].forEach((side) => {
+    const handle = new THREE.Mesh(handleGeo, material);
+    handle.position.set(side * 0.52, 0.64, 0);
+    handle.rotation.z = side > 0 ? -Math.PI * 0.65 : Math.PI * 0.35;
+    handle.castShadow = true;
+    g.add(handle);
+  });
+
+  g.scale.setScalar(scale);
+  return g;
+}
+
 /* -------------------------------------------------------------- materials */
 
 export function createMaterials(THREE, playfieldTexture) {
@@ -198,7 +224,6 @@ export function buildTable(THREE, mergeGeometries, materials) {
   });
 
   /* ---- Pop bumpers ---- */
-  const trophyGeo = trophyGeometry(THREE);
   L.bumpers.forEach((b) => {
     const g = new THREE.Group();
     g.position.set(b.x, 0, -b.y);
@@ -227,17 +252,37 @@ export function buildTable(THREE, mergeGeometries, materials) {
     cap.castShadow = true;
     g.add(cap);
 
-    const trophy = new THREE.Mesh(trophyGeo, materials.goldGlow);
-    trophy.scale.setScalar(0.78);
-    trophy.position.y = 0.95;
-    g.add(trophy);
+    let trophy = null;
+    if (b.trophy) {
+      // The centre bumper is a proper golden pokal on a plinth
+      const plinth = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.52, 0.66, 0.24, 22),
+        materials.rubber
+      );
+      plinth.position.y = 0.99;
+      plinth.castShadow = true;
+      g.add(plinth);
 
-    const light = new THREE.PointLight(0xf2c14e, 0, 7, 2);
-    light.position.y = 1.6;
+      trophy = buildTrophy(THREE, materials.gold, 1.5);
+      trophy.position.y = 1.06;
+      g.add(trophy);
+    } else {
+      const dome = new THREE.Mesh(
+        new THREE.SphereGeometry(L.bumperR * 0.6, 22, 14, 0, Math.PI * 2, 0, Math.PI / 2),
+        materials.goldGlow
+      );
+      dome.position.y = 0.94;
+      dome.castShadow = true;
+      g.add(dome);
+      trophy = dome;
+    }
+
+    const light = new THREE.PointLight(0xf2c14e, b.trophy ? 0.55 : 0, b.trophy ? 9 : 7, 2);
+    light.position.y = 1.9;
     g.add(light);
 
     group.add(g);
-    refs.bumpers.push({ group: g, ring, trophy, light, base: 0 });
+    refs.bumpers.push({ group: g, ring, trophy, light, base: b.trophy ? 0.55 : 0, isTrophy: !!b.trophy });
   });
 
   /* ---- Drop targets ---- */
@@ -267,10 +312,8 @@ export function buildTable(THREE, mergeGeometries, materials) {
     base.position.y = 0.21;
     g.add(base);
 
-    const trophy = new THREE.Mesh(trophyGeo, materials.goldGlow);
-    trophy.scale.setScalar(1.5);
-    trophy.position.y = 0.4;
-    trophy.castShadow = true;
+    const trophy = buildTrophy(THREE, materials.gold, 1.85);
+    trophy.position.y = 0.42;
     g.add(trophy);
 
     const halo = new THREE.Mesh(
@@ -281,8 +324,8 @@ export function buildTable(THREE, mergeGeometries, materials) {
     halo.position.y = 0.12;
     g.add(halo);
 
-    const light = new THREE.PointLight(0xf2c14e, 1.6, 12, 2);
-    light.position.y = 2.2;
+    const light = new THREE.PointLight(0xf2c14e, 0.85, 12, 2);
+    light.position.y = 2.4;
     g.add(light);
 
     group.add(g);
