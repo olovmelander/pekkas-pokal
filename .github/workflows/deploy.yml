@@ -5,36 +5,35 @@ on:
     branches: ["main"]
   workflow_dispatch:
 
+# Publishing pushes a branch, so this needs write access to contents.
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: "pages"
   cancel-in-progress: false
 
 jobs:
-  build:
+  build-and-publish:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
-          
+
       - name: Install dependencies
         run: npm ci
-        
+
       - name: Build project
         run: npm run build
         env:
           NODE_ENV: production
-          
+
       - name: Copy CSV file to dist
         run: |
           cp competition-data.csv dist/competition-data.csv
@@ -49,27 +48,33 @@ jobs:
           cp -r src/scripts dist/src/
           cp -r src/data dist/src/
           cp -r src/games dist/src/
-          
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
-        
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: './dist'
-          
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-        with:
-          # Default is 10 minutes. Deployments have sat queued longer than that,
-          # and the action cancels them when it gives up.
-          timeout: 1800000
-          error_count: 20
+
+      - name: Verify build output
+        run: |
+          test -f dist/index.html
+          test -f dist/competition-data.csv
+          test -f dist/src/games/pinball/index.js
+          test -f dist/logo-pekkas-pokal.png
+          echo "dist: $(find dist -type f | wc -l) files, $(du -sh dist | cut -f1)"
+
+      # Publish by pushing the gh-pages branch rather than using
+      # actions/deploy-pages. That action waits for the Pages queue to pick the
+      # deployment up and hard-caps its wait at 10 minutes (MAX_TIMEOUT =
+      # 600000 in its source, and the input is clamped to it). When the queue is
+      # slower than that — which it has been — the action cancels a deployment
+      # that had not actually failed. Pushing a branch hands off to Pages
+      # asynchronously, so a slow queue delays the site instead of failing here.
+      - name: Publish to gh-pages branch
+        run: |
+          cd dist
+          touch .nojekyll
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -qm "Deploy ${GITHUB_SHA} from ${GITHUB_REF_NAME}"
+          git push -f \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            gh-pages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
