@@ -28,7 +28,7 @@ export const L = {
   domeInnerR: 6.6,
   // The left wall flares out below the dome to make room for the ramp lane
   // beside the left orbit.
-  flareX: 9.7,
+  flareX: 10.0,
 
   // Shooter lane
   laneX: 6.6,
@@ -43,7 +43,10 @@ export const L = {
 
   // Flippers
   flipperY: 7,
-  flipperSpread: 3.7,
+  // Spread sets the centre drain gap. With the 0.46 flipper radius the tips
+  // must stay far enough apart that a ball falls cleanly between them
+  // instead of perching on both: 2.44 apart, 1.52 clear, ball is 1.08.
+  flipperSpread: 3.95,
   flipperLength: 3.15,
   flipperRest: -30 * D,
   flipperSwing: 62 * D,
@@ -64,7 +67,7 @@ const mirrorX = mirrorXRaw;
 L.bumpers = [
   { x: -4.4, y: 23.8 },
   { x: 2.0, y: 23.8 },
-  { x: -6.3, y: 25.2 }
+  { x: -5.9, y: 25.6 }
 ];
 
 /**
@@ -124,19 +127,19 @@ L.lockSlots = [
  */
 L.ramps = {
   left: {
-    capture: [-7.6, 22.8, -6.25, 22.8],
+    capture: [-7.6, 18.0, -5.95, 18.0],
     minVy: 5.0,
     exit: { x: 3.73, y: 12.2, vx: -1.2, vy: -7 },
     path: [
-      [-6.9, 22.8, 0.5],
-      [-6.7, 26.0, 1.9],
-      [-5.6, 29.5, 3.1],
-      [-3.2, 32.0, 3.7],
-      [-0.5, 32.8, 3.9],
-      [2.2, 31.0, 3.4],
-      [4.3, 26.5, 2.5],
-      [4.9, 20.0, 1.6],
-      [4.4, 14.5, 0.9],
+      [-6.75, 18.0, 0.4],
+      [-7.15, 22.2, 1.5],
+      [-6.5, 26.6, 2.6],
+      [-4.5, 30.4, 3.4],
+      [-1.5, 32.5, 3.9],
+      [1.6, 31.7, 3.7],
+      [3.9, 27.8, 2.9],
+      [4.9, 21.5, 1.9],
+      [4.6, 15.5, 1.0],
       [3.73, 12.4, 0.55]
     ]
   },
@@ -181,15 +184,16 @@ L.rightWall = [
   [mirrorX(-3.3), -1.4]
 ];
 
-// Divider between the left orbit (outside) and the left ramp lane (inside)
+/**
+ * Left lane divider: separates the left ORBIT (outside, hugging the wall)
+ * from the open playfield inside. There is deliberately no second wall — the
+ * left ramp is entered through a wide open mouth in front of the pop nest,
+ * the way Medieval Madness' left ramp is. The old caged ramp lane left only
+ * 0.13 units of clearance around the ball and jammed.
+ */
 L.leftDivider = [
-  [-7.75, 14.8],
-  [-7.75, 23.8]
-];
-// Inner wall of the ramp lane, keeping it clear of the bumper area
-L.leftRampInner = [
-  [-6.1, 18.6],
-  [-6.1, 22.8]
+  [-7.9, 15.2],
+  [-7.9, 23.5]
 ];
 
 /**
@@ -200,7 +204,7 @@ L.leftRampInner = [
  * the wire, because a resting ball no longer matches the speed filter.
  */
 L.leftReturnGate = [
-  [-9.35, 14.4],
+  [-9.65, 14.4],
   [-8.5, 13.4],
   [-7.4, 12.85],
   [-6.6, 12.5]
@@ -219,9 +223,14 @@ L.rightReturnGate = [
  */
 L.leftRail = [
   [-7.08, 12.55],
-  [-7.08, 8.7],
-  [-6.5, 7.9],
-  [-5.35, 7.55]
+  [-7.08, 8.9],
+  [-6.2, 8.45],
+  // The rail ends flush beside the flipper pivot, slightly BELOW it, so the
+  // flipper's own cap stands proud of the rail. An exposed rail cap is a
+  // perch — a ball balancing on one touches no moving surface, so flipping
+  // does nothing and the table feels dead. Ending here means every ball that
+  // reaches the heel is sitting on the flipper itself.
+  [L.centerX - L.flipperSpread - 0.05, L.flipperY + 0.05]
 ];
 L.rightRail = L.leftRail.map(([x, y]) => [mirrorX(x), y]);
 
@@ -245,12 +254,30 @@ L.posts = [
   { x: -2.75, y: 17.9, r: 0.28 },
   { x: 1.25, y: 17.9, r: 0.28 },
   { x: 3.45, y: 14.6, r: 0.28 },
-  { x: -7.75, y: 24.05, r: 0.3 }
+  { x: -5.4, y: 19.6, r: 0.28 }
+];
+
+/**
+ * Spinner in the left orbit. A ball passing through spins the blade; each
+ * revolution scores. Iconic on Williams tables and the most satisfying
+ * sound on any playfield.
+ */
+L.spinner = { x: -8.95, y: 21.0, half: 0.82 };
+
+/**
+ * Trolls: two pop-up beasts that rise out of the castle corridor. While up
+ * they block the castle shot and can be bashed down for points — the signature
+ * Medieval Madness toy.
+ */
+L.trolls = [
+  { x: -3.15, y: 21.4, r: 0.62 },
+  { x: 0.75, y: 21.4, r: 0.62 }
 ];
 
 // Scoring switches: invisible sensors the ball rolls through.
 L.sensors = {
-  leftOrbit: [-9.35, 18, -8.0, 18],
+  leftOrbit: [-9.85, 18, -8.05, 18],
+  spinner: [L.spinner.x - L.spinner.half, L.spinner.y, L.spinner.x + L.spinner.half, L.spinner.y],
   rightOrbit: [4.6, 27.2, 6.5, 27.2],
   leftRamp: L.ramps.left.capture,
   rightRamp: L.ramps.right.capture,
@@ -290,9 +317,8 @@ export function buildColliders(world, hooks = {}) {
     segment(L.laneX, L.laneBottomY, L.outerX, L.laneBottomY, { ...wallOpts, restitution: 0.15 })
   );
 
-  // Orbit/ramp divider and ramp lane inner wall
+  // Orbit divider
   world.add(chain(L.leftDivider, railOpts));
-  world.add(chain(L.leftRampInner, railOpts));
 
   // Inlane/outlane guide rails (the hook returns)
   world.add(chain(L.leftRail, railOpts));
@@ -372,6 +398,19 @@ export function buildColliders(world, hooks = {}) {
     })
   );
 
+  // Trolls — start retracted below the playfield
+  refs.trolls = L.trolls.map((t, i) => {
+    const c = circle(t.x, t.y, t.r, {
+      restitution: 0.5,
+      kick: 6,
+      id: `troll${i}`,
+      onHit: (v, b) => hooks.onTroll && hooks.onTroll(i, v, b)
+    });
+    c.enabled = false;
+    world.add(c);
+    return c;
+  });
+
   const jack = circle(L.jackpot.x, L.jackpot.y, L.jackpot.r, {
     restitution: 0.55,
     kick: 8,
@@ -404,7 +443,7 @@ export function buildColliders(world, hooks = {}) {
   const rp = L.centerX + L.flipperSpread;
   refs.flippers.left = world.addFlipper(
     new Flipper(lp, L.flipperY, L.flipperLength, L.flipperRest, L.flipperRest + L.flipperSwing, {
-      radius: 0.4,
+      radius: 0.46,
       onHit: (v) => hooks.onFlipper && hooks.onFlipper('left', v)
     })
   );
@@ -416,7 +455,7 @@ export function buildColliders(world, hooks = {}) {
       Math.PI - L.flipperRest,
       Math.PI - L.flipperRest - L.flipperSwing,
       {
-        radius: 0.4,
+        radius: 0.46,
         onHit: (v) => hooks.onFlipper && hooks.onFlipper('right', v)
       }
     )
@@ -498,6 +537,25 @@ export function createPlayfieldCanvas(participants = [], logo = null) {
   g.shadowBlur = 0;
   g.letterSpacing = '0px';
 
+  /* ---- Troll pits in the corridor ---- */
+  L.trolls.forEach((tr) => {
+    g.save();
+    g.strokeStyle = 'rgba(111,155,90,.55)';
+    g.lineWidth = 4;
+    g.setLineDash([9, 7]);
+    g.beginPath();
+    g.ellipse(toU(tr.x), toV(tr.y), unitsX(tr.r * 1.5), unitsY(tr.r * 1.5), 0, 0, Math.PI * 2);
+    g.stroke();
+    g.setLineDash([]);
+    g.restore();
+  });
+  g.fillStyle = 'rgba(111,155,90,.5)';
+  g.font = '700 17px Inter, sans-serif';
+  g.letterSpacing = '4px';
+  g.fillText('TROLL', toU(L.trolls[0].x), toV(L.trolls[0].y - 1.35));
+  g.fillText('TROLL', toU(L.trolls[1].x), toV(L.trolls[1].y - 1.35));
+  g.letterSpacing = '0px';
+
   /* ---- Castle corridor arrows ---- */
   g.fillStyle = 'rgba(124,140,248,.35)';
   for (let i = 0; i < 3; i++) {
@@ -532,19 +590,31 @@ export function createPlayfieldCanvas(participants = [], logo = null) {
     g.fill();
   });
   g.save();
-  g.translate(toU(-8.65), toV(19.5));
+  g.translate(toU(-8.95), toV(17.0));
   g.rotate(-Math.PI / 2);
   g.fillStyle = 'rgba(124,140,248,.5)';
   g.font = '700 20px Inter, sans-serif';
   g.letterSpacing = '6px';
-  g.fillText('ORBIT', 0, 0);
+  g.fillText('ORBIT · SNURRA', 0, 0);
+  g.restore();
+
+  // Ramp mouth: a wide gold funnel painted on the playfield
+  g.save();
+  g.strokeStyle = 'rgba(242,193,78,.5)';
+  g.lineWidth = 5;
+  g.beginPath();
+  g.moveTo(toU(-7.55), toV(13.4));
+  g.lineTo(toU(-7.2), toV(18.4));
+  g.moveTo(toU(-5.4), toV(13.8));
+  g.lineTo(toU(-6.15), toV(18.4));
+  g.stroke();
   g.restore();
   g.save();
-  g.translate(toU(-6.55), toV(19.9));
+  g.translate(toU(-6.6), toV(16.2));
   g.rotate(-Math.PI / 2);
-  g.fillStyle = 'rgba(242,193,78,.55)';
-  g.font = '700 20px Inter, sans-serif';
-  g.letterSpacing = '6px';
+  g.fillStyle = 'rgba(242,193,78,.62)';
+  g.font = '700 22px Inter, sans-serif';
+  g.letterSpacing = '7px';
   g.fillText('RAMP', 0, 0);
   g.restore();
   g.save();

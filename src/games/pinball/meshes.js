@@ -138,6 +138,28 @@ export function createMaterials(THREE, playfieldTexture) {
       emissive: 0x7c8cf8,
       emissiveIntensity: 0.8
     }),
+    troll: new THREE.MeshStandardMaterial({
+      color: 0x6f9b5a,
+      roughness: 0.72,
+      metalness: 0.08,
+      envMapIntensity: 0.3
+    }),
+    trollEye: new THREE.MeshStandardMaterial({
+      color: 0xffd166,
+      roughness: 0.3,
+      metalness: 0.2,
+      emissive: 0xffb703,
+      emissiveIntensity: 1.4
+    }),
+    insert: new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.35,
+      metalness: 0.1,
+      emissive: 0xffffff,
+      emissiveIntensity: 0.12,
+      transparent: true,
+      opacity: 0.92
+    }),
     rubber: new THREE.MeshStandardMaterial({
       color: 0x10152a,
       roughness: 0.8,
@@ -374,7 +396,6 @@ export function buildTable(THREE, mergeGeometries, materials) {
 
   // Lane dividers and guide rails, slimmer and lower than the outer walls
   pushChain(L.leftDivider, 0.22, railShapes);
-  pushChain(L.leftRampInner, 0.22, railShapes);
   pushChain(L.leftRail, 0.22, railShapes);
   pushChain(L.rightRail, 0.22, railShapes);
   // One-way return gates read as thin wires
@@ -580,9 +601,111 @@ export function buildTable(THREE, mergeGeometries, materials) {
     group.add(trim);
   }
 
+  /* ---- Shot inserts: the lit arrows that tell you what is on ---- */
+  {
+    const arrow = new THREE.Shape();
+    arrow.moveTo(-0.42, -0.5);
+    arrow.lineTo(0.42, -0.5);
+    arrow.lineTo(0.42, 0.16);
+    arrow.lineTo(0.72, 0.16);
+    arrow.lineTo(0, 0.86);
+    arrow.lineTo(-0.72, 0.16);
+    arrow.lineTo(-0.42, 0.16);
+    arrow.closePath();
+    const geo = flatten(new THREE.ExtrudeGeometry(arrow, { depth: 0.07, bevelEnabled: false }));
+
+    const SPOTS = [
+      { id: 'leftOrbit', x: -8.95, y: 15.4, a: 0, color: 0x7c8cf8 },
+      { id: 'leftRamp', x: -6.75, y: 14.4, a: 0.18, color: 0xf2c14e },
+      { id: 'castle', x: L.centerX, y: 19.4, a: 0, color: 0x7c8cf8 },
+      { id: 'rightRamp', x: 5.5, y: 15.0, a: -0.18, color: 0xf2c14e },
+      { id: 'trolls', x: L.centerX, y: 22.6, a: 0, color: 0x6f9b5a }
+    ];
+    refs.inserts = {};
+    SPOTS.forEach((s) => {
+      const mat = materials.insert.clone();
+      mat.color = new THREE.Color(s.color);
+      mat.emissive = new THREE.Color(s.color);
+      mat.emissiveIntensity = 0.12;
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(s.x, 0.035, -s.y);
+      mesh.rotation.y = s.a;
+      group.add(mesh);
+
+      const light = new THREE.PointLight(s.color, 0, 4.5, 2);
+      light.position.set(s.x, 0.8, -s.y);
+      group.add(light);
+
+      refs.inserts[s.id] = { mesh, mat, light };
+    });
+  }
+
+  /* ---- Spinner: a bladed disc swinging on a post across the orbit ---- */
+  {
+    const g = new THREE.Group();
+    g.position.set(L.spinner.x, 0, -L.spinner.y);
+    [-1, 1].forEach((side) => {
+      const post = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.09, 0.09, 1.9, 10),
+        materials.chrome
+      );
+      post.position.set(side * (L.spinner.half + 0.12), 0.95, 0);
+      g.add(post);
+    });
+    const blade = new THREE.Mesh(
+      new THREE.BoxGeometry(L.spinner.half * 2, 0.92, 0.05),
+      materials.goldGlow
+    );
+    blade.position.y = 1.05;
+    blade.castShadow = true;
+    g.add(blade);
+    group.add(g);
+    refs.spinner = { group: g, blade, spin: 0 };
+  }
+
+  /* ---- Trolls: pop-up beasts in the castle corridor ---- */
+  refs.trolls = L.trolls.map((t) => {
+    const g = new THREE.Group();
+    g.position.set(t.x, 0, -t.y);
+
+    const body = new THREE.Mesh(
+      new THREE.CapsuleGeometry(t.r * 0.86, 0.7, 6, 14),
+      materials.troll
+    );
+    body.position.y = 0.95;
+    body.castShadow = true;
+    g.add(body);
+
+    // Eyes so it reads as a creature, not a peg
+    [-1, 1].forEach((side) => {
+      const eye = new THREE.Mesh(
+        new THREE.SphereGeometry(0.13, 12, 8),
+        materials.trollEye
+      );
+      eye.position.set(side * 0.24, 1.42, t.r * 0.72);
+      g.add(eye);
+    });
+    // Club-like horns
+    [-1, 1].forEach((side) => {
+      const horn = new THREE.Mesh(
+        new THREE.ConeGeometry(0.11, 0.42, 8),
+        materials.stoneDark
+      );
+      horn.position.set(side * 0.36, 1.78, 0);
+      horn.rotation.z = side * 0.4;
+      g.add(horn);
+    });
+
+    // Retracted below the playfield until the mode raises them
+    g.position.y = -2.2;
+    g.visible = false;
+    group.add(g);
+    return { group: g, up: false };
+  });
+
   /* ---- Flippers ---- */
   const flipperGeo = flatten(
-    new THREE.ExtrudeGeometry(flipperShape(THREE, L.flipperLength, 0.4, 0.28), {
+    new THREE.ExtrudeGeometry(flipperShape(THREE, L.flipperLength, 0.46, 0.3), {
       depth: 0.85,
       bevelEnabled: false
     })
@@ -596,7 +719,7 @@ export function buildTable(THREE, mergeGeometries, materials) {
     // Rubber strip along the face
     const strip = new THREE.Mesh(
       flatten(
-        new THREE.ExtrudeGeometry(flipperShape(THREE, L.flipperLength, 0.43, 0.31), {
+        new THREE.ExtrudeGeometry(flipperShape(THREE, L.flipperLength, 0.49, 0.33), {
           depth: 0.3,
           bevelEnabled: false
         })
