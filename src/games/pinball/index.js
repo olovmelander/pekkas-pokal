@@ -184,6 +184,27 @@ function buildHud(root) {
       <div class="pb-power"><i class="pb-skill"></i><span id="pb-power-fill"></span></div>
     </div>
 
+    <button class="pb-info" id="pb-info" aria-label="Så spelar du">?</button>
+
+    <div class="pb-help" id="pb-help" hidden>
+      <div class="pb-help-card">
+        <h3>Strategikort</h3>
+        <p class="pb-help-sub">Pekkas Pokal Flipper</p>
+        <ul class="pb-help-list">
+          <li><i style="--c:#f2c14e"></i><b>Ramper</b> Kungsvägen (vänster mynning) och Vallgraven (hårt skott i höger orbit) — kedjar kombos och räknas som varv.</li>
+          <li><i style="--c:#7c8cf8"></i><b>Vänster orbit</b> Snurran ger poäng per varv. Lyser pilen: starta nästa GREN här.</li>
+          <li><i style="--c:#f26d8d"></i><b>P-O-K-A-L</b> Fäll alla fem målen så tänds grenstart i vänster orbit.</li>
+          <li><i style="--c:#8b93ad"></i><b>Borgen</b> Tre smällar på porten fäller vindbryggan. Bumprarna laddar låset — lås två bollar i borgen för MULTIBALL med jackpot på pokalen.</li>
+          <li><i style="--c:#6f9b5a"></i><b>Trollen</b> Vaktar borgen under grenar och multiball. Slå ner dem — 3 000 styck.</li>
+          <li><i style="--c:#f2c14e"></i><b>Ny boll &amp; kickback</b> Lampan vid avloppet lyser de första sekunderna: dräneras bollen då serveras den om, en gång per boll. Vänster utbana har kickback — tänds om via båda inbanorna.</li>
+          <li><i style="--c:#ffd166"></i><b>Finalen</b> Klara alla fem grenar → 60 sekunder multiball där allt räknas ×5.</li>
+        </ul>
+        <p class="pb-help-tip">Skill shot: släpp avfyraren i det turkosa fältet — och skjut vänster orbit inom tre sekunder för SUPER (15 000).</p>
+        <div class="pb-help-keys">Flippers: skärmhalvorna eller ←/→ · Avfyrare: håll &amp; släpp / mellanslag · Nudge: N</div>
+        <button class="pb-btn" id="pb-help-close">Tillbaka till spelet</button>
+      </div>
+    </div>
+
     <button class="pb-mute" id="pb-mute" aria-label="Ljud på/av">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M11 5 6 9H2v6h4l5 4V5Z"/><path class="pb-wave" d="M15.5 8.5a5 5 0 0 1 0 7"/>
@@ -212,7 +233,10 @@ function buildHud(root) {
     nudge: root.querySelector('#pb-nudge'),
     plunger: root.querySelector('#pb-plunger'),
     powerFill: root.querySelector('#pb-power-fill'),
-    mute: root.querySelector('#pb-mute')
+    mute: root.querySelector('#pb-mute'),
+    info: root.querySelector('#pb-info'),
+    help: root.querySelector('#pb-help'),
+    helpClose: root.querySelector('#pb-help-close')
   };
 }
 
@@ -413,6 +437,8 @@ export async function createPinball(container, opts = {}) {
     // Left-outlane kickback: lit at the start of every ball, relit by
     // completing both inlanes
     kickback: true,
+    // Ball save is once per ball: the relaunch does not re-arm it
+    saveUsed: false,
     sensorLast: {}
   };
 
@@ -496,7 +522,14 @@ export async function createPinball(container, opts = {}) {
       light.intensity = strength;
       flashes.push({ light, base, t: 0 });
     }
-    if (obj) obj.scale.multiplyScalar(1.13);
+    // Pop the mesh to a fixed size over its resting scale — never
+    // cumulative. The old multiplyScalar grew the mesh a little on every
+    // hit and nothing shrank it back, which is why bumpers ballooned.
+    if (obj) {
+      if (obj.userData.baseScale === undefined) obj.userData.baseScale = obj.scale.x;
+      obj.scale.setScalar(obj.userData.baseScale * 1.13);
+      flashes.push({ obj, t: 0 });
+    }
   }
 
   /* ---- Gameplay hooks ---- */
@@ -1107,7 +1140,7 @@ export async function createPinball(container, opts = {}) {
     b.vy = 57 + p * 11;
     b.vx = 0;
     state.phase = 'play';
-    state.ballSaveUntil = performance.now() + BALL_SAVE_MS;
+    state.ballSaveUntil = state.saveUsed ? 0 : performance.now() + BALL_SAVE_MS;
     state.superUntil = performance.now() + 3000;
     hud.plunger.hidden = true;
     hud.controls.hidden = false;
@@ -1146,8 +1179,10 @@ export async function createPinball(container, opts = {}) {
 
     // Last ball gone
     if (performance.now() < state.ballSaveUntil) {
+      state.saveUsed = true;
+      state.ballSaveUntil = 0;
       sfx.launch();
-      toast('BOLLRÄDDNING', true);
+      toast('NY BOLL — räddad!', true);
       placeInLane();
       state.power = 0.72;
       setTimeout(() => {
@@ -1188,6 +1223,7 @@ export async function createPinball(container, opts = {}) {
 
     if (state.extraBalls > 0) {
       state.extraBalls--;
+      state.saveUsed = false;
       renderBalls();
       setTimeout(() => {
         sfx.extraBall();
@@ -1202,6 +1238,7 @@ export async function createPinball(container, opts = {}) {
       return;
     }
     state.ballNo++;
+    state.saveUsed = false;
     state.mult = 1;
     hud.mult.textContent = '×1';
     renderBalls();
@@ -1266,6 +1303,7 @@ export async function createPinball(container, opts = {}) {
     state.extraBallGiven = false;
     state.superUntil = 0;
     state.kickback = true;
+    state.saveUsed = false;
     lockMeshes.forEach((m) => (m.visible = false));
     refs.bumpers.forEach((bm) => {
       bm.ring.material.emissiveIntensity = 0.95;
@@ -1286,6 +1324,7 @@ export async function createPinball(container, opts = {}) {
   }
 
   /* ---- Input ---- */
+  let helpOpen = false;
   const pointers = new Map();
   const flipL = colliderRefs.flippers.left;
   const flipR = colliderRefs.flippers.right;
@@ -1312,7 +1351,7 @@ export async function createPinball(container, opts = {}) {
 
   function onPointerDown(e) {
     sfx.resume();
-    if (e.target.closest('.pb-overlay, .pb-mute, .pb-nudge')) return;
+    if (e.target.closest('.pb-overlay, .pb-mute, .pb-nudge, .pb-info, .pb-help')) return;
     canvasHost.setPointerCapture?.(e.pointerId);
 
     if (state.phase === 'launch') {
@@ -1353,6 +1392,11 @@ export async function createPinball(container, opts = {}) {
   function onKeyDown(e) {
     if (e.repeat) return;
     const k = e.key.toLowerCase();
+    if (helpOpen) {
+      if (k === 'escape' || k === ' ') setHelp(false);
+      e.preventDefault();
+      return;
+    }
     if (k === 'arrowleft' || k === 'a' || k === 'z') setFlipper('left', true);
     else if (k === 'arrowright' || k === 'd' || k === 'm') setFlipper('right', true);
     else if (k === ' ') {
@@ -1433,6 +1477,18 @@ export async function createPinball(container, opts = {}) {
     toast('Nudge');
   }
 
+  // The tick keeps updating `last` even while paused, so closing the card
+  // resumes with a tiny dt — no need to reset the clock here.
+  function setHelp(open) {
+    helpOpen = open;
+    hud.help.hidden = !open;
+    if (open) {
+      flipL.pressed = false;
+      flipR.pressed = false;
+      pointers.clear();
+    }
+  }
+
   canvasHost.addEventListener('pointerdown', onPointerDown);
   window.addEventListener('pointerup', onPointerUp);
   window.addEventListener('pointercancel', onPointerUp);
@@ -1440,6 +1496,8 @@ export async function createPinball(container, opts = {}) {
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', onKeyUp);
   hud.start.addEventListener('click', startGame);
+  hud.info.addEventListener('click', () => setHelp(!helpOpen));
+  hud.helpClose.addEventListener('click', () => setHelp(false));
   hud.nudge.addEventListener('click', doNudge);
   hud.mute.addEventListener('click', () => {
     sfx.muted = !sfx.muted;
@@ -1512,7 +1570,7 @@ export async function createPinball(container, opts = {}) {
     raf = requestAnimationFrame(tick);
     const dtRaw = Math.min(0.05, (now - last) / 1000);
     last = now;
-    if (!running) return;
+    if (!running || helpOpen) return;
 
     // Plunger charge
     if (state.phase === 'launch' && state.charging) {
@@ -1625,6 +1683,7 @@ export async function createPinball(container, opts = {}) {
     {
       const pulse = 0.55 + Math.sin(now / 150) * 0.45;
       const lit = {
+        save: state.phase === 'play' && performance.now() < state.ballSaveUntil,
         leftOrbit: state.modeStartLit || (state.multiball && !state.jackpotLit),
         leftRamp: !!state.mode || state.multiball,
         castle: state.lockLit || (state.multiball && state.jackpotLit) ||
@@ -1747,6 +1806,14 @@ export async function createPinball(container, opts = {}) {
       } else if (f.mat) {
         f.mat.emissiveIntensity = Math.max(f.base, f.mat.emissiveIntensity - dtRaw * 16);
         if (f.mat.emissiveIntensity <= f.base + 0.01) flashes.splice(i, 1);
+      } else if (f.obj) {
+        const home = f.obj.userData.baseScale;
+        const sc = f.obj.scale.x + (home - f.obj.scale.x) * Math.min(1, dtRaw * 10);
+        f.obj.scale.setScalar(sc);
+        if (Math.abs(sc - home) < 0.004) {
+          f.obj.scale.setScalar(home);
+          flashes.splice(i, 1);
+        }
       }
     }
 

@@ -478,7 +478,7 @@ const toV = (y) => TEX_H - ((y - ART.y0) / (ART.y1 - ART.y0)) * TEX_H;
  * Draws the playfield art to a canvas. Doing this procedurally keeps the game
  * asset-free while still looking designed rather than bare.
  */
-export function createPlayfieldCanvas(participants = [], logo = null) {
+export function createPlayfieldCanvas(_participants = [], logo = null) {
   const cv = document.createElement('canvas');
   cv.width = TEX_W;
   cv.height = TEX_H;
@@ -556,51 +556,9 @@ export function createPlayfieldCanvas(participants = [], logo = null) {
   g.fillText('TROLL', toU(L.trolls[1].x), toV(L.trolls[1].y - 1.35));
   g.letterSpacing = '0px';
 
-  /* ---- Castle corridor arrows ---- */
-  g.fillStyle = 'rgba(124,140,248,.35)';
-  for (let i = 0; i < 3; i++) {
-    const y = 19.6 + i * 1.6;
-    g.beginPath();
-    g.moveTo(toU(cx - 0.6), toV(y));
-    g.lineTo(toU(cx + 0.6), toV(y));
-    g.lineTo(toU(cx), toV(y + 0.85));
-    g.closePath();
-    g.fill();
-  }
-
-  /* ---- Orbit + ramp lane guides ---- */
-  g.strokeStyle = 'rgba(124,140,248,.28)';
-  g.lineWidth = 5;
-  g.beginPath();
-  g.moveTo(toU(-8.65), toV(13.5));
-  g.lineTo(toU(-8.65), toV(24.5));
-  g.stroke();
-  g.beginPath();
-  g.moveTo(toU(5.55), toV(13.5));
-  g.lineTo(toU(5.55), toV(25.5));
-  g.stroke();
-  // Ramp lane arrows (gold, pointing up)
-  g.fillStyle = 'rgba(242,193,78,.4)';
-  [[-6.9, 16.2], [-6.9, 18.4], [-6.9, 20.6]].forEach(([x, y]) => {
-    g.beginPath();
-    g.moveTo(toU(x - 0.45), toV(y));
-    g.lineTo(toU(x + 0.45), toV(y));
-    g.lineTo(toU(x), toV(y + 0.8));
-    g.closePath();
-    g.fill();
-  });
+  /* ---- Ramp mouth: a quiet gold funnel, no text — the insert lights it ---- */
   g.save();
-  g.translate(toU(-8.95), toV(17.0));
-  g.rotate(-Math.PI / 2);
-  g.fillStyle = 'rgba(124,140,248,.5)';
-  g.font = '700 20px Inter, sans-serif';
-  g.letterSpacing = '6px';
-  g.fillText('ORBIT · SNURRA', 0, 0);
-  g.restore();
-
-  // Ramp mouth: a wide gold funnel painted on the playfield
-  g.save();
-  g.strokeStyle = 'rgba(242,193,78,.5)';
+  g.strokeStyle = 'rgba(242,193,78,.42)';
   g.lineWidth = 5;
   g.beginPath();
   g.moveTo(toU(-7.55), toV(13.4));
@@ -608,22 +566,6 @@ export function createPlayfieldCanvas(participants = [], logo = null) {
   g.moveTo(toU(-5.4), toV(13.8));
   g.lineTo(toU(-6.15), toV(18.4));
   g.stroke();
-  g.restore();
-  g.save();
-  g.translate(toU(-6.6), toV(16.2));
-  g.rotate(-Math.PI / 2);
-  g.fillStyle = 'rgba(242,193,78,.62)';
-  g.font = '700 22px Inter, sans-serif';
-  g.letterSpacing = '7px';
-  g.fillText('RAMP', 0, 0);
-  g.restore();
-  g.save();
-  g.translate(toU(5.55), toV(20.2));
-  g.rotate(Math.PI / 2);
-  g.fillStyle = 'rgba(124,140,248,.5)';
-  g.font = '700 20px Inter, sans-serif';
-  g.letterSpacing = '6px';
-  g.fillText('ORBIT · RAMP', 0, -14);
   g.restore();
 
   /* ---- Target banks: a letter in front of each target's face ---- */
@@ -635,15 +577,6 @@ export function createPlayfieldCanvas(participants = [], logo = null) {
     g.fillStyle = 'rgba(242,193,78,.55)';
     g.fillText(t.letter, toU(lx), toV(ly));
   });
-  g.fillStyle = 'rgba(255,255,255,.3)';
-  g.font = '700 19px Inter, sans-serif';
-  g.letterSpacing = '4px';
-  g.save();
-  g.translate(toU(-4.9), toV(13.4));
-  g.rotate(-bankA * 0.9);
-  g.fillText('SLÅ NER ALLA FEM', 0, 0);
-  g.restore();
-  g.letterSpacing = '0px';
 
   /* ---- Hero logo, centred in the lower playfield ---- */
   if (logo && logo.width) {
@@ -686,37 +619,15 @@ export function createPlayfieldCanvas(participants = [], logo = null) {
   g.fillText('UT', toU(mirrorX(-8.05)), toV(10.6));
   g.letterSpacing = '0px';
 
-  /* ---- Roll of honour down the left rail ---- */
-  if (participants.length) {
-    g.save();
-    g.fillStyle = 'rgba(255,255,255,.15)';
-    g.font = '600 17px Inter, sans-serif';
-    g.textAlign = 'left';
-    participants.slice(0, 13).forEach((name, i) => {
-      g.fillText(name.toUpperCase(), toU(-9.55), toV(26.3 - i * 0.92));
-    });
-    g.restore();
-    g.textAlign = 'center';
-  }
-
   /* ---- Shooter lane ---- */
   g.fillStyle = 'rgba(242,193,78,.09)';
   g.fillRect(toU(L.laneX), toV(L.domeY), toU(L.outerX) - toU(L.laneX), toV(2) - toV(L.domeY));
 
-  g.save();
-  g.translate(toU((L.laneX + L.outerX) / 2), toV(16));
-  g.rotate(-Math.PI / 2);
+  /* ---- Ball-save lamp label, just above the apron ---- */
   g.fillStyle = 'rgba(242,193,78,.5)';
-  g.font = '700 24px Inter, sans-serif';
-  g.letterSpacing = '8px';
-  g.fillText('DRA OCH SLÄPP', 0, 8);
-  g.restore();
-
-  /* ---- Drain ---- */
-  g.fillStyle = 'rgba(242,109,141,.35)';
-  g.font = '700 21px Inter, sans-serif';
-  g.letterSpacing = '5px';
-  g.fillText('UTGÅNG', toU(cx), toV(1.1));
+  g.font = '700 15px Inter, sans-serif';
+  g.letterSpacing = '3px';
+  g.fillText('NY BOLL', toU(cx), toV(3.55));
   g.letterSpacing = '0px';
 
   /* ---- Grain. Built on its own canvas and composited with drawImage:

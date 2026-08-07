@@ -732,3 +732,126 @@ body.game-open {
   background: linear-gradient(140deg, #f2c14e, #d99a2b);
   box-shadow: 0 0 10px rgba(242, 193, 78, 0.8);
 }
+
+/* ---- Strategikort (info button + help card) ---- */
+.pb-info {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: 104px;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  font: 700 16px 'Space Grotesk', Inter, sans-serif;
+  color: rgba(242, 193, 78, 0.9);
+  background: rgba(12, 16, 32, 0.62);
+  border: 1px solid rgba(242, 193, 78, 0.35);
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+
+.pb-info:active {
+  transform: scale(0.94);
+}
+
+.pb-help {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(5, 7, 15, 0.82);
+  backdrop-filter: blur(10px);
+  pointer-events: auto;
+}
+
+.pb-help[hidden] {
+  display: none;
+}
+
+.pb-help-card {
+  width: min(430px, 100%);
+  max-height: min(86vh, 720px);
+  overflow-y: auto;
+  padding: 22px 22px 18px;
+  border-radius: 18px;
+  background: linear-gradient(165deg, rgba(21, 27, 52, 0.97), rgba(12, 16, 32, 0.97));
+  border: 1px solid rgba(242, 193, 78, 0.35);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+}
+
+.pb-help-card h3 {
+  margin: 0;
+  font: 700 22px 'Space Grotesk', Inter, sans-serif;
+  color: #f2c14e;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pb-help-sub {
+  margin: 2px 0 14px;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(220, 226, 250, 0.55);
+}
+
+.pb-help-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: grid;
+  gap: 9px;
+}
+
+.pb-help-list li {
+  position: relative;
+  padding-left: 20px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: rgba(224, 229, 250, 0.88);
+}
+
+.pb-help-list li b {
+  color: #fff;
+  display: block;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pb-help-list li i {
+  position: absolute;
+  left: 0;
+  top: 5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--c, #f2c14e);
+  box-shadow: 0 0 10px var(--c, #f2c14e);
+}
+
+.pb-help-tip {
+  margin: 0 0 10px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: rgba(94, 234, 212, 0.09);
+  border: 1px solid rgba(94, 234, 212, 0.25);
+  font-size: 12.5px;
+  color: rgba(190, 244, 230, 0.9);
+}
+
+.pb-help-keys {
+  margin-bottom: 14px;
+  font-size: 11.5px;
+  letter-spacing: 0.03em;
+  color: rgba(220, 226, 250, 0.5);
+}
+
+.pb-help-card .pb-btn {
+  width: 100%;
+}
