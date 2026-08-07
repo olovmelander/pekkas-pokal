@@ -74,7 +74,15 @@ Bilden dyker upp automatiskt högst upp på det årets kort i Historik och i
 resultatrutan. Saknas en bild händer ingenting — inget att konfigurera.
 Liggande format och ca 1200 px bredd fungerar bäst.
 
-### 4. Spel
+### 4. Sångboken
+
+Fliken **Sånger** visar föreningens snapsvisor, ramsor och officiella låtar.
+Texterna bor i [`src/data/songs.js`](src/data/songs.js) — lägg till ett nytt
+objekt i listan (id, år, titel, melodi och textrader) så dyker sången upp i
+väljaren automatiskt. En rad kan också vara `{ o: 'originalrad', t:
+'översättning' }` när sången sjungs på ett annat språk, som Cant del Barça.
+
+### 5. Spel
 
 Fliken **Spel** innehåller ett spel per år. 2025 är *Pekkas Pokal Flipper* — ett
 flipperspel i Three.js som byggs helt i webbläsaren (ingen bild- eller
