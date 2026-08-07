@@ -104,6 +104,21 @@ class Sfx {
     [0, 110, 220].forEach((d, i) => setTimeout(() => this.tone(147 * (i + 1), 0.22, 'square', 0.5), d));
   }
   outlane() { this.tone(330, 0.3, 'sine', 0.4, -180); }
+  spinner(n) {
+    // A rattle of ticks that thins out as the blade slows — the best
+    // sound on any playfield
+    for (let i = 0; i < Math.min(n, 12); i++) {
+      setTimeout(() => this.tone(1500 - i * 55, 0.035, 'square', 0.22), i * (38 + i * 7));
+    }
+  }
+  trollUp() {
+    this.tone(70, 0.4, 'sawtooth', 0.5, 40);
+    setTimeout(() => this.tone(150, 0.3, 'square', 0.4, -60), 160);
+  }
+  trollHit() {
+    this.noise(0.12, 0.5, 420);
+    this.tone(190, 0.24, 'square', 0.5, -80);
+  }
   combo(n) { this.tone(440 * 1.25 ** Math.min(n, 6), 0.12, 'square', 0.45, 180); }
   lock() {
     this.tone(120, 0.3, 'square', 0.55, -40);
@@ -223,7 +238,7 @@ export async function createPinball(container, opts = {}) {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.86;
+  renderer.toneMappingExposure = 0.97;
   canvasHost.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
@@ -237,7 +252,7 @@ export async function createPinball(container, opts = {}) {
   const envRT = pmrem.fromScene(new RoomEnvironment(), 0.06);
   scene.environment = envRT.texture;
   // RoomEnvironment is a bright studio; at full strength it washes the table out
-  scene.environmentIntensity = 0.3;
+  scene.environmentIntensity = 0.42;
 
   /* ---- Table ---- */
   if (document.fonts && document.fonts.ready) {
@@ -292,9 +307,9 @@ export async function createPinball(container, opts = {}) {
   });
 
   /* ---- Lights ---- */
-  scene.add(new THREE.AmbientLight(0x9fb0ff, 0.16));
+  scene.add(new THREE.AmbientLight(0x9fb0ff, 0.26));
 
-  const key = new THREE.DirectionalLight(0xfff3e0, 1.1);
+  const key = new THREE.DirectionalLight(0xfff3e0, 1.5);
   key.position.set(9, 30, -6);
   key.target.position.set(0, 0, -20);
   key.castShadow = true;
@@ -308,13 +323,18 @@ export async function createPinball(container, opts = {}) {
   key.shadow.bias = -0.0016;
   scene.add(key, key.target);
 
-  const rim = new THREE.DirectionalLight(0x7c8cf8, 0.5);
+  const rim = new THREE.DirectionalLight(0x7c8cf8, 0.75);
   rim.position.set(-12, 12, -46);
   scene.add(rim);
 
-  const warm = new THREE.PointLight(0xf2c14e, 0.8, 30, 2);
+  // Playfield general illumination: two soft pools, like a real machine's GI
+  const warm = new THREE.PointLight(0xf2c14e, 1.15, 32, 2);
   warm.position.set(L.centerX, 9, -10);
   scene.add(warm);
+
+  const giUpper = new THREE.PointLight(0xbcd0ff, 0.75, 34, 2);
+  giUpper.position.set(L.centerX, 10, -25);
+  scene.add(giUpper);
 
   /* ---- Post-processing ---- */
   const composer = new EffectComposer(renderer);
@@ -370,6 +390,9 @@ export async function createPinball(container, opts = {}) {
 
     // Castle gate: bashed open with 3 hits, or held open by locks/modes
     gate: { hits: 0, until: 0 },
+    // Trolls: up while a gren runs, knocked down for a spell when hit
+    trolls: [{ up: false, downUntil: 0 }, { up: false, downUntil: 0 }],
+    spins: 0,
     // Balls riding a wireform ramp, outside the 2D simulation
     riders: [],
 
@@ -383,7 +406,7 @@ export async function createPinball(container, opts = {}) {
     combo: { n: 0, t: 0 },
     bonusX: 1,
     inlanes: { left: false, right: false },
-    perBall: { bumps: 0, targets: 0, orbits: 0, ramps: 0 },
+    perBall: { bumps: 0, targets: 0, orbits: 0, ramps: 0, trolls: 0 },
     extraBalls: 0,
     extraBallGiven: false,
     superUntil: 0,
@@ -548,6 +571,20 @@ export async function createPinball(container, opts = {}) {
       }
       modeEvent('bumper');
     },
+    onTroll(i, v) {
+      if (v < 1) return;
+      const t = state.trolls[i];
+      if (!t.up) return;
+      t.up = false;
+      t.downUntil = performance.now() + 6000;
+      addScore(3000);
+      state.perBall.trolls = (state.perBall.trolls || 0) + 1;
+      sfx.trollHit();
+      startShake(0.5, 0);
+      comboShot();
+      modeEvent('troll');
+      toast('TROLL NEDSLAGET! +3 000');
+    },
     onGate(v, _b) {
       if (v < 1.2) return;
       const now = performance.now();
@@ -682,6 +719,20 @@ export async function createPinball(container, opts = {}) {
         return;
       }
 
+      // Spinner: rides in the left orbit and pays per revolution
+      if (id === 'spinner') {
+        if (!b) return;
+        const spins = clamp(Math.round(b.speed * 0.5), 2, 14);
+        state.spins += spins;
+        const per = state.mode && state.mode.wizard ? 400 : 200;
+        addScore(spins * per);
+        sfx.spinner(spins);
+        if (refs.spinner) refs.spinner.spin = spins * 1.9;
+        toast(`SNURRA ×${spins}`);
+        modeEvent('spinner');
+        return;
+      }
+
       // Outlanes: the ball is on its way out past the flipper — unless the
       // left kickback is lit, which fires it straight back up the lane
       if (id === 'outLeft' || id === 'outRight') {
@@ -781,6 +832,8 @@ export async function createPinball(container, opts = {}) {
     }
     state.mode = { def: next, progress: 0, timeLeft: next.time, seen: new Set(), wizard: false };
     if (next.id === 'skytte') resetBank();
+    // Fiske needs the trophy, so the trolls stay down for that one
+    if (next.id !== 'fiske') setTimeout(raiseTrolls, 900);
     sfx.modeStart();
     toast(`${next.name} ${next.year} — ${next.hint}!`, true);
     warm.color.set(0x7c8cf8);
@@ -830,6 +883,7 @@ export async function createPinball(container, opts = {}) {
   function endMode() {
     const wasSkytte = state.mode && state.mode.def.id === 'skytte';
     state.mode = null;
+    lowerTrolls();
     hud.mode.hidden = true;
     warm.color.set(0xf2c14e);
     if (wasSkytte) resetBank();
@@ -848,6 +902,7 @@ export async function createPinball(container, opts = {}) {
     state.multiball = true;
     state.jackpotLit = true;
     state.mbSaveUntil = performance.now() + 60000;
+    setTimeout(raiseTrolls, 1200);
     sfx.multiball();
     toast('FINALEN — ALLA BOLLAR, ALLT ×5!', true);
     warm.color.set(0xffe08a);
@@ -954,6 +1009,35 @@ export async function createPinball(container, opts = {}) {
     r.ball.place(ex.x, ex.y, ex.vx || 0, ex.vy);
     r.ball.live = true;
     state.balls.push(r.ball);
+  }
+
+  /* =========================== Trolls =========================== */
+
+  /**
+   * Trolls guard the castle while a gren runs: they pop up, block the
+   * corridor and have to be bashed back down. Knocked-down trolls rise
+   * again after a spell as long as the mode lasts.
+   */
+  function raiseTrolls() {
+    let any = false;
+    state.trolls.forEach((t) => {
+      if (!t.up) {
+        t.up = true;
+        t.downUntil = 0;
+        any = true;
+      }
+    });
+    if (any) {
+      sfx.trollUp();
+      toast('TROLLEN VAKNAR!', true);
+    }
+  }
+
+  function lowerTrolls() {
+    state.trolls.forEach((t) => {
+      t.up = false;
+      t.downUntil = 0;
+    });
   }
 
   /* ======================== Castle gate ========================= */
@@ -1074,6 +1158,7 @@ export async function createPinball(container, opts = {}) {
 
     sfx.drain();
     state.phase = 'between';
+    lowerTrolls();
     if (state.multiball) endMultiball();
     if (state.mode) {
       if (state.mode.wizard) failMode();
@@ -1086,7 +1171,8 @@ export async function createPinball(container, opts = {}) {
     // End-of-ball bonus
     const pb = state.perBall;
     const bonus =
-      (pb.bumps * 50 + pb.targets * 300 + pb.orbits * 500 + pb.ramps * 400) * state.bonusX;
+      (pb.bumps * 50 + pb.targets * 300 + pb.orbits * 500 + pb.ramps * 400 +
+        (pb.trolls || 0) * 600) * state.bonusX;
     if (bonus > 0) {
       setTimeout(() => {
         state.score += bonus;
@@ -1095,7 +1181,7 @@ export async function createPinball(container, opts = {}) {
         toast(`BONUS +${fmt(bonus)}${state.bonusX > 1 ? ` (×${state.bonusX})` : ''}`, true);
       }, 700);
     }
-    state.perBall = { bumps: 0, targets: 0, orbits: 0, ramps: 0 };
+    state.perBall = { bumps: 0, targets: 0, orbits: 0, ramps: 0, trolls: 0 };
     state.bonusX = 1;
     state.inlanes = { left: false, right: false };
     state.combo = { n: 0, t: 0 };
@@ -1166,6 +1252,8 @@ export async function createPinball(container, opts = {}) {
     state.mbSaveUntil = 0;
     state.gate = { hits: 0, until: 0 };
     state.riders = [];
+    state.trolls = [{ up: false, downUntil: 0 }, { up: false, downUntil: 0 }];
+    state.spins = 0;
     state.modeDone = new Set();
     state.mode = null;
     state.modeStartLit = false;
@@ -1173,7 +1261,7 @@ export async function createPinball(container, opts = {}) {
     state.combo = { n: 0, t: 0 };
     state.bonusX = 1;
     state.inlanes = { left: false, right: false };
-    state.perBall = { bumps: 0, targets: 0, orbits: 0, ramps: 0 };
+    state.perBall = { bumps: 0, targets: 0, orbits: 0, ramps: 0, trolls: 0 };
     state.extraBalls = 0;
     state.extraBallGiven = false;
     state.superUntil = 0;
@@ -1461,19 +1549,36 @@ export async function createPinball(container, opts = {}) {
             b.laneFor = 0;
           }
 
-          // Ball search: a wedged ball gets shaken loose toward open
-          // playfield, like a real machine hunting for a lost ball
+          // Ball search. A real machine shakes its coils to free a lost
+          // ball and, if that fails, simply serves a new one. Escalating the
+          // shove and then re-serving guarantees no ball is ever stranded,
+          // whatever corner of the geometry it found.
           if (b.speed < 1.1 && !(b.x > L.laneX && b.y < 4)) {
             b.stuckFor = (b.stuckFor || 0) + FIXED;
             if (b.stuckFor > 2.2) {
-              b.vx += clamp((L.centerX - b.x) * 0.9, -6, 6) + (Math.random() - 0.5) * 4;
-              b.vy += b.y > 20 ? -5 : 6;
+              b.searches = (b.searches || 0) + 1;
+              const power = 1 + b.searches * 0.7;
+              b.vx += clamp((L.centerX - b.x) * 0.9, -7, 7) * power +
+                (Math.random() - 0.5) * 5 * power;
+              // High up in the habitrail a ball needs a real shove to come
+              // back down; low down it only needs a nudge back into play.
+              b.vy += (b.y > 20 ? -9 : 6) * power;
               b.stuckFor = 0;
-              startShake(0.4, 0);
+              startShake(0.4 + b.searches * 0.15, 0);
               sfx.wall();
+
+              // Still stuck after three searches: put it back in the shooter
+              // lane and fire it. No ball lost, no penalty.
+              if (b.searches >= 3) {
+                b.searches = 0;
+                b.place(L.laneBallX, L.laneBottomY + L.laneWallR + L.ballRadius + 0.06, 0, 0);
+                b.laneFor = 1.3;
+                toast('BOLLEN LETAS UPP…');
+              }
             }
           } else {
             b.stuckFor = 0;
+            b.searches = 0;
           }
         }
 
@@ -1494,6 +1599,53 @@ export async function createPinball(container, opts = {}) {
           state.riders.splice(ri, 1);
           releaseRider(r);
         }
+      }
+    }
+
+    // Trolls: respawn after being knocked down, drive collider + mesh
+    {
+      const now2 = performance.now();
+      const modeRunning = !!state.mode || state.multiball;
+      state.trolls.forEach((t, i) => {
+        if (!modeRunning) t.up = false;
+        else if (!t.up && t.downUntil && now2 > t.downUntil) {
+          t.up = true;
+          t.downUntil = 0;
+          sfx.trollUp();
+        }
+        colliderRefs.trolls[i].enabled = t.up;
+        const mesh = refs.trolls[i];
+        const wantY = t.up ? 0 : -2.2;
+        mesh.group.visible = mesh.group.position.y > -2.1 || t.up;
+        mesh.group.position.y += (wantY - mesh.group.position.y) * Math.min(1, dtRaw * 7);
+      });
+    }
+
+    // Shot inserts: lit when that shot is worth taking, pulsing when hot
+    {
+      const pulse = 0.55 + Math.sin(now / 150) * 0.45;
+      const lit = {
+        leftOrbit: state.modeStartLit || (state.multiball && !state.jackpotLit),
+        leftRamp: !!state.mode || state.multiball,
+        castle: state.lockLit || (state.multiball && state.jackpotLit) ||
+          (state.mode && (state.mode.wizard || state.mode.def.id === 'fiske')),
+        rightRamp: !!state.mode || state.multiball,
+        trolls: state.trolls.some((t) => t.up)
+      };
+      Object.entries(refs.inserts).forEach(([id, ins]) => {
+        const want = lit[id] ? 0.9 + pulse * 1.5 : 0.12;
+        ins.mat.emissiveIntensity += (want - ins.mat.emissiveIntensity) * Math.min(1, dtRaw * 9);
+        const wantL = lit[id] ? 0.5 + pulse * 0.5 : 0;
+        ins.light.intensity += (wantL - ins.light.intensity) * Math.min(1, dtRaw * 9);
+      });
+    }
+
+    // Spinner blade keeps turning and slows down, like real spinner inertia
+    if (refs.spinner) {
+      const sp = refs.spinner;
+      if (sp.spin > 0) {
+        sp.blade.rotation.x += sp.spin * dtRaw * 6;
+        sp.spin = Math.max(0, sp.spin - dtRaw * 3.2);
       }
     }
 
@@ -1654,6 +1806,11 @@ export async function createPinball(container, opts = {}) {
     },
     hitTarget(i) {
       hooks.onTarget(i, 3);
+    },
+    raiseTrolls,
+    lowerTrolls,
+    hitTroll(i) {
+      hooks.onTroll(i, 3);
     },
     hitGate() {
       state.sensorLast.gate = 0;

@@ -109,7 +109,9 @@ rampfil, bredvid vänster orbit) och **Vallgraven** (ett hårt skott i höger
 orbit) — bollen lyfter ur spelplanen och åker över borgen till motsatt
 inbana. Nedtill finns riktiga **utbanor**: bollen kan rulla ut vid sidan av
 flipprarna, precis som på ett riktigt bord. Fysiken är stämd efter en äkta
-maskins 6,5°-lutning, så bollen har fart och flipprarna smäller.
+maskins 6,5°-lutning, så bollen har fart och flipprarna smäller. Varje bana är
+bredare än bollen med god marginal, och fastnar bollen ändå någonstans letar
+maskinen upp den — först med en skakning, sedan genom att servera om den.
 
 | Moment | Så funkar det |
 | --- | --- |
@@ -118,6 +120,8 @@ maskins 6,5°-lutning, så bollen har fart och flipprarna smäller.
 | **FINALEN** | Klara alla fem grenar → wizard mode: 60 sekunder multiball där **allt räknas ×5**. |
 | **Multiball** | Bumperträffar laddar låset — då öppnas porten och pokalen låser bollar i borgen. Två låsta bollar startar multiball med jackpot (25 000) i pokalen; orbits och ramper tänder om jackpotten. |
 | **Kombo** | Träffar inom 3,5 sekunder kedjar: 1 000 × 2 per steg, upp till ×16. |
+| **Snurran** | Vänster orbit går genom en snurra — varje varv ger poäng, och ju hårdare skott desto fler varv. |
+| **Trollen** | När en gren startar reser sig två troll ur borggången och blockerar borgen. Slå ner dem för 3 000 — de reser sig igen efter en stund så länge grenen pågår. |
 | **Kickback** | Vänster utbana har en kickback som skjuter tillbaka bollen — tänd vid varje ny boll, tänds om när båda inbanorna rullats. |
 | **Bonus** | Inbanorna höjer bonusmultiplikatorn (upp till ×6) som multiplicerar slutbonusen per boll. |
 | **Extraboll** | Två klarade grenar ger en extra boll. |
