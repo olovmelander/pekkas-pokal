@@ -615,19 +615,21 @@ export function buildTable(THREE, mergeGeometries, materials) {
     const geo = flatten(new THREE.ExtrudeGeometry(arrow, { depth: 0.07, bevelEnabled: false }));
 
     const SPOTS = [
+      { id: 'save', x: L.centerX, y: 4.5, a: 0, color: 0xf2c14e, disc: true },
       { id: 'leftOrbit', x: -8.95, y: 15.4, a: 0, color: 0x7c8cf8 },
       { id: 'leftRamp', x: -6.75, y: 14.4, a: 0.18, color: 0xf2c14e },
       { id: 'castle', x: L.centerX, y: 19.4, a: 0, color: 0x7c8cf8 },
       { id: 'rightRamp', x: 5.5, y: 15.0, a: -0.18, color: 0xf2c14e },
       { id: 'trolls', x: L.centerX, y: 22.6, a: 0, color: 0x6f9b5a }
     ];
+    const discGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.07, 22);
     refs.inserts = {};
     SPOTS.forEach((s) => {
       const mat = materials.insert.clone();
       mat.color = new THREE.Color(s.color);
       mat.emissive = new THREE.Color(s.color);
       mat.emissiveIntensity = 0.12;
-      const mesh = new THREE.Mesh(geo, mat);
+      const mesh = new THREE.Mesh(s.disc ? discGeo : geo, mat);
       mesh.position.set(s.x, 0.035, -s.y);
       mesh.rotation.y = s.a;
       group.add(mesh);

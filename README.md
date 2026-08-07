@@ -96,6 +96,7 @@ Att lägga till ett nytt års spel:
 | Flippers | Vänster/höger halva av skärmen (fungerar samtidigt) | ←/→, A/D eller Z/M |
 | Avfyrare | Håll för kraft, släpp för att skjuta | Mellanslag |
 | Nudga | Knappen NUDGA | N |
+| Strategikort | ?-knappen uppe till höger | ? eller Esc för att stänga |
 
 Släpp avfyraren när mätaren står i det turkosa fältet för en **skill shot** —
 och skjut vänster orbit inom tre sekunder för en **super skill shot** (15 000).
@@ -123,6 +124,7 @@ maskinen upp den — först med en skakning, sedan genom att servera om den.
 | **Snurran** | Vänster orbit går genom en snurra — varje varv ger poäng, och ju hårdare skott desto fler varv. |
 | **Trollen** | När en gren startar reser sig två troll ur borggången och blockerar borgen. Slå ner dem för 3 000 — de reser sig igen efter en stund så länge grenen pågår. |
 | **Kickback** | Vänster utbana har en kickback som skjuter tillbaka bollen — tänd vid varje ny boll, tänds om när båda inbanorna rullats. |
+| **Ny boll** | Lampan vid avloppet lyser de första nio sekunderna: dräneras bollen då serveras den om — en gång per boll. |
 | **Bonus** | Inbanorna höjer bonusmultiplikatorn (upp till ×6) som multiplicerar slutbonusen per boll. |
 | **Extraboll** | Två klarade grenar ger en extra boll. |
 
