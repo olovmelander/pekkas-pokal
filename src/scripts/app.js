@@ -630,11 +630,19 @@
   function nextEventDate(stats) {
     const now = new Date();
     const { event } = App;
+    const resultYears = new Set(stats.real.map((c) => c.year));
 
-    // A confirmed event is shown from announcement until 24h after start
+    // A confirmed event is shown from announcement until 24h after start —
+    // but the moment its result is in the data the competition is decided,
+    // so the card moves on to the next forecast instead of claiming that it
+    // is still running next to the champion card that says who won it.
     if (event && event.date) {
       const d = new Date(event.date);
-      if (!isNaN(d.getTime()) && now - d < 24 * 3600 * 1000) {
+      if (
+        !isNaN(d.getTime()) &&
+        now - d < 24 * 3600 * 1000 &&
+        !resultYears.has(d.getFullYear())
+      ) {
         return {
           date: d,
           confirmed: true,
@@ -652,30 +660,43 @@
     const year = now.getFullYear();
     if (last && last.date >= now) return { date: last.date, confirmed: true, comp: last };
 
-    // Forecast: the tradition is a Saturday near mid-August.
-    const mid = new Date(year, 7, 15, 10, 0, 0);
-    const day = mid.getDay();
-    let diff = (6 - day) % 7;
-    if (diff > 3) diff -= 7;
-    let target = new Date(year, 7, 15 + diff, 10, 0, 0);
-    if (target < now) {
-      const midNext = new Date(year + 1, 7, 15, 10, 0, 0);
-      const d2 = midNext.getDay();
-      let diff2 = (6 - d2) % 7;
-      if (diff2 > 3) diff2 -= 7;
-      target = new Date(year + 1, 7, 15 + diff2, 10, 0, 0);
+    // Forecast: the tradition is a Saturday near mid-August — in the first
+    // year that has neither happened nor already has a result in the data.
+    const saturdayMidAugust = (y) => {
+      const mid = new Date(y, 7, 15, 10, 0, 0);
+      let diff = (6 - mid.getDay()) % 7;
+      if (diff > 3) diff -= 7;
+      return new Date(y, 7, 15 + diff, 10, 0, 0);
+    };
+    let target = saturdayMidAugust(year);
+    if (target < now || resultYears.has(target.getFullYear())) {
+      target = saturdayMidAugust(year + 1);
     }
-    return { date: target, confirmed: false, comp: null };
+    return { date: target, confirmed: false, comp: null, traditionHosts: traditionHosts(stats) };
+  }
+
+  /**
+   * Who arranges next year, by the tradition: this year's third place
+   * together with the second-to-last finisher.
+   */
+  function traditionHosts(stats) {
+    const { latest, per } = stats;
+    if (!latest) return '';
+    const entries = Object.entries(latest.scores).sort((a, b) => a[1] - b[1]);
+    if (entries.length < 4) return '';
+    const nameOf = (id) => (per[id] ? per[id].participant.name : '');
+    const third = entries.find(([, pos]) => pos === 3);
+    const secondLast = entries[entries.length - 2];
+    return [third && nameOf(third[0]), secondLast && nameOf(secondLast[0])]
+      .filter(Boolean)
+      .join(' & ');
   }
 
   function renderCountdown() {
     const next = nextEventDate(App.stats);
     const tag = $('#countdown-tag');
 
-    const { latest } = App.stats;
-    const hosts =
-      next.hosts ||
-      (latest ? [latest.arranger3rd, latest.arrangerSecondLast].filter(Boolean).join(' & ') : '');
+    const hosts = next.hosts || next.traditionHosts || '';
 
     const dateStr = next.date.toLocaleDateString('sv-SE', {
       weekday: 'long',
@@ -685,7 +706,9 @@
     });
     const timeStr = next.date.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
     const where = next.location ? ` · ${next.location}` : '';
-    const baseNote = `${dateStr} kl ${timeStr}${where}${hosts ? ` — arrangeras av ${hosts}.` : ''}`;
+    const baseNote = `${dateStr} kl ${timeStr}${where}${
+      hosts ? ` — arrangeras${next.confirmed ? '' : ' enligt traditionen'} av ${hosts}.` : ''
+    }`;
 
     const nums = [$('#cd-days'), $('#cd-hours'), $('#cd-mins')];
     const labels = $$('#countdown .count-label');
