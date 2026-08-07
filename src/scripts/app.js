@@ -1900,6 +1900,59 @@
     }
   ];
 
+  /* ======================================================================
+     Sangboken
+     ====================================================================== */
+
+  function renderSongs() {
+    const picker = $('#song-picker');
+    const sheet = $('#song-sheet');
+    if (!picker || !sheet || typeof PEKKAS_SONGS === 'undefined') return;
+
+    const songs = PEKKAS_SONGS;
+
+    picker.innerHTML = songs
+      .map(
+        (song, i) => `
+        <button class="song-chip ${i === 0 ? 'active' : ''}" data-song="${song.id}">
+          <span class="song-chip-year">${song.year}</span>
+          <span class="song-chip-title">${esc(song.title)}</span>
+        </button>`
+      )
+      .join('');
+
+    const show = (id) => {
+      const song = songs.find((x) => x.id === id) || songs[0];
+      $$('#song-picker .song-chip').forEach((b) =>
+        b.classList.toggle('active', b.dataset.song === song.id)
+      );
+      const lines = song.lines
+        .map((line) => {
+          if (line === '') return '<div class="song-break"></div>';
+          if (typeof line === 'object') {
+            return `<div class="song-line"><span>${esc(line.o)}</span><small>${esc(line.t)}</small></div>`;
+          }
+          return `<div class="song-line"><span>${esc(line)}</span></div>`;
+        })
+        .join('');
+      sheet.innerHTML = `
+        <header class="song-head">
+          <span class="song-year-badge">${song.year}</span>
+          <h2>${esc(song.title)}</h2>
+          ${song.subtitle ? `<p class="song-subtitle">${esc(song.subtitle)}</p>` : ''}
+          ${song.melody ? `<p class="song-melody">\u266a Melodi: ${esc(song.melody)}</p>` : ''}
+        </header>
+        <div class="song-lyrics">${lines}</div>
+        <footer class="song-foot">Skal! \ud83c\udf7b</footer>`;
+    };
+
+    picker.addEventListener('click', (e) => {
+      const btn = e.target.closest('.song-chip');
+      if (btn) show(btn.dataset.song);
+    });
+    show(songs[0].id);
+  }
+
   function renderGames() {
     const byYear = {};
     GAMES.forEach((g) => (byYear[g.year] = g));
@@ -2281,7 +2334,7 @@
     window.addEventListener('resize', positionNavIndicator);
 
     const hash = location.hash.replace('#', '');
-    if (['overview', 'medals', 'history', 'achievements', 'stats', 'games'].includes(hash)) {
+    if (['overview', 'medals', 'history', 'achievements', 'stats', 'songs', 'games'].includes(hash)) {
       App.currentView = hash;
     }
   }
@@ -2352,6 +2405,7 @@
       renderStatsView();
       renderH2HControls();
       renderElo();
+      renderSongs();
       renderGames();
       initMap();
 

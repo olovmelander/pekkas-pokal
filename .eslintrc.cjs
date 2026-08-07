@@ -37,6 +37,7 @@ module.exports = {
     
     // Achievement system
     ACHIEVEMENT_DEFINITIONS: 'readonly',
+    PEKKAS_SONGS: 'readonly',
     ACHIEVEMENT_CATEGORIES: 'readonly',
     ACHIEVEMENT_RARITIES: 'readonly',
     AchievementHelpers: 'readonly',
