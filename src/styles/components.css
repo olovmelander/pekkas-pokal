@@ -1507,6 +1507,12 @@
    Timeline additions
    ========================================================================== */
 
+.tl-photo[hidden] {
+  /* display:block below would defeat the hidden attribute and show a
+     broken-image placeholder on years without a photo */
+  display: none;
+}
+
 .tl-photo {
   display: block;
   /* Bleeds past the card padding, so it has to escape the global

@@ -212,7 +212,8 @@
 2022,2022-08-06,Skytte,Arnäsvall,Ludvig Ulenius,Henrik Lundqvist,5,9,3,10,-,7,4,8,6,2,-,1,-
 2023,2023-08-19,Fäkting,Stockholm,Viktor Jones,Mikael Hägglund,7,3,10,1,,,2,8,9,4,-,-,-
 2024,2024-08-17,Fisketävling,Själevad,Tobias Lundqvist ,Per Olsson ,7,10,4,9,1,2,12,5,3,11,8,6,-
-2025,2025-08-16,Flipper,Eskilstuna/Västerås,Viktor Jones,Mikael Hägglund,2,7,1,11,10,5,9,12,3,6,4,8,-`;
+2025,2025-08-16,Flipper,Eskilstuna/Västerås,Viktor Jones,Mikael Hägglund,2,7,1,11,10,5,9,12,3,6,4,8,-
+2026,2026-08-06,Lerskulptur,Barcelona,Per Olsson,Per Vikman,10,8,1,6,9,12,3,11,7,4,5,2,-`;
 
   async function loadData() {
     let text = null;
