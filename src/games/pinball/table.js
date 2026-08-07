@@ -624,7 +624,7 @@ export function createPlayfieldCanvas(_participants = [], logo = null) {
   g.fillRect(toU(L.laneX), toV(L.domeY), toU(L.outerX) - toU(L.laneX), toV(2) - toV(L.domeY));
 
   /* ---- Ball-save lamp label, just above the apron ---- */
-  g.fillStyle = 'rgba(242,193,78,.5)';
+  g.fillStyle = 'rgba(61,220,123,.55)';
   g.font = '700 15px Inter, sans-serif';
   g.letterSpacing = '3px';
   g.fillText('NY BOLL', toU(cx), toV(3.55));
