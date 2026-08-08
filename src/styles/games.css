@@ -1375,3 +1375,133 @@ body.game-open {
 .cl-tools[hidden] {
   display: none;
 }
+
+/* ==================================================================
+   Pekkas Lerduvor (2022) — HUD ovanpå basstilarna
+   ================================================================== */
+
+/* Streak-multiplikatorn */
+
+.sk-streak {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.2rem;
+  color: #5eead4;
+  text-shadow: 0 0 16px rgba(94, 234, 212, 0.55);
+}
+
+.sk-streak.hot {
+  color: #f2c14e;
+  text-shadow: 0 0 20px rgba(242, 193, 78, 0.7);
+}
+
+/* Skjutkortet: en rad prickar per serie, som ett riktigt 25-kort */
+
+.sk-card {
+  position: absolute;
+  left: 12px;
+  top: calc(max(10px, env(safe-area-inset-top)) + 62px);
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(14, 16, 10, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+
+.sk-card.show {
+  display: flex;
+}
+
+.sk-row {
+  display: flex;
+  gap: 4px;
+  opacity: 0.45;
+}
+
+.sk-row.now {
+  opacity: 1;
+}
+
+.sk-row i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+
+.sk-row i.hit {
+  background: #3ddc7b;
+  box-shadow: 0 0 8px rgba(61, 220, 123, 0.7);
+}
+
+.sk-row i.miss {
+  background: #ff5c4a;
+  box-shadow: 0 0 6px rgba(255, 92, 74, 0.6);
+}
+
+/* Patronindikatorn */
+
+.sk-shells {
+  position: absolute;
+  right: 14px;
+  bottom: calc(max(14px, env(safe-area-inset-bottom)) + 66px);
+  display: flex;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.sk-shells i {
+  width: 12px;
+  height: 26px;
+  border-radius: 4px 4px 5px 5px;
+  background: linear-gradient(180deg, #d23b4e 62%, #c9982e 62%);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.sk-shells i.spent {
+  opacity: 0.18;
+  transform: translateY(3px);
+}
+
+/* Kornet: ring + prick som följer fingret */
+
+.sk-cross {
+  position: absolute;
+  width: 58px;
+  height: 58px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.sk-cross.show {
+  opacity: 1;
+}
+
+.sk-cross::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 244, 214, 0.85);
+  box-shadow: 0 0 12px rgba(0, 0, 0, 0.35), inset 0 0 10px rgba(0, 0, 0, 0.2);
+}
+
+.sk-cross i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: #ffe9b0;
+  box-shadow: 0 0 8px rgba(255, 233, 176, 0.9);
+}
