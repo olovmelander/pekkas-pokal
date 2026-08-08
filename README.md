@@ -200,14 +200,28 @@ tänds i den riktiga målapparaten ovanför pisten: grön lampa och summer för
 dig, röd för motståndaren. Poäng: tusch 100, ripost 175, fint-tusch 150,
 parad 25, matchvinst 500 + 100 per tusch i marginal.
 
-**Teknik.** Fäktarna är ledade lågpolyfigurer — mask, jacka, knickers,
-florett — som poseras helt i kod: gardvinklar per linje, utfall, parader
-och vacklanden är interpolerade poser, inga animationsfiler. Salen är
-procedurell: fiskbensparkett och den borstade metallpisten är
-canvas-texturer, och bakom de höga bågfönstren ligger ett skymnings-
-Stockholm med Stadshusets tre kronor. På bänken sitter resten av gänget
-och kastar upp armarna vid varje tusch. Ljudet syntetiseras — paradens
-klingande klink, målapparatens hårda summer och publiksorlet.
+**Teknik.** Fäktarna är ledade lågpolyfigurer — mask med galler, jacka
+med blank lamé, knickers, florett — som poseras helt i kod: gardvinklar
+per linje, utfall, parader och vacklanden är interpolerade poser, inga
+animationsfiler. Klingan drar ett additivt spår efter sig i utfallet.
+
+Interiörer står och faller med ljussättningen, och regeln är *hierarki* —
+en dominant källa, ett par fills, några accenter, aldrig allt lika starkt:
+
+- **Dominant:** den låga kvällssolen genom bågfönstren, varm och den enda
+  som kastar skuggor. Falska volymetriska strålar (halvtransparent
+  geometri — tricket som går att köra var som helst) bär in den i rummet,
+  med damm som vänder sig inne i dem.
+- **Fills:** en kall ovanifrånhemisfär och en frontfill från kamerahållet,
+  så fäktarna inte blir silhuetter mot sin egen sal.
+- **Accenter:** ljuskronorna, var och en med sken och en ljuspöl målad på
+  golvet under sig.
+
+Resten följer av det: fiskbensparketten är blank nog att fånga en
+högdager, pisten hårdare, och de panelade väggarna har nog tonvariation
+för att mörkret ska ha form. Bakom fönstren ligger ett skymnings-Stockholm
+med Stadshusets tre kronor. Ljudet syntetiseras — paradens klingande
+klink, målapparatens hårda summer och publiksorlet.
 
 **Pekkas Lerduvor (2022)**
 

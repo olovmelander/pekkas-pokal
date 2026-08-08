@@ -180,24 +180,58 @@ export async function createFencing(container) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
+  renderer.toneMappingExposure = 1.16;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   canvasHost.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x171d16);
-  scene.fog = new THREE.Fog(0x171d16, 12, 26);
+  scene.background = new THREE.Color(0x11170f);
+  scene.fog = new THREE.Fog(0x151b13, 14, 34);
 
   const camera = new THREE.PerspectiveCamera(46, 1, 0.1, 60);
   camera.position.set(0, 2.4, 8.6);
 
-  const hemi = new THREE.HemisphereLight(0xffe9c8, 0x1c2418, 0.9);
+  // FILL: a cool overhead wash so nothing in shadow goes to pure black
+  const hemi = new THREE.HemisphereLight(0x9fb8d8, 0x201a12, 0.62);
   scene.add(hemi);
-  const key = new THREE.DirectionalLight(0xffdfae, 1.35);
-  key.position.set(-4, 8, 6);
+
+  // DOMINANT: the low sun coming through the arched windows. It is the
+  // only light that casts, which keeps one clean shadow direction instead
+  // of the mush you get from several casters.
+  const key = new THREE.DirectionalLight(0xffcf92, 2.1);
+  key.position.set(-6, 9, -16);
+  key.target.position.set(2, 0.6, 2);
+  key.castShadow = true;
+  key.shadow.mapSize.set(1024, 1024);
+  key.shadow.camera.left = -13;
+  key.shadow.camera.right = 13;
+  key.shadow.camera.top = 11;
+  key.shadow.camera.bottom = -8;
+  key.shadow.camera.near = 1;
+  key.shadow.camera.far = 46;
+  key.shadow.bias = -0.0009;
+  key.shadow.normalBias = 0.022;
   scene.add(key);
-  const cool = new THREE.DirectionalLight(0x8fa8d8, 0.5);
-  cool.position.set(6, 5, -4);
-  scene.add(cool);
+  scene.add(key.target);
+
+  // FILL 2: from the camera side, so the fencers are not backlit into
+  // silhouettes against their own salle
+  const front = new THREE.DirectionalLight(0xffe8cf, 0.95);
+  front.position.set(2, 5, 14);
+  scene.add(front);
+
+  // FILL 3: warm bounce up off the parquet
+  const bounce = new THREE.DirectionalLight(0xc98f4e, 0.3);
+  bounce.position.set(3, -4, 7);
+  scene.add(bounce);
+
+  // ACCENTS: the two chandeliers, warm and local
+  [-5, 5].forEach((x) => {
+    const lamp = new THREE.PointLight(0xffb066, 26, 15, 2);
+    lamp.position.set(x, 5.6, -1.5);
+    scene.add(lamp);
+  });
 
   /* World */
   const glow = glowTexture();
@@ -211,6 +245,9 @@ export async function createFencing(container) {
   foe.position.set(1.9, 0, 0);
   foe.rotation.y = Math.PI;
   scene.add(foe);
+  [player, foe].forEach((f) => f.traverse((o) => {
+    if (o.isMesh) o.castShadow = true;
+  }));
 
   /* Blade glint sprite shows which line the AI attack is coming in */
   const glintMat = new THREE.SpriteMaterial({
@@ -469,13 +506,7 @@ export async function createFencing(container) {
     renderLine();
     showOpponent();
     // New socks for the new opponent
-    foe.traverse((o) => {
-      if (o.material && o.material.color && o.geometry &&
-          o.geometry.type === 'CylinderGeometry' && o.position.y === -0.72) {
-        o.material = o.material.clone();
-        o.material.color.set(opp().sock);
-      }
-    });
+    foe.userData.socks.forEach((sock) => sock.material.color.set(opp().sock));
     toast(opp().taunt, true);
     startReady();
   }
@@ -905,6 +936,16 @@ export async function createFencing(container) {
 
     poseFencer(player, me, t);
     poseFencer(foe, ai, t);
+
+    // Blade streaks: brightest at the middle of the drive, gone at rest
+    const streak = (fencer, who, dur) => {
+      const driving = who.pose === 'lunge' || who.pose === 'attack' || who.pose === 'feint';
+      const k = driving ? Math.sin(Math.min(1, who.t / dur) * Math.PI) : 0;
+      const m = fencer.userData.trailMat;
+      m.opacity += (k * 0.65 - m.opacity) * Math.min(1, dt * 18);
+    };
+    streak(player, me, me.pose === 'feint' ? 0.18 : 0.24);
+    streak(foe, ai, opp().attackDur);
 
     /* Crowd: idle sway, arms up while celebrating */
     salle.crowd.forEach((p, i) => {
