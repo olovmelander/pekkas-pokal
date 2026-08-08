@@ -93,6 +93,8 @@ Ridiculous Fishings prisbelönta spelloop. 2026 är *Pekkas Lerskulptur* —
 drejning i en Barcelona-ateljé, inspirerat av Let's Create! Pottery.
 2023 är *Pekkas Fäktning* — dueller på pisten i Stockholm, inspirerat av
 Nidhogg och riktiga fäktningens parad–ripost.
+2022 är *Pekkas Lerduvor* — lerduveskytte över Arnäsvalls fält, med
+olympiska skeetets pull-ritual och Duck Hunt-arvets sikta-och-skjut.
 
 Att lägga till ett nytt års spel:
 
@@ -207,6 +209,36 @@ Stockholm med Stadshusets tre kronor. På bänken sitter resten av gänget
 och kastar upp armarna vid varje tusch. Ljudet syntetiseras — paradens
 klingande klink, målapparatens hårda summer och publiksorlet.
 
+**Pekkas Lerduvor (2022)**
+
+Arnäsvall i augustikväll: sädesfält, granskog, ladugården med vita knutar
+— och gänget på fikastolar bakom stationen. En hel runda om 25 duvor:
+
+1. **PULL!** Duvan släpps efter en slumpad fördröjning på upp till ett par
+   sekunder — precis som i olympisk skeet. Var redo.
+2. **Svinga igenom.** Håll fingret på skärmen och följ duvan; släpp när
+   kornet ligger på, så träffar hagelsvärmen där du pekar. På dator siktar
+   du med musen och klickar.
+3. **Två patroner** per singel, som i riktig trap. Dubbléerna i finalen:
+   två duvor i luften, ett skott var.
+
+Tre serier — uppvärmning rakt från graven, korsare från sidorna, final med
+dubbléer — och till sist den 25:e: **GULDDUVAN**, liten, snabb och värd
+500, med en enda patron. Varje kross i rad höjer streaken; en bom nollar
+den. Skjutkortet fylls i uppe till vänster som ett riktigt 25-kort, och
+Ludvigs guldrunda från 2022 är spökresultatet att slå.
+
+**Teknik.** Duvan är en fluorescerande orange kupol som krossas i riktiga
+3D-skärvor när svärmen tar. Hagelgeväret — en bockbössa sedd från axeln,
+med ribba, guldkorn, mynningsflamma och röksprite — följer siktet och
+rekylerar in i axeln. Fältet, graven, gärdsgården, ladan och två
+granridåer med luftperspektiv är procedurella; himlen är en gradientdome
+med lågt sammetsljus och seglande moln, och fåglar korsar den mellan
+dropparna. Ljudet syntetiseras: skottets knall med ekot som rullar
+tillbaka från skogsbrynet, brytvapnets klick-klack vid omladdning,
+kastarens svisch, duvans spröda kross — och fågelsång med vindbädd
+däremellan.
+
 **Kontroller i flipperspelet**
 
 | | Mobil | Dator |
@@ -270,6 +302,7 @@ npm run lint     # ESLint
 | `src/games/fishing/` | Fiskespelet: `species` (procedurella fiskar), `world` (sjö, vattenshader, båt), `audio` (syntetiskt ljud), `index` (spelloop) |
 | `src/games/clay/` | Drejspelet: `studio` (ateljé, matcaps, drejskiva), `audio` (syntetiskt ljud), `index` (lerfysik + spelloop) |
 | `src/games/fencing/` | Fäktspelet: `salle` (fäktsal, fäktare, texturer), `audio` (syntetiskt ljud), `index` (duell-AI + spelloop) |
+| `src/games/shooting/` | Skyttespelet: `range` (fält, gevär, lerduvor), `audio` (syntetiskt ljud), `index` (banor + spelloop) |
 | `public/` | Statiska filer: `event.json`, `manifest.json`, ikoner, `og-image.png`, `photos/` |
 
 Data hämtas från `competition-data.csv` vid sidladdning. Om filen inte går att

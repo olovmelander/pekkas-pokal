@@ -1898,6 +1898,14 @@
       module: 'src/games/clay/index.js'
     },
     {
+      year: 2022,
+      title: 'Pekkas Lerduvor',
+      competition: 'Skytte',
+      tagline: 'PULL! 24 duvor över Arnäsvalls fält — och till sist guldduvan.',
+      icon: '🥏',
+      module: 'src/games/shooting/index.js'
+    },
+    {
       year: 2023,
       title: 'Pekkas Fäktning',
       competition: 'Fäktning',
