@@ -59,7 +59,7 @@ const PEKKAS_SONGS = [
     id: 'pekka-de-la-espana',
     year: 2026,
     title: 'Pekka de la España',
-    subtitle: 'Bidrag till årets PP-låt 2026 — av Viktor',
+    subtitle: '🏆 Vinnare av årets PP-låt 2026 — av Viktor',
     melody: 'Cant del Barça',
     lines: [
       'Spaanien',
