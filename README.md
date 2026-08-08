@@ -88,7 +88,8 @@ Fliken **Spel** innehåller ett spel per år. 2025 är *Pekkas Pokal Flipper* �
 flipperspel i Three.js som byggs helt i webbläsaren (ingen bild- eller
 ljudfil laddas ner, bara Three.js självt, och först när man öppnar spelet).
 2024 är *Pekkas Fiske* — ett fiskespel med samma teknik, inspirerat av
-Ridiculous Fishings prisbelönta spelloop.
+Ridiculous Fishings prisbelönta spelloop. 2026 är *Pekkas Lerskulptur* —
+drejning i en Barcelona-ateljé, inspirerat av Let's Create! Pottery.
 
 Att lägga till ett nytt års spel:
 
@@ -140,6 +141,36 @@ Djupet styr färg, dimma, ljus — och ett lågpassfilter på hela ljudbussen, s
 världen blir bokstavligen dovare ju längre ner man kommer. Ingen
 efterbehandling: ACES-tonemappning gör jobbet i stället, så telefonen
 behåller sin bildfrekvens.
+
+**Pekkas Lerskulptur (2026)**
+
+Kvällen i keramikateljén, som i Barcelona: keramikern visar en form, du
+drejar den — och keramikern dömer, precis som i verkligheten.
+
+1. **Forma.** Drejskivan snurrar. Dra mot leran för att trycka in, dra utåt
+   för att dra ut — vid precis den höjd du rör. Målets silhuett hänger som
+   ett spöke över skivan, och likhetsmätaren svarar på den enda fråga som
+   räknas: börjar det likna?
+2. **Glätta.** Håll GLÄTTA-knappen så jämnar handflatan ut kurvorna.
+3. **Bränn.** Tryck KLAR (eller vänta tills tiden går ut — ugnen väntar
+   inte). Alstret glöder i ugnen, får sin glasyr och sitt betyg 1–10 med
+   keramikerns kommentar, och ställs på bänken.
+
+Tre alster per kväll: **Skålen** (honungsglasyr), **Vasen** (koboltglasyr)
+och **Amforan** (seladonglasyr). Poängen räknas på likhet i kvadrat plus
+tidsbonus, och rekordet sparas per enhet.
+
+**Teknik.** Leran är ett radiellt höjdfält lindat till ett lathe-nät som
+uppdateras på plats — drejränder och en svag spiral av fingermärken läggs
+på medan skivan snurrar. Skuggningen är en genererad **matcap**, samma
+trick som skulpteringsprogram använder för sin lerförhandsvisning: hela
+ljussättningen bakas in i en enda liten textur som slås upp per normal,
+så våta highlights kostar ingenting. Ateljén — kakelgolv, bågfönstret med
+Barcelona-silhuetten, hyllorna med brända krukor (slumpade lathe-profiler
+med glasyren bakad i vertexfärger, en draw call per hylla), ugnen och
+keramikern med basker — är helt procedurell. Ljudet syntetiseras:
+drejskivans brum och lerans våta klafs är kontinuerliga WebAudio-lager
+som styrs av hur hårt händerna arbetar.
 
 **Kontroller i flipperspelet**
 
@@ -202,6 +233,7 @@ npm run lint     # ESLint
 | `src/styles/` | `main` (tokens/teman), `layout`, `components`, `animations`, `games`, `responsive` |
 | `src/games/pinball/` | Flipperspelet: `physics` (2D-kollision), `table` (layout + banans grafik), `meshes` (3D), `index` (spelloop) |
 | `src/games/fishing/` | Fiskespelet: `species` (procedurella fiskar), `world` (sjö, vattenshader, båt), `audio` (syntetiskt ljud), `index` (spelloop) |
+| `src/games/clay/` | Drejspelet: `studio` (ateljé, matcaps, drejskiva), `audio` (syntetiskt ljud), `index` (lerfysik + spelloop) |
 | `public/` | Statiska filer: `event.json`, `manifest.json`, ikoner, `og-image.png`, `photos/` |
 
 Data hämtas från `competition-data.csv` vid sidladdning. Om filen inte går att
