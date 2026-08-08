@@ -1890,6 +1890,14 @@
    */
   const GAMES = [
     {
+      year: 2026,
+      title: 'Pekkas Lerskulptur',
+      competition: 'Lerskulptur',
+      tagline: 'Dreja tre alster i Barcelona-ateljén — keramikern dömer likheten.',
+      icon: '🏺',
+      module: 'src/games/clay/index.js'
+    },
+    {
       year: 2024,
       title: 'Pekkas Fiske',
       competition: 'Fisketävling',

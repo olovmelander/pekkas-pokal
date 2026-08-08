@@ -1100,3 +1100,167 @@ body.game-open {
 .fg-steps[hidden] {
   display: none;
 }
+
+/* ==================================================================
+   Pekkas Lerskulptur (2026) — HUD ovanpå pb/fg-basstilarna
+   ================================================================== */
+
+/* Timern */
+
+.cl-timer {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.2rem;
+  color: #f0d9a8;
+  text-shadow: 0 0 16px rgba(242, 193, 78, 0.5);
+  font-variant-numeric: tabular-nums;
+}
+
+.cl-timer.low {
+  color: #ff7a6b;
+  text-shadow: 0 0 18px rgba(255, 122, 107, 0.65);
+  animation: cl-pulse 1s ease-in-out infinite;
+}
+
+@keyframes cl-pulse {
+  50% { opacity: 0.55; }
+}
+
+/* Uppdragskortet: målets silhuett + namn */
+
+.cl-task {
+  position: absolute;
+  left: 12px;
+  top: calc(max(10px, env(safe-area-inset-top)) + 62px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px 8px 8px;
+  border-radius: 12px;
+  background: rgba(16, 10, 6, 0.55);
+  border: 1px solid rgba(94, 234, 212, 0.28);
+  backdrop-filter: blur(6px);
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  pointer-events: none;
+}
+
+.cl-task.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.cl-task canvas {
+  display: block;
+}
+
+.cl-task-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.9rem;
+  letter-spacing: 0.06em;
+  color: rgba(205, 244, 236, 0.95);
+}
+
+/* Likhetsmätaren */
+
+.cl-sim {
+  position: absolute;
+  left: 50%;
+  bottom: calc(max(14px, env(safe-area-inset-bottom)) + 64px);
+  transform: translateX(-50%);
+  width: min(320px, 64vw);
+  height: 22px;
+  border-radius: var(--r-pill);
+  background: rgba(16, 10, 6, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+
+.cl-sim.show {
+  opacity: 1;
+}
+
+.cl-sim i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0%;
+  background: linear-gradient(90deg, #8a5a3c, #d9a05b);
+  transition: width 0.18s ease-out, background 0.3s ease;
+}
+
+.cl-sim.good i {
+  background: linear-gradient(90deg, #3e8e7e, #5eead4);
+}
+
+.cl-sim.great i {
+  background: linear-gradient(90deg, #d9a05b, #f2c14e);
+  box-shadow: 0 0 18px rgba(242, 193, 78, 0.65);
+}
+
+.cl-sim b {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #fff;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
+}
+
+/* Verktygsknapparna */
+
+.cl-tools {
+  position: absolute;
+  left: 50%;
+  bottom: max(14px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+
+.cl-tools.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.cl-tool {
+  padding: 0.65rem 1.2rem;
+  border-radius: var(--r-pill);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: rgba(224, 229, 250, 0.92);
+  background: rgba(16, 10, 6, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(6px);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.cl-tool:active {
+  transform: scale(0.96);
+  background: rgba(94, 234, 212, 0.18);
+}
+
+.cl-tool.primary {
+  color: #241a05;
+  background: linear-gradient(140deg, #f2c14e, #d99a2b);
+  border-color: transparent;
+  box-shadow: 0 4px 18px rgba(242, 193, 78, 0.4);
+}
+
+/* Fasetiketten ligger lägre i drejspelet så uppdragskortet går fritt */
+#cl-phase {
+  top: 21%;
+}
