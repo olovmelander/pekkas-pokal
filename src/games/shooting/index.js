@@ -357,14 +357,20 @@ export async function createShooting(container) {
       const m = clay.mesh;
       m.visible = true;
       m.scale.setScalar(state.isGold ? 0.62 : 1);
+      m.rotation.set(0, 0, 0);
       m.children.forEach((c) => {
-        if (c.material && c.material.color && !c.userData.shard) {
+        // A previous KROSS hid the dome and rim — bring the body back,
+        // park the shards. Without this every clay after a hit flew
+        // invisible and the round silently died.
+        if (m.userData.shards.includes(c)) {
+          c.visible = false;
+          return;
+        }
+        c.visible = true;
+        if (c.material && c.material.color) {
           c.material.color.set(state.isGold ? 0xf2c14e : 0xff6a1c);
           c.material.emissive.set(state.isGold ? 0x4a3200 : 0x511a00);
         }
-      });
-      clay.mesh.userData.shards.forEach((sh) => {
-        sh.visible = false;
       });
       clay.shardT = 0;
 
