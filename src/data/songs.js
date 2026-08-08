@@ -7,6 +7,10 @@
  *
  * En rad är antingen en sträng eller { o: 'originalrad', t: 'översättning' }
  * när sången sjungs på ett annat språk. `subtitle` ger sammanhang.
+ *
+ * `author` är den som först skrev/postade sången — hämtat ur gruppchattens
+ * historik. Visas som "Av <namn>" på sångbladet. Utelämna när upphovet är
+ * okänt eller sången är en klassiker utifrån.
  */
 
 const PEKKAS_SONGS = [
@@ -37,7 +41,8 @@ const PEKKAS_SONGS = [
     id: 'cant-del-pekkas',
     year: 2026,
     title: 'Cant del Pekkas',
-    subtitle: 'Bidrag till årets PP-låt 2026 — av Henrik',
+    subtitle: 'Bidrag till årets PP-låt 2026',
+    author: 'Henrik',
     melody: 'Cant del Barça',
     lines: [
       'Stig så upp',
@@ -59,7 +64,8 @@ const PEKKAS_SONGS = [
     id: 'pekka-de-la-espana',
     year: 2026,
     title: 'Pekka de la España',
-    subtitle: '🏆 Vinnare av årets PP-låt 2026 — av Viktor',
+    subtitle: '🏆 Vinnare av årets PP-låt 2026',
+    author: 'Viktor',
     melody: 'Cant del Barça',
     lines: [
       'Spaanien',
