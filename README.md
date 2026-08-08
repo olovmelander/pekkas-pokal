@@ -80,7 +80,8 @@ Fliken **Sånger** visar föreningens snapsvisor, ramsor och officiella låtar.
 Texterna bor i [`src/data/songs.js`](src/data/songs.js) — lägg till ett nytt
 objekt i listan (id, år, titel, melodi och textrader) så dyker sången upp i
 väljaren automatiskt. En rad kan också vara `{ o: 'originalrad', t:
-'översättning' }` när sången sjungs på ett annat språk, som Cant del Barça.
+'översättning' }` om en sång sjungs på ett annat språk och behöver
+radvis översättning.
 
 ### 5. Spel
 
