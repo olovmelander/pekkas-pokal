@@ -95,6 +95,8 @@ drejning i en Barcelona-ateljé, inspirerat av Let's Create! Pottery.
 Nidhogg och riktiga fäktningens parad–ripost.
 2022 är *Pekkas Lerduvor* — lerduveskytte över Arnäsvalls fält, med
 olympiska skeetets pull-ritual och Duck Hunt-arvets sikta-och-skjut.
+2019 är *Pekkas Pingis* — bordtennis i Bredbyns bygdegård, inspirerat av
+Table Tennis Touch och Rockstars Table Tennis.
 
 Att lägga till ett nytt års spel:
 
@@ -281,6 +283,36 @@ Ljudet syntetiseras: skottets knall med ekot som rullar tillbaka från
 skogsbrynet, brytvapnets klick-klack vid omladdning, kastarens svisch,
 duvans spröda kross — och fågelsång med vindbädd däremellan.
 
+**Pekkas Pingis (2019)**
+
+Bygdegården i Bredbyn en sensommarkväll. Tre matcher mot 2019 års riktiga
+pall — Henrik (brons), Rickard (silver) och Viktor Jones (mästaren) — och
+först till 7 med två bollars marginal vinner varje match. Designen lånar
+från genrens bästa: Table Tennis Touch-skolans styrning där racketen
+följer fingret och **flicken i träffögonblicket är slaget** — uppåt ger
+topspin-drive, nedåt backspin, sidled placerar mot hörnen — och Rockstars
+Table Tennis-regel att långa dueller ska löna sig: varje slag i rallyt
+höjer poängen för den som vinner det, smash-avslut och serve-ess ger extra.
+
+1. **Serva.** Dra och släpp. Bollen studsar på din sida först, som på
+   riktigt — serven ärver flickens skruv.
+2. **Rallyt.** Möt bollen med racketen; träffar du inte är poängen borta.
+   Hård flick är hårdare boll men större risk för nät eller utanför.
+3. **Motståndarna.** Henrik spelar säkert, Rickard loopar och straffar
+   höga studsar, Viktor placerar bort dig och smashar allt.
+
+**Teknik.** Bollen flyger med gravitation, luftbroms och Magnuskraft —
+topspin dyker i luften och *sparkar framåt* i studsen, backspin flyter
+och bromsar, precis som fysiken i förlagorna. Varje slag går genom samma
+lösare: välj nedslagspunkt och flygtid, så följer hastigheten — och
+felträffar och våld skjuter nedslaget mot nät eller långt ut. Nätet är
+ett riktigt objekt med bandkrypare. Hallen är byggd på ljushierarkin från
+de andra spelen: tre pendellampor med fejkvolymetriska koner och målade
+ljuspölar över bordet, en enda skuggkastande nyckelljuskälla, månljus och
+granar i fönstren, scen med ridå, fikabord och Pekkas-vimplar. Bollen har
+en tajt kontaktskugga (lärdomen från flipperbygget) så den står på bordet
+i stället för att sväva. Poängtavlan på väggen målas om efter varje boll.
+
 **Kontroller i flipperspelet**
 
 | | Mobil | Dator |
@@ -374,6 +406,7 @@ npm run lint     # ESLint
 | `src/games/clay/` | Drejspelet: `studio` (ateljé, matcaps, drejskiva), `audio` (syntetiskt ljud), `index` (lerfysik + spelloop) |
 | `src/games/fencing/` | Fäktspelet: `salle` (fäktsal, fäktare, texturer), `audio` (syntetiskt ljud), `index` (duell-AI + spelloop) |
 | `src/games/shooting/` | Skyttespelet: `range` (fält, gevär, lerduvor), `grass` (instansierad äng med vind), `audio` (syntetiskt ljud), `index` (banor + spelloop) |
+| `src/games/pingis/` | Pingisspelet: `hall` (bygdegård, bord, figurer), `audio` (syntetiskt ljud), `index` (fysik, AI och spelloop) |
 | `public/` | Statiska filer: `event.json`, `manifest.json`, ikoner, `og-image.png`, `photos/` |
 
 Data hämtas från `competition-data.csv` vid sidladdning. Om filen inte går att
