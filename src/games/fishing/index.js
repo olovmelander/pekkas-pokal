@@ -91,6 +91,26 @@ function buildHud(root) {
       </div>
     </div>
 
+    <button class="pb-info" id="fg-info" aria-label="Så spelar du">?</button>
+
+    <div class="pb-help" id="fg-help" hidden>
+      <div class="pb-help-card">
+        <h3>Så fiskar du</h3>
+        <p class="pb-help-sub">Pekkas Fiske</p>
+        <ul class="pb-help-list">
+          <li><i style="--c:#7fd8e8"></i><b>Nedåt — väj</b> Slipp förbi fisken: varje fisk du väjer för höjer multiplikatorn. Nuddar du en fisk krokas den direkt.</li>
+          <li><i style="--c:#8b93ad"></i><b>Skräp</b> Stövlar, burkar och cykeldäck bränner kastet och nollar multiplikatorn.</li>
+          <li><i style="--c:#f2c14e"></i><b>Uppåt — träffa</b> Nu gäller tvärtom: fånga allt på vägen upp. Multiplikatorn du samlade spenderas här.</li>
+          <li><i style="--c:#5eead4"></i><b>I luften — tryck</b> Tryck på fisken innan den plumsar i: i tunnan för dubbelt. Tar du alla: PERFEKT KAST.</li>
+          <li><i style="--c:#6f9b5a"></i><b>Djupet</b> Mört och abborre nära ytan, sik från 12 m, gädda från 18 m, lax från 30 m. Ju djupare, desto finare.</li>
+          <li><i style="--c:#ffd166"></i><b>PEKKAGÄDDAN</b> 5 000 poäng, guldkrönt, simmar på 50+ meter. Inte alltid hemma.</li>
+        </ul>
+        <p class="pb-help-tip">Botten på 60 m utan att nudda något ger bottenkänning: stor bonus och full multiplikator.</p>
+        <div class="pb-help-keys">Styr draget: dra med fingret eller ←/→ · Tre kast per omgång</div>
+        <button class="pb-btn" id="fg-help-close">Tillbaka till sjön</button>
+      </div>
+    </div>
+
     <button class="pb-mute" id="fg-mute" aria-label="Ljud på/av">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M11 5 6 9H2v6h4l5 4V5Z"/><path class="pb-wave" d="M15.5 8.5a5 5 0 0 1 0 7"/>
@@ -103,7 +123,8 @@ function buildHud(root) {
     mult: q('#fg-mult'), zone: q('#fg-zone'), phase: q('#fg-phase'), toast: q('#fg-toast'),
     pops: q('#fg-pops'), overlay: q('#fg-overlay'), title: q('#fg-title'), text: q('#fg-text'),
     steps: q('#fg-steps'), scoreline: q('#fg-scoreline'), catchlist: q('#fg-catchlist'),
-    start: q('#fg-start'), mute: q('#fg-mute')
+    start: q('#fg-start'), mute: q('#fg-mute'),
+    info: q('#fg-info'), help: q('#fg-help'), helpClose: q('#fg-help-close')
   };
 }
 
@@ -530,6 +551,7 @@ export async function createFishing(container) {
   /* ---- Input ---------------------------------------------------------- */
 
   let dragging = false;
+  let helpOpen = false;
   const REACH = 9;
 
   function pointerToNdc(e) {
@@ -542,7 +564,7 @@ export async function createFishing(container) {
 
   function onPointerDown(e) {
     sfx.resume();
-    if (e.target.closest('.pb-overlay, .pb-mute')) return;
+    if (helpOpen || e.target.closest('.pb-overlay, .pb-mute, .pb-info, .pb-help')) return;
     if (state.phase === 'toss') {
       tryTapFish(e);
       return;
@@ -562,6 +584,11 @@ export async function createFishing(container) {
 
   function onKeyDown(e) {
     const k = e.key.toLowerCase();
+    if (k === '?' || (k === 'escape' && helpOpen)) {
+      setHelp(k === '?' ? !helpOpen : false);
+      return;
+    }
+    if (helpOpen) return;
     if (k === 'arrowleft' || k === 'a') state.targetX = Math.max(-REACH, state.targetX - 2.4);
     else if (k === 'arrowright' || k === 'd') state.targetX = Math.min(REACH, state.targetX + 2.4);
     else if (k === ' ' && (state.phase === 'idle' || state.phase === 'over' || state.phase === 'between')) {
@@ -617,11 +644,20 @@ export async function createFishing(container) {
     later(endCast, 750);
   }
 
+  /* Strategy card: pauses the game while open, like the pinball's */
+  function setHelp(open) {
+    helpOpen = open;
+    hud.help.hidden = !open;
+    if (open) dragging = false;
+  }
+
   canvasHost.addEventListener('pointerdown', onPointerDown);
   canvasHost.addEventListener('pointermove', onPointerMove);
   window.addEventListener('pointerup', onPointerUp);
   window.addEventListener('keydown', onKeyDown);
   hud.start.addEventListener('click', startGame);
+  hud.info.addEventListener('click', () => setHelp(!helpOpen));
+  hud.helpClose.addEventListener('click', () => setHelp(false));
   hud.mute.addEventListener('click', () => {
     sfx.muted = !sfx.muted;
     hud.mute.classList.toggle('off', sfx.muted);
@@ -862,7 +898,10 @@ export async function createFishing(container) {
 
     updateFish(dt, t);
 
-    if (state.phase === 'drop') {
+    if (helpOpen) {
+      // Strategy card open: hold the game still but keep the lake alive
+      sfx.setShaping?.(0);
+    } else if (state.phase === 'drop') {
       state.dropSpeed = Math.min(15.5, state.dropSpeed + dt * 1.7);
       state.depth += state.dropSpeed * dt;
       state.lureX += (state.targetX - state.lureX) * Math.min(1, dt * 6.5);
