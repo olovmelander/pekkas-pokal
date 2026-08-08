@@ -293,6 +293,12 @@ export async function createFishing(container) {
     return id;
   };
 
+  /* Camera scratch vectors — declared up here because startToss() cuts the
+     camera directly and runs before the loop section. */
+  const camGoal = new THREE.Vector3();
+  const lookGoal = new THREE.Vector3();
+  const lookAt = new THREE.Vector3(0, 1.5, 0);
+
   /* ---- Juice ---------------------------------------------------------- */
 
   const shake = { power: 0 };
@@ -644,9 +650,6 @@ export async function createFishing(container) {
   let raf = 0;
   let last = performance.now();
   let running = true;
-  const camGoal = new THREE.Vector3();
-  const lookGoal = new THREE.Vector3();
-  const lookAt = new THREE.Vector3(0, 1.5, 0);
   const tmpColor = new THREE.Color();
   const rodTip = new THREE.Vector3();
   const snowBox = snow.userData.box;
