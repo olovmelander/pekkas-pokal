@@ -201,6 +201,8 @@ export async function createClay(container) {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.08;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   canvasHost.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
@@ -211,11 +213,36 @@ export async function createClay(container) {
   camera.position.set(0, 2.4, 7.6);
 
   /* Warm studio light */
-  const hemi = new THREE.HemisphereLight(0xffe6c4, 0x40281a, 0.95);
+  // FILL: cool from above so nothing in shadow goes to pure black
+  const hemi = new THREE.HemisphereLight(0xbcd2ee, 0x3a2418, 0.6);
   scene.add(hemi);
-  const sunlight = new THREE.DirectionalLight(0xffd9a8, 1.5);
-  sunlight.position.set(-5, 7, 3);
+
+  // DOMINANT: the evening sun through the arched window — the only caster,
+  // aimed down the same line the visible shaft travels
+  const sunlight = new THREE.DirectionalLight(0xffd39a, 2.0);
+  sunlight.position.set(-6.5, 6.4, -5.2);
+  sunlight.target.position.set(0.6, 0.4, 1.4);
+  sunlight.castShadow = true;
+  sunlight.shadow.mapSize.set(1024, 1024);
+  sunlight.shadow.camera.left = -8;
+  sunlight.shadow.camera.right = 8;
+  sunlight.shadow.camera.top = 7;
+  sunlight.shadow.camera.bottom = -5;
+  sunlight.shadow.camera.near = 0.5;
+  sunlight.shadow.camera.far = 30;
+  sunlight.shadow.bias = -0.0009;
+  sunlight.shadow.normalBias = 0.02;
   scene.add(sunlight);
+  scene.add(sunlight.target);
+
+  // FILL 2: warm bounce off the terracotta floor, and a front fill so the
+  // potter and the wheel are not silhouettes against their own window
+  const bounce = new THREE.DirectionalLight(0xd9975a, 0.35);
+  bounce.position.set(2, -3, 4);
+  scene.add(bounce);
+  const front = new THREE.DirectionalLight(0xfff0dc, 0.55);
+  front.position.set(1.5, 3.5, 9);
+  scene.add(front);
   const kilnLight = new THREE.PointLight(0xff7a20, 0, 9, 2);
   kilnLight.position.set(3.4, 1.4, -2.6);
   scene.add(kilnLight);
@@ -228,6 +255,12 @@ export async function createClay(container) {
   const studio = buildStudio(firedMatcap);
   scene.add(studio.group);
   const wheel = buildWheel();
+  wheel.group.traverse((o) => {
+    if (o.isMesh) {
+      o.castShadow = true;
+      o.receiveShadow = true;
+    }
+  });
   scene.add(wheel.group);
 
   /* The display bench where finished pieces end up */
@@ -237,6 +270,8 @@ export async function createClay(container) {
     new THREE.MeshLambertMaterial({ color: 0x6b4526 })
   );
   benchTop.position.y = 0.85;
+  benchTop.castShadow = true;
+  benchTop.receiveShadow = true;
   bench.add(benchTop);
   [-1.1, 1.1].forEach((x) => {
     const leg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.85, 0.7), benchTop.material);
@@ -278,6 +313,31 @@ export async function createClay(container) {
   const clayMat = new THREE.MeshMatcapMaterial({ matcap: rawMatcap, color: 0xffffff });
   const clay = new THREE.Mesh(clayGeo, clayMat);
   clayGroup.add(clay);
+
+  // A matcap ignores scene lights, so the pot can never receive or cast a
+  // real shadow. This painted contact shadow is what stops it floating.
+  const contact = (() => {
+    const cv = document.createElement('canvas');
+    cv.width = 64;
+    cv.height = 64;
+    const c2 = cv.getContext('2d');
+    const rg = c2.createRadialGradient(32, 32, 2, 32, 32, 32);
+    rg.addColorStop(0, 'rgba(20,10,4,0.75)');
+    rg.addColorStop(0.55, 'rgba(20,10,4,0.32)');
+    rg.addColorStop(1, 'rgba(20,10,4,0)');
+    c2.fillStyle = rg;
+    c2.fillRect(0, 0, 64, 64);
+    const tex = new THREE.CanvasTexture(cv);
+    const m = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.5, 1.5),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false })
+    );
+    m.rotation.x = -Math.PI / 2;
+    m.position.y = 0.004;
+    m.renderOrder = 3;
+    return m;
+  })();
+  clayGroup.add(contact);
 
   const r = new Float32Array(N);
   const startLump = (u) => 0.68 - 0.3 * u ** 1.4;

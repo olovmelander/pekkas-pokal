@@ -142,7 +142,9 @@ genereras. Vattenytan förskjuts på GPU:n och skuggas olika ovanifrån och
 underifrån: nerifrån får man Snells fönster (ljust rakt upp, spegel i sneda
 vinklar) med kaustik som kryper över taket, ovanifrån en solglitterstig.
 Kaustiktexturen är genererad ur vågintereferens så att den kaklar sömlöst.
-Djupet styr färg, dimma, ljus — och ett lågpassfilter på hela ljudbussen, så
+Ljusstrålarna följer med ner i djupet i stället för att slockna vid 20 m,
+så det aldrig blir ett tomrum under en, och stranden har tre granridåer
+där varje bortre är blekare än den framför. Djupet styr färg, dimma, ljus — och ett lågpassfilter på hela ljudbussen, så
 världen blir bokstavligen dovare ju längre ner man kommer. Ingen
 efterbehandling: ACES-tonemappning gör jobbet i stället, så telefonen
 behåller sin bildfrekvens.
@@ -170,10 +172,15 @@ uppdateras på plats — drejränder och en svag spiral av fingermärken läggs
 på medan skivan snurrar. Skuggningen är en genererad **matcap**, samma
 trick som skulpteringsprogram använder för sin lerförhandsvisning: hela
 ljussättningen bakas in i en enda liten textur som slås upp per normal,
-så våta highlights kostar ingenting. Ateljén — kakelgolv, bågfönstret med
-Barcelona-silhuetten, hyllorna med brända krukor (slumpade lathe-profiler
-med glasyren bakad i vertexfärger, en draw call per hylla), ugnen och
-keramikern med basker — är helt procedurell. Ljudet syntetiseras:
+så våta highlights kostar ingenting. Eftersom en matcap ignorerar
+scenens ljus kan krukan aldrig ta emot en riktig skugga — därför ligger
+en målad kontaktskugga under den, vilket är det som hindrar den från att
+sväva. Ateljén — kakelgolv, bågfönstret med Barcelona-silhuetten,
+hyllorna med brända krukor (slumpade lathe-profiler med glasyren bakad i
+vertexfärger, en draw call per hylla), verktygshyllan, hinken, lersäckarna
+och lerstänket på golvet — är helt procedurell, med samma ljushierarki som
+fäktsalen: kvällssolen genom fönstret är dominant och enda skuggkastare,
+en kall ovanifrånfill och en frontfill lyfter resten. Ljudet syntetiseras:
 drejskivans brum och lerans våta klafs är kontinuerliga WebAudio-lager
 som styrs av hur hårt händerna arbetar.
 

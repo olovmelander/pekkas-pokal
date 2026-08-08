@@ -150,8 +150,11 @@ export function buildShore() {
   hills.position.set(0, 0, -260);
   hills.renderOrder = -9;
   g.add(hills);
+  // Three ranks, each paler than the one in front: distance is sold by
+  // colour, not by detail.
+  g.add(ridge(-240, 0x7d8fa4, 4.0, 34, 560));
   g.add(ridge(-180, 0x4a5c6e, 3.4, 40, 420));
-  g.add(ridge(-120, 0x263341, 2.4, 46, 320));
+  g.add(ridge(-120, 0x22303c, 2.4, 48, 320));
 
   const cloudMat = new THREE.MeshBasicMaterial({ color: 0xffdcb0, fog: false, transparent: true, opacity: 0.85 });
   for (let i = 0; i < 7; i++) {
@@ -569,13 +572,13 @@ export function buildShafts() {
   const rand = mulberry(3);
   const top = new THREE.Color(0xbfeee0);
   const bottom = new THREE.Color(0x000000);
-  for (let i = 0; i < 12; i++) {
-    const x = -26 + i * 4.4 + rand() * 2.2;
-    const wTop = 0.9 + rand() * 1.1;
+  for (let i = 0; i < 16; i++) {
+    const x = -30 + i * 3.9 + rand() * 2.4;
+    const wTop = 0.55 + rand() * 0.7;
     const wBot = wTop * 0.25;
-    const len = 16 + rand() * 12;
+    const len = 34 + rand() * 22;
     const lean = (rand() - 0.5) * 5;
-    const z = -6 - rand() * 8;
+    const z = -9 - rand() * 12;
     const quad = [
       [x - wTop, 0, z], [x + wTop, 0, z],
       [x + wBot + lean, -len, z], [x - wBot + lean, -len, z]
@@ -627,7 +630,7 @@ export function buildSnow(spark, count = 260, box = 30) {
   const mat = new THREE.PointsMaterial({
     map: spark,
     color: 0xcfeee6,
-    size: 0.17,
+    size: 0.2,
     sizeAttenuation: true,
     transparent: true,
     opacity: 0.55,

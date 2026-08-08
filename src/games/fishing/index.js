@@ -853,7 +853,13 @@ export async function createFishing(container) {
     sun.intensity = 1.7 - k * 1.45;
     lure.userData.glow.intensity = 0.7 + k * 2.4;
 
-    shafts.material.opacity = Math.max(0, 0.55 - k * 1.5);
+    // The shafts follow the descent, so there is always something raking
+    // through the water instead of an empty void below 20 m — they just
+    // get dimmer and steeper the deeper the lure goes.
+    // +16 keeps the shafts' bright top edge above the frame; without it
+    // you see a hard horizontal seam cutting across the water.
+    shafts.position.y = -d * 0.82 + 16;
+    shafts.material.opacity = Math.max(0, 0.3 - k * 0.22);
     shafts.visible = shafts.material.opacity > 0.01;
 
     // Marine snow belongs in the water, not in the sky over the boat
