@@ -111,6 +111,7 @@ export function tileTexture() {
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(3, 2);
+  tex.anisotropy = 8;
   return tex;
 }
 
@@ -263,12 +264,30 @@ export function buildStudio(potMatcap) {
     new THREE.MeshLambertMaterial({ map: tileTexture() })
   );
   floor.rotation.x = -Math.PI / 2;
+  floor.receiveShadow = true;
   g.add(floor);
+
+  // Clay splatter around the wheel — nobody throws pots on a clean floor
+  const splatMat = new THREE.MeshLambertMaterial({
+    color: 0x9c6c4a, transparent: true, opacity: 0.45, depthWrite: false
+  });
+  const srand = mulberry(71);
+  for (let i = 0; i < 26; i++) {
+    const a = srand() * Math.PI * 2;
+    const r = 1.0 + srand() * 2.6;
+    const blob = new THREE.Mesh(new THREE.CircleGeometry(0.06 + srand() * 0.16, 7), splatMat);
+    blob.rotation.x = -Math.PI / 2;
+    blob.rotation.z = srand() * 3;
+    blob.position.set(Math.cos(a) * r, 0.006, Math.sin(a) * r);
+    blob.renderOrder = 2;
+    g.add(blob);
+  }
 
   /* Walls: plaster, warm */
   const wallMat = lambert(0xd9b98f);
   const back = new THREE.Mesh(new THREE.PlaneGeometry(22, 8), wallMat);
   back.position.set(0, 4, -5.5);
+  back.receiveShadow = true;
   g.add(back);
   [-1, 1].forEach((s) => {
     const side = new THREE.Mesh(new THREE.PlaneGeometry(15, 8), wallMat);
@@ -310,7 +329,8 @@ export function buildStudio(potMatcap) {
   const sv = [];
   const sc = [];
   const quads = [
-    [[-3.2, 4.6, -5.4], [-1.0, 4.6, -5.4], [1.6, 0.05, 1.8], [-2.6, 0.05, 1.8]]
+    [[-3.4, 4.8, -5.4], [-0.8, 4.8, -5.4], [2.0, 0.05, 2.2], [-3.0, 0.05, 2.2]],
+    [[-3.1, 4.8, -5.2], [-1.1, 4.8, -5.2], [1.2, 0.05, 1.4], [-2.2, 0.05, 1.4]]
   ];
   quads.forEach((q) => {
     [[0, 1, 2], [0, 2, 3]].forEach((tri) => {
@@ -326,7 +346,7 @@ export function buildStudio(potMatcap) {
   const shaft = new THREE.Mesh(shaftGeo, new THREE.MeshBasicMaterial({
     vertexColors: true,
     transparent: true,
-    opacity: 0.32,
+    opacity: 0.2,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide
@@ -342,6 +362,8 @@ export function buildStudio(potMatcap) {
     [0.9, 1.75, 2.6].forEach((y) => {
       const plank = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.09, 0.75), frameMat);
       plank.position.y = y;
+      plank.castShadow = true;
+      plank.receiveShadow = true;
       unit.add(plank);
     });
     [-1.6, 1.6].forEach((x) => {
@@ -350,6 +372,7 @@ export function buildStudio(potMatcap) {
       unit.add(leg);
     });
     const pots = new THREE.Mesh(buildShelfPots(7 + si * 13, 9, 3.0, [0.95, 1.8, 2.65]), potMat);
+    pots.castShadow = true;
     unit.add(pots);
     unit.position.set(s * 5.6, 0, -3.6);
     unit.rotation.y = -s * 0.35;
@@ -360,6 +383,8 @@ export function buildStudio(potMatcap) {
   const kiln = new THREE.Group();
   const body = new THREE.Mesh(new THREE.BoxGeometry(1.7, 2.0, 1.5), lambert(0x8a5f4a));
   body.position.y = 1.0;
+  body.castShadow = true;
+  body.receiveShadow = true;
   kiln.add(body);
   const top = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.28, 0.8, 7), lambert(0x5c3d2c));
   top.position.y = 2.35;
@@ -410,8 +435,55 @@ export function buildStudio(potMatcap) {
   guy.userData.head = headG;
   g.add(guy);
 
+  /* Tool rack on the back wall: ribs, wires and a sponge on pegs */
+  const rack = new THREE.Group();
+  const board = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.5, 0.08), lambert(0x6b4526));
+  rack.add(board);
+  const TOOLS = [0xd8cfc0, 0x8a6a52, 0x4a5c6e, 0xc9a227, 0x7a4a3c];
+  for (let i = 0; i < 5; i++) {
+    const tx = -0.85 + i * 0.42;
+    const peg = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.1, 5), lambert(0x4a3320));
+    peg.rotation.x = Math.PI / 2;
+    peg.position.set(tx, 0.1, 0.08);
+    rack.add(peg);
+    const tool = new THREE.Mesh(
+      new THREE.BoxGeometry(0.07, 0.3 + (i % 3) * 0.08, 0.03),
+      lambert(TOOLS[i])
+    );
+    tool.position.set(tx, -0.08 - (i % 3) * 0.04, 0.1);
+    tool.castShadow = true;
+    rack.add(tool);
+  }
+  rack.position.set(2.2, 2.5, -5.42);
+  g.add(rack);
+
+  /* Water bucket with a slick of slip in it */
+  const bucket = new THREE.Group();
+  const pail = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.19, 0.36, 12, 1, true), lambert(0x5c6670));
+  pail.position.y = 0.18;
+  pail.castShadow = true;
+  bucket.add(pail);
+  const water = new THREE.Mesh(new THREE.CircleGeometry(0.22, 12),
+    new THREE.MeshPhongMaterial({ color: 0x8a7a5c, shininess: 80, specular: 0xffffff }));
+  water.rotation.x = -Math.PI / 2;
+  water.position.y = 0.3;
+  bucket.add(water);
+  bucket.position.set(1.5, 0, 0.7);
+  g.add(bucket);
+
+  /* Bagged clay stacked against the wall */
+  const bagMat = lambert(0x6f6a5e);
+  [[-3.4, 0.18, -4.4, 0.1], [-3.4, 0.52, -4.35, -0.2], [-2.9, 0.18, -4.5, 0.5]].forEach(([bx, by, bz, ry]) => {
+    const bag = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.32, 0.42), bagMat);
+    bag.position.set(bx, by, bz);
+    bag.rotation.y = ry;
+    bag.castShadow = true;
+    bag.receiveShadow = true;
+    g.add(bag);
+  });
+
   /* Dust motes in the light shaft */
-  const moteCount = 70;
+  const moteCount = 160;
   const motePos = new Float32Array(moteCount * 3);
   const rand = mulberry(23);
   for (let i = 0; i < moteCount; i++) {
@@ -423,9 +495,9 @@ export function buildStudio(potMatcap) {
   moteGeo.setAttribute('position', new THREE.BufferAttribute(motePos, 3));
   const motes = new THREE.Points(moteGeo, new THREE.PointsMaterial({
     color: 0xffe8c8,
-    size: 0.02,
+    size: 0.028,
     transparent: true,
-    opacity: 0.65,
+    opacity: 0.7,
     depthWrite: false,
     blending: THREE.AdditiveBlending
   }));
