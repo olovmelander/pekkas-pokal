@@ -91,6 +91,8 @@ ljudfil laddas ner, bara Three.js självt, och först när man öppnar spelet).
 2024 är *Pekkas Fiske* — ett fiskespel med samma teknik, inspirerat av
 Ridiculous Fishings prisbelönta spelloop. 2026 är *Pekkas Lerskulptur* —
 drejning i en Barcelona-ateljé, inspirerat av Let's Create! Pottery.
+2023 är *Pekkas Fäktning* — dueller på pisten i Stockholm, inspirerat av
+Nidhogg och riktiga fäktningens parad–ripost.
 
 Att lägga till ett nytt års spel:
 
@@ -173,6 +175,38 @@ keramikern med basker — är helt procedurell. Ljudet syntetiseras:
 drejskivans brum och lerans våta klafs är kontinuerliga WebAudio-lager
 som styrs av hur hårt händerna arbetar.
 
+**Pekkas Fäktning (2023)**
+
+Stockholm, en fäktsal i skymning. Turneringen går mot den riktiga
+2023-pallen i stigande svårighetsgrad: Mikael (brons), Rickard (silver)
+och mästaren Per Vikman. Först till fem tusch per match.
+
+Duellen bygger på Nidhoggs älskade trelinjesystem och den riktiga
+fäktningens fraser:
+
+1. **Gardera.** Tre linjer — HÖG, MITT, LÅG. Din gard i samma linje som
+   motståndarens anfall parerar det automatiskt. Klingan blänker i den
+   linje anfallet kommer i; de bättre fäktarna byter linje i sista stund.
+2. **Ripostera.** En parad får motståndaren att vackla — STÖT i det läget
+   är nästan alltid tusch och ger extra poäng.
+3. **Finta.** FINT är ett anfall som inte menas. Går motståndaren på den
+   binds klingan och en annan linje är öppen. Men att stöta rakt in i ett
+   påbörjat anfall slutar illa — den som började har vägrätt.
+
+Varje fras startar med domarens »En garde — klara — kör!«, och varje tusch
+tänds i den riktiga målapparaten ovanför pisten: grön lampa och summer för
+dig, röd för motståndaren. Poäng: tusch 100, ripost 175, fint-tusch 150,
+parad 25, matchvinst 500 + 100 per tusch i marginal.
+
+**Teknik.** Fäktarna är ledade lågpolyfigurer — mask, jacka, knickers,
+florett — som poseras helt i kod: gardvinklar per linje, utfall, parader
+och vacklanden är interpolerade poser, inga animationsfiler. Salen är
+procedurell: fiskbensparkett och den borstade metallpisten är
+canvas-texturer, och bakom de höga bågfönstren ligger ett skymnings-
+Stockholm med Stadshusets tre kronor. På bänken sitter resten av gänget
+och kastar upp armarna vid varje tusch. Ljudet syntetiseras — paradens
+klingande klink, målapparatens hårda summer och publiksorlet.
+
 **Kontroller i flipperspelet**
 
 | | Mobil | Dator |
@@ -235,6 +269,7 @@ npm run lint     # ESLint
 | `src/games/pinball/` | Flipperspelet: `physics` (2D-kollision), `table` (layout + banans grafik), `meshes` (3D), `index` (spelloop) |
 | `src/games/fishing/` | Fiskespelet: `species` (procedurella fiskar), `world` (sjö, vattenshader, båt), `audio` (syntetiskt ljud), `index` (spelloop) |
 | `src/games/clay/` | Drejspelet: `studio` (ateljé, matcaps, drejskiva), `audio` (syntetiskt ljud), `index` (lerfysik + spelloop) |
+| `src/games/fencing/` | Fäktspelet: `salle` (fäktsal, fäktare, texturer), `audio` (syntetiskt ljud), `index` (duell-AI + spelloop) |
 | `public/` | Statiska filer: `event.json`, `manifest.json`, ikoner, `og-image.png`, `photos/` |
 
 Data hämtas från `competition-data.csv` vid sidladdning. Om filen inte går att
