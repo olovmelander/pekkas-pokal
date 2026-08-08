@@ -485,16 +485,19 @@ export function createPlayfieldCanvas(_participants = [], logo = null) {
   const g = cv.getContext('2d');
 
   const GOLD = '#f2c14e';
-  const GOLD_DIM = 'rgba(242,193,78,.32)';
+  const GOLD_DIM = 'rgba(255,214,120,.5)';
   const cx = L.centerX;
   const unitsX = (u) => (u / (ART.x1 - ART.x0)) * TEX_W;
   const unitsY = (u) => (u / (ART.y1 - ART.y0)) * TEX_H;
 
-  /* ---- Base ---- */
+  /* ---- Base ----
+     A real playfield is a bright print: the light on it is what makes the
+     mood, not the ink. Printing it dark and then lighting it dark gives a
+     black hole in the middle of the machine, which is what this used to be. */
   const base = g.createLinearGradient(0, 0, 0, TEX_H);
-  base.addColorStop(0, '#131931');
-  base.addColorStop(0.45, '#0d1124');
-  base.addColorStop(1, '#161c38');
+  base.addColorStop(0, '#33438f');
+  base.addColorStop(0.45, '#26306c');
+  base.addColorStop(1, '#374890');
   g.fillStyle = base;
   g.fillRect(0, 0, TEX_W, TEX_H);
 
@@ -505,9 +508,11 @@ export function createPlayfieldCanvas(_participants = [], logo = null) {
     g.fillStyle = grad;
     g.fillRect(0, 0, TEX_W, TEX_H);
   };
-  pool(cx, 29, 430, 'rgba(124,140,248,.20)');
-  pool(cx, 13.2, 400, 'rgba(242,193,78,.13)');
-  pool(cx, 7, 300, 'rgba(242,193,78,.10)');
+  pool(cx, 29, 430, 'rgba(124,140,248,.45)');
+  pool(cx, 13.2, 400, 'rgba(242,193,78,.3)');
+  pool(cx, 7, 300, 'rgba(242,193,78,.22)');
+  pool(-8.2, 20, 260, 'rgba(94,234,212,.2)');
+  pool(4.6, 20, 260, 'rgba(242,109,141,.18)');
 
   /* ---- Dome arcs (centred on the dome, not the playfield) ---- */
   g.strokeStyle = GOLD_DIM;
@@ -519,14 +524,14 @@ export function createPlayfieldCanvas(_participants = [], logo = null) {
   }
 
   /* ---- Castle forecourt: cobblestone half-rings before the gate ---- */
-  g.strokeStyle = 'rgba(180,190,220,.16)';
+  g.strokeStyle = 'rgba(214,226,255,.3)';
   g.lineWidth = 3;
   for (let r = 1.6; r <= 4.6; r += 0.75) {
     g.beginPath();
     g.ellipse(toU(cx), toV(28.4), unitsX(r), unitsY(r), 0, 0.15 * Math.PI, 0.85 * Math.PI);
     g.stroke();
   }
-  g.fillStyle = 'rgba(220,228,255,.5)';
+  g.fillStyle = 'rgba(235,242,255,.82)';
   g.font = '700 24px "Space Grotesk", Inter, sans-serif';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
@@ -540,7 +545,7 @@ export function createPlayfieldCanvas(_participants = [], logo = null) {
   /* ---- Troll pits in the corridor ---- */
   L.trolls.forEach((tr) => {
     g.save();
-    g.strokeStyle = 'rgba(111,155,90,.55)';
+    g.strokeStyle = 'rgba(140,220,120,.75)';
     g.lineWidth = 4;
     g.setLineDash([9, 7]);
     g.beginPath();
@@ -549,7 +554,7 @@ export function createPlayfieldCanvas(_participants = [], logo = null) {
     g.setLineDash([]);
     g.restore();
   });
-  g.fillStyle = 'rgba(111,155,90,.5)';
+  g.fillStyle = 'rgba(140,220,120,.7)';
   g.font = '700 17px Inter, sans-serif';
   g.letterSpacing = '4px';
   g.fillText('TROLL', toU(L.trolls[0].x), toV(L.trolls[0].y - 1.35));
@@ -558,7 +563,7 @@ export function createPlayfieldCanvas(_participants = [], logo = null) {
 
   /* ---- Ramp mouth: a quiet gold funnel, no text — the insert lights it ---- */
   g.save();
-  g.strokeStyle = 'rgba(242,193,78,.42)';
+  g.strokeStyle = 'rgba(255,214,120,.62)';
   g.lineWidth = 5;
   g.beginPath();
   g.moveTo(toU(-7.55), toV(13.4));
@@ -574,23 +579,37 @@ export function createPlayfieldCanvas(_participants = [], logo = null) {
     const off = 1.05;
     const lx = t.x + Math.sin(t.a) * off;
     const ly = t.y - Math.cos(t.a) * off;
-    g.fillStyle = 'rgba(242,193,78,.55)';
+    g.fillStyle = 'rgba(255,224,150,.85)';
     g.fillText(t.letter, toU(lx), toV(ly));
   });
 
   /* ---- Hero logo, centred in the lower playfield ---- */
   if (logo && logo.width) {
-    const w = 6.6;
+    const w = 7.6;
     const h = (w * logo.height) / logo.width;
     const px = toU(cx - w / 2);
     const py = toV(11.9 + h / 2);
     g.save();
-    g.globalAlpha = 0.34;
-    g.shadowColor = 'rgba(242,193,78,.85)';
-    g.shadowBlur = 34;
+    // A halo behind it: the logo is dark gold, and on a bright print it needs
+    // something to sit against. Kept tight to the logo — an earlier version
+    // spread it half the width of the texture and dimmed the whole lower
+    // playfield along with it.
+    const hx = px + unitsX(w) / 2;
+    const hy = py + unitsY(h) / 2;
+    const hr = unitsY(h) * 0.8;
+    const halo = g.createRadialGradient(hx, hy, hr * 0.15, hx, hy, hr);
+    halo.addColorStop(0, 'rgba(10,14,34,.6)');
+    halo.addColorStop(1, 'rgba(10,14,34,0)');
+    g.fillStyle = halo;
+    g.beginPath();
+    g.ellipse(hx, hy, hr, hr, 0, 0, Math.PI * 2);
+    g.fill();
+    g.globalAlpha = 0.5;
+    g.shadowColor = 'rgba(255,214,120,.95)';
+    g.shadowBlur = 40;
     g.drawImage(logo, px, py, unitsX(w), unitsY(h));
     g.shadowBlur = 0;
-    g.globalAlpha = 0.9;
+    g.globalAlpha = 1;
     g.drawImage(logo, px, py, unitsX(w), unitsY(h));
     g.restore();
   } else {
@@ -600,7 +619,7 @@ export function createPlayfieldCanvas(_participants = [], logo = null) {
   }
 
   /* ---- Inlane / outlane labels ---- */
-  g.fillStyle = 'rgba(242,193,78,.30)';
+  g.fillStyle = 'rgba(255,214,120,.5)';
   [[-6.15, 'in'], [3.75, 'in']].forEach(([ax]) => {
     for (let i = 0; i < 2; i++) {
       const y = 11.6 - i * 1.2;
@@ -612,7 +631,7 @@ export function createPlayfieldCanvas(_participants = [], logo = null) {
       g.fill();
     }
   });
-  g.fillStyle = 'rgba(242,109,141,.5)';
+  g.fillStyle = 'rgba(255,140,170,.75)';
   g.font = '700 19px Inter, sans-serif';
   g.letterSpacing = '3px';
   g.fillText('UT', toU(-8.05), toV(10.6));
@@ -620,11 +639,11 @@ export function createPlayfieldCanvas(_participants = [], logo = null) {
   g.letterSpacing = '0px';
 
   /* ---- Shooter lane ---- */
-  g.fillStyle = 'rgba(242,193,78,.09)';
+  g.fillStyle = 'rgba(242,193,78,.14)';
   g.fillRect(toU(L.laneX), toV(L.domeY), toU(L.outerX) - toU(L.laneX), toV(2) - toV(L.domeY));
 
   /* ---- Ball-save lamp label, just above the apron ---- */
-  g.fillStyle = 'rgba(61,220,123,.55)';
+  g.fillStyle = 'rgba(90,240,150,.8)';
   g.font = '700 15px Inter, sans-serif';
   g.letterSpacing = '3px';
   g.fillText('NY BOLL', toU(cx), toV(3.55));
