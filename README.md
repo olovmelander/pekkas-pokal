@@ -87,6 +87,8 @@ väljaren automatiskt. En rad kan också vara `{ o: 'originalrad', t:
 Fliken **Spel** innehåller ett spel per år. 2025 är *Pekkas Pokal Flipper* — ett
 flipperspel i Three.js som byggs helt i webbläsaren (ingen bild- eller
 ljudfil laddas ner, bara Three.js självt, och först när man öppnar spelet).
+2024 är *Pekkas Fiske* — ett fiskespel med samma teknik, inspirerat av
+Ridiculous Fishings prisbelönta spelloop.
 
 Att lägga till ett nytt års spel:
 
@@ -96,6 +98,24 @@ Att lägga till ett nytt års spel:
    `year`, `title`, `tagline`, `icon` och sökvägen i `module`.
 
 År utan spel visas automatiskt som "inte byggt än".
+
+**Pekkas Fiske (2024)**
+
+Tre kast per fiskeafton, på en fjällsjö i midnattssol. Varje kast har tre
+faser, med samma återkopplingsloop som Ridiculous Fishing:
+
+1. **Nedåt** — styr draget (dra med fingret eller ←/→) och **väj** för fisken.
+   Nuddar du en fisk krokas den direkt; ju djupare du kommer, desto finare
+   arter väntar. På 50+ meter simmar **PEKKAGÄDDAN** — 500 poäng, guldfärgad
+   och krönt.
+2. **Uppåt** — veven går! Nu ska du **träffa** allt på vägen upp; varje fisk
+   ger poäng och kombon stiger.
+3. **I luften** — fångsten kastas upp ur vattnet. Tryck på fiskarna innan de
+   plumsar i igen: träff ger **dubbla poäng** i tunnan.
+
+Sex arter från mört till lax, djupgraderat ljus och dimma, syntetiserat ljud
+och rekord sparat per enhet. Allt är procedurellt byggt — inga bilder eller
+ljudfiler laddas ner.
 
 **Kontroller i flipperspelet**
 
