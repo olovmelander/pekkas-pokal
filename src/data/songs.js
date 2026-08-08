@@ -12,28 +12,6 @@
 const PEKKAS_SONGS = [
   /* ------------------------------------------------ 2026 · Barcelona ---- */
   {
-    id: 'cant-del-barca',
-    year: 2026,
-    title: 'Cant del Barça',
-    subtitle: 'Årets melodi 2026 · Barcelona',
-    melody: 'FC Barcelonas hymn',
-    lines: [
-      { o: 'Tot el camp', t: 'Hela arenan' },
-      { o: 'és un clam', t: 'är ett rop' },
-      { o: 'som la gent blaugrana.', t: 'vi är det blåröda folket.' },
-      { o: 'Tant se val d’on venim', t: 'Det spelar ingen roll varifrån vi kommer' },
-      { o: 'si del sud o del nord', t: 'om från söder eller från norr' },
-      { o: 'ara estem d’acord, estem d’acord', t: 'nu är vi överens, vi är överens' },
-      { o: 'una bandera ens agermana', t: 'en fana gör oss till bröder' },
-      '',
-      { o: 'Blaugrana al vent', t: 'Blårött i vinden' },
-      { o: 'un crit valent', t: 'ett modigt rop' },
-      { o: 'tenim un nom', t: 'vi har ett namn' },
-      { o: 'el sap tothom', t: 'det vet alla' },
-      'Barça, Barça, Barça!'
-    ]
-  },
-  {
     id: 'varat-pekkas',
     year: 2026,
     title: 'Vårat Pekkas',
