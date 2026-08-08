@@ -27,6 +27,15 @@ import {
 const CASTS_PER_GAME = 3;
 const HIGHSCORE_KEY = 'pp-fiske-highscore';
 
+/**
+ * The beat between two casts. The old version was a toast over a frozen
+ * lake and a blind setTimeout; now the camera lifts to the boat, the round
+ * card reports the haul, and the fisherman physically casts back out — so
+ * the next drop starts from a throw you watched instead of a cut.
+ */
+const BETWEEN_HOLD = 1.55; // round card on screen, seconds
+const CAST_OUT = 0.62;     // lure arcing from the rod tip back to the water
+
 /** Water colour by depth — five stops instead of a straight fade. */
 const WATER_STOPS = [
   [0, 0x3ec2c4], [8, 0x1f8f96], [18, 0x136d82],
@@ -86,6 +95,14 @@ function buildHud(root) {
       <div class="fg-pops" id="fg-pops"></div>
     </div>
 
+    <div class="fg-round" id="fg-round" hidden>
+      <div class="fg-round-card">
+        <span class="fg-round-kicker" id="fg-round-kicker"></span>
+        <b class="fg-round-no" id="fg-round-no"></b>
+        <div class="fg-round-haul" id="fg-round-haul"></div>
+      </div>
+    </div>
+
     <div class="pb-overlay" id="fg-overlay">
       <div class="pb-panel">
         <h2 id="fg-title">Pekkas Fiske</h2>
@@ -132,6 +149,8 @@ function buildHud(root) {
     score: q('#fg-score'), hi: q('#fg-hi'), depth: q('#fg-depth'), cast: q('#fg-cast'),
     mult: q('#fg-mult'), zone: q('#fg-zone'), phase: q('#fg-phase'), toast: q('#fg-toast'),
     pops: q('#fg-pops'), overlay: q('#fg-overlay'), title: q('#fg-title'), text: q('#fg-text'),
+    round: q('#fg-round'), roundKicker: q('#fg-round-kicker'), roundNo: q('#fg-round-no'),
+    roundHaul: q('#fg-round-haul'),
     steps: q('#fg-steps'), scoreline: q('#fg-scoreline'), catchlist: q('#fg-catchlist'),
     start: q('#fg-start'), mute: q('#fg-mute'),
     info: q('#fg-info'), help: q('#fg-help'), helpClose: q('#fg-help-close')
@@ -305,6 +324,9 @@ export async function createFishing(container) {
     tossLeft: 0,
     zone: -1,
     deepest: 0,
+    castScore: 0,
+    betweenT: 0,
+    castOut: null,
     lastToast: 0,
     timers: []
   };
@@ -381,6 +403,7 @@ export async function createFishing(container) {
 
   function addScore(n, world, label) {
     state.score += n;
+    state.castScore += n;
     hud.score.textContent = fmt(state.score);
     hud.score.classList.remove('bump');
     void hud.score.offsetWidth;
@@ -406,9 +429,12 @@ export async function createFishing(container) {
     state.mult = 1;
     state.tapChain = 0;
     state.zone = -1;
+    state.castScore = 0;
+    state.betweenT = 0;
+    state.castOut = null;
     spawnFishSet();
     sfx.splash(1.1);
-    emitBurst(burst, 1.9, 0.2, 0, 26, 5, 0.7);
+    emitBurst(burst, 0, 0.2, 0, 26, 5, 0.7);
     setPhaseLabel('VÄJ FÖR FISKEN — djupare ner simmar det finare');
     later(() => setPhaseLabel(''), 2600);
     renderCast();
@@ -503,6 +529,24 @@ export async function createFishing(container) {
     });
   }
 
+  /** The scorecard that carries the gap between two casts. */
+  function showRoundCard(finished, haul, pts) {
+    hud.roundKicker.textContent = `Kast ${finished} klart`;
+    hud.roundNo.textContent = `KAST ${state.castNo} AV ${CASTS_PER_GAME}`;
+    hud.roundHaul.innerHTML =
+      `<span><b>${haul}</b> ${haul === 1 ? 'fisk' : 'fiskar'}</span>` +
+      `<span><b>+${fmt(pts)}</b> poäng</span>` +
+      `<span><b>${fmt(state.score)}</b> totalt</span>`;
+    hud.round.hidden = false;
+    void hud.round.offsetWidth;
+    hud.round.classList.add('show');
+  }
+
+  function hideRoundCard() {
+    hud.round.classList.remove('show');
+    hud.round.hidden = true;
+  }
+
   function endCast() {
     setPhaseLabel('');
     hud.mult.classList.remove('show');
@@ -510,13 +554,21 @@ export async function createFishing(container) {
       gameOver();
       return;
     }
+    const finished = state.castNo;
+    const haul = state.caught.length;
+    const pts = state.castScore;
+    state.caught.forEach((f) => {
+      f.mesh.visible = false;
+    });
     state.castNo++;
     state.phase = 'between';
+    state.betweenT = 0;
+    state.castOut = null;
     renderCast();
-    toast(`Kast ${state.castNo} av ${CASTS_PER_GAME}`, true);
-    later(() => {
-      if (state.phase === 'between') startCast();
-    }, 1500);
+    showRoundCard(finished, haul, pts);
+    sfx.zone();
+    // From here the tick drives it: camera to the boat, card up, then the
+    // fisherman winds up and throws the lure back out. See BETWEEN_HOLD.
   }
 
   function gameOver() {
@@ -555,6 +607,7 @@ export async function createFishing(container) {
     hud.catchlist.hidden = true;
     hud.steps.hidden = false;
     hud.overlay.classList.remove('show');
+    hideRoundCard();
     startCast();
   }
 
@@ -750,13 +803,13 @@ export async function createFishing(container) {
     }
   }
 
-  function updateLine(dt) {
+  function updateLine(dt, lx, ly) {
     const { nodes, segments } = line.userData;
     boat.userData.rod.getWorldPosition(rodTip);
     rodTip.x += 2.6;
     rodTip.y += 1.1;
     nodes[0].copy(rodTip);
-    nodes[segments].set(state.lureX, -state.depth + 0.22, 0);
+    nodes[segments].set(lx, ly + 0.22, 0);
     for (let pass = 0; pass < 2; pass++) {
       for (let i = 1; i < segments; i++) {
         const prev = nodes[i - 1];
@@ -797,6 +850,12 @@ export async function createFishing(container) {
     } else if (state.phase === 'toss') {
       camGoal.set(boat.position.x, 3.6, 15.5);
       lookGoal.set(boat.position.x, 2.7, 0.4);
+    } else if (state.phase === 'between') {
+      // Lift off the water and put the boat in frame — the round card reads
+      // over a wide shot, and the throw that follows needs the rod visible.
+      camGoal.set(boat.position.x - 0.4, 3.4, 15.2);
+      const at = state.castOut ? (boat.position.x + state.castOut.x) * 0.5 : boat.position.x + 0.9;
+      lookGoal.set(at, state.castOut ? 1.4 : 1.9, 0);
     } else if (under) {
       const lead = (state.targetX - state.lureX) * 0.25;
       camGoal.set(state.lureX * 0.55 + lead, -state.depth + 2.6, 11.5);
@@ -831,7 +890,8 @@ export async function createFishing(container) {
     const d = Math.max(0, state.depth);
     const k = Math.min(1, d / 52);
     gradient(WATER_STOPS, d, tmpColor);
-    const above = state.depth < 0.4 && (state.phase === 'idle' || state.phase === 'over' || state.phase === 'toss');
+    const above = state.depth < 0.4 && (state.phase === 'idle' || state.phase === 'over' ||
+      state.phase === 'toss' || state.phase === 'between');
     scene.background.lerp(above ? tmpColor.set(0x8fb9cf) : tmpColor, Math.min(1, dt * 6));
     scene.fog.color.copy(scene.background);
     scene.fog.density = above ? 0.0009 : 0.013 + k * 0.035;
@@ -858,9 +918,12 @@ export async function createFishing(container) {
     // get dimmer and steeper the deeper the lure goes.
     // +16 keeps the shafts' bright top edge above the frame; without it
     // you see a hard horizontal seam cutting across the water.
+    // …and they belong under the surface. Seen from the boat they read as
+    // white slabs standing in the sky, so the eye position gates them the
+    // same way it gates the sky dome.
     shafts.position.y = -d * 0.82 + 16;
     shafts.material.opacity = Math.max(0, 0.3 - k * 0.22);
-    shafts.visible = shafts.material.opacity > 0.01;
+    shafts.visible = !eyeAbove && shafts.material.opacity > 0.01;
 
     // Marine snow belongs in the water, not in the sky over the boat
     snow.visible = camera.position.y < -1.2;
@@ -903,8 +966,12 @@ export async function createFishing(container) {
     boat.userData.foam.position.set(boat.position.x, 0.05, 0);
     boat.userData.foam.material.opacity = 0.06 + Math.sin(t * 2.2) * 0.02;
 
-    // The rod loads up while the reel is turning
-    const load = state.phase === 'reel' ? 0.55 : state.phase === 'drop' ? 0.2 : 0;
+    // The rod loads up while the reel is turning, and between casts it winds
+    // all the way back before whipping forward on the throw.
+    const load = state.phase === 'reel' ? 0.55
+      : state.phase === 'drop' ? 0.2
+        : state.phase === 'between' ? (state.castOut ? 0.85 : -0.5)
+          : 0;
     boat.userData.rod.rotation.z += (0.5 - load - boat.userData.rod.rotation.z) * Math.min(1, dt * 5);
     boat.userData.arms.rotation.z = state.phase === 'reel' ? Math.sin(t * 9) * 0.06 : 0;
 
@@ -971,31 +1038,78 @@ export async function createFishing(container) {
           if (state.tossLeft <= 0) finishToss();
         }
       });
+    } else if (state.phase === 'between') {
+      state.betweenT += dt;
+      if (state.betweenT >= BETWEEN_HOLD) {
+        if (!state.castOut) {
+          hideRoundCard();
+          sfx.toss();
+          state.castOut = { x: 0, y: 0.2 };
+        }
+        const k = Math.min(1, (state.betweenT - BETWEEN_HOLD) / CAST_OUT);
+        boat.userData.rod.getWorldPosition(rodTip);
+        rodTip.x += 2.6;
+        rodTip.y += 1.1;
+        // Constant horizontal speed with a sine arc on top — the shape a
+        // thrown lure actually traces, and it reads even at 0.6 s.
+        state.castOut.x = rodTip.x * (1 - k);
+        state.castOut.y = rodTip.y + (0.2 - rodTip.y) * k + Math.sin(Math.PI * k) * 2.1;
+        if (k >= 1) {
+          state.castOut = null;
+          startCast();
+        }
+      }
     }
 
     /* Lure, line and the string of fish following it */
-    const lureY = -state.depth;
-    lure.position.set(state.lureX, lureY, 0);
-    lure.rotation.z = (state.targetX - state.lureX) * -0.06;
+    const lureX = state.castOut ? state.castOut.x : state.lureX;
+    const lureY = state.castOut ? state.castOut.y : -state.depth;
+    lure.position.set(lureX, lureY, 0);
+    lure.rotation.z = state.castOut ? t * 9 : (state.targetX - state.lureX) * -0.06;
     lure.userData.spinner.rotation.x = t * 12;
-    lure.visible = state.phase === 'drop' || state.phase === 'reel';
+    lure.visible = state.phase === 'drop' || state.phase === 'reel' || !!state.castOut;
     line.visible = lure.visible;
-    if (lure.visible) updateLine(dt);
+    if (lure.visible) updateLine(dt, lureX, lureY);
 
     if (state.phase === 'reel' || state.phase === 'drop') {
-      // Strung below the lure, nose-up, each one lagging a little more than
-      // the last so the whole catch swings like a real stringer.
+      // The catch hangs off the barb itself, not off the lure's centre: the
+      // hook sits at (-0.28, -0.16) in the lure's own frame.
+      const hookX = lureX - 0.28;
+      let snoutY = lureY - 0.16;
       state.caught.forEach((f, i) => {
+        const s = f.sp.size * 0.85;
+        const nose = f.sp.profile.x(0) * s; // snout ahead of the mesh origin
+        const back = 1.05 * s;              // tail fin behind it
         f.mesh.visible = true;
-        const lag = Math.min(1, dt * (6.5 - Math.min(4, i * 0.5)));
-        const sway = Math.sin(t * 2.2 + i * 0.8) * 0.28;
-        f.mesh.position.x += (state.lureX + sway - f.mesh.position.x) * lag;
-        f.mesh.position.y += (lureY - 1.15 - i * 1.35 - f.mesh.position.y) * Math.min(1, dt * 9);
-        f.mesh.position.z += (0.35 - f.mesh.position.z) * Math.min(1, dt * 6);
-        f.mesh.rotation.z = Math.PI / 2 + Math.sin(t * 4 + i) * 0.2;
-        f.mesh.rotation.y = 0.5;
-        f.mesh.scale.setScalar(f.sp.size * 0.85);
-        swim(f.mesh, t * 1.6 + i, 3, 1.6);
+        f.mesh.scale.setScalar(s);
+        if (i === 0) {
+          // Fish number one is *on* the hook. It is placed by its mouth, not
+          // by its origin: pivoting a thrashing fish around its centre swings
+          // the snout clean off the barb, which is exactly what looked wrong.
+          const wz = Math.PI / 2 + Math.sin(t * 9.5) * 0.26 + Math.sin(t * 3.7) * 0.1;
+          const wy = 0.3 + Math.sin(t * 6.1) * 0.55;
+          f.mesh.rotation.set(0, wy, wz);
+          const cz = Math.cos(wz);
+          const goalX = hookX - nose * cz * Math.cos(wy);
+          const goalY = snoutY - nose * Math.sin(wz);
+          const goalZ = nose * cz * Math.sin(wy);
+          const snap = Math.min(1, dt * 20);
+          f.mesh.position.x += (goalX - f.mesh.position.x) * snap;
+          f.mesh.position.y += (goalY - f.mesh.position.y) * snap;
+          f.mesh.position.z += (goalZ - f.mesh.position.z) * snap;
+          swim(f.mesh, t * 3.4, 8, 2.2); // fighting the line
+        } else {
+          // Everything after it is strung below on the stringer, each one
+          // lagging a little more so the whole chain swings.
+          const lag = Math.min(1, dt * (7 - Math.min(4, i * 0.5)));
+          const sway = Math.sin(t * 2.2 + i * 0.8) * 0.26;
+          f.mesh.position.x += (hookX + sway - f.mesh.position.x) * lag;
+          f.mesh.position.y += (snoutY - nose - f.mesh.position.y) * Math.min(1, dt * 9);
+          f.mesh.position.z += (0.35 - f.mesh.position.z) * Math.min(1, dt * 6);
+          f.mesh.rotation.set(0, 0.5, Math.PI / 2 + Math.sin(t * 4 + i) * 0.2);
+          swim(f.mesh, t * 1.6 + i, 3, 1.6);
+        }
+        snoutY -= nose + back + 0.24; // where the next snout hangs
       });
     }
 
@@ -1054,6 +1168,17 @@ export async function createFishing(container) {
       if (state.tossLeft <= 0) finishToss();
     },
     fishes,
+    /** Distance from the barb to the hooked fish's snout, in world units. */
+    hookGap() {
+      const f = state.caught[0];
+      if (!f || !f.mesh.visible) return null;
+      const snout = f.mesh.localToWorld(new THREE.Vector3(f.sp.profile.x(0), 0, 0));
+      const barb = lure.localToWorld(new THREE.Vector3(-0.28, -0.16, 0));
+      return snout.distanceTo(barb);
+    },
+    roundCardVisible() {
+      return !hud.round.hidden && hud.round.classList.contains('show');
+    },
     info() {
       return {
         drawCalls: renderer.info.render.calls,
