@@ -1898,6 +1898,14 @@
       module: 'src/games/clay/index.js'
     },
     {
+      year: 2023,
+      title: 'Pekkas Fäktning',
+      competition: 'Fäktning',
+      tagline: 'En garde på pisten i Stockholm — parera, ripostera och stöt dig till pokalen.',
+      icon: '🤺',
+      module: 'src/games/fencing/index.js'
+    },
+    {
       year: 2024,
       title: 'Pekkas Fiske',
       competition: 'Fisketävling',
