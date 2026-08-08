@@ -53,6 +53,16 @@ function gradient(stops, d, out) {
   return out.set(stops[0][1]);
 }
 
+/**
+ * Frame delta, clamped at BOTH ends. Only clamping the top looks harmless
+ * until a queued rAF fires with a timestamp older than the one stashed on
+ * visibilitychange: dt goes negative, and every `x -= rate * dt` in the
+ * loop starts running backwards — fades brighten, scales invert.
+ */
+function clampDt(ms) {
+  return Math.max(0, Math.min(0.05, ms / 1000));
+}
+
 /* ------------------------------------------------------------------- HUD */
 
 function buildHud(root) {
@@ -869,7 +879,7 @@ export async function createFishing(container) {
 
   function tick(now) {
     raf = requestAnimationFrame(tick);
-    let dt = Math.min(0.05, (now - last) / 1000);
+    let dt = clampDt(now - last);
     last = now;
     if (!running) return;
     const t = now / 1000;

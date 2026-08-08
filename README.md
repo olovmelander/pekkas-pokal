@@ -230,14 +230,27 @@ Ludvigs guldrunda från 2022 är spökresultatet att slå.
 
 **Teknik.** Duvan är en fluorescerande orange kupol som krossas i riktiga
 3D-skärvor när svärmen tar. Hagelgeväret — en bockbössa sedd från axeln,
-med ribba, guldkorn, mynningsflamma och röksprite — följer siktet och
-rekylerar in i axeln. Fältet, graven, gärdsgården, ladan och två
-granridåer med luftperspektiv är procedurella; himlen är en gradientdome
-med lågt sammetsljus och seglande moln, och fåglar korsar den mellan
-dropparna. Ljudet syntetiseras: skottets knall med ekot som rullar
-tillbaka från skogsbrynet, brytvapnets klick-klack vid omladdning,
-kastarens svisch, duvans spröda kross — och fågelsång med vindbädd
-däremellan.
+med ventilerad ribba, guldkorn, valnötsstock, mynningsflamma och
+röksprite — följer siktet och rekylerar in i axeln.
+
+Grafiken vilar på tre saker som all utomhusrendering handlar om:
+
+- **Ängen.** Ett enda `InstancedMesh` med ~23 000 avsmalnande grässtrån
+  om sju hörn styck, alltså en draw call. All vind ligger i vertex-
+  shadern — tre lagrade frekvenser plus en långsam by som vandrar över
+  fältet — och stråna böjs kvadratiskt från en fast rot. Tätheten är
+  kraftigt viktad inåt, för gräs ser tätt ut på håll men glest rakt
+  ovanifrån, och närmast skjutplatsen är det nertrampat.
+- **Luftperspektiv.** Avstånd säljs med blekare och blåare färg, inte med
+  fler detaljer: dimman är samma dova blågrå ton som himlens horisontband
+  tonar in i, och den bortre granridån är förtintad mot den ovanpå det.
+- **Skuggor.** En skuggkastande sol med tajt ortografisk frustum runt
+  stationen. Kontaktskuggor under graven, stenarna och gänget är det som
+  förhindrar att allt ser ut som klistermärken på en fond.
+
+Ljudet syntetiseras: skottets knall med ekot som rullar tillbaka från
+skogsbrynet, brytvapnets klick-klack vid omladdning, kastarens svisch,
+duvans spröda kross — och fågelsång med vindbädd däremellan.
 
 **Kontroller i flipperspelet**
 
@@ -302,7 +315,7 @@ npm run lint     # ESLint
 | `src/games/fishing/` | Fiskespelet: `species` (procedurella fiskar), `world` (sjö, vattenshader, båt), `audio` (syntetiskt ljud), `index` (spelloop) |
 | `src/games/clay/` | Drejspelet: `studio` (ateljé, matcaps, drejskiva), `audio` (syntetiskt ljud), `index` (lerfysik + spelloop) |
 | `src/games/fencing/` | Fäktspelet: `salle` (fäktsal, fäktare, texturer), `audio` (syntetiskt ljud), `index` (duell-AI + spelloop) |
-| `src/games/shooting/` | Skyttespelet: `range` (fält, gevär, lerduvor), `audio` (syntetiskt ljud), `index` (banor + spelloop) |
+| `src/games/shooting/` | Skyttespelet: `range` (fält, gevär, lerduvor), `grass` (instansierad äng med vind), `audio` (syntetiskt ljud), `index` (banor + spelloop) |
 | `public/` | Statiska filer: `event.json`, `manifest.json`, ikoner, `og-image.png`, `photos/` |
 
 Data hämtas från `competition-data.csv` vid sidladdning. Om filen inte går att

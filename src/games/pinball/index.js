@@ -1568,7 +1568,7 @@ export async function createPinball(container, opts = {}) {
 
   function tick(now) {
     raf = requestAnimationFrame(tick);
-    const dtRaw = Math.min(0.05, (now - last) / 1000);
+    const dtRaw = Math.max(0, Math.min(0.05, (now - last) / 1000));
     last = now;
     if (!running || helpOpen) return;
 

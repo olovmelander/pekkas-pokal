@@ -22,7 +22,8 @@
 
 import * as THREE from 'three';
 import { Sfx } from './audio.js';
-import { mulberry, glowTexture, buildSky, buildRange, buildShotgun, buildClay } from './range.js';
+import { mulberry, glowTexture, buildSky, buildRange, buildShotgun, buildClay, HAZE } from './range.js';
+import { buildGrass } from './grass.js';
 
 const HIGHSCORE_KEY = 'pp-skytte-highscore';
 const LUDVIG = 3400; // mästarens ghost score
@@ -32,6 +33,16 @@ const SERIES = [
   { name: 'Serie 2 — Korsarna', singles: 8, doubles: 0, speed: 1.1, crossers: true, brief: 'Snabbare nu, och från sidorna. Sving igenom duvan!' },
   { name: 'Serie 3 — Finalen', singles: 4, doubles: 2, speed: 1.25, crossers: true, brief: 'Fyra singlar och två dubbléer. Ett skott per duva i dubbléerna.' }
 ];
+
+/**
+ * Frame delta, clamped at BOTH ends. Only clamping the top looks harmless
+ * until a queued rAF fires with a timestamp older than the one stashed on
+ * visibilitychange: dt goes negative, and every `x -= rate * dt` in the
+ * loop starts running backwards — fades brighten, scales invert.
+ */
+function clampDt(ms) {
+  return Math.max(0, Math.min(0.05, ms / 1000));
+}
 
 /* ------------------------------------------------------------------- HUD */
 
@@ -134,30 +145,52 @@ export async function createShooting(container) {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.06;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   canvasHost.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(0xd8c9a0, 60, 220);
+  scene.fog = new THREE.Fog(HAZE, 45, 230);
 
   const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 400);
   camera.position.set(0, 1.7, 0);
   scene.add(camera);
 
-  const hemi = new THREE.HemisphereLight(0xfff2d6, 0x3a4a2c, 1.0);
+  const hemi = new THREE.HemisphereLight(0xcfe2ff, 0x55632c, 0.85);
   scene.add(hemi);
-  const sun = new THREE.DirectionalLight(0xffe2ae, 1.5);
-  sun.position.set(-40, 26, -70);
+  const sun = new THREE.DirectionalLight(0xffdda2, 2.0);
+  sun.position.set(-28, 26, -56);
+  sun.castShadow = true;
+  // A tight orthographic frustum around the station is what keeps a single
+  // 1024 map crisp — a wide one would smear every contact shadow away.
+  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.camera.left = -26;
+  sun.shadow.camera.right = 26;
+  sun.shadow.camera.top = 26;
+  sun.shadow.camera.bottom = -26;
+  sun.shadow.camera.near = 1;
+  sun.shadow.camera.far = 150;
+  sun.shadow.bias = -0.0012;
+  sun.shadow.normalBias = 0.03;
+  sun.target.position.set(0, 0, -8);
   scene.add(sun);
+  scene.add(sun.target);
+  // Cool fill from the opposite side so shadowed faces are not dead black
+  const fill = new THREE.DirectionalLight(0x9fc0e8, 0.4);
+  fill.position.set(30, 12, 24);
+  scene.add(fill);
 
   /* World */
   const glow = glowTexture();
   const sky = buildSky();
   scene.add(sky.dome);
-  const range = buildRange();
+  const range = buildRange(mulberry(2022));
   scene.add(range.group);
+  const grass = buildGrass(mulberry(8123));
+  scene.add(grass.mesh);
 
   const gun = buildShotgun(glow);
-  gun.group.scale.setScalar(0.62);
+  gun.group.scale.setScalar(0.55);
   gun.group.position.set(0.17, -0.31, -0.62);
   camera.add(gun.group);
 
@@ -658,7 +691,7 @@ export async function createShooting(container) {
 
   function tick(now) {
     raf = requestAnimationFrame(tick);
-    let dt = Math.min(0.05, (now - last) / 1000);
+    let dt = clampDt(now - last);
     last = now;
     if (!running) return;
     const t = now / 1000;
@@ -699,6 +732,8 @@ export async function createShooting(container) {
         }
       }
     }
+
+    grass.uniforms.uTime.value = t;
 
     /* Shards tumble on after a break */
     clays.forEach((clay) => {
