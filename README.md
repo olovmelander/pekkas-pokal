@@ -122,6 +122,14 @@ tre faser, och det som gör loopen bra är att varje fas vänder på förra:
    innan de plumsar i igen så åker de i tunnan. Träffar på rad kedjar ihop
    sig, och tar du alla blir det **perfekt kast**.
 
+Mellan kasten lyfter kameran upp till båten, ett rundkort summerar fångsten
+(antal fiskar, kastets poäng, totalen) och fiskaren vevar tillbaka spöet och
+kastar ut draget i en båge över vattnet — nästa nedstig börjar alltså med ett
+kast man sett, inte med en klippning. Den fisk som krokas hänger på själva
+kroken: den placeras efter *munnen*, inte efter mitten, så nosen sitter kvar
+på hullingen hur mycket den än sprattlar. Resten av fångsten hänger på
+löpknuten under, med avstånd efter artens längd.
+
 Går du hela vägen till botten utan att nudda något får du **bottenkänning**:
 stor bonus och full multiplikator.
 

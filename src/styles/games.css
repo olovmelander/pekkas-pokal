@@ -977,6 +977,89 @@ body.game-open {
   transform: translate(-50%, 0);
 }
 
+/* Rundkortet mellan kasten — fångsten sammanfattas medan draget kastas ut */
+
+.fg-round {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 34%; /* över båten, under toasten — båda måste synas */
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.32s ease;
+}
+
+.fg-round[hidden] {
+  display: none;
+}
+
+.fg-round.show {
+  opacity: 1;
+}
+
+.fg-round-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 1rem 1.6rem 1.1rem;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(8, 24, 38, 0.88), rgba(4, 14, 24, 0.92));
+  border: 1px solid rgba(127, 216, 232, 0.34);
+  box-shadow: 0 18px 48px rgba(2, 10, 18, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+  text-align: center;
+  transform: translateY(10px) scale(0.97);
+  transition: transform 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.fg-round.show .fg-round-card {
+  transform: translateY(0) scale(1);
+}
+
+.fg-round-kicker {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(190, 199, 233, 0.7);
+}
+
+.fg-round-no {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #d8f4fb;
+  text-shadow: 0 0 24px rgba(127, 216, 232, 0.5);
+}
+
+.fg-round-haul {
+  display: flex;
+  gap: 0.55rem;
+  margin-top: 0.25rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.fg-round-haul span {
+  padding: 0.24rem 0.6rem;
+  border-radius: var(--r-pill);
+  background: rgba(127, 216, 232, 0.1);
+  border: 1px solid rgba(127, 216, 232, 0.2);
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  color: rgba(205, 236, 244, 0.8);
+  white-space: nowrap;
+}
+
+.fg-round-haul b {
+  color: #ffd98a;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Flygande poängsiffror, förankrade i 3D-positionen */
 
 .fg-pops {
