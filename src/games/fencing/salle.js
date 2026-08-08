@@ -688,7 +688,6 @@ export function buildFencer(jacketColor, sockColor) {
   const knickers = new THREE.MeshPhongMaterial({
     color: 0xe6e4de, shininess: 10, specular: 0x333330
   });
-  const skin = lambert(0xdba97f);
 
   const sockMat = () => new THREE.MeshLambertMaterial({ color: sockColor });
   const socks = [];
