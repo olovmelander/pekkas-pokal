@@ -133,6 +133,26 @@ function buildHud(root) {
       </div>
     </div>
 
+    <button class="pb-info" id="cl-info" aria-label="Så spelar du">?</button>
+
+    <div class="pb-help" id="cl-help" hidden>
+      <div class="pb-help-card">
+        <h3>Så drejar du</h3>
+        <p class="pb-help-sub">Pekkas Lerskulptur</p>
+        <ul class="pb-help-list">
+          <li><i style="--c:#7fd8e8"></i><b>Uppdraget</b> Keramikern visar en form — dess silhuett hänger som streckat spöke över drejskivan. Likhetsmätaren visar hur nära du är.</li>
+          <li><i style="--c:#d9a05b"></i><b>Forma</b> Dra mot leran för att trycka in, dra utåt för att dra ut — vid precis den höjd du rör.</li>
+          <li><i style="--c:#f2c14e"></i><b>Glätta</b> Håll GLÄTTA-knappen så jämnar handflatan ut kurvorna.</li>
+          <li><i style="--c:#ff7a6b"></i><b>Tiden</b> 75 sekunder per alster. Går tiden ut åker det in i ugnen som det är.</li>
+          <li><i style="--c:#5eead4"></i><b>Bränn</b> Tryck KLAR när du är nöjd. Glasyr, betyg 1–10 och keramikerns dom — sen ställs alstret på bänken.</li>
+          <li><i style="--c:#6f9b5a"></i><b>Poängen</b> Likhet i kvadrat × 1 000, plus tidsbonus om likheten når 60 %. Tre alster per kväll.</li>
+        </ul>
+        <p class="pb-help-tip">Snabb och lik vinner: en tidig 90-procentare slår en sen perfektionist.</p>
+        <div class="pb-help-keys">Forma: dra på skivan · Bränn: KLAR eller Enter · Kortet: ? eller Esc</div>
+        <button class="pb-btn" id="cl-help-close">Tillbaka till ateljén</button>
+      </div>
+    </div>
+
     <button class="pb-mute" id="cl-mute" aria-label="Ljud på/av">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M11 5 6 9H2v6h4l5 4V5Z"/><path class="pb-wave" d="M15.5 8.5a5 5 0 0 1 0 7"/>
@@ -147,7 +167,8 @@ function buildHud(root) {
     phase: q('#cl-phase'), toast: q('#cl-toast'), pops: q('#cl-pops'), tools: q('#cl-tools'),
     smooth: q('#cl-smooth'), done: q('#cl-done'),
     overlay: q('#cl-overlay'), title: q('#cl-title'), text: q('#cl-text'), steps: q('#cl-steps'),
-    scoreline: q('#cl-scoreline'), verdict: q('#cl-verdict'), start: q('#cl-start'), mute: q('#cl-mute')
+    scoreline: q('#cl-scoreline'), verdict: q('#cl-verdict'), start: q('#cl-start'), mute: q('#cl-mute'),
+    info: q('#cl-info'), help: q('#cl-help'), helpClose: q('#cl-help-close')
   };
 }
 
@@ -610,6 +631,7 @@ export async function createClay(container) {
   const pointerNdc = new THREE.Vector2();
   let dragging = false;
   let smoothing = false;
+  let helpOpen = false;
   let shapingEnergy = 0;
 
   function pointerToClay(e) {
@@ -627,7 +649,7 @@ export async function createClay(container) {
 
   function onPointerDown(e) {
     sfx.resume();
-    if (e.target.closest('.pb-overlay, .pb-mute, .cl-tool')) return;
+    if (helpOpen || e.target.closest('.pb-overlay, .pb-mute, .pb-info, .pb-help, .cl-tool')) return;
     if (state.phase !== 'throw') return;
     dragging = true;
     onPointerMove(e);
@@ -657,11 +679,28 @@ export async function createClay(container) {
   }
 
   function onKeyDown(e) {
+    if (e.key === '?' || (e.key === 'Escape' && helpOpen)) {
+      setHelp(e.key === '?' ? !helpOpen : false);
+      return;
+    }
+    if (helpOpen) return;
     if (e.key === ' ' && (state.phase === 'idle' || state.phase === 'over')) {
       e.preventDefault();
       startGame();
     } else if (e.key === 'Enter' && state.phase === 'throw') {
       finishPiece();
+    }
+  }
+
+  /* Strategy card: pauses the wheel while open, like the pinball's */
+  function setHelp(open) {
+    helpOpen = open;
+    hud.help.hidden = !open;
+    if (open) {
+      dragging = false;
+      smoothing = false;
+      brush = null;
+      sfx.setShaping(0);
     }
   }
 
@@ -674,6 +713,8 @@ export async function createClay(container) {
     else startGame();
   });
   hud.done.addEventListener('click', finishPiece);
+  hud.info.addEventListener('click', () => setHelp(!helpOpen));
+  hud.helpClose.addEventListener('click', () => setHelp(false));
   const smoothOn = (e) => {
     e.preventDefault();
     smoothing = true;
@@ -825,7 +866,10 @@ export async function createClay(container) {
     if (!running) return;
     const t = now / 1000;
 
-    if (state.phase === 'throw') updateThrow(dt, t);
+    if (helpOpen) {
+      // Strategy card open: the wheel coasts, nothing advances
+      state.wheelSpeed += (0 - state.wheelSpeed) * Math.min(1, dt * 2);
+    } else if (state.phase === 'throw') updateThrow(dt, t);
     else if (state.phase === 'fire') updateFire(dt);
     else {
       state.wheelSpeed += (0 - state.wheelSpeed) * Math.min(1, dt * 2);

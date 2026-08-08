@@ -861,7 +861,7 @@ body.game-open {
    ================================================================== */
 
 .fg-ui .pb-top {
-  right: 104px; /* clear the mute button so the depth counter never hides */
+  right: 148px; /* clear both the ?-button and the mute button */
 }
 
 /* Djupmätaren och kasträknaren */
