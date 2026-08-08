@@ -20,6 +20,7 @@ const PEKKAS_SONGS = [
     year: 2026,
     title: 'Vårat Pekkas',
     subtitle: 'Bidrag till årets PP-låt 2026',
+    author: 'Erik Vallgren',
     melody: 'Cant del Barça',
     lines: [
       'Vårat Pekkas',
@@ -42,7 +43,7 @@ const PEKKAS_SONGS = [
     year: 2026,
     title: 'Cant del Pekkas',
     subtitle: 'Bidrag till årets PP-låt 2026',
-    author: 'Henrik',
+    author: 'Henrik Lundqvist',
     melody: 'Cant del Barça',
     lines: [
       'Stig så upp',
@@ -65,7 +66,7 @@ const PEKKAS_SONGS = [
     year: 2026,
     title: 'Pekka de la España',
     subtitle: '🏆 Vinnare av årets PP-låt 2026',
-    author: 'Viktor',
+    author: 'Viktor Jones',
     melody: 'Cant del Barça',
     lines: [
       'Spaanien',
@@ -90,6 +91,7 @@ const PEKKAS_SONGS = [
     year: 2026,
     title: 'Bävergäll',
     subtitle: 'Snapsvisa · Barcelona 2026',
+    author: 'Per Vikman',
     melody: null,
     lines: [
       'Gällen river, glider ner för strupen,',
@@ -111,6 +113,7 @@ const PEKKAS_SONGS = [
     year: 2025,
     title: 'På resan hem',
     subtitle: 'Saaben mot Eskilstuna',
+    author: 'Per Vikman',
     melody: null,
     lines: [
       'På resan hem på resan hem',
@@ -130,6 +133,7 @@ const PEKKAS_SONGS = [
     id: 'pekkasen',
     year: 2025,
     title: 'Pekkasen',
+    author: 'Lars Sandin',
     melody: 'When Johnny Comes Marching Home',
     lines: [
       'En pekkas älskar livets vand,',
@@ -216,6 +220,7 @@ const PEKKAS_SONGS = [
     year: 2024,
     title: 'Hejsan pekka!',
     subtitle: 'Sjungen varje år sedan 2024',
+    author: 'Per Vikman',
     melody: null,
     lines: [
       'När nätterna blir längre och sommaren är slut',
@@ -235,6 +240,7 @@ const PEKKAS_SONGS = [
     year: 2024,
     title: 'Jag vill ha en egen pokal',
     subtitle: 'Sjungen varje år sedan 2024',
+    author: 'Per Vikman',
     melody: 'Jag vill ha en egen måne — Ted Gärdestad',
     lines: [
       'Jag vill ha en egen pokal',
@@ -253,6 +259,7 @@ const PEKKAS_SONGS = [
     year: 2023,
     title: 'Förhöjt terrorhot',
     subtitle: 'Fäktnings-Pekkas i tiden',
+    author: 'Henrik Lundqvist',
     melody: 'Feliz Navidad',
     lines: [
       'Förhöjt terrorhot',
@@ -269,6 +276,7 @@ const PEKKAS_SONGS = [
     id: 'henke-pa-fyllan',
     year: 2023,
     title: 'Se på Henke på fyllan',
+    author: 'Per Vikman',
     melody: 'Internationalen',
     lines: [
       'Se på Henke på fyllan',
@@ -289,6 +297,7 @@ const PEKKAS_SONGS = [
     year: 2022,
     title: 'Pekkas på Sjösala äng',
     subtitle: 'Sjungen 2022 och 2023',
+    author: 'Per Vikman',
     melody: 'Sjösala vals — Evert Taube',
     lines: [
       'Henrik Lundqvist skuttar med ett skratt ur sin säng',
@@ -317,6 +326,7 @@ const PEKKAS_SONGS = [
     id: 'nar-pekka-tar-sig-en-sup',
     year: 2022,
     title: 'När Pekka tar sig en sup',
+    author: 'Per Vikman',
     melody: 'Dover–Calais — Magnus Uggla',
     lines: [
       'När Pekka tar sig en sup',
@@ -333,6 +343,7 @@ const PEKKAS_SONGS = [
     id: 'oh-ioh-pekkas',
     year: 2022,
     title: 'Oh-ioh Pekkas!',
+    author: 'Per Vikman',
     melody: 'Luftens hjältar',
     lines: [
       'Ohohohohohoh',
@@ -352,6 +363,7 @@ const PEKKAS_SONGS = [
     year: 2022,
     title: 'Kommer du ihåg förra pekkas?',
     subtitle: 'Sjungen varje år sedan 2022',
+    author: 'Per Vikman',
     melody: null,
     lines: [
       'Kommer du ihåg hur det var förra pekkas?',
@@ -367,6 +379,7 @@ const PEKKAS_SONGS = [
     id: 'pekkas-peak',
     year: 2022,
     title: 'När man ser på hur Pekkas utvecklas',
+    author: 'Henrik Lundqvist',
     melody: 'Öl — Hasse & Tage',
     lines: [
       'När man ser på hur Pekkas, utvecklas å står i',
@@ -380,6 +393,7 @@ const PEKKAS_SONGS = [
     id: 'pekkas-hockey',
     year: 2022,
     title: 'P-E-K-K-A-S',
+    author: 'Per Vikman',
     melody: 'Hockeylåten',
     lines: [
       'P-E-K-K-A-S, Pekkas!',
@@ -407,6 +421,7 @@ const PEKKAS_SONGS = [
     id: 'fader-pekkaman',
     year: 2022,
     title: 'Fader Pekkaman',
+    author: 'Henrik Lundqvist',
     melody: 'Fader Abraham',
     lines: [
       'Fader Pekkaman',
@@ -475,6 +490,7 @@ const PEKKAS_SONGS = [
     id: 'viktor-jones-fylledrang',
     year: 2021,
     title: 'Viktor Jones fylledräng',
+    author: 'Per Vikman',
     melody: 'Trad. — ur gruppchatten 8 aug 2021',
     lines: [
       'Viktor Jones fylledräng',
