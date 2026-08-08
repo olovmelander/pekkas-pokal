@@ -1890,6 +1890,14 @@
    */
   const GAMES = [
     {
+      year: 2024,
+      title: 'Pekkas Fiske',
+      competition: 'Fisketävling',
+      tagline: 'Sänk draget djupt, kroka storgäddan och fånga allt på vägen upp.',
+      icon: '🎣',
+      module: 'src/games/fishing/index.js'
+    },
+    {
       year: 2025,
       title: 'Pekkas Pokal Flipper',
       competition: 'Flipper',

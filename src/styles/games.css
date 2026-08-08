@@ -855,3 +855,53 @@ body.game-open {
 .pb-help-card .pb-btn {
   width: 100%;
 }
+
+/* ==================================================================
+   Pekkas Fiske (2024) — HUD-tillägg ovanpå pb-basstilarna
+   ================================================================== */
+
+.fg-ui .pb-top {
+  right: 104px; /* clear the mute button so the depth counter never hides */
+}
+
+.fg-depth {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.15rem;
+  color: #7fd8e8;
+  text-shadow: 0 0 16px rgba(127, 216, 232, 0.55);
+  font-variant-numeric: tabular-nums;
+}
+
+.fg-cast {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: rgba(190, 199, 233, 0.65);
+}
+
+.fg-phase {
+  position: absolute;
+  left: 50%;
+  top: 14%;
+  transform: translate(-50%, -6px);
+  padding: 0.35rem 0.95rem;
+  border-radius: var(--r-pill);
+  background: rgba(6, 18, 30, 0.72);
+  border: 1px solid rgba(127, 216, 232, 0.35);
+  backdrop-filter: blur(8px);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: rgba(205, 236, 244, 0.92);
+  opacity: 0;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  pointer-events: none;
+}
+
+.fg-phase.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
