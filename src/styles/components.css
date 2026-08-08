@@ -1881,6 +1881,14 @@
   color: var(--text-2, rgba(220, 226, 250, 0.65));
 }
 
+.song-author {
+  margin: 6px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-2, rgba(220, 226, 250, 0.75));
+}
+
 .song-melody {
   margin: 8px 0 0;
   font-style: italic;

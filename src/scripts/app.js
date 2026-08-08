@@ -1972,6 +1972,7 @@
           <span class="song-year-badge">${song.year}</span>
           <h2>${esc(song.title)}</h2>
           ${song.subtitle ? `<p class="song-subtitle">${esc(song.subtitle)}</p>` : ''}
+          ${song.author ? `<p class="song-author">Av ${esc(song.author)}</p>` : ''}
           ${song.melody ? `<p class="song-melody">\u266a Melodi: ${esc(song.melody)}</p>` : ''}
         </header>
         <div class="song-lyrics">${lines}</div>
