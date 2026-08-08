@@ -101,21 +101,45 @@ Att lägga till ett nytt års spel:
 
 **Pekkas Fiske (2024)**
 
-Tre kast per fiskeafton, på en fjällsjö i midnattssol. Varje kast har tre
-faser, med samma återkopplingsloop som Ridiculous Fishing:
+Tre kast per fiskeafton på en 60 meter djup sjö i midnattssol. Varje kast har
+tre faser, och det som gör loopen bra är att varje fas vänder på förra:
 
-1. **Nedåt** — styr draget (dra med fingret eller ←/→) och **väj** för fisken.
-   Nuddar du en fisk krokas den direkt; ju djupare du kommer, desto finare
-   arter väntar. På 50+ meter simmar **PEKKAGÄDDAN** — 500 poäng, guldfärgad
-   och krönt.
-2. **Uppåt** — veven går! Nu ska du **träffa** allt på vägen upp; varje fisk
-   ger poäng och kombon stiger.
-3. **I luften** — fångsten kastas upp ur vattnet. Tryck på fiskarna innan de
-   plumsar i igen: träff ger **dubbla poäng** i tunnan.
+1. **Nedåt — väj.** Styr draget (dra med fingret eller ←/→) och slipp *förbi*
+   fisken. Varje fisk du väjer för höjer multiplikatorn, och eftersom de fina
+   arterna bara simmar djupt är belöningen för att väja bra att få väja mer.
+   Nuddar du en fisk krokas den direkt. Nuddar du **skräp** — en gammal
+   stövel, en rostig burk, ett cykeldäck — är kastet bränt och multiplikatorn
+   nollad.
+2. **Uppåt — träffa.** Nu gäller tvärtom: veven går och allt du nuddar åker
+   med. Multiplikatorn du samlade på vägen ner spenderas här.
+3. **I luften — tryck.** Fångsten slungas upp över båten. Tryck på fiskarna
+   innan de plumsar i igen så åker de i tunnan. Träffar på rad kedjar ihop
+   sig, och tar du alla blir det **perfekt kast**.
 
-Sex arter från mört till lax, djupgraderat ljus och dimma, syntetiserat ljud
-och rekord sparat per enhet. Allt är procedurellt byggt — inga bilder eller
-ljudfiler laddas ner.
+Går du hela vägen till botten utan att nudda något får du **bottenkänning**:
+stor bonus och full multiplikator.
+
+| Djupzon | Från | Vad som simmar där |
+| --- | --- | --- |
+| Ytvattnet | 0 m | Mört (100), abborre (250) |
+| Sikdjupet | 12 m | Sik (400) |
+| Gäddgraven | 24 m | Gädda (800) |
+| Laxdjupet | 38 m | Lax (1 500) |
+| Pekkadjupet | 50 m | **PEKKAGÄDDAN** (5 000) — guldfärgad, krönt, inte alltid hemma |
+
+**Teknik.** Allt är procedurellt: inte en enda bild- eller ljudfil laddas ner,
+bara Three.js självt. Varje fiskart byggs från en ryggradsprofil plus
+fenblad och slås ihop till tre meshar per art, så hela stimmet ryms på ett
+femtiotal draw calls. Mönstren — motskuggningen, abborrens ränder, gäddans
+ljusa bönfläckar, laxens prickar — målas in i vertexfärgerna medan kroppen
+genereras. Vattenytan förskjuts på GPU:n och skuggas olika ovanifrån och
+underifrån: nerifrån får man Snells fönster (ljust rakt upp, spegel i sneda
+vinklar) med kaustik som kryper över taket, ovanifrån en solglitterstig.
+Kaustiktexturen är genererad ur vågintereferens så att den kaklar sömlöst.
+Djupet styr färg, dimma, ljus — och ett lågpassfilter på hela ljudbussen, så
+världen blir bokstavligen dovare ju längre ner man kommer. Ingen
+efterbehandling: ACES-tonemappning gör jobbet i stället, så telefonen
+behåller sin bildfrekvens.
 
 **Kontroller i flipperspelet**
 
@@ -177,6 +201,7 @@ npm run lint     # ESLint
 | `src/data/achievements.js` | Definitioner av alla utmärkelser |
 | `src/styles/` | `main` (tokens/teman), `layout`, `components`, `animations`, `games`, `responsive` |
 | `src/games/pinball/` | Flipperspelet: `physics` (2D-kollision), `table` (layout + banans grafik), `meshes` (3D), `index` (spelloop) |
+| `src/games/fishing/` | Fiskespelet: `species` (procedurella fiskar), `world` (sjö, vattenshader, båt), `audio` (syntetiskt ljud), `index` (spelloop) |
 | `public/` | Statiska filer: `event.json`, `manifest.json`, ikoner, `og-image.png`, `photos/` |
 
 Data hämtas från `competition-data.csv` vid sidladdning. Om filen inte går att
