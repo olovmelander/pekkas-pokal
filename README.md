@@ -320,6 +320,35 @@ maskinen upp den — först med en skakning, sedan genom att servera om den.
 | **Bonus** | Inbanorna höjer bonusmultiplikatorn (upp till ×6) som multiplicerar slutbonusen per boll. |
 | **Extraboll** | Två klarade grenar ger en extra boll. |
 
+**Teknik.** Bordet renderas som en riktig *maskin*, inte som ett bräde i tomma
+intet: ett skåp med sidoarmatur i polerat stål, ett låsbleck tvärs framkanten
+och ett upplyst backglas som står och lyser i bortre änden. Ovanför spelplanen
+ligger glaset, och de smala reflexerna av takarmaturen som glider över det är
+det mesta av vad som får en flipperbild att läsa som ett fotografi.
+
+Ljuset följer en riktig maskins hierarki. En **halvsfärsljuskälla** ger det
+breda ovanljuset, en riktad nyckelljuskälla är den enda som kastar skuggor,
+och åtta **GI-lampor** sitter där de sitter på ett riktigt bord — i perimetern
+under plasterna och inne i bumperboet — så spelplanen får pölar och avstånd i
+stället för en jämn matta. Miljömappen är ett medvetet *mörkt* arkadrum med två
+takarmaturer: krom kan bara se ut som metall om det finns något ljust att
+spegla och något mörkt att spegla det mot. Det breda ovanljuset ligger i
+halvsfären och inte i mappen, för mappen är också vad klarlacken speglar — en
+ljus himmel där ger en grå hinna över hela trycket.
+
+Spelplanen är tryck på trä under en tjock klarlack: `MeshPhysicalMaterial` med
+`clearcoat` och en genererad slitagekarta för färgens ojämnhet och de fina
+repor ett bord får av år av bollar och trasor. Insatserna ligger i frästa
+fickor med en mörk kant och en frostad diffusor som blöder ljuset ut på träet,
+precis som en riktig insats gör. Bumperkupolerna är genomskinlig plast med
+lampan inuti. Bollen har en tajt kontaktskugga så den står på träet i stället
+för att sväva.
+
+Punktljus är candela och avtar med 1/d². I bordets skala (≈35 enheter över en
+42-tums spelplan) betyder det att en lampa tre enheter över träet behöver en
+intensitet i tiotal innan den lägger ut något ljus alls — allt ljus uttrycks
+därför som multiplar av `LAMP`.
+
 ---
 
 ## Utveckling

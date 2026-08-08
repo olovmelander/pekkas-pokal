@@ -74,27 +74,158 @@ export function buildTrophy(THREE, material, scale = 1) {
   return g;
 }
 
+/* ------------------------------------------------------------ environment */
+
+/**
+ * The room the machine stands in, as an equirectangular map.
+ *
+ * This is what turns chrome from grey plastic into metal: a rail can only
+ * look like steel if there is something bright for it to reflect. Two ceiling
+ * strips run above the long axis, the backbox throws amber from one end, and
+ * everything else is a dark arcade — so highlights come out as streaks that
+ * travel along a wire, not as a uniform wash.
+ */
+export function machineEnvironment(THREE) {
+  const W = 512;
+  const H = 256;
+  const cv = document.createElement('canvas');
+  cv.width = W;
+  cv.height = H;
+  const g = cv.getContext('2d');
+
+  // Ceiling → horizon → floor.
+  //
+  // Deliberately dark between the fixtures. The broad top light a room gives
+  // the playfield comes from the hemisphere light instead, because this map
+  // is also what the clearcoat mirrors: paint the ceiling bright and the coat
+  // reflects a uniform grey sheet over the whole playfield, which greys out
+  // the print. Dark ceiling + discrete strips = discrete streaks.
+  const room = g.createLinearGradient(0, 0, 0, H);
+  room.addColorStop(0, '#242b46');
+  room.addColorStop(0.32, '#141a2e');
+  room.addColorStop(0.52, '#0a0e1a');
+  room.addColorStop(1, '#04060c');
+  g.fillStyle = room;
+  g.fillRect(0, 0, W, H);
+
+  const glow = (u, v, ru, rv, rgb, a) => {
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    g.translate(u * W, v * H);
+    g.scale(ru * W, rv * H);
+    const grad = g.createRadialGradient(0, 0, 0, 0, 0, 1);
+    grad.addColorStop(0, `rgba(${rgb},${a})`);
+    grad.addColorStop(0.45, `rgba(${rgb},${a * 0.34})`);
+    grad.addColorStop(1, `rgba(${rgb},0)`);
+    g.fillStyle = grad;
+    g.fillRect(-1, -1, 2, 2);
+    g.restore();
+  };
+
+  // Two ceiling fixtures, one over each side of the machine. Wide and soft
+  // rather than small and blinding: a near-mirror wireform reflecting a tiny
+  // over-bright source clips to white and the bloom pass renders the result
+  // as a hard square, which is worse than having no highlight at all.
+  glow(0.26, 0.1, 0.21, 0.11, '255,247,228', 0.8);
+  glow(0.76, 0.1, 0.21, 0.11, '255,247,228', 0.8);
+  // The backbox is a lamp in its own right
+  glow(0.5, 0.3, 0.2, 0.13, '255,196,110', 0.5);
+  // Cool spill off the walls behind the player
+  glow(0.02, 0.4, 0.24, 0.17, '116,146,255', 0.26);
+  glow(0.98, 0.4, 0.24, 0.17, '116,146,255', 0.26);
+  // Floor bounce so undersides are dim rather than dead black
+  glow(0.5, 0.88, 0.5, 0.14, '92,102,142', 0.16);
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/**
+ * Micro-variation for the playfield clearcoat: ink irregularity plus the fine
+ * swirl a coated playfield picks up from years of balls and cloths. A coat of
+ * perfectly uniform gloss is the tell-tale CG-plastic look.
+ */
+function wearTexture(THREE) {
+  const N = 256;
+  const cv = document.createElement('canvas');
+  cv.width = N;
+  cv.height = N;
+  const g = cv.getContext('2d');
+  g.fillStyle = '#6e6e6e';
+  g.fillRect(0, 0, N, N);
+  for (let i = 0; i < 240; i++) {
+    const x = Math.random() * N;
+    const y = Math.random() * N;
+    const r = 6 + Math.random() * 26;
+    const v = Math.random() < 0.5 ? 255 : 0;
+    const grad = g.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, `rgba(${v},${v},${v},0.1)`);
+    grad.addColorStop(1, `rgba(${v},${v},${v},0)`);
+    g.fillStyle = grad;
+    g.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+  g.strokeStyle = 'rgba(255,255,255,0.055)';
+  g.lineWidth = 1;
+  for (let i = 0; i < 90; i++) {
+    const x = Math.random() * N;
+    const y = Math.random() * N;
+    const a = Math.random() * Math.PI * 2;
+    const len = 8 + Math.random() * 40;
+    g.beginPath();
+    g.moveTo(x, y);
+    g.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len);
+    g.stroke();
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(5, 10);
+  return tex;
+}
+
+/** Soft round falloff — used for contact shadows and diffused insert pools. */
+function radialTexture(THREE, inner, stops) {
+  const N = 128;
+  const cv = document.createElement('canvas');
+  cv.width = N;
+  cv.height = N;
+  const g = cv.getContext('2d');
+  const grad = g.createRadialGradient(N / 2, N / 2, N / 2 * inner, N / 2, N / 2, N / 2);
+  stops.forEach(([at, color]) => grad.addColorStop(at, color));
+  g.fillStyle = grad;
+  g.fillRect(0, 0, N, N);
+  return new THREE.CanvasTexture(cv);
+}
+
 /* -------------------------------------------------------------- materials */
 
 export function createMaterials(THREE, playfieldTexture) {
   return {
-    playfield: new THREE.MeshStandardMaterial({
+    // A playfield is ink on wood under a thick pour of clearcoat. The coat is
+    // what carries the room's reflection; the print below stays matte, and
+    // the wear map keeps the gloss from being a perfect mirror.
+    playfield: new THREE.MeshPhysicalMaterial({
       map: playfieldTexture,
-      roughness: 0.5,
-      metalness: 0.1,
-      envMapIntensity: 0.3
-    }),
-    chrome: new THREE.MeshStandardMaterial({
-      color: 0xdfe6ff,
-      roughness: 0.16,
-      metalness: 1,
+      roughnessMap: wearTexture(THREE),
+      roughness: 0.62,
+      metalness: 0,
+      clearcoat: 0.62,
+      clearcoatRoughness: 0.2,
       envMapIntensity: 1
     }),
+    chrome: new THREE.MeshStandardMaterial({
+      color: 0xeef2ff,
+      roughness: 0.17,
+      metalness: 1,
+      envMapIntensity: 1.15
+    }),
     rail: new THREE.MeshStandardMaterial({
-      color: 0x7c88a8,
-      roughness: 0.3,
-      metalness: 0.9,
-      envMapIntensity: 0.5
+      color: 0x98a4c4,
+      roughness: 0.26,
+      metalness: 0.95,
+      envMapIntensity: 1
     }),
     stone: new THREE.MeshStandardMaterial({
       color: 0x8b93ad,
@@ -116,9 +247,12 @@ export function createMaterials(THREE, playfieldTexture) {
     }),
     gold: new THREE.MeshStandardMaterial({
       color: 0xf2c14e,
-      roughness: 0.26,
-      metalness: 1,
-      envMapIntensity: 0.55,
+      roughness: 0.3,
+      // Anodised, not chromed. At metalness 1 the base colour is thrown away
+      // and the surface shows only the room — which in a dark arcade means a
+      // gold flipper renders white under the key light.
+      metalness: 0.35,
+      envMapIntensity: 1,
       emissive: 0x2a1e04,
       emissiveIntensity: 1
     }),
@@ -128,7 +262,7 @@ export function createMaterials(THREE, playfieldTexture) {
       metalness: 0.55,
       envMapIntensity: 0.4,
       emissive: 0xf2c14e,
-      emissiveIntensity: 0.95
+      emissiveIntensity: 0.6
     }),
     blueGlow: new THREE.MeshStandardMaterial({
       color: 0x7c8cf8,
@@ -179,8 +313,286 @@ export function createMaterials(THREE, playfieldTexture) {
       roughness: 0.6,
       metalness: 0.3,
       emissive: 0x000000
+    }),
+    // Cabinet: painted plywood, deliberately darker than anything on the
+    // playfield so the lit surface stays the brightest thing in frame.
+    cabinet: new THREE.MeshStandardMaterial({
+      color: 0x0c1122,
+      roughness: 0.62,
+      metalness: 0.1,
+      envMapIntensity: 0.45
+    }),
+    // Side armour and the lockdown bar: polished stainless, the brightest
+    // metal on the machine and the frame the whole photo hangs on.
+    armour: new THREE.MeshStandardMaterial({
+      color: 0xb9c4dc,
+      roughness: 0.17,
+      metalness: 1,
+      envMapIntensity: 0.95
+    }),
+    // The routed pocket an insert sits in — a dark ring is what makes the
+    // insert read as let into the wood instead of stuck on top of it.
+    bezel: new THREE.MeshStandardMaterial({
+      color: 0x05070f,
+      roughness: 0.9,
+      metalness: 0,
+      envMapIntensity: 0.15
     })
   };
+}
+
+/* ----------------------------------------------------------- the machine */
+
+/**
+ * Where the cabinet sits around the playfield. Everything the cabinet builds
+ * hangs off these, and index.js frames the camera on them.
+ */
+export const CAB = {
+  x0: -L.flareX - 1.15,
+  x1: L.outerX + 1.15,
+  z0: 2.1, // front edge, on the player's side of the apron
+  z1: -(L.domeY + L.domeOuterR + 1.2),
+  glassY: 6.4, // the glass clears the tallest ramp and the castle roofs
+  railY: 4.7, // top edge of the side armour
+  backH: 4.5 // how far the backglass stands above the playfield
+};
+
+/** The backglass art: the machine's own identity, lit from behind. */
+function backglassTexture(THREE, logo) {
+  const W = 1024;
+  const H = 512;
+  const cv = document.createElement('canvas');
+  cv.width = W;
+  cv.height = H;
+  const g = cv.getContext('2d');
+
+  const bg = g.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#1b2450');
+  bg.addColorStop(0.55, '#0d1330');
+  bg.addColorStop(1, '#080c20');
+  g.fillStyle = bg;
+  g.fillRect(0, 0, W, H);
+
+  // A backglass is lit from behind, so the light pools behind the artwork
+  const pool = g.createRadialGradient(W / 2, H * 0.52, 20, W / 2, H * 0.52, W * 0.55);
+  pool.addColorStop(0, 'rgba(242,193,78,.32)');
+  pool.addColorStop(0.5, 'rgba(124,140,248,.14)');
+  pool.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = pool;
+  g.fillRect(0, 0, W, H);
+
+  g.strokeStyle = 'rgba(242,193,78,.5)';
+  g.lineWidth = 6;
+  g.strokeRect(16, 16, W - 32, H - 32);
+
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  if (logo && logo.width) {
+    const h = H * 0.44;
+    const w = (h * logo.width) / logo.height;
+    g.save();
+    g.shadowColor = 'rgba(242,193,78,.9)';
+    g.shadowBlur = 46;
+    g.drawImage(logo, (W - w) / 2, H * 0.1, w, h);
+    g.restore();
+  }
+  g.fillStyle = '#f2c14e';
+  g.font = '700 76px "Space Grotesk", Inter, sans-serif';
+  g.letterSpacing = '6px';
+  g.shadowColor = 'rgba(242,193,78,.8)';
+  g.shadowBlur = 30;
+  g.fillText('PEKKAS POKAL', W / 2, H * 0.68);
+  g.shadowBlur = 0;
+  g.fillStyle = 'rgba(190,199,233,.75)';
+  g.font = '700 28px Inter, sans-serif';
+  g.letterSpacing = '10px';
+  g.fillText('FLIPPER · 2025', W / 2, H * 0.83);
+  g.letterSpacing = '0px';
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/**
+ * The cabinet the playfield lives in: body, side armour, lockdown bar and a
+ * lit backglass standing at the far end.
+ *
+ * Without it the table floats in a void, which is the single thing that most
+ * gives away a pinball render as a diorama rather than a photograph. The
+ * armour and the lockdown bar are also the brightest metal in frame, so they
+ * do the job a picture frame does — they bound the composition.
+ */
+export function buildCabinet(THREE, materials, logo) {
+  const g = new THREE.Group();
+  const refs = {};
+  const { x0, x1, z0, z1, railY, backH } = CAB;
+  const w = x1 - x0;
+  const len = z0 - z1;
+  const cx = (x0 + x1) / 2;
+  const cz = (z0 + z1) / 2;
+
+  // Body below the playfield. Only its top few units are ever in frame, but
+  // that lip is what stops the playfield looking like a floating decal.
+  // Top face must land BELOW the playfield plane, not on it: at y = 0 this
+  // box covers the entire print and the table renders as a dark slab.
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, 7, len), materials.cabinet);
+  body.position.set(cx, -3.5 - 0.12, cz);
+  body.receiveShadow = true;
+  g.add(body);
+
+  // Inner cabinet walls, standing just outside the playfield's own guides
+  [-1, 1].forEach((side) => {
+    const wall = new THREE.Mesh(
+      new THREE.BoxGeometry(0.5, railY, len),
+      materials.cabinet
+    );
+    wall.position.set(side < 0 ? x0 + 0.25 : x1 - 0.25, railY / 2, cz);
+    wall.receiveShadow = true;
+    g.add(wall);
+  });
+
+  // Side armour: the polished trim that carries the glass
+  [-1, 1].forEach((side) => {
+    const rail = new THREE.Mesh(
+      new THREE.BoxGeometry(0.78, 1.5, len),
+      materials.armour
+    );
+    rail.position.set(side < 0 ? x0 + 0.3 : x1 - 0.3, railY + 0.5, cz);
+    rail.castShadow = true;
+    g.add(rail);
+  });
+
+  // Lockdown bar across the front — the bright bar at the bottom of every
+  // pinball photograph, and the thing that says "this is a machine".
+  const bar = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.62, 0.62, w, 20, 1, false, -Math.PI / 2, Math.PI * 1.35),
+    materials.armour
+  );
+  bar.rotation.z = Math.PI / 2;
+  bar.position.set(cx, railY + 0.62, z0 - 0.5);
+  bar.castShadow = true;
+  g.add(bar);
+
+  const front = new THREE.Mesh(
+    new THREE.BoxGeometry(w, railY + 0.4, 0.6),
+    materials.cabinet
+  );
+  front.position.set(cx, (railY + 0.4) / 2, z0 - 0.3);
+  g.add(front);
+
+  /* ---- Backbox: a lit backglass leaning away at the far end ---- */
+  {
+    const head = new THREE.Group();
+    head.position.set(cx, 0, z1 + 0.4);
+    head.rotation.x = -0.44; // leans away from the player, as a real head does
+
+    const shell = new THREE.Mesh(
+      new THREE.BoxGeometry(w, backH, 0.9),
+      materials.cabinet
+    );
+    shell.position.set(0, backH / 2, -0.5);
+    head.add(shell);
+
+    const tex = backglassTexture(THREE, logo);
+    // A backglass is a lamp: it must not be shaded by the playfield's lights
+    // and it must not be tone-mapped down with the rest of the scene.
+    const glass = new THREE.Mesh(
+      new THREE.PlaneGeometry(w - 1.2, backH - 0.7),
+      new THREE.MeshBasicMaterial({ map: tex, toneMapped: false })
+    );
+    glass.position.set(0, backH / 2, 0.02);
+    head.add(glass);
+
+    // Chrome bezel around the glass
+    const bezel = new THREE.Mesh(
+      new THREE.BoxGeometry(w, backH, 0.3),
+      materials.armour
+    );
+    bezel.position.set(0, backH / 2, -0.16);
+    head.add(bezel);
+
+    // The head throws light down the upper playfield
+    const lamp = new THREE.PointLight(0xffd39a, 70, 44, 2);
+    lamp.position.set(0, backH * 0.55, 2.6);
+    head.add(lamp);
+
+    g.add(head);
+    refs.backglass = glass;
+    refs.headLamp = lamp;
+  }
+
+  return { group: g, refs };
+}
+
+/**
+ * The playfield glass.
+ *
+ * Everything is played through a sheet of tempered glass, and the streaks of
+ * the room's ceiling lights sliding across it are most of what makes a
+ * pinball render read as a photograph.
+ *
+ * Drawn as three narrow bars rather than one sheet over the whole opening:
+ * additive black is a no-op, so a full-size quad spends its entire fill rate
+ * blending nothing over most of the table. The bars cover about a fifth of
+ * the area for the same picture.
+ */
+export function buildGlass(THREE) {
+  const W = 64;
+  const H = 256;
+  const cv = document.createElement('canvas');
+  cv.width = W;
+  cv.height = H;
+  const g = cv.getContext('2d');
+  const img = g.createImageData(W, H);
+  for (let y = 0; y < H; y++) {
+    // Fades in and out along its length, brightest along its spine
+    const along = Math.pow(Math.sin(Math.PI * ((y + 0.5) / H)), 0.55);
+    for (let x = 0; x < W; x++) {
+      const u = (x + 0.5) / W - 0.5;
+      const across = Math.exp(-(u * u) / 0.022);
+      const i = (y * W + x) * 4;
+      img.data[i] = 214;
+      img.data[i + 1] = 228;
+      img.data[i + 2] = 255;
+      img.data[i + 3] = Math.round(along * across * 255);
+    }
+  }
+  g.putImageData(img, 0, 0);
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const geo = new THREE.PlaneGeometry(1, 1);
+  const group = new THREE.Group();
+  const cx = (CAB.x0 + CAB.x1) / 2;
+  const cz = (CAB.z0 + CAB.z1) / 2;
+
+  // Two reflections of the ceiling fixtures. Kept narrow: every pixel of an
+  // additive quad is blended whether it adds anything or not, and this is a
+  // phone-first game, so the bars are sized to what actually reads.
+  [
+    { w: 2.6, l: 34, x: -4.2, z: 0, rot: 0.11, a: 0.36 },
+    { w: 1.8, l: 26, x: 4.4, z: -6, rot: -0.08, a: 0.26 }
+  ].forEach((b) => {
+    const mesh = new THREE.Mesh(
+      geo,
+      new THREE.MeshBasicMaterial({
+        map: tex,
+        transparent: true,
+        opacity: b.a,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false,
+        side: THREE.DoubleSide
+      })
+    );
+    mesh.scale.set(b.w, b.l, 1);
+    mesh.rotation.set(-Math.PI / 2, 0, b.rot);
+    mesh.position.set(cx + b.x, CAB.glassY, cz + b.z);
+    mesh.renderOrder = 5;
+    group.add(mesh);
+  });
+  return group;
 }
 
 /* ------------------------------------------------------------------- ramps */
@@ -343,7 +755,7 @@ function buildCastle(THREE, materials) {
   refs.bridge = bridge;
 
   // Courtyard glow
-  const lamp = new THREE.PointLight(0xf2c14e, 0.6, 9, 2);
+  const lamp = new THREE.PointLight(0xf2c14e, 9.6, 14, 2); // 0.6 in LAMP units
   lamp.position.set(L.centerX, 2.6, -(gay + 1.6));
   g.add(lamp);
   refs.lamp = lamp;
@@ -485,20 +897,40 @@ export function buildTable(THREE, mergeGeometries, materials) {
     cap.castShadow = true;
     g.add(cap);
 
+    // The lamp bead that lives inside the cap. Small, very bright, and read
+    // through the plastic — which is what gives a pop bumper its glow.
+    const bead = new THREE.Mesh(
+      new THREE.SphereGeometry(L.bumperR * 0.26, 12, 8),
+      new THREE.MeshBasicMaterial({ color: 0xfff0c0, toneMapped: false })
+    );
+    bead.position.y = 1.06;
+    g.add(bead);
+
     const dome = new THREE.Mesh(
       new THREE.SphereGeometry(L.bumperR * 0.6, 22, 14, 0, Math.PI * 2, 0, Math.PI / 2),
-      materials.goldGlow
+      // Standard, not physical: a transparent clearcoat shader is the most
+      // expensive thing on the table and, at this size, indistinguishable.
+      new THREE.MeshStandardMaterial({
+        color: 0xf2c14e,
+        roughness: 0.16,
+        metalness: 0.15,
+        transparent: true,
+        opacity: 0.66,
+        emissive: 0xf2c14e,
+        emissiveIntensity: 0.5,
+        envMapIntensity: 1.4
+      })
     );
     dome.position.y = 0.94;
-    dome.castShadow = true;
+    dome.renderOrder = 3;
     g.add(dome);
 
-    const light = new THREE.PointLight(0xf2c14e, 0, 7, 2);
+    const light = new THREE.PointLight(0xf2c14e, 0, 11, 2);
     light.position.y = 1.9;
     g.add(light);
 
     group.add(g);
-    refs.bumpers.push({ group: g, ring, trophy: dome, light, base: 0, isTrophy: false });
+    refs.bumpers.push({ group: g, ring, trophy: dome, bead, light, base: 0, isTrophy: false });
   });
 
   /* ---- Drop targets (angled banks) ---- */
@@ -546,7 +978,7 @@ export function buildTable(THREE, mergeGeometries, materials) {
     halo.position.y = 0.12;
     g.add(halo);
 
-    const light = new THREE.PointLight(0xf2c14e, 0.85, 12, 2);
+    const light = new THREE.PointLight(0xf2c14e, 13.6, 18, 2); // 0.85 in LAMP units
     light.position.y = 2.4;
     g.add(light);
 
@@ -623,22 +1055,58 @@ export function buildTable(THREE, mergeGeometries, materials) {
       { id: 'trolls', x: L.centerX, y: 22.6, a: 0, color: 0x6f9b5a }
     ];
     const discGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.07, 22);
+    // The routed pocket the insert drops into
+    const bezelGeo = flatten(
+      new THREE.ExtrudeGeometry(arrow, { depth: 0.02, bevelEnabled: false })
+    ).scale(1.16, 1, 1.16);
+    const bezelDisc = new THREE.CylinderGeometry(0.6, 0.6, 0.02, 22);
+    // The diffuser: real inserts are frosted so the lamp under them never
+    // shows as a hot spot, and the light bleeds a little onto the wood.
+    const poolTex = radialTexture(THREE, 0, [
+      [0, 'rgba(255,255,255,0.85)'],
+      [0.42, 'rgba(255,255,255,0.28)'],
+      [1, 'rgba(255,255,255,0)']
+    ]);
+    const poolGeo = flatten(new THREE.PlaneGeometry(1, 1));
     refs.inserts = {};
     SPOTS.forEach((s) => {
       const mat = materials.insert.clone();
       mat.color = new THREE.Color(s.color);
       mat.emissive = new THREE.Color(s.color);
       mat.emissiveIntensity = 0.12;
+
+      const bezel = new THREE.Mesh(s.disc ? bezelDisc : bezelGeo, materials.bezel);
+      bezel.position.set(s.x, 0.016, -s.y);
+      bezel.rotation.y = s.a;
+      group.add(bezel);
+
       const mesh = new THREE.Mesh(s.disc ? discGeo : geo, mat);
       mesh.position.set(s.x, 0.035, -s.y);
       mesh.rotation.y = s.a;
       group.add(mesh);
 
-      const light = new THREE.PointLight(s.color, 0, 4.5, 2);
+      const pool = new THREE.Mesh(
+        poolGeo,
+        new THREE.MeshBasicMaterial({
+          map: poolTex,
+          color: new THREE.Color(s.color),
+          transparent: true,
+          opacity: 0,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          toneMapped: false
+        })
+      );
+      pool.position.set(s.x, 0.05, -s.y);
+      pool.scale.setScalar(s.disc ? 2.8 : 3.4);
+      pool.renderOrder = 2;
+      group.add(pool);
+
+      const light = new THREE.PointLight(s.color, 0, 7, 2);
       light.position.set(s.x, 0.8, -s.y);
       group.add(light);
 
-      refs.inserts[s.id] = { mesh, mat, light };
+      refs.inserts[s.id] = { mesh, mat, light, pool };
     });
   }
 
@@ -737,13 +1205,31 @@ export function buildTable(THREE, mergeGeometries, materials) {
   refs.flippers.right = buildFlipper(L.centerX + L.flipperSpread, L.flipperY);
 
   /* ---- Ball ---- */
+  // A near-mirror with a strong environment: the ball must pick up the
+  // ceiling strips hard enough to stay findable against a dark playfield.
+  materials.ball = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    roughness: 0.09,
+    metalness: 1,
+    envMapIntensity: 2
+  });
   const ball = new THREE.Mesh(
     new THREE.SphereGeometry(L.ballRadius, 40, 28),
-    materials.chrome
+    materials.ball
   );
   ball.castShadow = true;
   group.add(ball);
   refs.ball = ball;
+
+  // Contact shadow. The shadow map covers the whole table, so its softest
+  // penumbra is wider than the ball itself and the ball reads as hovering.
+  // A tight dark blob pinned under it is what puts it back on the wood.
+  refs.contactTexture = radialTexture(THREE, 0, [
+    [0, 'rgba(0,0,0,0.62)'],
+    [0.45, 'rgba(0,0,0,0.3)'],
+    [1, 'rgba(0,0,0,0)']
+  ]);
+  refs.contactGeometry = flatten(new THREE.PlaneGeometry(1, 1));
 
   /* ---- Plunger ---- */
   {

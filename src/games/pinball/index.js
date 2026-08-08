@@ -10,12 +10,23 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import { World, Ball, clamp } from './physics.js';
 import { L, buildColliders, createPlayfieldCanvas } from './table.js';
-import { buildTable, createMaterials } from './meshes.js';
+import {
+  CAB, buildTable, buildCabinet, buildGlass, createMaterials, machineEnvironment
+} from './meshes.js';
+
+/**
+ * Point lights are candela and fall off with 1/d². At this table's scale
+ * (≈35 units across a 42" playfield) a lamp three units off the wood needs an
+ * intensity in the tens before it puts any light down at all — which is why
+ * the old rig, with every lamp set to about 1, was lit almost entirely by the
+ * environment map and had no pools anywhere on the playfield. Every lamp is
+ * expressed as a multiple of this so the numbers stay readable.
+ */
+const LAMP = 16;
 
 const BALLS_PER_GAME = 3;
 const BALL_SAVE_MS = 9000;
@@ -257,26 +268,35 @@ export async function createPinball(container, opts = {}) {
 
   /* ---- Renderer ---- */
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-  const maxDpr = window.innerWidth < 700 ? 2 : 1.8;
+  // The renderer is now fragment-bound (clearcoat playfield, GI lamps, glass
+  // glare), and fragment cost scales with the SQUARE of this. Phones run at
+  // device ratios of 3 and up, so 1.75 is already a downsample and the drop
+  // from 2 buys back about a fifth of the frame for no visible softening.
+  const maxDpr = window.innerWidth < 700 ? 1.75 : 1.8;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxDpr));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.97;
+  renderer.toneMappingExposure = 1.06;
   canvasHost.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x05070f);
-  scene.fog = new THREE.Fog(0x05070f, 52, 96);
+  scene.background = new THREE.Color(0x03050c);
+  scene.fog = new THREE.Fog(0x03050c, 58, 108);
 
   const camera = new THREE.PerspectiveCamera(42, 1, 0.5, 220);
 
   /* ---- Environment reflections ---- */
+  // A purpose-built arcade room rather than three's studio RoomEnvironment.
+  // A studio box lights every metal surface evenly, which is exactly why the
+  // rails used to read as grey plastic: chrome needs something bright AND
+  // something dark to reflect before it looks like metal at all.
   const pmrem = new THREE.PMREMGenerator(renderer);
-  const envRT = pmrem.fromScene(new RoomEnvironment(), 0.06);
+  const envSource = machineEnvironment(THREE);
+  const envRT = pmrem.fromEquirectangular(envSource);
+  envSource.dispose();
   scene.environment = envRT.texture;
-  // RoomEnvironment is a bright studio; at full strength it washes the table out
-  scene.environmentIntensity = 0.42;
+  scene.environmentIntensity = 1;
 
   /* ---- Table ---- */
   if (document.fonts && document.fonts.ready) {
@@ -309,6 +329,25 @@ export async function createPinball(container, opts = {}) {
     tableGroup.add(m);
     ballMeshes.push(m);
   }
+  // One contact shadow per pooled ball, parented to the table so it inherits
+  // the shake. Kept just above the wood and drawn after it.
+  const ballShadows = ballMeshes.map(() => {
+    const m = new THREE.Mesh(
+      refs.contactGeometry,
+      new THREE.MeshBasicMaterial({
+        map: refs.contactTexture,
+        transparent: true,
+        depthWrite: false,
+        toneMapped: false
+      })
+    );
+    m.scale.setScalar(L.ballRadius * 4.2);
+    m.visible = false;
+    m.renderOrder = 1;
+    tableGroup.add(m);
+    return m;
+  });
+
   const lockMeshes = L.lockSlots.map((s) => {
     const m = refs.ball.clone();
     m.position.set(s.x, L.ballRadius + 0.04, -s.y);
@@ -330,10 +369,27 @@ export async function createPinball(container, opts = {}) {
     m.material = m.material.clone();
   });
 
-  /* ---- Lights ---- */
-  scene.add(new THREE.AmbientLight(0x9fb0ff, 0.26));
+  /* ---- Cabinet, backglass and glass ---- */
+  const cab = buildCabinet(THREE, materials, logo);
+  scene.add(cab.group);
+  const glass = buildGlass(THREE);
+  scene.add(glass);
 
-  const key = new THREE.DirectionalLight(0xfff3e0, 1.5);
+  /* ---- Lights ----
+     A real machine has one lighting hierarchy and it is worth copying: a
+     handful of always-on GI lamps tucked under the plastics around the
+     PERIMETER and inside the pop nest, the backbox throwing light down the
+     table, and flashers on top for events. The old rig was two big pools in
+     the middle of the playfield, which lit everything equally and therefore
+     modelled nothing. */
+  // The room's broad top light. A hemisphere rather than a flat ambient: the
+  // playfield faces up and takes the sky term, while undersides and the
+  // cabinet interior take the darker ground term, so the table gets vertical
+  // shape for free. Doing this here instead of in the environment map keeps
+  // the clearcoat reflecting discrete fixtures rather than a grey sheet.
+  scene.add(new THREE.HemisphereLight(0xcbd9ff, 0x151a30, 1.05));
+
+  const key = new THREE.DirectionalLight(0xfff3e0, 1.55);
   key.position.set(9, 30, -6);
   key.target.position.set(0, 0, -20);
   key.castShadow = true;
@@ -347,23 +403,56 @@ export async function createPinball(container, opts = {}) {
   key.shadow.bias = -0.0016;
   scene.add(key, key.target);
 
-  const rim = new THREE.DirectionalLight(0x7c8cf8, 0.75);
+  const rim = new THREE.DirectionalLight(0x7c8cf8, 0.55);
   rim.position.set(-12, 12, -46);
   scene.add(rim);
 
-  // Playfield general illumination: two soft pools, like a real machine's GI
-  const warm = new THREE.PointLight(0xf2c14e, 1.15, 32, 2);
-  warm.position.set(L.centerX, 9, -10);
-  scene.add(warm);
+  // GI lamps: low, warm, short range, out at the edges where the real ones
+  // hide under the plastics. Short range is the point — it is the falloff
+  // between them that gives the playfield its pools and its shape.
+  // Warm at the perimeter, neutral down the middle. All-amber GI is what a
+  // 1990s machine had, but it turns a blue playfield brown; real modern GI
+  // mixes white with warm accents, and the blue print survives.
+  const GI_WARM = 0xffe0bc;
+  const GI_COOL = 0xdfe9ff;
+  // Kept deliberately short. Every point light is a per-fragment loop over
+  // the whole table, and this is a phone-first game — seven lamps placed on
+  // the shots give the playfield its pools; twelve just cost frames.
+  const GI = [
+    [-6.8, 7.5, GI_COOL], [4.4, 7.5, GI_COOL], // either side of the flippers
+    [-1.2, 13.5, GI_WARM], // over the hero logo, below the target banks
+    [-8.4, 17.5, GI_COOL], [5.4, 17.0, GI_COOL], // beside the target banks
+    [-1.2, 24.0, GI_WARM], // inside the pop bumper nest
+    [-1.2, 30.5, GI_WARM], // up under the castle plastics
+    [7.8, 20.0, GI_COOL] // the shooter lane, or the ball vanishes in it
+  ];
+  const GI_INTENSITY = 1.85 * LAMP;
+  const giLamps = GI.map(([x, y, color]) => {
+    const lamp = new THREE.PointLight(color, GI_INTENSITY, 24, 2);
+    lamp.position.set(x, 3.4, -y);
+    lamp.userData.home = color;
+    scene.add(lamp);
+    return lamp;
+  });
 
-  const giUpper = new THREE.PointLight(0xbcd0ff, 0.75, 34, 2);
-  giUpper.position.set(L.centerX, 10, -25);
-  scene.add(giUpper);
+  /**
+   * Turn the general illumination over. A real machine recolours its whole GI
+   * string when a mode starts, and because these lamps sit at the perimeter
+   * the change sweeps in from the edges instead of switching a single pool.
+   */
+  function setGI(color = null, intensity = GI_INTENSITY) {
+    giLamps.forEach((lamp) => {
+      lamp.color.set(color === null ? lamp.userData.home : color);
+      lamp.intensity = intensity;
+    });
+  }
 
   /* ---- Post-processing ---- */
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
-  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.5, 0.6, 0.88);
+  // Higher threshold than before: bloom should be the lamps and the backglass
+  // blooming, not every lit gold surface bleeding into its neighbour.
+  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.38, 0.5, 0.96);
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
 
@@ -519,8 +608,12 @@ export async function createPinball(container, opts = {}) {
   const flashes = [];
   function flash(obj, light, strength = 3, base = 0) {
     if (light) {
-      light.intensity = strength;
-      flashes.push({ light, base, t: 0 });
+      // `strength` and `base` are both in LAMP units, so a flasher restores
+      // to the resting brightness the lamp was built with.
+      light.intensity = strength * LAMP;
+      // Decay proportional to the peak: a bright flasher and a dim one fade
+      // over the same fifth of a second.
+      flashes.push({ light, base: base * LAMP, t: 0, rate: strength * LAMP * 5 });
     }
     // Pop the mesh to a fixed size over its resting scale — never
     // cumulative. The old multiplyScalar grew the mesh a little on every
@@ -869,7 +962,7 @@ export async function createPinball(container, opts = {}) {
     if (next.id !== 'fiske') setTimeout(raiseTrolls, 900);
     sfx.modeStart();
     toast(`${next.name} ${next.year} — ${next.hint}!`, true);
-    warm.color.set(0x7c8cf8);
+    setGI(0x7c8cf8, 1.2 * LAMP);
     hud.mode.hidden = false;
     renderGrenar();
     updateStatus();
@@ -918,7 +1011,7 @@ export async function createPinball(container, opts = {}) {
     state.mode = null;
     lowerTrolls();
     hud.mode.hidden = true;
-    warm.color.set(0xf2c14e);
+    setGI();
     if (wasSkytte) resetBank();
     renderGrenar();
     updateStatus();
@@ -938,9 +1031,8 @@ export async function createPinball(container, opts = {}) {
     setTimeout(raiseTrolls, 1200);
     sfx.multiball();
     toast('FINALEN — ALLA BOLLAR, ALLT ×5!', true);
-    warm.color.set(0xffe08a);
-    warm.intensity = 1.6;
-    bloom.strength = 0.8;
+    setGI(0xffe08a, 1.7 * LAMP);
+    bloom.strength = 0.6;
     hud.mode.hidden = false;
     renderGrenar();
     updateStatus();
@@ -981,7 +1073,7 @@ export async function createPinball(container, opts = {}) {
     sfx.multiball();
     startShake(1.4, 0);
     toast('MULTIBALL!', true);
-    bloom.strength = 0.72;
+    bloom.strength = 0.54;
 
     // The locked balls burst out through the castle gate into the forecourt.
     // They spawn just below the gate mouth: the courtyard itself is too
@@ -1092,8 +1184,8 @@ export async function createPinball(container, opts = {}) {
   function endMultiball() {
     state.multiball = false;
     state.jackpotLit = false;
-    bloom.strength = 0.5;
-    warm.intensity = 0.8;
+    bloom.strength = 0.38;
+    setGI();
     toast('Multiball slut');
     updateStatus();
   }
@@ -1308,9 +1400,8 @@ export async function createPinball(container, opts = {}) {
     refs.bumpers.forEach((bm) => {
       bm.ring.material.emissiveIntensity = 0.95;
     });
-    bloom.strength = 0.5;
-    warm.color.set(0xf2c14e);
-    warm.intensity = 0.8;
+    bloom.strength = 0.38;
+    setGI();
     hud.mode.hidden = true;
     hud.score.textContent = '0';
     hud.mult.textContent = '×1';
@@ -1508,12 +1599,15 @@ export async function createPinball(container, opts = {}) {
   const target = new THREE.Vector3(0, 0, -19);
   const pitch = 67 * (Math.PI / 180);
   const dir = new THREE.Vector3(0, Math.sin(pitch), Math.cos(pitch));
+  // Frame the machine, not just the playfield: the side armour and the front
+  // of the lockdown bar are the composition's border, and the backglass has
+  // to clear the top of the frame or it reads as a bug rather than a head.
   const corners = [];
-  for (const x of [-L.flareX - 0.35, L.outerX + 0.35]) {
-    for (const z of [0.5, -41.5]) {
-      corners.push(new THREE.Vector3(x, 0, z));
-      corners.push(new THREE.Vector3(x, 2, z));
-    }
+  for (const x of [CAB.x0, CAB.x1]) {
+    corners.push(new THREE.Vector3(x, 0, CAB.z0));
+    corners.push(new THREE.Vector3(x, CAB.railY + 1.3, CAB.z0));
+    corners.push(new THREE.Vector3(x, 0, CAB.z1));
+    corners.push(new THREE.Vector3(x, CAB.backH * 0.96, CAB.z1 - CAB.backH * 0.3));
   }
 
   function fitCamera() {
@@ -1551,6 +1645,9 @@ export async function createPinball(container, opts = {}) {
     const h = Math.max(1, Math.floor(rect.height));
     renderer.setSize(w, h, false);
     composer.setSize(w, h);
+    // Bloom resolution is the most expensive knob in the whole renderer — five
+    // mip levels, two blur passes each, every frame. The blocky highlights it
+    // used to produce were a blown-out chrome source, not a lack of pixels.
     bloom.setSize(Math.min(320, w / 2), Math.min(560, h / 2));
     fitCamera();
   }
@@ -1560,6 +1657,8 @@ export async function createPinball(container, opts = {}) {
   resize();
 
   /* ---- Loop ---- */
+  renderer.info.autoReset = false;
+  const perf = { drawCalls: 0, triangles: 0 };
   let raf = 0;
   let last = performance.now();
   let acc = 0;
@@ -1694,8 +1793,11 @@ export async function createPinball(container, opts = {}) {
       Object.entries(refs.inserts).forEach(([id, ins]) => {
         const want = lit[id] ? 0.9 + pulse * 1.5 : 0.12;
         ins.mat.emissiveIntensity += (want - ins.mat.emissiveIntensity) * Math.min(1, dtRaw * 9);
-        const wantL = lit[id] ? 0.5 + pulse * 0.5 : 0;
+        const wantL = (lit[id] ? 0.5 + pulse * 0.5 : 0) * LAMP;
         ins.light.intensity += (wantL - ins.light.intensity) * Math.min(1, dtRaw * 9);
+        // The frosted diffuser: bleeds the lamp onto the wood around the
+        // insert so a lit shot glows rather than switching on like an LCD.
+        ins.pool.material.opacity = Math.min(0.85, ins.light.intensity * 0.62);
       });
     }
 
@@ -1763,6 +1865,19 @@ export async function createPinball(container, opts = {}) {
     }
     for (; meshIdx < ballMeshes.length; meshIdx++) ballMeshes[meshIdx].visible = false;
 
+    // Contact shadows follow their ball and fade as it climbs a wireform —
+    // a shadow that stays hard while the ball is three units in the air is
+    // worse than no shadow at all.
+    ballShadows.forEach((sh, i) => {
+      const mesh = ballMeshes[i];
+      sh.visible = mesh.visible;
+      if (!mesh.visible) return;
+      const lift = Math.max(0, mesh.position.y - L.ballRadius - 0.04);
+      sh.position.set(mesh.position.x, 0.03, mesh.position.z);
+      sh.scale.setScalar(L.ballRadius * (4.2 + lift * 1.1));
+      sh.material.opacity = Math.max(0, 1 - lift * 0.42);
+    });
+
     // Flippers
     // rotation.y = +angle, NOT -angle: the playfield→world mapping (y → −z)
     // is a reflection, and a positive Y-rotation already sweeps +x toward −z,
@@ -1792,8 +1907,13 @@ export async function createPinball(container, opts = {}) {
     const t = now / 1000;
     refs.jackpot.trophy.rotation.y = t * 0.9;
     refs.jackpot.halo.scale.setScalar(1 + Math.sin(t * 2.4) * 0.06);
-    refs.bumpers.forEach((b) => {
+    refs.bumpers.forEach((b, i) => {
       if (b.isTrophy) b.trophy.rotation.y = t * 1.1;
+      if (b.bead) {
+        const hot = state.bumperLit && state.bumperLit[i];
+        b.bead.scale.setScalar(hot ? 1.15 + Math.sin(t * 7 + i) * 0.12 : 1);
+        b.trophy.material.emissiveIntensity = hot ? 1.5 : 0.5;
+      }
       b.group.scale.lerp(new THREE.Vector3(1, 1, 1), Math.min(1, dtRaw * 9));
     });
 
@@ -1801,7 +1921,7 @@ export async function createPinball(container, opts = {}) {
       const f = flashes[i];
       f.t += dtRaw;
       if (f.light) {
-        f.light.intensity = Math.max(f.base || 0, f.light.intensity - dtRaw * 14);
+        f.light.intensity = Math.max(f.base || 0, f.light.intensity - dtRaw * (f.rate || 14));
         if (f.light.intensity <= (f.base || 0) + 0.01) flashes.splice(i, 1);
       } else if (f.mat) {
         f.mat.emissiveIntensity = Math.max(f.base, f.mat.emissiveIntensity - dtRaw * 16);
@@ -1825,6 +1945,12 @@ export async function createPinball(container, opts = {}) {
     camera.lookAt(target);
 
     composer.render();
+    // The composer's output pass is the last thing drawn, so reading
+    // renderer.info afterwards reports one fullscreen quad. Snapshot the
+    // whole frame instead, for the perf checks.
+    perf.drawCalls = renderer.info.render.calls;
+    perf.triangles = renderer.info.render.triangles;
+    renderer.info.reset();
   }
 
   raf = requestAnimationFrame(tick);
@@ -1849,6 +1975,13 @@ export async function createPinball(container, opts = {}) {
   // Deterministic hooks for automated tests (and curious friends)
   window.__pbFlipper = {
     state,
+    scene,
+    camera,
+    renderer,
+    refs,
+    info() {
+      return { ...perf };
+    },
     startGame,
     startNextMode,
     startMultiball,
