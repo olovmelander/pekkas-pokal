@@ -1898,6 +1898,14 @@
       module: 'src/games/clay/index.js'
     },
     {
+      year: 2019,
+      title: 'Pekkas Pingis',
+      competition: 'Pingis',
+      tagline: 'Bygdegården i Bredbyn — flicka topspin och slå hela 2019 års pall.',
+      icon: '🏓',
+      module: 'src/games/pingis/index.js'
+    },
+    {
       year: 2022,
       title: 'Pekkas Lerduvor',
       competition: 'Skytte',
