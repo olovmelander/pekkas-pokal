@@ -1,0 +1,252 @@
+/* ==========================================================================
+   Pekkas Pokal — Layout: header, navigation, shell, grids, footer
+   ========================================================================== */
+
+/* ---------- Header ---------- */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--header-bg);
+  backdrop-filter: var(--card-blur);
+  -webkit-backdrop-filter: var(--card-blur);
+  border-bottom: 1px solid var(--border);
+}
+
+.header-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  height: var(--header-h);
+  padding: 0 var(--sp-5);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  text-decoration: none;
+  color: var(--text-1);
+  min-width: 0;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  color: var(--accent-contrast);
+  background: linear-gradient(140deg, var(--gold), var(--gold-deep));
+  box-shadow: 0 4px 14px rgba(242, 193, 78, 0.35);
+  flex-shrink: 0;
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.brand-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.brand-sub {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+/* ---------- Desktop nav ---------- */
+.top-nav {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+}
+
+.nav-link {
+  position: relative;
+  z-index: 1;
+  padding: 0.45rem 1rem;
+  border-radius: var(--r-pill);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-2);
+  white-space: nowrap;
+  transition: color var(--t-fast);
+}
+
+.nav-link:hover {
+  color: var(--text-1);
+}
+
+.nav-link.active {
+  color: var(--accent-contrast);
+}
+
+.nav-indicator {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 0;
+  width: 0;
+  border-radius: var(--r-pill);
+  background: linear-gradient(140deg, var(--gold), var(--gold-deep));
+  box-shadow: 0 2px 10px rgba(242, 193, 78, 0.35);
+  transition: left var(--t-med) var(--ease-out), width var(--t-med) var(--ease-out);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+/* ---------- Page shell ---------- */
+.page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--sp-6) var(--sp-5) var(--sp-8);
+}
+
+.view {
+  display: none;
+}
+
+.view.active {
+  display: block;
+  animation: view-in var(--t-slow) var(--ease-out) both;
+}
+
+.view-head {
+  margin-bottom: var(--sp-6);
+}
+
+.view-head h1 {
+  font-size: var(--text-2xl);
+  background: linear-gradient(120deg, var(--text-1) 60%, var(--text-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.view-sub {
+  margin-top: var(--sp-2);
+  color: var(--text-2);
+  font-size: var(--text-md);
+}
+
+.section-heading {
+  font-size: var(--text-lg);
+  margin: var(--sp-7) 0 var(--sp-4);
+}
+
+/* ---------- Grids ---------- */
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
+  gap: var(--sp-5);
+  margin-top: var(--sp-5);
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: var(--sp-5);
+  margin-bottom: var(--sp-5);
+}
+
+.hero-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  min-width: 0;
+}
+
+.hero-side > .card {
+  flex: 1;
+}
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--sp-4);
+  margin: var(--sp-5) 0;
+}
+
+/* ---------- Footer ---------- */
+.site-footer {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--sp-5);
+  padding-bottom: calc(var(--sp-5) + env(safe-area-inset-bottom));
+  text-align: center;
+  color: var(--text-3);
+  font-size: var(--text-sm);
+  border-top: 1px solid var(--border);
+}
+
+/* ---------- Mobile tab bar (hidden on desktop) ---------- */
+.tab-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: none;
+  justify-content: space-around;
+  align-items: stretch;
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+  background: var(--header-bg);
+  backdrop-filter: var(--card-blur);
+  -webkit-backdrop-filter: var(--card-blur);
+  border-top: 1px solid var(--border);
+}
+
+.tab-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 2px;
+  border-radius: var(--r-sm);
+  color: var(--text-3);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: color var(--t-fast), transform var(--t-fast);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tab-item svg {
+  transition: transform var(--t-med) var(--ease-spring);
+}
+
+.tab-item.active {
+  color: var(--accent);
+}
+
+.tab-item.active svg {
+  transform: translateY(-2px) scale(1.08);
+}
+
+.tab-item:active {
+  transform: scale(0.94);
+}

@@ -1,0 +1,1590 @@
+/* ==========================================================================
+   Pekkas Pokal — Spel: year grid, game stage, pinball HUD
+   ========================================================================== */
+
+/* ---------------------------------------------------------------- year grid */
+
+.game-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
+  gap: var(--sp-4);
+}
+
+.game-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-1);
+  padding: var(--sp-5);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  backdrop-filter: var(--card-blur);
+  -webkit-backdrop-filter: var(--card-blur);
+  text-align: left;
+  overflow: hidden;
+  transition: transform var(--t-med) var(--ease-out), border-color var(--t-med),
+    box-shadow var(--t-med);
+}
+
+.game-card.playable {
+  cursor: pointer;
+  border-color: color-mix(in srgb, var(--gold) 40%, var(--border));
+  box-shadow: var(--shadow-1), var(--glow-gold);
+}
+
+.game-card.playable::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 90% at 80% 0%, rgba(242, 193, 78, 0.16), transparent 60%);
+  pointer-events: none;
+}
+
+.game-card.playable:hover {
+  transform: translateY(-4px);
+}
+
+.game-card.playable:active {
+  transform: translateY(-1px) scale(0.99);
+}
+
+.game-card.soon {
+  opacity: 0.55;
+}
+
+.game-badge {
+  position: absolute;
+  top: var(--sp-4);
+  right: var(--sp-4);
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  background: linear-gradient(140deg, var(--gold), var(--gold-deep));
+  color: var(--accent-contrast);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.game-icon {
+  font-size: 1.9rem;
+  line-height: 1;
+  margin-bottom: var(--sp-2);
+}
+
+.game-year {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-sm);
+  letter-spacing: 0.1em;
+  color: var(--accent);
+}
+
+.game-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-lg);
+  line-height: 1.2;
+}
+
+.game-tagline {
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  color: var(--text-2);
+}
+
+.game-play {
+  margin-top: var(--sp-3);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--accent);
+  transition: transform var(--t-fast);
+}
+
+.game-card.playable:hover .game-play {
+  transform: translateX(3px);
+}
+
+/* --------------------------------------------------------------- game stage */
+
+body.game-open {
+  overflow: hidden;
+}
+
+.game-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: #05070f;
+  display: flex;
+  overscroll-behavior: none;
+}
+
+.game-stage[hidden] {
+  display: none;
+}
+
+.game-mount {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.game-close {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: 12px;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: #cfd6f5;
+  background: rgba(12, 16, 32, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(8px);
+  transition: color var(--t-fast), transform var(--t-fast);
+}
+
+.game-close:hover {
+  color: var(--gold);
+  transform: rotate(90deg);
+}
+
+.game-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-4);
+  background: #05070f;
+  color: #a7aecb;
+  font-size: var(--text-sm);
+  text-align: center;
+  padding: var(--sp-5);
+}
+
+.game-loading[hidden] {
+  display: none;
+}
+
+.game-spinner {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 3px solid rgba(242, 193, 78, 0.22);
+  border-top-color: #f2c14e;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ------------------------------------------------------------- pinball view */
+
+.pb-canvas {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.pb-canvas canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* The UI layer is click-through except for its own controls */
+.pb-ui {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  font-family: var(--font-body);
+  color: #eef1ff;
+}
+
+.pb-ui button {
+  pointer-events: auto;
+}
+
+/* ---- Top bar ---- */
+
+.pb-top {
+  position: absolute;
+  top: max(10px, env(safe-area-inset-top));
+  left: 12px;
+  right: 62px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+
+.pb-score {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(1.7rem, 7vw, 2.6rem);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  text-shadow: 0 0 22px rgba(242, 193, 78, 0.55);
+}
+
+.pb-hi {
+  margin-top: 2px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: rgba(190, 199, 233, 0.65);
+}
+
+.pb-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.pb-mult {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.15rem;
+  color: #f2c14e;
+  text-shadow: 0 0 16px rgba(242, 193, 78, 0.6);
+}
+
+.pb-balls {
+  display: flex;
+  gap: 5px;
+}
+
+.pb-ball-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+.pb-ball-dot.on {
+  background: linear-gradient(140deg, #fff, #b9c2e8);
+  box-shadow: 0 0 10px rgba(210, 220, 255, 0.75);
+}
+
+/* ---- P-O-K-A-L progress ---- */
+
+.pb-pokal {
+  position: absolute;
+  top: calc(max(10px, env(safe-area-inset-top)) + 62px);
+  left: 12px;
+  display: flex;
+  gap: 5px;
+}
+
+.pb-letter {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: rgba(190, 199, 233, 0.5);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all var(--t-med) var(--ease-spring);
+}
+
+.pb-letter.lit {
+  color: #241a05;
+  background: linear-gradient(140deg, #f2c14e, #d99a2b);
+  border-color: transparent;
+  box-shadow: 0 0 14px rgba(242, 193, 78, 0.7);
+  transform: translateY(-2px);
+}
+
+/* ---- Toast ---- */
+
+.pb-toast {
+  position: absolute;
+  left: 50%;
+  top: 26%;
+  transform: translate(-50%, -6px);
+  padding: 0.5rem 1.1rem;
+  border-radius: var(--r-pill);
+  background: rgba(10, 14, 28, 0.78);
+  border: 1px solid rgba(242, 193, 78, 0.34);
+  backdrop-filter: blur(8px);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity var(--t-med), transform var(--t-med) var(--ease-out);
+}
+
+.pb-toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.pb-toast.big {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  color: #f2c14e;
+  border-color: rgba(242, 193, 78, 0.7);
+  box-shadow: 0 0 34px rgba(242, 193, 78, 0.35);
+}
+
+/* ---- Overlay ---- */
+
+.pb-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-5);
+  background: rgba(5, 7, 15, 0.82);
+  backdrop-filter: blur(10px);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--t-med), visibility var(--t-med);
+}
+
+.pb-overlay.show {
+  opacity: 1;
+  visibility: visible;
+}
+
+.pb-panel {
+  max-width: 380px;
+  text-align: center;
+  color: #eef1ff;
+}
+
+.pb-panel h2 {
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 6vw, 2rem);
+  font-weight: 700;
+  background: linear-gradient(120deg, #f2c14e, #fff0c8 55%, #d99a2b);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.pb-panel p {
+  margin-top: var(--sp-3);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: #a7aecb;
+}
+
+.pb-scoreline {
+  margin-top: var(--sp-4);
+}
+
+.pb-scoreline span {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 2.4rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+
+.pb-scoreline small {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(190, 199, 233, 0.6);
+}
+
+.pb-btn {
+  margin-top: var(--sp-5);
+  padding: 0.8rem 2rem;
+  border-radius: var(--r-pill);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #241a05;
+  background: linear-gradient(140deg, #f2c14e, #d99a2b);
+  border: none;
+  box-shadow: 0 8px 26px rgba(242, 193, 78, 0.36);
+  transition: transform var(--t-fast) var(--ease-out), box-shadow var(--t-fast);
+}
+
+.pb-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(242, 193, 78, 0.46);
+}
+
+.pb-btn:active {
+  transform: scale(0.97);
+}
+
+/* ---- Plunger ---- */
+
+.pb-plunger {
+  position: absolute;
+  left: 50%;
+  bottom: calc(18px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(300px, 76vw);
+  text-align: center;
+  pointer-events: none;
+}
+
+.pb-plunger[hidden] {
+  display: none;
+}
+
+.pb-plunger-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(190, 199, 233, 0.8);
+  margin-bottom: 8px;
+  animation: pb-breathe 2s ease-in-out infinite;
+}
+
+@keyframes pb-breathe {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+.pb-power {
+  height: 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+
+.pb-power span {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #d99a2b, #f2c14e, #fff0c8);
+  box-shadow: 0 0 18px rgba(242, 193, 78, 0.7);
+}
+
+/* ---- Nudge + mute ---- */
+
+.pb-controls {
+  position: absolute;
+  left: 50%;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 15;
+}
+
+.pb-controls[hidden] {
+  display: none;
+}
+
+.pb-nudge {
+  padding: 0.5rem 1.5rem;
+  border-radius: var(--r-pill);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: rgba(220, 226, 250, 0.9);
+  background: rgba(12, 16, 32, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(8px);
+  transition: color var(--t-fast), border-color var(--t-fast), transform var(--t-fast);
+}
+
+.pb-nudge:active {
+  transform: scale(0.94);
+  color: #f2c14e;
+  border-color: rgba(242, 193, 78, 0.6);
+}
+
+.pb-mute {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: 60px;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  color: rgba(220, 226, 250, 0.85);
+  background: rgba(12, 16, 32, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+
+.pb-mute.off {
+  color: rgba(190, 199, 233, 0.4);
+}
+
+.pb-mute.off .pb-wave {
+  display: none;
+}
+
+/* ---- Landscape / desktop: keep the table portrait and centred ---- */
+
+@media (min-aspect-ratio: 1/1) {
+  .game-mount {
+    max-width: min(56vh, 100%);
+    margin: 0 auto;
+  }
+
+  .game-stage {
+    background:
+      radial-gradient(80% 60% at 50% 0%, rgba(124, 140, 248, 0.08), transparent 70%),
+      #05070f;
+  }
+}
+
+@media (max-width: 420px) {
+  .pb-letter {
+    width: 20px;
+    height: 20px;
+    font-size: 0.62rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pb-plunger-label {
+    animation: none;
+    opacity: 0.9;
+  }
+}
+
+/* Skill-shot band on the plunger meter */
+.pb-power {
+  position: relative;
+}
+
+.pb-skill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 68%;
+  width: 18%;
+  background: rgba(79, 209, 197, 0.5);
+  box-shadow: 0 0 12px rgba(79, 209, 197, 0.7);
+}
+
+.pb-power span {
+  position: relative;
+  z-index: 1;
+}
+
+/* Official logo on the playable game card */
+.game-logo {
+  width: clamp(120px, 46%, 170px);
+  height: auto;
+  margin-bottom: var(--sp-3);
+  filter: drop-shadow(0 4px 16px rgba(242, 193, 78, 0.35));
+}
+
+/* Screen shake on nudge — applied to the whole game mount (canvas + HUD) */
+@keyframes pb-shake {
+  0% { transform: translate(0, 0) rotate(0); }
+  15% { transform: translate(-7px, 3px) rotate(-0.5deg); }
+  30% { transform: translate(6px, -4px) rotate(0.4deg); }
+  45% { transform: translate(-5px, 2px) rotate(-0.3deg); }
+  60% { transform: translate(4px, -2px) rotate(0.2deg); }
+  80% { transform: translate(-2px, 1px) rotate(-0.1deg); }
+  100% { transform: translate(0, 0) rotate(0); }
+}
+
+.pb-shake {
+  animation: pb-shake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pb-shake {
+    animation: none;
+  }
+}
+
+/* ---- Grenar (mode ladder) chips ---- */
+
+.pb-grenar {
+  position: absolute;
+  top: calc(max(10px, env(safe-area-inset-top)) + 92px);
+  left: 12px;
+  display: flex;
+  gap: 4px;
+}
+
+.pb-gren {
+  display: grid;
+  place-items: center;
+  min-width: 24px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 5px;
+  font-size: 0.58rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: rgba(190, 199, 233, 0.45);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  transition: all var(--t-med) var(--ease-spring);
+}
+
+.pb-gren.won {
+  color: #241a05;
+  background: linear-gradient(140deg, #f2c14e, #d99a2b);
+  border-color: transparent;
+  box-shadow: 0 0 10px rgba(242, 193, 78, 0.6);
+}
+
+.pb-gren.active {
+  color: #dfe5ff;
+  border-color: rgba(124, 140, 248, 0.8);
+  box-shadow: 0 0 12px rgba(124, 140, 248, 0.55);
+  animation: pb-gren-pulse 1s ease-in-out infinite;
+}
+
+@keyframes pb-gren-pulse {
+  50% { transform: translateY(-1px); }
+}
+
+/* ---- Active mode banner ---- */
+
+.pb-mode {
+  position: absolute;
+  top: calc(max(10px, env(safe-area-inset-top)) + 118px);
+  left: 12px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0.35rem 0.8rem;
+  border-radius: var(--r-pill);
+  background: rgba(10, 14, 28, 0.72);
+  border: 1px solid rgba(124, 140, 248, 0.5);
+  backdrop-filter: blur(8px);
+}
+
+.pb-mode[hidden] {
+  display: none;
+}
+
+.pb-mode-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #aeb9ff;
+}
+
+.pb-mode-task {
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: rgba(210, 217, 245, 0.8);
+}
+
+.pb-mode-time {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+
+.pb-mode-time.urgent {
+  color: #f26d8d;
+  animation: pb-time-blink 0.5s steps(2) infinite;
+}
+
+@keyframes pb-time-blink {
+  50% { opacity: 0.4; }
+}
+
+/* ---- Substatus (locks, bonus, hints) ---- */
+
+.pb-substatus {
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: rgba(242, 193, 78, 0.85);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* ---- Extra ball dot ---- */
+
+.pb-ball-dot.extra {
+  background: linear-gradient(140deg, #f2c14e, #d99a2b);
+  box-shadow: 0 0 10px rgba(242, 193, 78, 0.8);
+}
+
+/* ---- Strategikort (info button + help card) ---- */
+.pb-info {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: 104px;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  font: 700 16px 'Space Grotesk', Inter, sans-serif;
+  color: rgba(242, 193, 78, 0.9);
+  background: rgba(12, 16, 32, 0.62);
+  border: 1px solid rgba(242, 193, 78, 0.35);
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+
+.pb-info:active {
+  transform: scale(0.94);
+}
+
+.pb-help {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(5, 7, 15, 0.82);
+  backdrop-filter: blur(10px);
+  pointer-events: auto;
+}
+
+.pb-help[hidden] {
+  display: none;
+}
+
+.pb-help-card {
+  width: min(430px, 100%);
+  max-height: min(86vh, 720px);
+  overflow-y: auto;
+  padding: 22px 22px 18px;
+  border-radius: 18px;
+  background: linear-gradient(165deg, rgba(21, 27, 52, 0.97), rgba(12, 16, 32, 0.97));
+  border: 1px solid rgba(242, 193, 78, 0.35);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+}
+
+.pb-help-card h3 {
+  margin: 0;
+  font: 700 22px 'Space Grotesk', Inter, sans-serif;
+  color: #f2c14e;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pb-help-sub {
+  margin: 2px 0 14px;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(220, 226, 250, 0.55);
+}
+
+.pb-help-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: grid;
+  gap: 9px;
+}
+
+.pb-help-list li {
+  position: relative;
+  padding-left: 20px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: rgba(224, 229, 250, 0.88);
+}
+
+.pb-help-list li b {
+  color: #fff;
+  display: block;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pb-help-list li i {
+  position: absolute;
+  left: 0;
+  top: 5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--c, #f2c14e);
+  box-shadow: 0 0 10px var(--c, #f2c14e);
+}
+
+.pb-help-tip {
+  margin: 0 0 10px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: rgba(94, 234, 212, 0.09);
+  border: 1px solid rgba(94, 234, 212, 0.25);
+  font-size: 12.5px;
+  color: rgba(190, 244, 230, 0.9);
+}
+
+.pb-help-keys {
+  margin-bottom: 14px;
+  font-size: 11.5px;
+  letter-spacing: 0.03em;
+  color: rgba(220, 226, 250, 0.5);
+}
+
+.pb-help-card .pb-btn {
+  width: 100%;
+}
+
+/* ==================================================================
+   Pekkas Fiske (2024) — HUD ovanpå pb-basstilarna
+   ================================================================== */
+
+.fg-ui .pb-top {
+  right: 148px; /* clear both the ?-button and the mute button */
+}
+
+/* Djupmätaren och kasträknaren */
+
+.fg-depth {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.2rem;
+  color: #8fe3f2;
+  text-shadow: 0 0 18px rgba(127, 216, 232, 0.6);
+  font-variant-numeric: tabular-nums;
+}
+
+.fg-cast {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: rgba(190, 199, 233, 0.65);
+}
+
+.pb-score.bump {
+  animation: fg-bump 0.28s ease-out;
+}
+
+@keyframes fg-bump {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.13); }
+  100% { transform: scale(1); }
+}
+
+/* Multiplikatorn — samlas på vägen ner, spenderas på vägen upp */
+
+.fg-mult {
+  position: absolute;
+  left: 12px;
+  top: calc(max(10px, env(safe-area-inset-top)) + 62px);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.3rem;
+  letter-spacing: 0.02em;
+  color: #5eead4;
+  text-shadow: 0 0 18px rgba(94, 234, 212, 0.55);
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 0.2s ease, transform 0.2s ease, color 0.3s ease;
+  pointer-events: none;
+}
+
+.fg-mult.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.fg-mult.hot {
+  color: #f2c14e;
+  text-shadow: 0 0 22px rgba(242, 193, 78, 0.7);
+}
+
+/* Djupzonens namn — stort, kort, en gång per zon */
+
+.fg-zone {
+  position: absolute;
+  left: 50%;
+  top: 34%;
+  transform: translate(-50%, 0);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(1.2rem, 6vw, 2rem);
+  letter-spacing: 0.2em;
+  color: rgba(220, 244, 250, 0.95);
+  text-shadow: 0 0 30px rgba(10, 30, 45, 0.9);
+  opacity: 0;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.fg-zone.show {
+  animation: fg-zone 1.8s ease-out forwards;
+}
+
+@keyframes fg-zone {
+  0% { opacity: 0; letter-spacing: 0.5em; }
+  18% { opacity: 1; letter-spacing: 0.2em; }
+  70% { opacity: 1; }
+  100% { opacity: 0; letter-spacing: 0.16em; }
+}
+
+/* Fasetiketten */
+
+.fg-phase {
+  position: absolute;
+  left: 50%;
+  top: 13%;
+  transform: translate(-50%, -6px);
+  padding: 0.35rem 0.95rem;
+  border-radius: var(--r-pill);
+  background: rgba(6, 18, 30, 0.7);
+  border: 1px solid rgba(127, 216, 232, 0.32);
+  backdrop-filter: blur(8px);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: rgba(205, 236, 244, 0.92);
+  opacity: 0;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  pointer-events: none;
+}
+
+.fg-phase.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* Rundkortet mellan kasten — fångsten sammanfattas medan draget kastas ut */
+
+.fg-round {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 34%; /* över båten, under toasten — båda måste synas */
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.32s ease;
+}
+
+.fg-round[hidden] {
+  display: none;
+}
+
+.fg-round.show {
+  opacity: 1;
+}
+
+.fg-round-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 1rem 1.6rem 1.1rem;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(8, 24, 38, 0.88), rgba(4, 14, 24, 0.92));
+  border: 1px solid rgba(127, 216, 232, 0.34);
+  box-shadow: 0 18px 48px rgba(2, 10, 18, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+  text-align: center;
+  transform: translateY(10px) scale(0.97);
+  transition: transform 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.fg-round.show .fg-round-card {
+  transform: translateY(0) scale(1);
+}
+
+.fg-round-kicker {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(190, 199, 233, 0.7);
+}
+
+.fg-round-no {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #d8f4fb;
+  text-shadow: 0 0 24px rgba(127, 216, 232, 0.5);
+}
+
+.fg-round-haul {
+  display: flex;
+  gap: 0.55rem;
+  margin-top: 0.25rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.fg-round-haul span {
+  padding: 0.24rem 0.6rem;
+  border-radius: var(--r-pill);
+  background: rgba(127, 216, 232, 0.1);
+  border: 1px solid rgba(127, 216, 232, 0.2);
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  color: rgba(205, 236, 244, 0.8);
+  white-space: nowrap;
+}
+
+.fg-round-haul b {
+  color: #ffd98a;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Flygande poängsiffror, förankrade i 3D-positionen */
+
+.fg-pops {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.fg-pop {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  color: #fff4d6;
+  text-shadow: 0 2px 12px rgba(4, 12, 22, 0.95);
+  animation: fg-pop 1.1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.fg-pop.mult {
+  color: #5eead4;
+  font-size: 1.15rem;
+}
+
+@keyframes fg-pop {
+  0% { opacity: 0; transform: translate(-50%, -30%) scale(0.7); }
+  16% { opacity: 1; transform: translate(-50%, -50%) scale(1.05); }
+  100% { opacity: 0; transform: translate(-50%, -160%) scale(1); }
+}
+
+/* Tryckvinjett: sluter sig ju djupare man kommer */
+
+.fg-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 50% 42%, rgba(0, 0, 0, 0) 42%, rgba(2, 8, 16, 0.55) 100%),
+    linear-gradient(to bottom, rgba(2, 10, 20, 0.28), rgba(0, 0, 0, 0) 26%);
+  mix-blend-mode: multiply;
+}
+
+/* Startpanelens tre steg och slutsummeringen */
+
+.fg-steps {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  text-align: left;
+}
+
+.fg-steps li {
+  position: relative;
+  padding-left: 20px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: rgba(224, 229, 250, 0.85);
+}
+
+.fg-steps li b {
+  color: #fff;
+  display: block;
+  font-size: 11.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.fg-steps li i {
+  position: absolute;
+  left: 0;
+  top: 5px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--c, #f2c14e);
+  box-shadow: 0 0 10px var(--c, #f2c14e);
+}
+
+.fg-catchlist {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  margin: -4px 0 14px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(127, 216, 232, 0.08);
+  border: 1px solid rgba(127, 216, 232, 0.2);
+  font-size: 12.5px;
+  color: rgba(205, 236, 244, 0.85);
+}
+
+.fg-catchlist b {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 11px;
+  color: rgba(205, 236, 244, 0.6);
+}
+
+.fg-catchlist span {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  color: #8fe3f2;
+}
+
+.fg-catchlist[hidden] {
+  display: none;
+}
+
+/* Sjön ska synas bakom startpanelen — den är halva försäljningen */
+.fg-ui .pb-overlay {
+  background: linear-gradient(180deg, rgba(4, 12, 22, 0.5), rgba(3, 8, 16, 0.8));
+  backdrop-filter: blur(4px);
+}
+
+.fg-steps[hidden] {
+  display: none;
+}
+
+/* ==================================================================
+   Pekkas Lerskulptur (2026) — HUD ovanpå pb/fg-basstilarna
+   ================================================================== */
+
+/* Timern */
+
+.cl-timer {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.2rem;
+  color: #f0d9a8;
+  text-shadow: 0 0 16px rgba(242, 193, 78, 0.5);
+  font-variant-numeric: tabular-nums;
+}
+
+.cl-timer.low {
+  color: #ff7a6b;
+  text-shadow: 0 0 18px rgba(255, 122, 107, 0.65);
+  animation: cl-pulse 1s ease-in-out infinite;
+}
+
+@keyframes cl-pulse {
+  50% { opacity: 0.55; }
+}
+
+/* Uppdragskortet: målets silhuett + namn */
+
+.cl-task {
+  position: absolute;
+  left: 12px;
+  top: calc(max(10px, env(safe-area-inset-top)) + 62px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px 8px 8px;
+  border-radius: 12px;
+  background: rgba(16, 10, 6, 0.55);
+  border: 1px solid rgba(94, 234, 212, 0.28);
+  backdrop-filter: blur(6px);
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  pointer-events: none;
+}
+
+.cl-task.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.cl-task canvas {
+  display: block;
+}
+
+.cl-task-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.9rem;
+  letter-spacing: 0.06em;
+  color: rgba(205, 244, 236, 0.95);
+}
+
+/* Likhetsmätaren */
+
+.cl-sim {
+  position: absolute;
+  left: 50%;
+  bottom: calc(max(14px, env(safe-area-inset-bottom)) + 64px);
+  transform: translateX(-50%);
+  width: min(320px, 64vw);
+  height: 22px;
+  border-radius: var(--r-pill);
+  background: rgba(16, 10, 6, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+
+.cl-sim.show {
+  opacity: 1;
+}
+
+.cl-sim i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0%;
+  background: linear-gradient(90deg, #8a5a3c, #d9a05b);
+  transition: width 0.18s ease-out, background 0.3s ease;
+}
+
+.cl-sim.good i {
+  background: linear-gradient(90deg, #3e8e7e, #5eead4);
+}
+
+.cl-sim.great i {
+  background: linear-gradient(90deg, #d9a05b, #f2c14e);
+  box-shadow: 0 0 18px rgba(242, 193, 78, 0.65);
+}
+
+.cl-sim b {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #fff;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
+}
+
+/* Verktygsknapparna */
+
+.cl-tools {
+  position: absolute;
+  left: 50%;
+  bottom: max(14px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+
+.cl-tools.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.cl-tool {
+  padding: 0.65rem 1.2rem;
+  border-radius: var(--r-pill);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: rgba(224, 229, 250, 0.92);
+  background: rgba(16, 10, 6, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(6px);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.cl-tool:active {
+  transform: scale(0.96);
+  background: rgba(94, 234, 212, 0.18);
+}
+
+.cl-tool.primary {
+  color: #241a05;
+  background: linear-gradient(140deg, #f2c14e, #d99a2b);
+  border-color: transparent;
+  box-shadow: 0 4px 18px rgba(242, 193, 78, 0.4);
+}
+
+/* Fasetiketten ligger lägre i drejspelet så uppdragskortet går fritt */
+#cl-phase {
+  top: 21%;
+}
+
+/* ==================================================================
+   Pekkas Fäktning (2023) — HUD ovanpå pb/fg/cl-basstilarna
+   ================================================================== */
+
+/* Tuschräknaren: fyllda och tomma prickar, du överst */
+
+.fk-touches {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: 0.78rem;
+  letter-spacing: 0.22em;
+  line-height: 1.1;
+}
+
+.fk-touches b {
+  color: #3ddc7b;
+  text-shadow: 0 0 12px rgba(61, 220, 123, 0.6);
+}
+
+.fk-touches i {
+  font-style: normal;
+  color: #ff6b5c;
+  text-shadow: 0 0 12px rgba(255, 107, 92, 0.55);
+}
+
+/* Motståndarkortet */
+
+.fk-opponent {
+  position: absolute;
+  left: 12px;
+  top: calc(max(10px, env(safe-area-inset-top)) + 62px);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 7px 12px;
+  border-radius: 12px;
+  background: rgba(10, 14, 10, 0.55);
+  border: 1px solid rgba(242, 193, 78, 0.3);
+  backdrop-filter: blur(6px);
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  pointer-events: none;
+}
+
+.fk-opponent.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.fk-opponent b {
+  font-family: var(--font-display);
+  font-size: 0.86rem;
+  letter-spacing: 0.04em;
+  color: #fff;
+}
+
+.fk-opponent span {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(242, 193, 78, 0.85);
+}
+
+/* Gardknapparna: tre linjer längs vänsterkanten */
+
+.fk-lines {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+
+.fk-lines.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.fk-line {
+  padding: 0.7rem 0.8rem;
+  border-radius: 12px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: rgba(224, 229, 250, 0.75);
+  background: rgba(10, 14, 10, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(6px);
+  touch-action: none;
+}
+
+.fk-line.on {
+  color: #10231a;
+  background: linear-gradient(140deg, #7fd8e8, #4aa8c0);
+  border-color: transparent;
+  box-shadow: 0 0 16px rgba(127, 216, 232, 0.5);
+}
+
+.cl-tools[hidden] {
+  display: none;
+}
+
+/* ==================================================================
+   Pekkas Lerduvor (2022) — HUD ovanpå basstilarna
+   ================================================================== */
+
+/* Streak-multiplikatorn */
+
+.sk-streak {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.2rem;
+  color: #5eead4;
+  text-shadow: 0 0 16px rgba(94, 234, 212, 0.55);
+}
+
+.sk-streak.hot {
+  color: #f2c14e;
+  text-shadow: 0 0 20px rgba(242, 193, 78, 0.7);
+}
+
+/* Skjutkortet: en rad prickar per serie, som ett riktigt 25-kort */
+
+.sk-card {
+  position: absolute;
+  left: 12px;
+  top: calc(max(10px, env(safe-area-inset-top)) + 62px);
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(14, 16, 10, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+
+.sk-card.show {
+  display: flex;
+}
+
+.sk-row {
+  display: flex;
+  gap: 4px;
+  opacity: 0.45;
+}
+
+.sk-row.now {
+  opacity: 1;
+}
+
+.sk-row i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+
+.sk-row i.hit {
+  background: #3ddc7b;
+  box-shadow: 0 0 8px rgba(61, 220, 123, 0.7);
+}
+
+.sk-row i.miss {
+  background: #ff5c4a;
+  box-shadow: 0 0 6px rgba(255, 92, 74, 0.6);
+}
+
+/* Patronindikatorn */
+
+.sk-shells {
+  position: absolute;
+  right: 14px;
+  bottom: calc(max(14px, env(safe-area-inset-bottom)) + 66px);
+  display: flex;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.sk-shells i {
+  width: 12px;
+  height: 26px;
+  border-radius: 4px 4px 5px 5px;
+  background: linear-gradient(180deg, #d23b4e 62%, #c9982e 62%);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.sk-shells i.spent {
+  opacity: 0.18;
+  transform: translateY(3px);
+}
+
+/* Kornet: ring + prick som följer fingret */
+
+.sk-cross {
+  position: absolute;
+  width: 58px;
+  height: 58px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.sk-cross.show {
+  opacity: 1;
+}
+
+.sk-cross::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 244, 214, 0.85);
+  box-shadow: 0 0 12px rgba(0, 0, 0, 0.35), inset 0 0 10px rgba(0, 0, 0, 0.2);
+}
+
+.sk-cross i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: #ffe9b0;
+  box-shadow: 0 0 8px rgba(255, 233, 176, 0.9);
+}

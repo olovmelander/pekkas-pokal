@@ -1,0 +1,45 @@
+{
+  "name": "Pekkas Pokal",
+  "short_name": "Pekkas Pokal",
+  "description": "Pekkas Pokal — den årliga tävlingen mellan vänner. Resultat, medaljliga, achievements och statistik sedan 2011.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#0b0e1a",
+  "background_color": "#0b0e1a",
+  "categories": ["sports", "games"],
+  "lang": "sv-SE",
+  "icons": [
+    {
+      "src": "icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Medaljliga",
+      "short_name": "Medaljer",
+      "description": "Visa medaljligan",
+      "url": "./#medals"
+    },
+    {
+      "name": "Statistik",
+      "short_name": "Stats",
+      "description": "Visa statistik och diagram",
+      "url": "./#stats"
+    }
+  ],
+  "prefer_related_applications": false,
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  }
+}
