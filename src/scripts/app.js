@@ -1943,7 +1943,7 @@
           ${song.melody ? `<p class="song-melody">\u266a Melodi: ${esc(song.melody)}</p>` : ''}
         </header>
         <div class="song-lyrics">${lines}</div>
-        <footer class="song-foot">Skal! \ud83c\udf7b</footer>`;
+        <footer class="song-foot">Sk\u00e5l! \ud83c\udf7b</footer>`;
     };
 
     picker.addEventListener('click', (e) => {
