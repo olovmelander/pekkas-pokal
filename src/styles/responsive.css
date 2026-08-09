@@ -1,0 +1,228 @@
+/* ==========================================================================
+   Pekkas Pokal — Responsive
+   ========================================================================== */
+
+/* ---------- Tablet ---------- */
+@media (max-width: 1024px) {
+  .hero {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-champion {
+    min-height: 220px;
+  }
+
+  .hero-side {
+    flex-direction: row;
+  }
+
+  .hero-side > .card {
+    flex: 1;
+  }
+}
+
+/* ---------- Mobile ---------- */
+@media (max-width: 720px) {
+  :root {
+    --header-h: 60px;
+  }
+
+  .page {
+    padding: var(--sp-4) var(--sp-4) calc(var(--sp-8) + 68px);
+  }
+
+  /* Header: hide desktop nav, show tab bar */
+  .top-nav {
+    display: none;
+  }
+
+  .tab-bar {
+    display: flex;
+  }
+
+  .site-footer {
+    padding-bottom: calc(84px + env(safe-area-inset-bottom));
+  }
+
+  .header-inner {
+    padding: 0 var(--sp-4);
+  }
+
+  .brand-mark {
+    width: 36px;
+    height: 36px;
+  }
+
+  /* Hero */
+  .hero-side {
+    flex-direction: column;
+  }
+
+  .hero-champion {
+    padding: var(--sp-5);
+    min-height: 200px;
+  }
+
+  .hero-trophy {
+    width: 180px;
+    height: 180px;
+    right: -40px;
+    bottom: -40px;
+  }
+
+  .count-seg {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .countdown {
+    width: 100%;
+  }
+
+  /* Cards a touch tighter */
+  .card {
+    padding: var(--sp-4);
+    border-radius: var(--r-md);
+  }
+
+  .kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .chart-wrap,
+  .chart-wrap.tall {
+    height: 250px;
+  }
+
+  #map {
+    height: 320px;
+  }
+
+  /* Podium tighter */
+  .podium {
+    gap: var(--sp-2);
+  }
+
+  .podium-avatar {
+    width: 52px;
+    height: 52px;
+    font-size: 1rem;
+  }
+
+  .podium-1 .podium-block { height: 110px; }
+  .podium-2 .podium-block { height: 80px; }
+  .podium-3 .podium-block { height: 60px; }
+
+  .podium-medals {
+    white-space: normal;
+  }
+
+  /* Timeline */
+  .timeline {
+    padding-left: 24px;
+  }
+
+  .tl-item::before {
+    left: -21px;
+  }
+
+  /* Touch targets */
+  .chip {
+    padding: 0.5rem 0.95rem;
+  }
+
+  .filter-actions {
+    justify-content: stretch;
+  }
+
+  .filter-actions .btn {
+    width: 100%;
+  }
+
+  /* Modal goes full-bleed sheet on phones */
+  .modal-backdrop {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .modal-panel {
+    width: 100%;
+    max-height: 92dvh;
+    padding: var(--sp-5) var(--sp-4) calc(var(--sp-6) + env(safe-area-inset-bottom));
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    transform: translateY(100%);
+  }
+
+  .pf-avatar {
+    width: 50px;
+    height: 50px;
+  }
+
+  .pf-stats {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .pf-rivals {
+    gap: var(--sp-4);
+  }
+
+  /* Head to head stacks */
+  .h2h-pickers {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--sp-3);
+  }
+
+  .h2h-vs {
+    padding: 0;
+    text-align: center;
+  }
+
+  .h2h-list {
+    max-height: none;
+  }
+
+  .tl-photo {
+    width: calc(100% + var(--sp-4) * 2);
+    margin-left: calc(var(--sp-4) * -1);
+    margin-right: calc(var(--sp-4) * -1);
+    height: 150px;
+  }
+}
+
+/* ---------- Small phones ---------- */
+@media (max-width: 380px) {
+  .kpi-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp-2);
+  }
+
+  .brand-sub {
+    display: none;
+  }
+
+  .ccard-stats {
+    gap: var(--sp-1);
+  }
+}
+
+/* ---------- Hover devices only: card lift ---------- */
+@media (hover: hover) and (pointer: fine) {
+  .card:hover {
+    box-shadow: var(--shadow-2);
+  }
+
+  .chart-card:hover,
+  .map-card:hover {
+    transform: translateY(-2px);
+  }
+}
+
+/* ---------- Large screens ---------- */
+@media (min-width: 1440px) {
+  .page,
+  .header-inner,
+  .site-footer {
+    max-width: 1320px;
+  }
+}
