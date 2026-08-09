@@ -394,6 +394,18 @@ kurva är skillnaden mellan "en gubbe" och Munchs gestalt. Van Goghs himmel
 har en egen primitiv: en avsmalnande spiral, för det är virvlarna som gör
 att Stjärnenatten läser som Stjärnenatten.
 
+Alla fem är uppmätta mot originalen, inte ritade ur minnet, och det är
+kompositionen som avgör om ett motiv läser: Munchs brygga försvinner mot
+en flyktpunkt **uppe till vänster** med fjorden till höger — allt på
+bryggan (däckets kant, båda ledstängerna, stolparna, de två gestalterna
+längre bort) räknas ut från den enda punkten. Vermeers flicka är vänd
+bortåt och ser tillbaka över axeln, så ansiktet ligger till vänster i
+huvudet och den gula turbansvansen faller nästan hela högersidan. Mona
+Lisa har två separata hårfall med det ljusa bröstet emellan — en enda
+mörk massa med en spets i mitten gör henne till en nunna. Nattvardens
+sidoväggar bär fyra mörka gobelänger var, för utan dem är rummet bara två
+grå kilar.
+
 Utöver ytorna bär varje verk ett **tuschlager** — konturer, ögon, munnar,
 spröjs, penselriktning — som ritas ovanpå både förlagan och spelarens duk.
 Teckningen ligger alltså redan på duken när du börjar, precis som om någon
