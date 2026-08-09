@@ -97,6 +97,8 @@ Nidhogg och riktiga fäktningens parad–ripost.
 olympiska skeetets pull-ritual och Duck Hunt-arvets sikta-och-skjut.
 2019 är *Pekkas Pingis* — bordtennis i Bredbyns bygdegård, inspirerat av
 Table Tennis Touch och Rockstars Table Tennis.
+2021 är *Pekkas Måleri* — måleritävlingen i trädgården på Terrassvägen,
+där färgen blandas subtraktivt på en riktig palett.
 
 Att lägga till ett nytt års spel:
 
@@ -343,6 +345,53 @@ håll han rör sig och följer bollen med blicken. Bollen har
 en tajt kontaktskugga (lärdomen från flipperbygget) så den står på bordet
 i stället för att sväva. Poängtavlan på väggen målas om efter varje boll.
 
+**Pekkas Måleri (2021)**
+
+Trädgården på **Terrassvägen 47** i Örnsköldsvik, lördag 7 augusti 2021 —
+måleritävlingen, arrangerad av Per Vikman och Henrik Lundqvist. Reglerna
+var enkla: dra en lapp ur en hatt med en konstnär och ett känt konstverk,
+och tolka det så gott du kan på ett staffli i trädgården. Sedan dömde en
+inbjuden kulturprofil — **Mikael Hägglund** — och gav segern till
+**Skriet av Munch**, Olov Melanders tolkning, med motiveringen att han
+fångat essensen av mästerverket. Dresscoden var högkulturell profil, och
+Per Olsson dök upp som keramikern **Hans Hedberg** i röd basker. Allt det
+finns i spelet, inklusive baskern.
+
+Spelet behåller ritualen — hatten, lappen, staffliet, domen — men gör
+verbet till det som faktiskt avgör om en kopia läser som originalet:
+**färgen**.
+
+1. **Välj yta.** Tavlan är uppdelad i färgfält. Tryck på ett fält, så
+   visas målfärgen.
+2. **Blanda.** Fem pigment: krapplack, kadmiumgul, ultramarin, titanvit
+   och benswart. Mätaren visar hur nära du ligger.
+3. **Måla.** Lägg på färgen. Ju närmare målet, desto mer poäng — och
+   ytor du inte hinner står kvar som bar duk när Hägglund dömer.
+
+Tre verk per kväll, 75 sekunder styck, betyg 1–10 på vart och ett. Skriet
+ligger alltid i hatten eftersom det var verket som vann. Övriga: Mona
+Lisa, Nattvarden, Flicka med pärlörhänge och Stjärnenatten. Picasso låg i
+den riktiga hatten men är inte med här — hans verk är fortfarande
+upphovsrättsskyddade.
+
+**Teknik.** Pigmenten blandas **subtraktivt**, inte additivt. Blandar man
+i RGB blir gult plus blått grått, vilket är det enda resultat som direkt
+avslöjar att blandningen är på låtsas — så pigmenten lever i RYB och
+konverteras till RGB först på slutet, genom Gosset & Chens kub. Gult plus
+blått ger då mätbart grönt (0, 168, 51), rött plus gult orange, rött plus
+blått lila.
+
+Betyget sätts i **Lab**, inte i RGB. Avstånd i RGB skulle kalla mörkblått
+och mörkbrunt nästan identiska och straffa två gräddvita toner som vem
+som helst kan skilja på; ΔE under ungefär 6 är en färg ingen skulle kalla
+fel, och där ligger full poäng.
+
+Varje motiv är en handfull ytor definierade som ritfunktioner i ett 0..1-
+kvadrat, vilket gör konsten upplösningsoberoende. Samma funktioner ritar
+tre saker — förlagan, spelarens duk och en id-karta — så de kan aldrig
+råka säga emot varandra: ett tryck på duken slår upp **en pixel** i
+id-kartan i stället för att testa punkt-i-polygon mot kurvor.
+
 **Kontroller i flipperspelet**
 
 | | Mobil | Dator |
@@ -437,6 +486,7 @@ npm run lint     # ESLint
 | `src/games/fencing/` | Fäktspelet: `salle` (fäktsal, fäktare, texturer), `audio` (syntetiskt ljud), `index` (duell-AI + spelloop) |
 | `src/games/shooting/` | Skyttespelet: `range` (fält, gevär, lerduvor), `grass` (instansierad äng med vind), `audio` (syntetiskt ljud), `index` (banor + spelloop) |
 | `src/games/pingis/` | Pingisspelet: `hall` (bygdegård, bord, figurer), `audio` (syntetiskt ljud), `index` (fysik, AI och spelloop) |
+| `src/games/painting/` | Målerispelet: `artworks` (motiven + färgblandning i RYB och Lab), `garden` (trädgården, staffli, målare), `audio` (syntetiskt ljud), `index` (spelloop och dom) |
 | `public/` | Statiska filer: `event.json`, `manifest.json`, ikoner, `og-image.png`, `photos/` |
 
 Data hämtas från `competition-data.csv` vid sidladdning. Om filen inte går att

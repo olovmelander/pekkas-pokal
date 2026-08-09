@@ -1898,6 +1898,14 @@
       module: 'src/games/clay/index.js'
     },
     {
+      year: 2021,
+      title: 'Pekkas Måleri',
+      competition: 'Målning',
+      tagline: 'Dra en lapp ur hatten, blanda färgen och låt Hägglund döma.',
+      icon: '🎨',
+      module: 'src/games/painting/index.js'
+    },
+    {
       year: 2019,
       title: 'Pekkas Pingis',
       competition: 'Pingis',
