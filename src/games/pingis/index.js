@@ -263,7 +263,7 @@ export async function createPingis(container) {
 
   /* The player's paddle, floating at the bottom of the frame */
   const myPaddle = buildPaddle();
-  myPaddle.position.set(0, T.height + 0.18, HITZ);
+  myPaddle.position.set(0, T.height + 0.08, HITZ);
   myPaddle.rotation.x = -0.4;
   myPaddle.traverse((o) => {
     if (o.isMesh) o.castShadow = true;
@@ -1171,7 +1171,7 @@ export async function createPingis(container) {
     /* Meshes */
     myPaddle.position.x = me.x;
     myPaddle.rotation.y = THREE.MathUtils.clamp(me.vx * 0.06, -0.35, 0.35);
-    myPaddle.position.y = T.height + 0.18 + Math.sin(t * 2.1) * 0.008;
+    myPaddle.position.y = T.height + 0.08 + Math.sin(t * 2.1) * 0.008;
     myPaddle.rotation.z = THREE.MathUtils.clamp(-me.vx * 0.09 - me.dragVX * 0.06, -0.6, 0.6);
     if (me.swing > 0) {
       me.swing = Math.max(0, me.swing - dt * 5);
@@ -1291,6 +1291,9 @@ export async function createPingis(container) {
     ball: b,
     me,
     ai,
+    scene,
+    camera,
+    foe: () => foe,
     startGame,
     beginPoint,
     playerServe,

@@ -867,8 +867,14 @@ export function buildPlayer(shirt, opts = {}) {
 
   // The paddle lives in the right hand, gripped at the handle
   const paddle = buildPaddle();
-  paddle.position.set(0, -0.4, 0.02);
-  paddle.rotation.x = -0.5;
+  // Seated IN the hand, and — the part that matters — held the way a bat is
+  // held: head UP, face toward the table. A flat blade cannot do both at
+  // once by accident; if the head points forward the face is edge-on. So
+  // the paddle cancels the pitch the shoulder and elbow have accumulated
+  // (0.72 + 0.5), which lands it upright in the figure's own frame with the
+  // rubber looking straight across the net. The swing then carries it.
+  paddle.position.set(0, -0.3, 0.02);
+  paddle.rotation.set(-1.22, 0, 0);
   refs.armR.elbow.add(paddle);
   refs.paddle = paddle;
 
@@ -894,6 +900,24 @@ export function buildPlayer(shirt, opts = {}) {
 /** A paddle: red rubber one side, black the other, pale blade edge, handle. */
 export function buildPaddle() {
   const g = new THREE.Group();
+  // The group's origin is the GRIP — the point the fist closes around —
+  // with the blade reaching out along +y beyond it. Building it around the
+  // blade's centre instead is what had the opponent clutching the rubber
+  // with the handle swinging free below his hand.
+  const wood = lambert(0xb08a54);
+
+  const handle = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.115, 0.026), wood);
+  handle.position.y = -0.048; // runs back through the fist to the butt
+  g.add(handle);
+  // Flared butt, so the bat cannot slide out of the hand
+  const butt = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.022, 0.034), lambert(0x8f6d3f));
+  butt.position.y = -0.104;
+  g.add(butt);
+  // Shoulder where the handle meets the blade
+  const neck = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.03, 0.022), wood);
+  neck.position.y = 0.018;
+  g.add(neck);
+
   const blade = new THREE.Mesh(
     new THREE.CylinderGeometry(0.098, 0.098, 0.014, 22),
     [
@@ -902,11 +926,9 @@ export function buildPaddle() {
       new THREE.MeshLambertMaterial({ color: 0x1d2026 })
     ]
   );
-  blade.rotation.x = Math.PI / 2;
+  blade.rotation.x = Math.PI / 2; // flat faces look along ±z
+  blade.position.y = 0.112; // clear of the hand, as a blade sits
   blade.castShadow = true;
   g.add(blade);
-  const handle = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.09, 0.02), lambert(0xb08a54));
-  handle.position.y = -0.12;
-  g.add(handle);
   return g;
 }
