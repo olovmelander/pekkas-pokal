@@ -252,6 +252,29 @@ const STARS = [
   [0.915, 0.56, 0.022]
 ];
 
+/*
+ * Munch's walkway is strict one-point perspective, and EVERYTHING on it —
+ * the deck's near edge, both rails, the posts between them, the two figures
+ * further along — runs to the same vanishing point. Letting the deck
+ * converge somewhere of its own is what left the railing hanging over open
+ * water instead of standing on the boards.
+ */
+const BRIDGE_VP = [0.79, 0.42];
+const BRIDGE_NEAR = -0.06;
+/** A point t of the way from the near edge of the frame to the vanishing point. */
+const alongBridge = (y, t) => [
+  BRIDGE_NEAR + (BRIDGE_VP[0] - BRIDGE_NEAR) * t,
+  y + (BRIDGE_VP[1] - y) * t
+];
+/** The deck edge, the rails: a triangle closing on the vanishing point. */
+const bridgeRail = (c, W, H, y0, y1) => P(c, W, H, [[BRIDGE_NEAR, y0], BRIDGE_VP, [BRIDGE_NEAR, y1]]);
+/* Where the boards meet the railing at the near edge of the frame. The rails
+   stand ON this line, so it has to sit just under the lower rail — put it off
+   the bottom of the canvas instead and a wedge of fjord opens up underneath
+   the railing, which is the one place water cannot be. */
+const DECK_EDGE_Y = 0.905;
+const RAIL_TOP_Y = 0.655;
+
 export const ARTWORKS = [
   {
     id: 'skriet',
@@ -306,22 +329,37 @@ export const ARTWORKS = [
       {
         name: 'Bron',
         color: 0x7d4a22,
-        path: (c, W, H) => P(c, W, H, [[-0.06, 1.06], [0.56, 0.442], [0.79, 0.424], [1.06, 1.06]])
+        // We are standing ON the walkway, so its far edge is off frame to
+        // the right and the only boundary we see is the railed near edge.
+        // Running both edges to the vanishing point instead draws a brown
+        // triangle with a needle apex, which reads as a mountain.
+        path: (c, W, H) => P(c, W, H, [
+          [BRIDGE_NEAR, DECK_EDGE_Y], BRIDGE_VP, [1.06, 0.46], [1.06, 1.06], [BRIDGE_NEAR, 1.06]
+        ])
       },
       {
         name: 'Räcket',
         color: 0x452812,
         path: (c, W, H) => {
-          P(c, W, H, [[-0.06, 0.73], [0.762, 0.418], [0.786, 0.441], [-0.06, 0.79]]);
-          P(c, W, H, [[-0.06, 0.885], [0.775, 0.45], [0.79, 0.478], [-0.06, 0.955]]);
+          bridgeRail(c, W, H, RAIL_TOP_Y, 0.715);
+          bridgeRail(c, W, H, 0.855, 0.905);
         }
       },
       {
+        // Standing ON the boards: their feet sit on the deck edge line at
+        // the point along the walkway where each of them is.
         name: 'Gestalterna på bron',
         color: 0x241c18,
         path: (c, W, H) => {
-          S(c, W, H, [[0.612, 0.395], [0.641, 0.408], [0.646, 0.47], [0.633, 0.5], [0.606, 0.492], [0.6, 0.42]]);
-          S(c, W, H, [[0.678, 0.392], [0.703, 0.404], [0.706, 0.457], [0.694, 0.482], [0.671, 0.474], [0.666, 0.414]]);
+          [[0.78, 0.026, 0.13], [0.87, 0.021, 0.1]].forEach(([t, hw, tall]) => {
+            const [x, y] = alongBridge(DECK_EDGE_Y, t);
+            const cx = x + hw;
+            S(c, W, H, [
+              [cx, y - tall], [cx + hw, y - tall * 0.86], [cx + hw, y - tall * 0.28],
+              [cx + hw * 0.55, y], [cx - hw * 0.55, y],
+              [cx - hw, y - tall * 0.28], [cx - hw, y - tall * 0.86]
+            ]);
+          });
         }
       },
       {
@@ -355,14 +393,18 @@ export const ARTWORKS = [
         const y = 0.05 + i * 0.082;
         ink(ctx, W, H, wave(y, 0.03, 1.05, 0.4 + i * 0.9, 8), 0.004, 0.13);
       }
-      // The two faces on the bridge, and the posts of the railing
-      for (let i = 0; i <= 7; i++) {
-        const t = i / 7;
-        const x = -0.05 + t * 0.82;
-        const yTop = 0.73 + (0.418 - 0.73) * t;
-        const yBot = 0.9 + (0.462 - 0.9) * t;
-        ink(ctx, W, H, [[x, yTop], [x, yBot]], 0.004 * (1 - t * 0.6), 0.3);
+      // Posts standing between the top rail and the deck, spaced so they
+      // crowd toward the vanishing point the way real ones do
+      for (let i = 0; i < 8; i++) {
+        const t = 1 - (1 - i / 8) ** 1.6;
+        const top = alongBridge(RAIL_TOP_Y, t);
+        const foot = alongBridge(DECK_EDGE_Y, t);
+        ink(ctx, W, H, [top, foot], 0.005 * (1 - t) + 0.001, 0.32);
       }
+      // The rails themselves, drawn on top so the run of the bridge reads
+      ink(ctx, W, H, [[BRIDGE_NEAR, RAIL_TOP_Y], BRIDGE_VP], 0.0035, 0.3);
+      ink(ctx, W, H, [[BRIDGE_NEAR, 0.905], BRIDGE_VP], 0.003, 0.24);
+      ink(ctx, W, H, [[BRIDGE_NEAR, DECK_EDGE_Y], BRIDGE_VP], 0.0035, 0.26);
       // The head: hollow eyes, the open mouth, the hands pressed to the skull
       mark(ctx, W, H, 0.3, 0.462, 0.021, 0.014, -0.1, 0.55);
       mark(ctx, W, H, 0.346, 0.462, 0.021, 0.014, 0.1, 0.55);

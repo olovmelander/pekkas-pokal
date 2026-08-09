@@ -83,6 +83,9 @@ out/
 tmp/
 temp/
 
+# Agent scratch space: test harnesses, screenshots, vendored CDN mirrors
+scratchpad/
+
 # Archives
 *.zip
 *.tar.gz
