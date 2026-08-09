@@ -570,17 +570,17 @@ export function buildHall(glow) {
   {
     const signTex = olympiaSignTexture();
     const sign = new THREE.Mesh(
-      new THREE.PlaneGeometry(2.9, 0.91),
+      new THREE.PlaneGeometry(2.2, 0.69),
       new THREE.MeshBasicMaterial({ map: signTex })
     );
     sign.position.set(0, 2.42, -HALL_D / 2 + 0.2);
     group.add(sign);
     // Frame and a warm wash so it reads as a lit sign, not a poster
-    const frame = new THREE.Mesh(new THREE.BoxGeometry(3.14, 1.13, 0.1), lambert(0x2a1f14));
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.89, 0.1), lambert(0x2a1f14));
     frame.position.set(0, 2.42, -HALL_D / 2 + 0.13);
     group.add(frame);
     const wash = new THREE.Mesh(
-      new THREE.PlaneGeometry(4.4, 2.1),
+      new THREE.PlaneGeometry(3.1, 1.7),
       new THREE.MeshBasicMaterial({
         map: glow, color: 0xff9a72, transparent: true, opacity: 0.06,
         depthWrite: false, blending: THREE.AdditiveBlending
@@ -601,13 +601,13 @@ export function buildHall(glow) {
      three things — scoreboard, sign, pennant — laid out inside that. */
   {
     const pen = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.9, 0.45),
+      new THREE.PlaneGeometry(1.04, 0.52),
       new THREE.MeshBasicMaterial({ map: pennantTexture('ANUNDSJÖ IF') })
     );
-    pen.position.set(1.86, 2.42, -HALL_D / 2 + 0.22);
+    pen.position.set(1.97, 2.42, -HALL_D / 2 + 0.22);
     group.add(pen);
-    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.05, 0.05), lambert(0x2a1f14));
-    bar.position.set(1.86, 2.66, -HALL_D / 2 + 0.24);
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(1.08, 0.05, 0.05), lambert(0x2a1f14));
+    bar.position.set(1.97, 2.72, -HALL_D / 2 + 0.24);
     group.add(bar);
   }
 
@@ -732,10 +732,10 @@ export function buildHall(glow) {
   const sbTex = new THREE.CanvasTexture(sbCv);
   sbTex.colorSpace = THREE.SRGBColorSpace;
   const board = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.96, 0.48),
+    new THREE.PlaneGeometry(1.04, 0.52),
     new THREE.MeshBasicMaterial({ map: sbTex })
   );
-  board.position.set(-1.86, 2.42, -HALL_D / 2 + 0.28);
+  board.position.set(-1.97, 2.42, -HALL_D / 2 + 0.28);
   board.rotation.x = 0.14; // tilted toward the players, like a real board
   group.add(board);
   refs.scoreboard = { canvas: sbCv, ctx: sbCv.getContext('2d'), tex: sbTex };
