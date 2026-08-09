@@ -368,7 +368,7 @@ verbet till det som faktiskt avgör om en kopia läser som originalet:
 3. **Måla.** Lägg på färgen. Ju närmare målet, desto mer poäng — och
    ytor du inte hinner står kvar som bar duk när Hägglund dömer.
 
-Tre verk per kväll, 75 sekunder styck, betyg 1–10 på vart och ett. Skriet
+Tre verk per kväll, 95 sekunder styck, betyg 1–10 på vart och ett. Skriet
 ligger alltid i hatten eftersom det var verket som vann. Övriga: Mona
 Lisa, Nattvarden, Flicka med pärlörhänge och Stjärnenatten. Picasso låg i
 den riktiga hatten men är inte med här — hans verk är fortfarande
@@ -386,11 +386,42 @@ och mörkbrunt nästan identiska och straffa två gräddvita toner som vem
 som helst kan skilja på; ΔE under ungefär 6 är en färg ingen skulle kalla
 fel, och där ligger full poäng.
 
-Varje motiv är en handfull ytor definierade som ritfunktioner i ett 0..1-
-kvadrat, vilket gör konsten upplösningsoberoende. Samma funktioner ritar
-tre saker — förlagan, spelarens duk och en id-karta — så de kan aldrig
-råka säga emot varandra: ett tryck på duken slår upp **en pixel** i
-id-kartan i stället för att testa punkt-i-polygon mot kurvor.
+**Motiven.** Varje verk är 13–14 ytor definierade som ritfunktioner i en
+0..1-kvadrat, vilket gör konsten upplösningsoberoende. Formerna är
+Catmull-Rom-splines genom kontrollpunkter, inte polygonlistor — nästan
+ingenting i en målning är rakt, och skillnaden mellan en ellips och en
+kurva är skillnaden mellan "en gubbe" och Munchs gestalt. Van Goghs himmel
+har en egen primitiv: en avsmalnande spiral, för det är virvlarna som gör
+att Stjärnenatten läser som Stjärnenatten.
+
+Utöver ytorna bär varje verk ett **tuschlager** — konturer, ögon, munnar,
+spröjs, penselriktning — som ritas ovanpå både förlagan och spelarens duk.
+Teckningen ligger alltså redan på duken när du börjar, precis som om någon
+skissat upp den åt dig, och det är den som gör att ett motiv läser som
+Vermeer i stället för som en hög ellipser — utan att kräva att spelaren
+målar sextio separata fält.
+
+Samma funktioner ritar tre saker — förlagan, spelarens duk och en id-karta
+— så de kan aldrig råka säga emot varandra: ett tryck på duken slår upp
+**en pixel** i id-kartan i stället för att testa punkt-i-polygon mot
+kurvor. Testet kontrollerar att *varje* yta i *varje* verk faktiskt
+överlever in i id-kartan; en yta som råkar bli helt övermålad av en senare
+går att se men aldrig att trycka på, och eftersom spelet hoppar vidare till
+nästa omålade yta strandar en enda begravd yta hela rundan.
+
+Duken renderas i två lager. Basen — väven, den lagda färgen, penseldragen,
+teckningen — är för dyr att rita om sextio gånger i sekunden och ändras
+bara när en yta målas, så den byggs om vid behov och den pulsande
+markeringen komponeras ovanpå per bildruta.
+
+**Trädgården.** Himlen är en gradient på insidan av en kupol, inte en
+`scene.background`: en enda färg överallt är precis vad en utomhushimmel
+aldrig är. Granskogen ligger i tre led, vart och ett blekare och blåare än
+det förra — avstånd säljs med färg, inte med mer geometri. Skogen, häcken
+och vimplarna ritas som `InstancedMesh` med färg per instans; det är
+ritanropen, inte trianglarna, som en telefon-GPU tar slut på, och
+omskrivningen tog dem från 425 till 222 på dator och från 117 till 37 på
+mobil.
 
 **Kontroller i flipperspelet**
 
