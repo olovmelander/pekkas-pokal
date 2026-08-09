@@ -1588,3 +1588,190 @@ body.game-open {
   background: #ffe9b0;
   box-shadow: 0 0 8px rgba(255, 233, 176, 0.9);
 }
+
+
+/* ==================================================================
+   Pekkas Måleri (2021) — palett-HUD ovanpå pb-basstilarna
+   ================================================================== */
+
+/* Blandningspanelen: målfärg, din färg och hur nära du ligger */
+
+.ml-mix {
+  position: absolute;
+  left: 50%;
+  bottom: calc(max(12px, env(safe-area-inset-bottom)) + 158px);
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 0.5rem 0.85rem 0.6rem;
+  border-radius: 16px;
+  background: rgba(8, 14, 24, 0.72);
+  border: 1px solid rgba(242, 193, 78, 0.28);
+  backdrop-filter: blur(9px);
+  pointer-events: none;
+}
+
+.ml-mix[hidden] {
+  display: none;
+}
+
+.ml-swatches {
+  display: flex;
+  gap: 14px;
+}
+
+.ml-swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.ml-swatch i {
+  display: block;
+  width: 46px;
+  height: 30px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  background: transparent;
+}
+
+.ml-swatch span {
+  font-size: 0.52rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: rgba(190, 199, 233, 0.7);
+}
+
+.ml-meter {
+  width: 120px;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.ml-meter i {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: var(--r-pill);
+  background: #f26d8d;
+  transition: width 0.12s linear, background 0.2s ease;
+}
+
+.ml-region {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(235, 240, 250, 0.85);
+  white-space: nowrap;
+}
+
+
+/* Pigmentraden — paletten som knappar, för det är så man träffar på en
+   telefon. Antalet droppar syns på varje pigment. */
+
+.ml-pigments {
+  position: absolute;
+  left: 50%;
+  bottom: calc(max(12px, env(safe-area-inset-bottom)) + 78px);
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.ml-pigments[hidden] {
+  display: none;
+}
+
+.ml-pigment {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 4px 3px;
+  width: 60px;
+  border-radius: 12px;
+  background: rgba(8, 14, 24, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(8px);
+  transition: transform var(--t-fast), border-color var(--t-fast);
+}
+
+.ml-pigment:active {
+  transform: scale(0.93);
+  border-color: rgba(242, 193, 78, 0.7);
+}
+
+.ml-pigment i {
+  display: block;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--c);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: inset -3px -4px 8px rgba(0, 0, 0, 0.35), inset 3px 4px 7px rgba(255, 255, 255, 0.22);
+}
+
+.ml-pigment b {
+  font-size: 0.44rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(190, 199, 233, 0.72);
+  white-space: nowrap;
+}
+
+.ml-pigment em {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font-style: normal;
+  font-size: 0.55rem;
+  font-weight: 700;
+  color: #f2c14e;
+  font-variant-numeric: tabular-nums;
+}
+
+
+/* Förlagan — den lilla bilden av mästerverket, som telefonen man målade
+   efter i trädgården 2021 */
+
+.ml-ref {
+  position: absolute;
+  left: 12px;
+  top: calc(max(10px, env(safe-area-inset-top)) + 86px);
+  padding: 5px 5px 3px;
+  border-radius: 10px;
+  background: rgba(8, 14, 24, 0.7);
+  border: 1px solid rgba(242, 193, 78, 0.3);
+  backdrop-filter: blur(8px);
+}
+
+.ml-ref[hidden] {
+  display: none;
+}
+
+.ml-ref span {
+  display: block;
+  margin-top: 2px;
+  text-align: center;
+  font-size: 0.46rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: rgba(190, 199, 233, 0.7);
+}
+
+.ml-ref-canvas {
+  display: block;
+  width: 74px;
+  height: auto;
+  border-radius: 5px;
+}
