@@ -259,8 +259,11 @@ const STARS = [
  * converge somewhere of its own is what left the railing hanging over open
  * water instead of standing on the boards.
  */
-const BRIDGE_VP = [0.79, 0.42];
-const BRIDGE_NEAR = -0.06;
+/* Munch's walkway runs away to the UPPER LEFT, which puts the fjord on the
+   right and the boards under the bottom-left corner. Run it the other way
+   and the picture is a mirror image of the one everybody knows. */
+const BRIDGE_VP = [0.03, 0.455];
+const BRIDGE_NEAR = 1.06;
 /** A point t of the way from the near edge of the frame to the vanishing point. */
 const alongBridge = (y, t) => [
   BRIDGE_NEAR + (BRIDGE_VP[0] - BRIDGE_NEAR) * t,
@@ -271,9 +274,12 @@ const bridgeRail = (c, W, H, y0, y1) => P(c, W, H, [[BRIDGE_NEAR, y0], BRIDGE_VP
 /* Where the boards meet the railing at the near edge of the frame. The rails
    stand ON this line, so it has to sit just under the lower rail — put it off
    the bottom of the canvas instead and a wedge of fjord opens up underneath
-   the railing, which is the one place water cannot be. */
-const DECK_EDGE_Y = 0.905;
-const RAIL_TOP_Y = 0.655;
+   the railing, which is the one place water cannot be.
+   The rail is shallower than the deck edge because it is higher off the
+   ground; both still run to the same point. Set them too high and the
+   railing crosses the screamer's face instead of passing under his hands. */
+const DECK_EDGE_Y = 0.93;
+const RAIL_TOP_Y = 0.745;
 
 export const ARTWORKS = [
   {
@@ -322,8 +328,8 @@ export const ARTWORKS = [
         name: 'Landtungan',
         color: 0x2e4a4c,
         path: (c, W, H) => S(c, W, H, [
-          [-0.09, 0.475], [0.08, 0.44], [0.24, 0.452], [0.33, 0.487],
-          [0.2, 0.52], [-0.09, 0.53]
+          [1.09, 0.475], [0.92, 0.44], [0.76, 0.452], [0.67, 0.487],
+          [0.8, 0.52], [1.09, 0.53]
         ])
       },
       {
@@ -334,15 +340,15 @@ export const ARTWORKS = [
         // Running both edges to the vanishing point instead draws a brown
         // triangle with a needle apex, which reads as a mountain.
         path: (c, W, H) => P(c, W, H, [
-          [BRIDGE_NEAR, DECK_EDGE_Y], BRIDGE_VP, [1.06, 0.46], [1.06, 1.06], [BRIDGE_NEAR, 1.06]
+          [BRIDGE_NEAR, DECK_EDGE_Y], BRIDGE_VP, [-0.06, 0.5], [-0.06, 1.06], [BRIDGE_NEAR, 1.06]
         ])
       },
       {
         name: 'Räcket',
         color: 0x452812,
         path: (c, W, H) => {
-          bridgeRail(c, W, H, RAIL_TOP_Y, 0.715);
-          bridgeRail(c, W, H, 0.855, 0.905);
+          bridgeRail(c, W, H, RAIL_TOP_Y, 0.79);
+          bridgeRail(c, W, H, 0.855, 0.9);
         }
       },
       {
@@ -351,7 +357,7 @@ export const ARTWORKS = [
         name: 'Gestalterna på bron',
         color: 0x241c18,
         path: (c, W, H) => {
-          [[0.78, 0.026, 0.13], [0.87, 0.021, 0.1]].forEach(([t, hw, tall]) => {
+          [[0.85, 0.02, 0.1], [0.93, 0.015, 0.075]].forEach(([t, hw, tall]) => {
             const [x, y] = alongBridge(DECK_EDGE_Y, t);
             const cx = x + hw;
             S(c, W, H, [
@@ -363,27 +369,29 @@ export const ARTWORKS = [
         }
       },
       {
+        // He stands mid-frame on the boards, the railing running away behind
+        // his shoulders to the vanishing point.
         name: 'Skriets rock',
         color: 0x1f2229,
         path: (c, W, H) => S(c, W, H, [
-          [0.315, 0.452], [0.372, 0.512], [0.402, 0.66], [0.442, 0.86], [0.472, 1.06],
-          [0.174, 1.06], [0.202, 0.83], [0.234, 0.63], [0.262, 0.5]
+          [0.465, 0.452], [0.522, 0.512], [0.552, 0.66], [0.592, 0.86], [0.622, 1.06],
+          [0.324, 1.06], [0.352, 0.83], [0.384, 0.63], [0.412, 0.5]
         ], true, 0.85)
       },
       {
         name: 'Händerna',
         color: 0xc8a678,
         path: (c, W, H) => {
-          S(c, W, H, [[0.245, 0.5], [0.272, 0.53], [0.266, 0.586], [0.234, 0.6], [0.212, 0.565], [0.216, 0.515]]);
-          S(c, W, H, [[0.4, 0.498], [0.428, 0.512], [0.432, 0.568], [0.406, 0.592], [0.379, 0.575], [0.375, 0.522]]);
+          S(c, W, H, [[0.395, 0.5], [0.422, 0.53], [0.416, 0.586], [0.384, 0.6], [0.362, 0.565], [0.366, 0.515]]);
+          S(c, W, H, [[0.55, 0.498], [0.578, 0.512], [0.582, 0.568], [0.556, 0.592], [0.529, 0.575], [0.525, 0.522]]);
         }
       },
       {
         name: 'Ansiktet',
         color: 0xd9bc8c,
         path: (c, W, H) => S(c, W, H, [
-          [0.32, 0.378], [0.375, 0.42], [0.386, 0.5], [0.356, 0.566],
-          [0.32, 0.588], [0.284, 0.566], [0.254, 0.5], [0.265, 0.42]
+          [0.47, 0.378], [0.525, 0.42], [0.536, 0.5], [0.506, 0.566],
+          [0.47, 0.588], [0.434, 0.566], [0.404, 0.5], [0.415, 0.42]
         ])
       }
     ],
@@ -403,20 +411,25 @@ export const ARTWORKS = [
       }
       // The rails themselves, drawn on top so the run of the bridge reads
       ink(ctx, W, H, [[BRIDGE_NEAR, RAIL_TOP_Y], BRIDGE_VP], 0.0035, 0.3);
-      ink(ctx, W, H, [[BRIDGE_NEAR, 0.905], BRIDGE_VP], 0.003, 0.24);
+      ink(ctx, W, H, [[BRIDGE_NEAR, 0.9], BRIDGE_VP], 0.003, 0.24);
       ink(ctx, W, H, [[BRIDGE_NEAR, DECK_EDGE_Y], BRIDGE_VP], 0.0035, 0.26);
+      // Planks. Every one starts below the deck edge and ends at the same
+      // vanishing point, so it can never stray off the boards onto water.
+      [0.12, 0.4, 0.68, 0.94].forEach((x) => {
+        ink(ctx, W, H, [[x, 1.06], BRIDGE_VP], 0.0032, 0.2);
+      });
       // The head: hollow eyes, the open mouth, the hands pressed to the skull
-      mark(ctx, W, H, 0.3, 0.462, 0.021, 0.014, -0.1, 0.55);
-      mark(ctx, W, H, 0.346, 0.462, 0.021, 0.014, 0.1, 0.55);
-      mark(ctx, W, H, 0.322, 0.529, 0.019, 0.036, 0, 0.72);
-      ink(ctx, W, H, [[0.303, 0.494], [0.322, 0.508], [0.341, 0.494]], 0.0035, 0.4);
+      mark(ctx, W, H, 0.45, 0.462, 0.021, 0.014, -0.1, 0.55);
+      mark(ctx, W, H, 0.496, 0.462, 0.021, 0.014, 0.1, 0.55);
+      mark(ctx, W, H, 0.472, 0.529, 0.019, 0.036, 0, 0.72);
+      ink(ctx, W, H, [[0.453, 0.494], [0.472, 0.508], [0.491, 0.494]], 0.0035, 0.4);
       ink(ctx, W, H, [
-        [0.265, 0.42], [0.32, 0.378], [0.375, 0.42]
+        [0.415, 0.42], [0.47, 0.378], [0.525, 0.42]
       ], 0.005, 0.35);
       // The robe folds
-      ink(ctx, W, H, [[0.3, 0.6], [0.318, 0.78], [0.33, 1.0]], 0.005, 0.28);
-      ink(ctx, W, H, [[0.245, 0.66], [0.238, 0.83], [0.243, 1.02]], 0.004, 0.22);
-      ink(ctx, W, H, [[0.382, 0.66], [0.4, 0.83], [0.415, 1.02]], 0.004, 0.22);
+      ink(ctx, W, H, [[0.45, 0.6], [0.468, 0.78], [0.48, 1.0]], 0.005, 0.28);
+      ink(ctx, W, H, [[0.395, 0.66], [0.388, 0.83], [0.393, 1.02]], 0.004, 0.22);
+      ink(ctx, W, H, [[0.532, 0.66], [0.55, 0.83], [0.565, 1.02]], 0.004, 0.22);
     }
   },
   {
