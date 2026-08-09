@@ -433,15 +433,15 @@ export async function createPingis(container) {
     ctx.lineWidth = 4;
     ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
     ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(235,240,250,0.75)';
-    ctx.font = '700 17px Inter, sans-serif';
-    ctx.fillText('PEKKAS POKAL · PINGIS 2019', canvas.width / 2, 30);
-    ctx.font = '700 52px "Space Grotesk", Inter, sans-serif';
+    ctx.fillStyle = 'rgba(235,240,250,0.8)';
+    ctx.font = '700 20px Inter, sans-serif';
+    ctx.fillText('PINGIS 2019', canvas.width / 2, 26);
+    ctx.font = '700 66px "Space Grotesk", Inter, sans-serif';
     ctx.fillStyle = '#f2c14e';
-    ctx.fillText(`${state.myPts}  –  ${state.aiPts}`, canvas.width / 2, 84);
-    ctx.font = '700 15px Inter, sans-serif';
-    ctx.fillStyle = 'rgba(235,240,250,0.55)';
-    ctx.fillText(`DU mot ${opp().name.toUpperCase()}`, canvas.width / 2, 112);
+    ctx.fillText(`${state.myPts} – ${state.aiPts}`, canvas.width / 2, 78);
+    ctx.font = '700 19px Inter, sans-serif';
+    ctx.fillStyle = 'rgba(235,240,250,0.6)';
+    ctx.fillText(`DU · ${opp().name.split(' ')[0].toUpperCase()}`, canvas.width / 2, 112);
     tex.needsUpdate = true;
   }
 

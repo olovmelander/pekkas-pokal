@@ -290,9 +290,16 @@ export function pennantTexture(label) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#f6ead6';
-  ctx.font = '700 40px "Space Grotesk", Inter, sans-serif';
-  ctx.letterSpacing = '5px';
-  ctx.fillText(label, w / 2 + 3, h / 2);
+  ctx.letterSpacing = '4px';
+  // Fit the label to the cloth. At a fixed 40px "ANUNDSJÖ IF" is wider than
+  // the canvas, so the last letters were sliced off inside the texture —
+  // which looks exactly like the pennant being clipped by the frame.
+  let size = 44;
+  do {
+    ctx.font = `700 ${size}px "Space Grotesk", Inter, sans-serif`;
+    size -= 2;
+  } while (size > 12 && ctx.measureText(label).width > w - 40);
+  ctx.fillText(label, w / 2 + 2, h / 2);
   ctx.letterSpacing = '0px';
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -387,8 +394,10 @@ export function buildHall(glow) {
     group.add(g);
     return pane;
   };
-  addWindow(-2.6, -HALL_D / 2 + 0.02, 0);
-  addWindow(2.6, -HALL_D / 2 + 0.02, 0);
+  // No windows in the stage gable. A hall puts its stage against a solid
+  // end wall — and through this lens that wall shows only ±2.6 units, all
+  // of which the scoreboard, the house sign and the pennant need. Windows
+  // there could only ever be sliced in half by the edge of the frame.
   addWindow(-HALL_W / 2 + 0.02, -2.2, Math.PI / 2);
   addWindow(-HALL_W / 2 + 0.02, 2.2, Math.PI / 2);
   addWindow(HALL_W / 2 - 0.02, -2.2, -Math.PI / 2);
@@ -543,13 +552,17 @@ export function buildHall(glow) {
   stage.position.set(0, 0.25, -HALL_D / 2 + 1.1);
   stage.receiveShadow = true;
   group.add(stage);
-  const curtain = new THREE.Mesh(new THREE.PlaneGeometry(HALL_W - 1.2, 1.6, 24, 1), lambert(0x7a2028));
+  // The curtain hangs from the stage top to just under the scoreboard. At
+  // its old height it stood IN FRONT of the house sign and swallowed the
+  // bottom two-thirds of it — the sign sits further back on the wall, so
+  // anything hanging in front of it has to stop below it.
+  const curtain = new THREE.Mesh(new THREE.PlaneGeometry(HALL_W - 1.2, 0.9, 24, 1), lambert(0x7a2028));
   const cpos = curtain.geometry.attributes.position;
   for (let i = 0; i < cpos.count; i++) {
     cpos.setZ(i, Math.sin(cpos.getX(i) * 4.2) * 0.07);
   }
   curtain.geometry.computeVertexNormals();
-  curtain.position.set(0, 1.55, -HALL_D / 2 + 0.25);
+  curtain.position.set(0, 0.95, -HALL_D / 2 + 0.25);
   group.add(curtain);
 
   /* The house sign over the stage — Olympia has carried that name since
@@ -557,23 +570,23 @@ export function buildHall(glow) {
   {
     const signTex = olympiaSignTexture();
     const sign = new THREE.Mesh(
-      new THREE.PlaneGeometry(3.6, 1.13),
+      new THREE.PlaneGeometry(2.9, 0.91),
       new THREE.MeshBasicMaterial({ map: signTex })
     );
-    sign.position.set(0, 2.34, -HALL_D / 2 + 0.2);
+    sign.position.set(0, 2.42, -HALL_D / 2 + 0.2);
     group.add(sign);
     // Frame and a warm wash so it reads as a lit sign, not a poster
-    const frame = new THREE.Mesh(new THREE.BoxGeometry(3.88, 1.4, 0.1), lambert(0x2a1f14));
-    frame.position.set(0, 2.34, -HALL_D / 2 + 0.13);
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(3.14, 1.13, 0.1), lambert(0x2a1f14));
+    frame.position.set(0, 2.42, -HALL_D / 2 + 0.13);
     group.add(frame);
     const wash = new THREE.Mesh(
-      new THREE.PlaneGeometry(5.2, 2.4),
+      new THREE.PlaneGeometry(4.4, 2.1),
       new THREE.MeshBasicMaterial({
         map: glow, color: 0xff9a72, transparent: true, opacity: 0.06,
         depthWrite: false, blending: THREE.AdditiveBlending
       })
     );
-    wash.position.set(0, 2.26, -HALL_D / 2 + 0.32);
+    wash.position.set(0, 2.34, -HALL_D / 2 + 0.32);
     wash.renderOrder = 3;
     group.add(wash);
     const signLamp = new THREE.PointLight(0xff9c6a, 1.4, 5, 2);
@@ -582,15 +595,21 @@ export function buildHall(glow) {
     refs.sign = sign;
   }
 
-  /* Anundsjö IF pennants on the side wall, in the club's red */
-  ['ANUNDSJÖ IF', 'PEKKAS POKAL'].forEach((label, i) => {
+  /* Anundsjö IF's pennant, hung to the right of the house sign.
+     Measured, not guessed: through this lens the back wall shows only
+     ±2.6 units either side of centre on a phone, so the wall gets exactly
+     three things — scoreboard, sign, pennant — laid out inside that. */
+  {
     const pen = new THREE.Mesh(
-      new THREE.PlaneGeometry(1.1, 0.55),
-      new THREE.MeshBasicMaterial({ map: pennantTexture(label) })
+      new THREE.PlaneGeometry(0.9, 0.45),
+      new THREE.MeshBasicMaterial({ map: pennantTexture('ANUNDSJÖ IF') })
     );
-    pen.position.set(i === 0 ? -2.85 : 2.85, 2.34, -HALL_D / 2 + 0.22);
+    pen.position.set(1.86, 2.42, -HALL_D / 2 + 0.22);
     group.add(pen);
-  });
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.05, 0.05), lambert(0x2a1f14));
+    bar.position.set(1.86, 2.66, -HALL_D / 2 + 0.24);
+    group.add(bar);
+  }
 
   // Pekkas bunting strung across the room
   const flagMat = [lambert(0xf2c14e), lambert(0x2e5f9e), lambert(0xd8394d)];
@@ -713,10 +732,10 @@ export function buildHall(glow) {
   const sbTex = new THREE.CanvasTexture(sbCv);
   sbTex.colorSpace = THREE.SRGBColorSpace;
   const board = new THREE.Mesh(
-    new THREE.PlaneGeometry(1.9, 0.95),
+    new THREE.PlaneGeometry(0.96, 0.48),
     new THREE.MeshBasicMaterial({ map: sbTex })
   );
-  board.position.set(-3.0, 2.2, -HALL_D / 2 + 0.28);
+  board.position.set(-1.86, 2.42, -HALL_D / 2 + 0.28);
   board.rotation.x = 0.14; // tilted toward the players, like a real board
   group.add(board);
   refs.scoreboard = { canvas: sbCv, ctx: sbCv.getContext('2d'), tex: sbTex };
