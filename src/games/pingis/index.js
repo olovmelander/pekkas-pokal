@@ -32,8 +32,25 @@ const POINTS_TO_WIN = 7;
 
 const T = TABLE;
 const HITZ = T.length / 2 + 0.11; // the hit plane, just off each end
-const REACH = 0.58; // generous: quality falls off toward the edge, misses are rare
+const REACH = 0.62; // generous: quality falls off toward the edge, misses are rare
 const GRAV = 9.4;
+
+/*
+ * The opponents.
+ *
+ * `place` is how wide they work the corners and it is the knob that
+ * actually sets difficulty, because what beats a player is having to
+ * COVER ground, not the ball being struck well.
+ *
+ * `err` is genuine imprecision, and it is deliberately small for everyone
+ * — including, especially, the weakest. That is the opposite of what it
+ * looks like it should be: the landing point is clamped onto the table, so
+ * a big random spread never becomes a miss, it just becomes unpredictable
+ * placement, which is HARDER to return. Giving Henrik the largest err made
+ * the bronze medallist the most awkward opponent in the tournament. A weak
+ * opponent is weak through `missP` (he actually misses), `pace` (his ball
+ * is slow) and a small `place` (he hits it back down the middle).
+ */
 
 const OPPONENTS = [
   {
@@ -42,12 +59,14 @@ const OPPONENTS = [
     shirt: 0x3f7a46,
     hair: 0x6b4a24,
     shorts: 0x23283a,
-    speed: 1.5,
-    err: 0.34,
-    missP: 0.16,
-    aggro: 0.15,
-    smashP: 0.12,
-    serveSpin: 0.3,
+    speed: 1.3,
+    place: 0.5,
+    pace: 1.1,
+    err: 0.1,
+    missP: 0.22,
+    aggro: 0.1,
+    smashP: 0.04,
+    serveSpin: 0.2,
     taunt: 'Henrik spelar säkert — långa, lugna bollar.'
   },
   {
@@ -56,12 +75,14 @@ const OPPONENTS = [
     shirt: 0x2f5f96,
     hair: 0x2a1c10,
     shorts: 0x1b2130,
-    speed: 2.0,
-    err: 0.24,
-    missP: 0.1,
-    aggro: 0.48,
-    smashP: 0.32,
-    serveSpin: 0.7,
+    speed: 1.8,
+    place: 0.7,
+    pace: 1.02,
+    err: 0.14,
+    missP: 0.17,
+    aggro: 0.38,
+    smashP: 0.22,
+    serveSpin: 0.55,
     taunt: 'Rickard loopar — och smashar allt som studsar högt.'
   },
   {
@@ -70,12 +91,14 @@ const OPPONENTS = [
     shirt: 0xa8202c,
     hair: 0x3d2b18,
     shorts: 0x2a1418,
-    speed: 2.6,
-    err: 0.17,
-    missP: 0.06,
-    aggro: 0.72,
-    smashP: 0.55,
-    serveSpin: 1,
+    speed: 2.0,
+    place: 0.8,
+    pace: 1.0,
+    err: 0.18,
+    missP: 0.15,
+    aggro: 0.55,
+    smashP: 0.3,
+    serveSpin: 0.9,
     taunt: 'Viktor Jones. Mästaren. Serverna skruvar.'
   }
 ];
@@ -714,8 +737,8 @@ export async function createPingis(container) {
     const side = (rand() - 0.5) * 1.4 * o.serveSpin;
     const spin = (rand() < 0.55 ? 1 : -0.7) * (0.3 + rand() * 0.5) * o.serveSpin;
     strike('ai', new THREE.Vector3(ai.x, T.height + 0.34, -HITZ + 0.05),
-      { x: (rand() - 0.5) * 1.1, z: -T.length * 0.24 },
-      0.36, spin, side, false);
+      { x: (rand() - 0.5) * 1.1 * o.place, z: -T.length * 0.24 },
+      0.36 * o.pace, spin, side, false);
     b.serving = true;
     state.phase = 'rally';
     setPhaseLabel('');
@@ -763,7 +786,7 @@ export async function createPingis(container) {
       -T.width * 0.66, T.width * 0.66
     );
     // A contact right on the edge of the bat is a mishit, not a shot
-    if (Math.abs(dx) > REACH * 0.86 && rand() < 0.55) {
+    if (Math.abs(dx) > REACH * 0.92 && rand() < 0.35) {
       const wild = rand();
       const at = b.pos.clone();
       if (wild < 0.45) {
@@ -828,14 +851,17 @@ export async function createPingis(container) {
     const smash = high2 && rand() < o.smashP;
     const loop = rand() < o.aggro;
     const spin = smash ? 0.4 : loop ? 0.5 + rand() * 0.5 : (rand() < 0.3 ? -0.5 : 0.15);
-    const flightT = smash ? 0.3 : loop ? 0.42 : 0.54;
-    // Aim away from where the bat is now, and keep it on the table: the
-    // clamp is what turns "the bot misses a lot" into "the bot plays".
-    const away = me.x > 0 ? -1 : 1;
+    const flightT = (smash ? 0.3 : loop ? 0.42 : 0.54) * o.pace;
+    /* Aim away from where the bat is now — but not EVERY time. Wrong-footing
+       the player on all twelve shots of a rally is not what a rally looks
+       like, and it is the single biggest reason a returnable opponent still
+       feels unplayable. Only the sharper ones do it consistently. */
+    const wrongFoot = rand() < 0.45 + o.aggro * 0.5;
+    const away = (me.x > 0 ? -1 : 1) * (wrongFoot ? 1 : -1);
     // Clamped just OUTSIDE the lines: a blunder has to be able to miss,
     // or the rally never ends and the bot is unbeatable rather than good.
     const landX = THREE.MathUtils.clamp(
-      away * (0.2 + rand() * 0.45) * (1 + o.aggro) * 0.55 + spread,
+      away * (0.2 + rand() * 0.45) * (1 + o.aggro) * 0.55 * o.place + spread,
       -T.width * 0.58, T.width * 0.58
     );
     const landZ = THREE.MathUtils.clamp(
@@ -1093,6 +1119,10 @@ export async function createPingis(container) {
   let raf = 0;
   let last = performance.now();
   let running = true;
+  /* Balance runs play thousands of matches headless. The whole loop is
+     dt-driven, so the only thing standing between a match and running in
+     milliseconds is the frame we never look at. */
+  let renderOn = true;
 
   function tick(now) {
     raf = requestAnimationFrame(tick);
@@ -1271,7 +1301,7 @@ export async function createPingis(container) {
     lookAt.x = camX * 0.5;
     camera.lookAt(lookAt);
 
-    composer.render();
+    if (renderOn) composer.render();
   }
 
   renderPts();
@@ -1301,6 +1331,10 @@ export async function createPingis(container) {
       me.x = x;
       me.aimX = x;
       me.vx = 0;
+    },
+    /** Balance harness: play out matches without paying for the picture. */
+    setRender(on) {
+      renderOn = on;
     },
     forcePoint(mine = true) {
       if (state.phase === 'serve' || state.phase === 'rally') {

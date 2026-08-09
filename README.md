@@ -328,6 +328,30 @@ så en bred boll är svår men inte omöjlig. Och hans misstag är *diskreta*
 händelser — nät, långt eller utanför — för en slumpmässig knuff på siktet
 äts upp av kanterna och då missar han aldrig.
 
+**Så är svårigheten satt.** Knappen som faktiskt styr hur svår en
+motståndare är heter `place`: hur brett han jobbar hörnen. Det som slår ut
+en spelare är att behöva *täcka yta*, inte att bollen är välträffad.
+`err` — hans rena oprecision — är därför liten för alla, och särskilt för
+den svagaste, vilket är precis tvärtemot vad det ser ut att skulle vara:
+nedslaget klampas in på bordet, så en stor slumpspridning blir aldrig en
+miss, den blir *oförutsägbar placering*, och den är svårare att returnera.
+Henrik hade från början tävlingens största `err` och var därför dess
+mest obekväma motståndare fast han skulle vara uppvärmningen. En svag
+motståndare är svag genom `missP` (han missar på riktigt), `pace` (hans
+boll är långsam) och ett litet `place` (han slår tillbaka mitt på bordet).
+Han siktar dessutom bara *ibland* bort från racketen — att felvända
+spelaren på rallyts samtliga tolv slag är inte hur ett rally ser ut, och
+det är enskilt största skälet till att en returnerbar motståndare ändå
+känns ospelbar.
+
+Balansen är uppmätt, inte gissad: `scratchpad/pingissim.mjs` spelar hela
+matcher headless mot en modellerad människa — racketen jagar bollen med
+reaktionstid och ett långsamt vandrande siktfel — på fem färdighetsnivåer
+mot alla tre motståndarna, och redovisar vinstprocent och vad poängen
+gick på. Hela loopen är dt-driven, så rAF byts mot en virtuell klocka och
+`__ppPingis.setRender(false)` stänger av bilden vi ändå inte tittar på;
+en match tar då sekunder i stället för minuter.
+
 **Teknik.** Bollen flyger med gravitation, luftbroms och Magnuskraft —
 topspin dyker i luften och *sparkar framåt* i studsen, backspin flyter
 och bromsar, precis som fysiken i förlagorna. Varje slag går genom samma
