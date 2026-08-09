@@ -285,7 +285,13 @@ duvans spröda kross — och fågelsång med vindbädd däremellan.
 
 **Pekkas Pingis (2019)**
 
-Bygdegården i Bredbyn en sensommarkväll. Tre matcher mot 2019 års riktiga
+**Olympia i Bredbyn** en sensommarkväll — den riktiga spelplatsen. Olympia
+är Anundsjö IF:s hus, rest 1938 och på ungefär tusen kvadratmeter, och där
+har byn dansat, spelat fotboll och åkt skidor sedan dess. Dansgolvet byttes
+i sexmiljonersrenoveringen, så brädorna i spelet är nylagda i ett rum som är
+allt annat än nytt. Anundsjö IF spelar i rött — därför är ridån, husskylten
+och vimplarna röda, och OLYMPIA står över scenen precis som det gör i
+verkligheten. Tre matcher mot 2019 års riktiga
 pall — Henrik (brons), Rickard (silver) och Viktor Jones (mästaren) — och
 först till 7 med två bollars marginal vinner varje match. Designen lånar
 från genrens bästa: Table Tennis Touch-skolans styrning där racketen
@@ -296,20 +302,44 @@ höjer poängen för den som vinner det, smash-avslut och serve-ess ger extra.
 
 1. **Serva.** Dra och släpp. Bollen studsar på din sida först, som på
    riktigt — serven ärver flickens skruv.
-2. **Rallyt.** Möt bollen med racketen; träffar du inte är poängen borta.
-   Hård flick är hårdare boll men större risk för nät eller utanför.
+2. **Rallyt.** Du möter bollen *efter* studsen, när den faller tillbaka
+   till slaghöjd — du kliver alltså in på korta bollar i stället för att
+   vänta bakom bordskanten. En gyllene ring visar var den inkommande
+   bollen kommer att studsa.
 3. **Motståndarna.** Henrik spelar säkert, Rickard loopar och straffar
    höga studsar, Viktor placerar bort dig och smashar allt.
+
+**Så styrs racketen.** Racketen följer inte fingret rakt av — den dras dit
+av en kritiskt dämpad fjäder. Att snappa racketen direkt på fingret är vad
+som får ett touch-spel att kännas billigt; fjädern ger den tyngd utan en
+fördröjning man känner, och racketens egen rörelsemängd följer med in i
+slaget.
+
+**Så spelar boten.** Motståndaren *läser* slaget: i samma ögonblick du
+träffar simuleras bollen framåt genom exakt samma integrator som spelet
+självt kör, hela vägen till den punkt där han möter den — med gravitation,
+luftbroms, Magnuskraft och, avgörande, studsen där topspinnen sparkar
+bollen framåt och i sidled. En bot som i stället extrapolerar en rak linje
+står permanent fel och ser ut att missa med flit. Farten han behöver
+räknas ut ur sträckan och tiden han har på sig, inte ur en fast toppfart,
+så en bred boll är svår men inte omöjlig. Och hans misstag är *diskreta*
+händelser — nät, långt eller utanför — för en slumpmässig knuff på siktet
+äts upp av kanterna och då missar han aldrig.
 
 **Teknik.** Bollen flyger med gravitation, luftbroms och Magnuskraft —
 topspin dyker i luften och *sparkar framåt* i studsen, backspin flyter
 och bromsar, precis som fysiken i förlagorna. Varje slag går genom samma
 lösare: välj nedslagspunkt och flygtid, så följer hastigheten — och
 felträffar och våld skjuter nedslaget mot nät eller långt ut. Nätet är
-ett riktigt objekt med bandkrypare. Hallen är byggd på ljushierarkin från
-de andra spelen: tre pendellampor med fejkvolymetriska koner och målade
-ljuspölar över bordet, en enda skuggkastande nyckelljuskälla, månljus och
-granar i fönstren, scen med ridå, fikabord och Pekkas-vimplar. Bollen har
+ett riktigt objekt med bandkrypare. Hallen är byggd på ljushierarkin från de andra spelen: tre
+pendellampor med fejkvolymetriska koner och målade ljuspölar över bordet,
+en enda skuggkastande nyckelljuskälla, en låg fyllnad från spelarsidan så
+motståndarens ansikte läses i stället för att bli siluett, månljus och
+granar i fönstren, scen med ridå, publik på scenkanten, fikabord och
+Pekkas-vimplar. Motståndaren är ledad — huvud med ansikte, axel, armbåge
+och knä som egna pivoter — så en sving är en sving och inte en mesh som
+glider i sidled. Han studsar på fotbladen mellan slagen, lutar sig åt det
+håll han rör sig och följer bollen med blicken. Bollen har
 en tajt kontaktskugga (lärdomen från flipperbygget) så den står på bordet
 i stället för att sväva. Poängtavlan på väggen målas om efter varje boll.
 

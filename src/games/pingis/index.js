@@ -12,13 +12,19 @@
  *    and Magnus lift, topspin kicks forward off the bounce, backspin
  *    checks, and the net is a real object with a tape dribble.
  *
- * A match goes to 7 (win by 2 — kvällens husregel i Bredbyn). Three
- * matches against the actual 2019 podium — Henrik (brons), Rickard
- * (silver) and Viktor Jones (mästaren) — make the tournament.
+ * Played in OLYMPIA, Anundsjö IF's hall in Bredbyn — the real venue for
+ * the 2019 competition, standing there since 1938. A match goes to 7 (win
+ * by 2 — kvällens husregel). Three matches against the actual 2019 podium
+ * — Henrik (brons), Rickard (silver) and Viktor Jones (mästaren) — make
+ * the tournament.
  */
 
 import * as THREE from 'three';
 import { Sfx } from './audio.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { mulberry, glowTexture, buildHall, buildPlayer, buildPaddle, TABLE } from './hall.js';
 
 const HIGHSCORE_KEY = 'pp-pingis-highscore';
@@ -26,17 +32,19 @@ const POINTS_TO_WIN = 7;
 
 const T = TABLE;
 const HITZ = T.length / 2 + 0.11; // the hit plane, just off each end
-const REACH = 0.44;
+const REACH = 0.58; // generous: quality falls off toward the edge, misses are rare
 const GRAV = 9.4;
 
 const OPPONENTS = [
   {
     name: 'Henrik Lundqvist',
     title: 'Bronsracketen',
-    shirt: 0x4f8a4a,
+    shirt: 0x3f7a46,
+    hair: 0x6b4a24,
+    shorts: 0x23283a,
     speed: 1.5,
-    err: 0.3,
-    missP: 0.17,
+    err: 0.34,
+    missP: 0.16,
     aggro: 0.15,
     smashP: 0.12,
     serveSpin: 0.3,
@@ -45,9 +53,11 @@ const OPPONENTS = [
   {
     name: 'Rickard Nilsson',
     title: 'Silverloopen',
-    shirt: 0x3e6e9e,
+    shirt: 0x2f5f96,
+    hair: 0x2a1c10,
+    shorts: 0x1b2130,
     speed: 2.0,
-    err: 0.19,
+    err: 0.24,
     missP: 0.1,
     aggro: 0.48,
     smashP: 0.32,
@@ -57,10 +67,12 @@ const OPPONENTS = [
   {
     name: 'Viktor Jones',
     title: 'Mästaren av 2019',
-    shirt: 0xc9982e,
+    shirt: 0xa8202c,
+    hair: 0x3d2b18,
+    shorts: 0x2a1418,
     speed: 2.6,
-    err: 0.11,
-    missP: 0.05,
+    err: 0.17,
+    missP: 0.06,
     aggro: 0.72,
     smashP: 0.55,
     serveSpin: 1,
@@ -172,7 +184,7 @@ export async function createPingis(container) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.12;
+  renderer.toneMappingExposure = 0.98;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   canvasHost.appendChild(renderer.domElement);
@@ -182,14 +194,14 @@ export async function createPingis(container) {
   scene.fog = new THREE.Fog(0x151109, 9, 20);
 
   const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 40);
-  camera.position.set(0, 2.3, 3.8);
-  const lookAt = new THREE.Vector3(0, 0.72, -0.9);
+  camera.position.set(0, 2.5, 3.85);
+  const lookAt = new THREE.Vector3(0, 1.02, -1.1);
   camera.lookAt(lookAt);
 
   /* Lights — hierarchy: hemisphere fill, one casting key, lamp accents */
-  scene.add(new THREE.HemisphereLight(0x9aa8c8, 0x241a10, 0.5));
+  scene.add(new THREE.HemisphereLight(0x9aa8c8, 0x241a10, 0.42));
 
-  const key = new THREE.DirectionalLight(0xffe2b0, 1.9);
+  const key = new THREE.DirectionalLight(0xffe2b0, 1.55);
   key.position.set(1.6, 5.4, 2.4);
   key.target.position.set(0, 0.7, -0.4);
   key.castShadow = true;
@@ -207,10 +219,24 @@ export async function createPingis(container) {
   // The pendants: warm pools over the table. At this scale (metres, lamps
   // ~1.9 m up) candela in single digits already reads — no LAMP multiplier.
   [-1.05, 0, 1.05].forEach((z) => {
-    const lamp = new THREE.PointLight(0xffc98e, 7.5, 8, 2);
+    const lamp = new THREE.PointLight(0xffc98e, 5, 7, 2);
     lamp.position.set(0, 2.9, z);
     scene.add(lamp);
   });
+
+  /* Post: a light bloom so the pendants, the house sign and the ball's
+     highlight glow the way a warm hall reads on camera. */
+  const composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.26, 0.5, 0.93);
+  composer.addPass(bloom);
+  composer.addPass(new OutputPass());
+
+  // A low fill from the player's side so the opponent's face reads instead
+  // of going to silhouette against his own hall.
+  const faceFill = new THREE.DirectionalLight(0xffe8d0, 0.5);
+  faceFill.position.set(0.5, 2.2, 6);
+  scene.add(faceFill);
 
   /* World */
   const glow = glowTexture();
@@ -222,7 +248,8 @@ export async function createPingis(container) {
   const foeRefs = { current: null };
   function spawnFoe(idx) {
     if (foe) scene.remove(foe.group);
-    foe = buildPlayer(OPPONENTS[idx].shirt);
+    const look = OPPONENTS[idx];
+    foe = buildPlayer(look.shirt, { hair: look.hair, shorts: look.shorts });
     foe.group.position.set(0, 0, -HITZ - 0.55);
     foe.group.rotation.y = Math.PI;
     foe.group.scale.setScalar(1.3); // human-tall against the 76 cm table
@@ -261,6 +288,23 @@ export async function createPingis(container) {
   blob.renderOrder = 2;
   scene.add(blob);
 
+  /* Landing marker: a ring on the player's half showing where the incoming
+     ball will first bounce. Every good table tennis game gives you this —
+     without it a fast serve is a coin flip rather than a read. */
+  const marker = new THREE.Mesh(
+    new THREE.RingGeometry(0.62, 0.9, 26),
+    new THREE.MeshBasicMaterial({
+      color: 0xffd166, transparent: true, opacity: 0, depthWrite: false,
+      side: THREE.DoubleSide, toneMapped: false
+    })
+  );
+  marker.rotation.x = -Math.PI / 2;
+  marker.scale.setScalar(0.2);
+  marker.visible = false;
+  marker.renderOrder = 3;
+  marker.userData = { t: 0 };
+  scene.add(marker);
+
   const TRAIL_N = 10;
   const trail = [];
   for (let i = 0; i < TRAIL_N; i++) {
@@ -287,6 +331,8 @@ export async function createPingis(container) {
     aiTouched: false,
     pointT: 0,
     serveT: 0,
+    lastCause: '',
+    causes: {},
     lastToast: 0
   };
 
@@ -303,8 +349,12 @@ export async function createPingis(container) {
     smash: false
   };
 
-  const me = { x: 0, dragVX: 0, dragVY: 0, swing: 0 };
-  const ai = { x: 0, targetX: 0, swing: 0, serveTimer: 0 };
+  // `x` is where the bat IS, `aimX` where the finger wants it. Snapping the
+  // bat straight onto the finger is what makes a touch game feel cheap; a
+  // critically damped follow gives it weight without adding lag you can
+  // feel. Fast enough to cover the table, slow enough to have momentum.
+  const me = { x: 0, aimX: 0, vx: 0, dragVX: 0, dragVY: 0, swing: 0 };
+  const ai = { x: 0, targetX: 0, swing: 0, serveTimer: 0, arriveT: 1, reading: false };
 
   let high = 0;
   try {
@@ -417,13 +467,31 @@ export async function createPingis(container) {
    * flight time, and the velocity follows. Guessable, tunable, and the
    * Magnus term then bends it just enough to feel alive.
    */
-  function strike(hitter, from, land, flightT, spin, side, smash = false) {
+  function strike(hitter, from, land, flightT, spin, side, smash = false, fault = false) {
     b.pos.copy(from);
-    b.vel.set(
-      (land.x - from.x) / flightT,
-      (T.height + 0.02 - from.y + 0.5 * GRAV * flightT * flightT) / flightT,
-      (land.z - from.z) / flightT
-    );
+    const netTop = T.height + T.netH;
+    // Solve the shot under the gravity the ball will ACTUALLY fly under.
+    // The Magnus term adds to gravity under topspin — up to about a
+    // quarter more — so a purely ballistic solve lands the ball short and,
+    // more often, in the net. Then loft until it clears the tape. The
+    // serve is exempt: it is aimed short onto your own half on purpose, so
+    // its "net crossing" lies past the landing point and lofting for it
+    // balloons the serve into the ceiling.
+    const crossesNet = !fault && Math.sign(land.z) !== Math.sign(from.z);
+    let ft = flightT;
+    let vy = 0;
+    let vz = 0;
+    for (let i = 0; i < 7; i++) {
+      vz = (land.z - from.z) / ft;
+      const gEff = GRAV + Math.max(0, spin) * Math.abs(vz) * 0.55;
+      vy = (T.height + 0.02 - from.y + 0.5 * gEff * ft * ft) / ft;
+      if (!crossesNet) break;
+      const tNet = Math.abs(vz) > 1e-4 ? -from.z / vz : 0;
+      const yNet = from.y + vy * tNet - 0.5 * gEff * tNet * tNet;
+      if (tNet <= 0 || yNet > netTop + 0.06) break;
+      ft *= 1.07;
+    }
+    b.vel.set((land.x - from.x) / ft, vy, vz);
     b.st = spin;
     b.ss = side;
     b.live = true;
@@ -431,10 +499,87 @@ export async function createPingis(container) {
     b.bounces = 0;
     b.smash = smash;
     state.rallyHits++;
+    if (hitter === 'me') {
+      aiRead();
+      marker.visible = false;
+    } else {
+      // Show the player where the incoming ball will land on their half —
+      // the readability aid every good table tennis game gives you.
+      const r = predictStrike(1);
+      if (r.bounceX !== null && r.bounceZ > 0) {
+        marker.position.set(r.bounceX, T.height + 0.026, r.bounceZ);
+        marker.visible = true;
+        marker.userData.t = 0;
+      } else {
+        marker.visible = false;
+      }
+    }
   }
 
-  function scorePoint(mine, why) {
+  /**
+   * Fly a copy of the ball forward through the same integrator and report
+   * where the receiver on `side` gets to meet it (side −1 = the far half,
+   * +1 = the near half), plus where it bounces on the way.
+   *
+   * Two things this has to get right. First, gravity, drag, the Magnus
+   * term and — fatally — the BOUNCE, where topspin kicks the ball forward
+   * and sideways. Extrapolating a straight line from the current velocity
+   * leaves a bot permanently out of position, which reads as it missing on
+   * purpose. Second, the contact happens wherever the ball drops back to
+   * bat height after bouncing, not at some fixed plane: that is what a
+   * player actually does, and anchoring it to a plane behind the table end
+   * made every short ball an unreturnable freak winner.
+   */
+  const CONTACT_Y = T.height + 0.52;
+
+  function predictStrike(side) {
+    const pos = b.pos.clone();
+    const vel = b.vel.clone();
+    let { st, ss } = b;
+    let bounces = 0;
+    let bounceX = null;
+    let bounceZ = null;
+    const h = 1 / 120;
+    for (let i = 0; i < 900; i++) {
+      const sp = Math.abs(vel.z);
+      vel.y -= GRAV * h;
+      vel.y -= st * sp * 0.55 * h;
+      vel.x += ss * sp * 0.4 * h * Math.sign(-vel.z);
+      vel.multiplyScalar(1 - 0.06 * h);
+      pos.addScaledVector(vel, h);
+      if (vel.y < 0 && pos.y <= T.height + 0.023 &&
+          Math.abs(pos.x) < T.width / 2 + 0.02 && Math.abs(pos.z) < T.length / 2 + 0.02) {
+        pos.y = T.height + 0.023;
+        vel.y = -vel.y * 0.86;
+        vel.z *= 1 + st * 0.22;
+        vel.x += ss * Math.abs(vel.z) * 0.16 * Math.sign(-vel.z);
+        st *= 0.5;
+        ss *= 0.55;
+        if (Math.sign(pos.z) === side) {
+          bounces++;
+          if (bounceX === null) {
+            bounceX = pos.x;
+            bounceZ = pos.z;
+          }
+        }
+      }
+      if (pos.y < 0.03) break;
+      const onSide = Math.sign(pos.z) === side && Math.abs(pos.z) > 0.15;
+      if (bounces >= 1 && onSide && vel.y < 0 && pos.y <= CONTACT_Y) {
+        return { x: pos.x, y: pos.y, z: pos.z, t: i * h, bounceX, bounceZ, ok: true };
+      }
+      // Long ball: met behind the table end instead
+      if (side < 0 ? pos.z <= -HITZ : pos.z >= HITZ) {
+        return { x: pos.x, y: pos.y, z: pos.z, t: i * h, bounceX, bounceZ, ok: true };
+      }
+    }
+    return { x: pos.x, y: pos.y, z: pos.z, t: 0.6, bounceX, bounceZ, ok: false };
+  }
+
+  function scorePoint(mine, why, cause = '?') {
     if (state.phase !== 'rally' && state.phase !== 'serve') return;
+    state.lastCause = `${cause}:${mine ? 'me' : 'ai'}:${state.rallyHits}`;
+    state.causes[cause] = (state.causes[cause] || 0) + 1;
     state.phase = 'point';
     state.pointT = 0;
     b.live = false;
@@ -540,7 +685,7 @@ export async function createPingis(container) {
     state.rallyHits = 0;
     state.aiTouched = false;
     state.serveT = 0;
-    ai.serveTimer = 1 + rand() * 0.8;
+    ai.serveTimer = 0.7 + rand() * 0.6;
     resetBallForServe();
     renderPts();
     setPhaseLabel(myServe() ? 'DIN SERVE — dra och släpp' : `${opp().name.split(' ')[0]} servar…`);
@@ -580,6 +725,15 @@ export async function createPingis(container) {
 
   /* ---- Hitting ---------------------------------------------------------- */
 
+  /** The opponent reads the shot: where will it reach their side, and when. */
+  function aiRead() {
+    const r = predictStrike(-1);
+    ai.targetX = THREE.MathUtils.clamp(r.x, -1.3, 1.3);
+    ai.arriveT = r.t;
+    ai.reading = true;
+    return r;
+  }
+
   function playerHit() {
     const dx = b.pos.x - me.x;
     if (Math.abs(dx) > REACH || b.pos.y < 0.45 || b.pos.y > 1.9) {
@@ -592,16 +746,37 @@ export async function createPingis(container) {
     const side = THREE.MathUtils.clamp(flickX * 0.16, -1, 1);
 
     // Risk: off-centre contact and violence both push the landing point
-    const err = (Math.abs(dx) / REACH) ** 2 * 0.5 + Math.max(0, power - 0.75) * 0.9;
+    // Off-centre contact and sheer violence both push the landing point.
+    // Squared, so the middle two-thirds of the bat is forgiving and only
+    // the very edge really punishes you.
+    const err = (Math.abs(dx) / REACH) ** 2 * 0.55 + Math.max(0, power - 0.75) * 0.85;
     const spread = err * (rand() - 0.5) * 2;
 
     // Topspin dives: it may be hit faster and still land. Backspin floats.
-    const flightT = spin > 0 ? 0.5 - power * 0.13 : 0.62 - power * 0.1;
-    const landZ = -(T.length * (0.18 + power * 0.26) + spread * 0.9);
-    const landX = THREE.MathUtils.clamp(
-      side * 0.85 + b.pos.x * 0.25 + spread * 0.6,
-      -T.width * 0.7, T.width * 0.7
+    const flightT = spin > 0 ? 0.42 - power * 0.11 : 0.52 - power * 0.09;
+    const landZ = -THREE.MathUtils.clamp(
+      T.length * (0.18 + power * 0.24) + spread * 0.85,
+      T.length * 0.05, T.length * 0.6
     );
+    const landX = THREE.MathUtils.clamp(
+      side * 0.85 + b.pos.x * 0.25 + spread * 0.65,
+      -T.width * 0.66, T.width * 0.66
+    );
+    // A contact right on the edge of the bat is a mishit, not a shot
+    if (Math.abs(dx) > REACH * 0.86 && rand() < 0.55) {
+      const wild = rand();
+      const at = b.pos.clone();
+      if (wild < 0.45) {
+        strike('me', at, { x: b.pos.x * 0.4, z: T.length * 0.1 }, 0.32, -0.2, 0, false, true);
+      } else {
+        strike('me', at, { x: (rand() < 0.5 ? -1 : 1) * T.width * 0.72, z: -T.length * 0.66 }, 0.5, -0.2, 0);
+      }
+      sfx.paddle(0.3);
+      me.swing = 1;
+      toast('Kantträff!');
+      return true;
+    }
+
     const smash = b.pos.y > 1.1 && power > 0.8 && spin >= 0;
     strike('me', b.pos.clone(), { x: landX, z: landZ }, smash ? flightT * 0.72 : flightT,
       spin, side, smash);
@@ -618,28 +793,57 @@ export async function createPingis(container) {
   function aiHit() {
     const o = opp();
     const dx = b.pos.x - ai.x;
-    if (Math.abs(dx) > REACH + 0.06) {
-      return false; // out of reach — clean winner for the player
+    if (Math.abs(dx) > REACH + 0.1) {
+      return false; // genuinely out of reach — a clean winner for the player
     }
     state.aiTouched = true;
-    // Unforced errors: the roll shrinks as the AI gets better
-    const blunder = rand() < o.missP;
-    const spread = (rand() - 0.5) * 2 * o.err + (blunder ? (rand() < 0.5 ? -0.9 : 0.9) : 0);
+    const stretch = Math.abs(dx) / REACH;
+    const spread = (rand() - 0.5) * 2 * o.err * (0.6 + stretch * 0.7);
 
-    const high2 = b.pos.y > 1.08 && Math.abs(b.vel.z) < 6.5;
+    /* Unforced error.
+       Nudging the aim by a random amount does not produce one: the target
+       is clamped to keep the ball on the table, so the nudge just gets
+       swallowed and the opponent never misses. An error has to be a
+       DISCRETE event — net, long, or wide — the way it is when a real
+       player mistimes one. Reaching wide makes it likelier. */
+    if (rand() < o.missP * (0.45 + stretch)) {
+      const kind = rand();
+      const from = b.pos.clone();
+      if (kind < 0.4) {
+        // Into the net: aim it short of the tape, no lofting to save it
+        strike('ai', from, { x: b.pos.x * 0.4, z: -T.length * 0.1 }, 0.34, -0.2, 0, false, true);
+      } else if (kind < 0.72) {
+        // Long: over the far end
+        strike('ai', from, { x: b.pos.x * 0.5, z: T.length * 0.72 }, 0.5, -0.3, 0);
+      } else {
+        // Wide: past the sideline
+        strike('ai', from, { x: (rand() < 0.5 ? -1 : 1) * T.width * 0.72, z: T.length * 0.3 }, 0.52, 0.2, 0);
+      }
+      sfx.paddle(0.4);
+      ai.swing = 1;
+      return true;
+    }
+
+    const high2 = b.pos.y > 1.05 && Math.abs(b.vel.z) < 7;
     const smash = high2 && rand() < o.smashP;
     const loop = rand() < o.aggro;
     const spin = smash ? 0.4 : loop ? 0.5 + rand() * 0.5 : (rand() < 0.3 ? -0.5 : 0.15);
-    const flightT = smash ? 0.34 : loop ? 0.48 : 0.62;
-    // Aim away from the player's paddle, more so the better they are
+    const flightT = smash ? 0.3 : loop ? 0.42 : 0.54;
+    // Aim away from where the bat is now, and keep it on the table: the
+    // clamp is what turns "the bot misses a lot" into "the bot plays".
     const away = me.x > 0 ? -1 : 1;
+    // Clamped just OUTSIDE the lines: a blunder has to be able to miss,
+    // or the rally never ends and the bot is unbeatable rather than good.
     const landX = THREE.MathUtils.clamp(
       away * (0.2 + rand() * 0.45) * (1 + o.aggro) * 0.55 + spread,
-      -T.width * 0.62, T.width * 0.62
+      -T.width * 0.58, T.width * 0.58
     );
-    const landZ = T.length * (smash ? 0.42 : 0.24 + rand() * 0.16) + spread * 0.5;
+    const landZ = THREE.MathUtils.clamp(
+      T.length * (smash ? 0.4 : 0.22 + rand() * 0.16) + spread * 0.45,
+      T.length * 0.08, T.length * 0.56
+    );
     strike('ai', b.pos.clone(), { x: landX, z: landZ }, flightT, spin,
-      (rand() - 0.5) * o.serveSpin, smash);
+      (rand() - 0.5) * o.serveSpin * 0.6, smash);
     if (smash) {
       sfx.smash();
       shakeT = 0.3;
@@ -705,11 +909,11 @@ export async function createPingis(container) {
       } else if (receiverSide) {
         b.bounces++;
         if (b.bounces >= 2) {
-          scorePoint(b.lastHitter === 'me', b.lastHitter === 'me' ? 'DUBBELSTUDS!' : '');
+          scorePoint(b.lastHitter === 'me', b.lastHitter === 'me' ? 'DUBBELSTUDS!' : '', 'doublebounce');
         }
       } else {
         // Bounced back on the hitter's own side: their fault
-        scorePoint(b.lastHitter !== 'me');
+        scorePoint(b.lastHitter !== 'me', '', 'ownside');
       }
     }
 
@@ -723,19 +927,27 @@ export async function createPingis(container) {
       sfx.floor(0.3 / b.floorBounces);
       if (b.floorBounces === 1) {
         // Rally over: table bounce first = winner, no table bounce = fault
-        if (b.bounces >= 1) scorePoint(b.lastHitter === 'me');
-        else scorePoint(b.lastHitter !== 'me', b.lastHitter === 'me' ? 'UT!' : 'UT — din poäng');
+        if (b.bounces >= 1) scorePoint(b.lastHitter === 'me', '', 'winner');
+        else scorePoint(b.lastHitter !== 'me', b.lastHitter === 'me' ? 'UT!' : 'UT — din poäng', 'out');
       }
       if (b.floorBounces > 4) b.live = false;
     }
 
-    /* Hit planes. A whiff just lets the ball sail past — the floor rule
-       scores it when it lands. */
-    if (b.vel.z > 0 && prevZ < HITZ && b.pos.z >= HITZ && state.phase === 'rally' && b.floorBounces === 0) {
-      playerHit();
+    /* Strike windows.
+       In table tennis you meet the ball AFTER it has bounced on your side,
+       as it drops back to bat height — you step in for a short ball rather
+       than waiting behind the end of the table. A whiff just lets it sail
+       on; the floor rule scores it when it lands. */
+    if (state.phase === 'rally' && b.floorBounces === 0 && b.bounces >= 1) {
+      const meReceiving = b.lastHitter === 'ai';
+      const dropping = b.vel.y < 0 && b.pos.y <= CONTACT_Y;
+      if (meReceiving && b.pos.z > 0.15 && dropping) playerHit();
+      else if (!meReceiving && b.pos.z < -0.15 && dropping) aiHit();
     }
-    if (b.vel.z < 0 && prevZ > -HITZ && b.pos.z <= -HITZ && state.phase === 'rally' && b.floorBounces === 0) {
-      aiHit();
+    /* …and a fallback for the long ball that clears the table entirely */
+    if (state.phase === 'rally' && b.floorBounces === 0) {
+      if (b.vel.z > 0 && prevZ < HITZ && b.pos.z >= HITZ && b.lastHitter === 'ai') playerHit();
+      if (b.vel.z < 0 && prevZ > -HITZ && b.pos.z <= -HITZ && b.lastHitter === 'me') aiHit();
     }
   }
 
@@ -760,7 +972,7 @@ export async function createPingis(container) {
     lastPX = e.clientX;
     lastPY = e.clientY;
     lastPT = performance.now();
-    me.x = THREE.MathUtils.clamp(pointerX(e) * 1.2, -1.15, 1.15);
+    me.aimX = THREE.MathUtils.clamp(pointerX(e) * 1.25, -1.2, 1.2);
   }
 
   function onPointerMove(e) {
@@ -776,7 +988,7 @@ export async function createPingis(container) {
     lastPX = e.clientX;
     lastPY = e.clientY;
     lastPT = now;
-    me.x = THREE.MathUtils.clamp(pointerX(e) * 1.2, -1.15, 1.15);
+    me.aimX = THREE.MathUtils.clamp(pointerX(e) * 1.25, -1.2, 1.2);
   }
 
   function onPointerUp() {
@@ -865,6 +1077,8 @@ export async function createPingis(container) {
     const w = Math.max(1, Math.floor(rect.width));
     const h = Math.max(1, Math.floor(rect.height));
     renderer.setSize(w, h, false);
+    composer.setSize(w, h);
+    bloom.setSize(Math.min(320, w / 2), Math.min(560, h / 2));
     camera.aspect = w / h;
     // Narrow screens need a wider lens to keep the whole table in frame
     camera.fov = camera.aspect < 0.62 ? 58 : 50;
@@ -889,8 +1103,15 @@ export async function createPingis(container) {
 
     if (!helpOpen) {
       /* Keyboard paddle */
-      if (keys.left) me.x = Math.max(-1.15, me.x - 2.6 * dt);
-      if (keys.right) me.x = Math.min(1.15, me.x + 2.6 * dt);
+      if (keys.left) me.aimX = Math.max(-1.2, me.aimX - 3.2 * dt);
+      if (keys.right) me.aimX = Math.min(1.2, me.aimX + 3.2 * dt);
+
+      // Critically damped spring toward the finger: settles without
+      // overshoot, and carries the bat's own momentum into the shot.
+      const stiff = 190;
+      const damp = 2 * Math.sqrt(stiff);
+      me.vx += ((me.aimX - me.x) * stiff - me.vx * damp) * dt;
+      me.x = THREE.MathUtils.clamp(me.x + me.vx * dt, -1.25, 1.25);
       if (!dragging) {
         // Keyboard spin: held arrows stand in for the flick
         me.dragVY = keys.up ? -2.6 : keys.down ? 2.6 : me.dragVY * (1 - 6 * dt);
@@ -916,27 +1137,42 @@ export async function createPingis(container) {
 
       if (state.phase === 'point') {
         state.pointT += dt;
-        if (state.pointT > 1.15 && state.phase === 'point') beginPoint();
+        if (state.pointT > 0.95 && state.phase === 'point') beginPoint();
       }
 
-      /* AI movement: chase the ball when it is coming, drift home when not */
+      /* AI movement.
+         The bot moves toward the point it READ, and — crucially — fast
+         enough to arrive before the ball does. A fixed top speed means a
+         wide, fast ball is unreturnable no matter how good the opponent
+         is supposed to be, which reads as the bot giving up. Instead the
+         required speed is derived from the distance and the time left,
+         and only capped by the opponent's own limit. */
       const o = opp();
       const incoming = b.live && b.vel.z < 0;
-      ai.targetX = incoming
-        ? b.pos.x + b.vel.x * Math.max(0, (-HITZ - b.pos.z) / Math.max(0.1, -b.vel.z)) * 0.85
-        : 0;
-      ai.targetX = THREE.MathUtils.clamp(ai.targetX, -1.15, 1.15);
-      const dxA = ai.targetX - ai.x;
-      const maxStep = o.speed * dt;
+      if (!incoming || !ai.reading) ai.targetX = ai.reading ? ai.targetX : 0;
+      const dxA = THREE.MathUtils.clamp(ai.targetX, -1.25, 1.25) - ai.x;
+      ai.arriveT = Math.max(0.05, ai.arriveT - dt);
+      const need = Math.abs(dxA) / ai.arriveT;
+      const speed = incoming ? Math.min(o.speed, Math.max(1.2, need)) : 1.6;
+      const maxStep = speed * dt;
       ai.x += THREE.MathUtils.clamp(dxA, -maxStep, maxStep);
+
+      /* Landing marker fades after it has done its job */
+      if (marker.visible) {
+        marker.userData.t += dt;
+        marker.material.opacity = Math.max(0, 0.75 - marker.userData.t * 0.5);
+        marker.scale.setScalar(0.2 + Math.sin(marker.userData.t * 7) * 0.022);
+        if (marker.material.opacity <= 0) marker.visible = false;
+      }
 
       stepBall(dt);
     }
 
     /* Meshes */
     myPaddle.position.x = me.x;
+    myPaddle.rotation.y = THREE.MathUtils.clamp(me.vx * 0.06, -0.35, 0.35);
     myPaddle.position.y = T.height + 0.18 + Math.sin(t * 2.1) * 0.008;
-    myPaddle.rotation.z = THREE.MathUtils.clamp(-me.dragVX * 0.12, -0.5, 0.5);
+    myPaddle.rotation.z = THREE.MathUtils.clamp(-me.vx * 0.09 - me.dragVX * 0.06, -0.6, 0.6);
     if (me.swing > 0) {
       me.swing = Math.max(0, me.swing - dt * 5);
       myPaddle.rotation.x = -0.4 - Math.sin(me.swing * Math.PI) * 0.8;
@@ -945,23 +1181,56 @@ export async function createPingis(container) {
     }
 
     if (foe) {
-      foe.group.position.x += (ai.x - foe.group.position.x) * Math.min(1, dt * 10);
-      foe.group.position.y = Math.abs(ai.x - foe.group.position.x) > 0.02
-        ? Math.abs(Math.sin(t * 9)) * 0.02
-        : 0;
       const fr = foeRefs.current;
-      // Paddle arm out to the side so the racket reads in silhouette
-      fr.armR.rotation.z = -0.72;
+      const prevX = foe.group.position.x;
+      foe.group.position.x += (ai.x - prevX) * Math.min(1, dt * 10);
+      const moving = Math.abs(ai.x - prevX);
+      const stride = moving > 0.004 ? 1 : 0;
+
+      // Split-step: a table tennis player is never still, they bounce on
+      // the balls of their feet between shots. That idle is most of what
+      // makes a figure read as alive rather than as a prop.
+      const hop = Math.abs(Math.sin(t * 4.4)) * (0.012 + stride * 0.02);
+      foe.group.position.y = hop;
+      const crouch = 0.1 + hop * 1.6;
+      fr.legL.hip.rotation.x = crouch + Math.sin(t * 4.4) * 0.06 * stride;
+      fr.legR.hip.rotation.x = crouch - Math.sin(t * 4.4) * 0.06 * stride;
+      fr.legL.knee.rotation.x = -0.22 - hop * 2.4;
+      fr.legR.knee.rotation.x = -0.22 - hop * 2.4;
+      // Lean into the direction of travel
+      foe.group.rotation.z = THREE.MathUtils.clamp((ai.x - prevX) * -1.4, -0.16, 0.16);
+
+      // Paddle arm held out to the side so the racket reads in silhouette
+      fr.armR.shoulder.rotation.z = -0.42;
+      fr.armL.shoulder.rotation.z = 0.34;
       if (ai.swing > 0) {
         ai.swing = Math.max(0, ai.swing - dt * 4.5);
-        fr.armR.rotation.x = -0.7 - Math.sin(ai.swing * Math.PI) * 1.3;
+        // Wind up behind, whip through, follow across the body
+        const k = 1 - ai.swing; // 0 → 1 across the stroke
+        const arc = Math.sin(k * Math.PI);
+        fr.armR.shoulder.rotation.x = 0.72 - (k - 0.5) * 1.6;
+        fr.armR.elbow.rotation.x = 0.5 + arc * 0.55;
+        fr.armR.shoulder.rotation.z = -0.42 - arc * 0.5;
+        fr.torso.rotation.y = (k - 0.5) * 0.5;
       } else {
-        // Ready position: paddle up over the table, not hanging by the hip
-        fr.armR.rotation.x = -0.7 + Math.sin(t * 1.7) * 0.08;
+        fr.armR.shoulder.rotation.x = 0.72 + Math.sin(t * 1.7) * 0.07;
+        fr.armR.elbow.rotation.x = 0.5;
+        fr.torso.rotation.y *= 1 - Math.min(1, dt * 5);
       }
-      fr.armL.rotation.x = Math.sin(t * 1.7 + 1) * 0.05;
-      fr.head.rotation.y = THREE.MathUtils.clamp((b.pos.x - ai.x) * 0.4, -0.5, 0.5);
+      fr.armL.shoulder.rotation.x = 0.5 + Math.sin(t * 1.7 + 1) * 0.06;
+      fr.armL.elbow.rotation.x = 0.5;
+      // Eyes on the ball
+      fr.head.rotation.y = THREE.MathUtils.clamp((b.pos.x - ai.x) * -0.5, -0.6, 0.6);
+      fr.head.rotation.x = THREE.MathUtils.clamp((b.pos.z + HITZ) * 0.06, -0.25, 0.3);
     }
+
+    /* The crowd breathes, and jumps when a point lands */
+    hall.refs.crowd.forEach((c) => {
+      const d = c.userData;
+      const cheer = state.phase === 'point' ? Math.max(0, 1 - state.pointT * 1.6) : 0;
+      c.position.y = 0.5 + Math.sin(t * 1.6 + d.phase) * 0.006
+        + Math.abs(Math.sin(t * 9 + d.phase)) * cheer * 0.09;
+    });
 
     /* Ball visuals */
     ball.position.copy(b.pos);
@@ -989,9 +1258,9 @@ export async function createPingis(container) {
     camera.position.x += (camX - camera.position.x) * Math.min(1, dt * 3);
     if (shakeT > 0) {
       shakeT -= dt;
-      camera.position.y = 2.3 + (rand() - 0.5) * 0.04;
+      camera.position.y = 2.5 + (rand() - 0.5) * 0.04;
     } else {
-      camera.position.y = 2.3;
+      camera.position.y = 2.5;
     }
     if (fovPunch > 0) {
       fovPunch = Math.max(0, fovPunch - dt * 26);
@@ -1002,7 +1271,7 @@ export async function createPingis(container) {
     lookAt.x = camX * 0.5;
     camera.lookAt(lookAt);
 
-    renderer.render(scene, camera);
+    composer.render();
   }
 
   renderPts();
@@ -1027,6 +1296,8 @@ export async function createPingis(container) {
     playerServe,
     setPaddle(x) {
       me.x = x;
+      me.aimX = x;
+      me.vx = 0;
     },
     forcePoint(mine = true) {
       if (state.phase === 'serve' || state.phase === 'rally') {
