@@ -19,15 +19,15 @@
 
 import * as THREE from 'three';
 import { Sfx } from './audio.js';
-import { mulberry, buildGarden, buildEasel, buildPainter, buildPalette } from './garden.js';
+import { mulberry, buildGarden, buildSky, buildEasel, buildPainter, buildPalette } from './garden.js';
 import {
   ARTWORKS, mixPigments, colourDistance, hexToRgb, rgbToCss,
-  paintReference, paintPlayer, paintIdMap
+  paintReference, paintPlayerBase, paintSelection, paintIdMap
 } from './artworks.js';
 
 const HIGHSCORE_KEY = 'pp-maleri-highscore';
 const WORKS_PER_GAME = 3;
-const ROUND_SECONDS = 75;
+const ROUND_SECONDS = 95;
 
 /** The pigments on the palette, in the order they sit around the rim. */
 const PIGMENTS = [
@@ -72,7 +72,7 @@ function buildHud(root) {
           <div class="pb-hi">REKORD <span id="ml-hi">0</span></div>
         </div>
         <div class="pb-meta">
-          <div class="fg-depth" id="ml-time">1:15</div>
+          <div class="fg-depth" id="ml-time">1:35</div>
           <div class="fg-cast" id="ml-work"></div>
         </div>
       </div>
@@ -126,7 +126,7 @@ function buildHud(root) {
           <li><i style="--c:#f2c14e"></i><b>Paletten</b> Fem pigment. Rött + gult = orange, gult + blått = grönt, rött + blått = lila — subtraktivt, som riktig färg. Vitt ljusar, svart mörkar.</li>
           <li><i style="--c:#5eead4"></i><b>Mätaren</b> Visar hur nära din blandning ligger målet. Grönt = träff.</li>
           <li><i style="--c:#a78bfa"></i><b>TORKA</b> Torkar paletten ren så du kan börja om på en ny färg.</li>
-          <li><i style="--c:#f26d8d"></i><b>Tiden</b> 75 sekunder per verk. Ytor du inte hinner måla står kvar som bar duk och drar ner betyget.</li>
+          <li><i style="--c:#f26d8d"></i><b>Tiden</b> 95 sekunder per verk. Ytor du inte hinner måla står kvar som bar duk och drar ner betyget.</li>
           <li><i style="--c:#ffd166"></i><b>Domen</b> Mikael Hägglund sätter betyg 1–10 på varje verk, precis som 2021.</li>
         </ul>
         <p class="pb-help-tip">Tre verk per kväll. Skriet av Munch är verket som faktiskt vann 2021 — Olov Melanders tolkning.</p>
@@ -176,41 +176,50 @@ export async function createPainting(container) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.04;
+  renderer.toneMappingExposure = 1.12;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   canvasHost.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x9dc0d8);
-  scene.fog = new THREE.Fog(0xa8c6da, 22, 62);
+  // The fog colour has to be the sky's HORIZON colour, not its average, or
+  // the far spruces fade into a band that does not exist in the sky behind.
+  scene.fog = new THREE.Fog(0xc9d9dd, 30, 78);
 
-  const camera = new THREE.PerspectiveCamera(44, 1, 0.1, 90);
+  const camera = new THREE.PerspectiveCamera(44, 1, 0.1, 140);
   camera.position.set(0, 1.95, 2.32);
   const lookAt = new THREE.Vector3(0, 1.42, -0.55);
   camera.lookAt(lookAt);
 
+  scene.add(buildSky());
+
   /* Lights: one warm low sun casting everything, a cool sky fill, a bounce */
-  scene.add(new THREE.HemisphereLight(0xbcd8f2, 0x4a5a30, 0.85));
+  scene.add(new THREE.HemisphereLight(0xc6dcf4, 0x5a6a34, 0.9));
 
   const sun = new THREE.DirectionalLight(0xfff0cf, 2.2);
-  sun.position.set(-7, 9, 6);
+  sun.position.set(-8, 13, 6);
   sun.target.position.set(0, 1, -2);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(1024, 1024);
-  sun.shadow.camera.left = -9;
-  sun.shadow.camera.right = 9;
-  sun.shadow.camera.top = 9;
-  sun.shadow.camera.bottom = -6;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.camera.left = -11;
+  sun.shadow.camera.right = 11;
+  sun.shadow.camera.top = 10;
+  sun.shadow.camera.bottom = -7;
   sun.shadow.camera.near = 1;
-  sun.shadow.camera.far = 30;
-  sun.shadow.bias = -0.0009;
+  sun.shadow.camera.far = 32;
+  sun.shadow.bias = -0.0007;
   sun.shadow.normalBias = 0.02;
   scene.add(sun, sun.target);
 
   const bounce = new THREE.DirectionalLight(0x9cb060, 0.32);
   bounce.position.set(2, -3, 4);
   scene.add(bounce);
+
+  // A cool back light so the spruces and the painters keep an edge against
+  // the sky instead of silhouetting into one flat mass
+  const rim = new THREE.DirectionalLight(0xbcd2e8, 0.55);
+  rim.position.set(5, 5, -12);
+  scene.add(rim);
 
   /* World */
   const garden = buildGarden();
@@ -223,6 +232,10 @@ export async function createPainting(container) {
   artCv.width = CW;
   artCv.height = CH;
   const artCtx = artCv.getContext('2d');
+  const baseCv = document.createElement('canvas');
+  baseCv.width = CW;
+  baseCv.height = CH;
+  const baseCtx = baseCv.getContext('2d');
   const artTex = new THREE.CanvasTexture(artCv);
   artTex.colorSpace = THREE.SRGBColorSpace;
   artTex.anisotropy = 8;
@@ -254,31 +267,60 @@ export async function createPainting(container) {
   const palTex = new THREE.CanvasTexture(palCv);
   palTex.colorSpace = THREE.SRGBColorSpace;
   const palette = buildPalette(new THREE.MeshBasicMaterial({ map: palTex, transparent: true }));
-  palette.position.set(-0.72, 0.99, 0.86);
-  palette.rotation.set(-0.9, 0.45, 0.14);
-  palette.scale.setScalar(0.46);
+  palette.position.set(-0.62, 0.94, 0.94);
+  palette.rotation.set(-1.02, 0.5, 0.12);
+  palette.scale.setScalar(0.44);
   scene.add(palette);
 
   /* The others, at their own easels down the lawn */
+  /*
+   * The rest of the field, staged so they actually land inside the frame.
+   * The first version had them at x ±3 and z ≈ 0 — which is fifty-odd
+   * degrees off axis at this focal length, i.e. entirely off screen. Depth
+   * is what buys you width: at z −5 the frame is nine metres across.
+   */
   const FIELD = [
-    { name: 'Per Olsson', shirt: 0x6b4a2e, beret: true, x: -3.15, z: -0.35, ry: 0.5 },
-    { name: 'Viktor Jones', shirt: 0x2f5f96, x: 2.9, z: -0.5, ry: -0.42 },
-    { name: 'Per Vikman', shirt: 0xa8202c, x: -4.9, z: -1.5, ry: 0.66, hair: 0x4a3520 },
-    { name: 'Henrik Lundqvist', shirt: 0x3f7a46, x: 4.7, z: -1.6, ry: -0.6, hair: 0x2a1c10 }
+    { name: 'Per Olsson', shirt: 0x6b4a2e, beret: true, x: -3.4, z: -4.6, ry: 0.42, side: -1 },
+    { name: 'Viktor Jones', shirt: 0x2f5f96, x: 3.3, z: -4.8, ry: -0.38, side: 1 },
+    // Depth alone does not separate two figures: a painter at x −3 and z −4.6
+    // and one at x −4.9 and z −7.4 land on the SAME screen column and read as
+    // one pile. The far pair is pulled back toward the centre instead.
+    { name: 'Per Vikman', shirt: 0xa8202c, x: -3.0, z: -7.4, ry: 0.58, side: -1, hair: 0x4a3520 },
+    { name: 'Henrik Lundqvist', shirt: 0x3f7a46, x: 3.1, z: -7.8, ry: -0.52, side: 1, hair: 0x2a1c10 }
   ];
   const painters = FIELD.map((p) => {
     const fig = buildPainter(p.shirt, { beret: p.beret, hair: p.hair });
-    fig.group.position.set(p.x, 0, p.z + 0.75);
-    fig.group.rotation.y = p.ry + Math.PI;
+    // Their canvases face away from us, so the painter stands BEYOND the
+    // easel looking back toward the camera — in front of it, everyone is
+    // painting the back of their own canvas. The lateral offset is what
+    // keeps them from being four heads floating over four boards.
+    const fx = Math.sin(p.ry);
+    const fz = Math.cos(p.ry);
+    fig.group.position.set(
+      p.x - fx * 0.72 + fz * p.side * 0.44,
+      0,
+      p.z - fz * 0.72 - fx * p.side * 0.44
+    );
+    fig.group.rotation.y = p.ry - p.side * 0.5;
     fig.group.traverse((o) => {
       if (o.isMesh) o.castShadow = true;
     });
     scene.add(fig.group);
-    const theirEasel = buildEasel(new THREE.MeshLambertMaterial({ color: 0xefece3 }), 0.85, 0.66);
+    const theirEasel = buildEasel(new THREE.MeshLambertMaterial({ color: 0xd8cfba }), 0.78, 0.6);
     theirEasel.position.set(p.x, 0, p.z);
     theirEasel.rotation.y = p.ry + Math.PI;
-    theirEasel.scale.setScalar(0.9);
+    theirEasel.scale.setScalar(0.88);
     scene.add(theirEasel);
+    // We see the back of their canvas, so it gets the stretcher bars
+    [0.66, -0.66].forEach((tilt) => {
+      const bar = new THREE.Mesh(
+        new THREE.BoxGeometry(0.62, 0.035, 0.02),
+        new THREE.MeshLambertMaterial({ color: 0xa8804a })
+      );
+      bar.position.set(p.x, 1.14, p.z + 0.03);
+      bar.rotation.set(0, p.ry + Math.PI, tilt);
+      scene.add(bar);
+    });
     return { ...p, fig, phase: rand() * 6 };
   });
 
@@ -457,9 +499,22 @@ export async function createPainting(container) {
 
   /* ---- Canvas rendering ------------------------------------------------ */
 
+  /*
+   * The canvas is drawn in two layers. The base — weave, laid paint,
+   * brushwork, the drawing — is expensive enough that redoing it sixty
+   * times a second would cost more than the whole 3D scene, and it only
+   * changes when a region is painted or a new work comes out of the hat.
+   * The pulsing selection is the only thing that moves, so that alone is
+   * composited on top each frame.
+   */
   let artT = 0;
+  function rebuildBase() {
+    paintPlayerBase(baseCtx, work, CW, CH, painted);
+  }
   function repaint() {
-    paintPlayer(artCtx, work, CW, CH, painted, state.selected, artT);
+    artCtx.clearRect(0, 0, CW, CH);
+    artCtx.drawImage(baseCv, 0, 0);
+    paintSelection(artCtx, work, CW, CH, painted, state.selected, artT);
     artTex.needsUpdate = true;
   }
 
@@ -469,6 +524,7 @@ export async function createPainting(container) {
     state.selected = -1;
     paintReference(refCtx, work, refCv.width, refCv.height);
     paintIdMap(idCtx, work, CW, CH);
+    rebuildBase();
     repaint();
     hud.work.textContent = `VERK ${state.workNo}/${WORKS_PER_GAME}`;
     hud.title.textContent = `${work.title} · ${work.artist}`;
@@ -528,6 +584,7 @@ export async function createPainting(container) {
     const next = painted.findIndex((p) => p === null);
     state.selected = next;
     state.matchedNow = false;
+    rebuildBase();
     repaint();
     renderMixHud();
     if (next < 0) later(finishWork, 500);
@@ -835,7 +892,29 @@ export async function createPainting(container) {
     beginPaint,
     finishWork,
     work: () => work,
+    works: () => ARTWORKS,
     painted: () => painted,
+    /**
+     * Every region has to survive into the id-map. Regions are drawn back to
+     * front and later ones paint over earlier ones, so a shape that ends up
+     * completely covered can be seen on the canvas but never tapped — and
+     * because the auto-advance jumps to the next unpainted region, one buried
+     * region strands the player on a field they cannot reach.
+     */
+    idCoverage() {
+      const missing = [];
+      ARTWORKS.forEach((w) => {
+        paintIdMap(idCtx, w, CW, CH);
+        const px = idCtx.getImageData(0, 0, CW, CH).data;
+        const seen = new Set();
+        for (let i = 0; i < px.length; i += 4) seen.add(px[i]);
+        w.regions.forEach((rg, i) => {
+          if (!seen.has(i + 1)) missing.push(`${w.id}:${rg.name}`);
+        });
+      });
+      paintIdMap(idCtx, work, CW, CH);
+      return { missing };
+    },
     mixed: () => mixed,
     addDrop,
     wipe,
@@ -851,6 +930,7 @@ export async function createPainting(container) {
         painted[i] = hexToRgb(rg.color);
       });
       state.selected = -1;
+      rebuildBase();
       repaint();
     },
     info() {
