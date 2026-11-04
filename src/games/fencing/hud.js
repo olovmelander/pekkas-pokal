@@ -21,7 +21,6 @@ export const FIELD = [
 /** You can fence as anyone who was there and did not make the podium */
 export const PICKABLE = FIELD.filter((f) => f.place > 3).map((f) => f.name);
 
-export const MEDALS = ['', 'guld', 'silver', 'brons'];
 const MEDAL_LABEL = { 1: 'Guld', 2: 'Silver', 3: 'Brons' };
 export const ROUNDS = ['Kvartsfinal', 'Semifinal', 'Final'];
 
@@ -280,7 +279,7 @@ const medalSvg = (rank, size = 26) => {
     <path d="M10 2h5l3 9h-5zM22 2h-5l-3 9h5z" fill="#3e6e9e"/>
     <circle cx="16" cy="20" r="9.5" fill="${c[1]}"/>
     <circle cx="16" cy="20" r="7.5" fill="${c[0]}"/>
-    <text x="16" y="24" text-anchor="middle" font-size="10" font-weight="700" fill="${c[1]}" font-family="Space Grotesk, sans-serif">${rank}</text>
+    <text x="16" y="24" text-anchor="middle" font-size="10" font-weight="700" fill="${c[1]}" font-family="sans-serif">${rank}</text>
   </svg>`;
 };
 

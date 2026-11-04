@@ -244,7 +244,8 @@ fäktningens fraser:
 Varje fras startar med domarens »En garde — klara — kör!«, och varje tusch
 tänds i den riktiga målapparaten ovanför pisten: grön lampa och summer för
 dig, röd för motståndaren. Poäng: tusch 100, ripost 175, fint-tusch 150,
-parad 25, matchvinst 500 + 100 per tusch i marginal.
+parad 25, +50 per tusch i rad, matchvinst 500 + 100 per tusch i marginal och
+vit match (5–0) +300.
 
 **Teknik.** Fäktarna är ledade lågpolyfigurer — mask med galler, jacka
 med blank lamé, knickers, florett — som poseras helt i kod: gardvinklar
@@ -268,6 +269,22 @@ högdager, pisten hårdare, och de panelade väggarna har nog tonvariation
 för att mörkret ska ha form. Bakom fönstren ligger ett skymnings-Stockholm
 med Stadshusets tre kronor. Ljudet syntetiseras — paradens klingande
 klink, målapparatens hårda summer och publiksorlet.
+
+**Uppgraderingen.** Turneringen är nu hela 2023-fältet i ett riktigt
+slutspelsträd: du väljer vem av de fem utanför pallen du fäktas som, och
+Mikael, Rickard och Per Vikman väntar i kvartsfinal, semifinal och final.
+Medaljerna följer riktig fäktning, där båda förlorande semifinalisterna får
+brons, och bästa medalj sparas per fäktare. Fäktarna är nu ledade med
+inverterad kinematik — fötterna står kvar när kroppen sjunker in i utfallet,
+och klingan böjer sig i en båge när den träffar lamén — och varje pose
+fjädras, så att fraserna får tyngd och eftersving. Bakväggen har riktiga
+fönsteröppningar som kastar solfläckar över pisten, och solstrålarna räknas
+fram som en volym genom rummet, med damm som bara lyser där ljuset faktiskt
+faller. Varje tusch fryser världen ett ögonblick, kameran går in på
+träffpunkten, lampan blommar, lamén lyser i skyttens färg och publiken
+reagerar; det avgörande tuschet i varje match visas i slow motion. På dator
+spelar du med piltangenterna, mellanslag och F; på telefon med knappar för
+tummarna, och i stående läge står kameran bakom din axel.
 
 **Pekkas Lerduvor (2022)**
 
@@ -631,7 +648,7 @@ stänger dem.
 | `src/games/pinball/` | Flipperspelet: `physics` (2D-kollision), `table` (layout + banans grafik), `meshes` (3D), `room` (arkadhallen), `dmd` (punktmatrisen), `fx` (gnistor, bollspår), `audio` (syntetiskt ljud), `hud` (paneler), `scores` (topplistan), `index` (spelloop) |
 | `src/games/fishing/` | Fiskespelet: `species` (procedurella fiskar), `world` (sjö, vattenshader, båt), `fx` (stänk, bubblor, glimtar), `hud` (paneler, fångstdagbok), `progress` (uppdrag och rekord), `audio` (syntetiskt ljud), `index` (spelloop) |
 | `src/games/clay/` | Drejspelet: `studio` (ateljé, matcaps, drejskiva), `audio` (syntetiskt ljud), `index` (lerfysik + spelloop) |
-| `src/games/fencing/` | Fäktspelet: `salle` (fäktsal, fäktare, texturer), `audio` (syntetiskt ljud), `index` (duell-AI + spelloop) |
+| `src/games/fencing/` | Fäktspelet: `salle` (fäktsal, ljusvolymer, publik), `fencer` (IK-riggade fäktare), `fx` (gnistor, klingspår, konfetti), `hud` (paneler, slutspelsträd), `audio` (syntetiskt ljud), `index` (duell-AI + spelloop) |
 | `src/games/shooting/` | Skyttespelet: `range` (fält, gevär, lerduvor), `grass` (instansierad äng med vind), `audio` (syntetiskt ljud), `index` (banor + spelloop) |
 | `src/games/pingis/` | Pingisspelet: `hall` (bygdegård, bord, figurer), `audio` (syntetiskt ljud), `index` (fysik, AI och spelloop) |
 | `src/games/painting/` | Målerispelet: `artworks` (motiven + färgblandning i RYB och Lab), `garden` (trädgården, staffli, målare), `audio` (syntetiskt ljud), `index` (spelloop och dom) |

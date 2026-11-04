@@ -440,7 +440,7 @@ function bannerTexture(text) {
     ctx.arc(x, y, 8, 0, Math.PI * 2);
     ctx.fill();
   });
-  ctx.font = 'bold 22px "Space Grotesk", sans-serif';
+  ctx.font = 'bold 22px Georgia, serif';
   ctx.textAlign = 'center';
   ctx.fillText(text, 64, 222);
   return canvasTex(cv);
@@ -1094,7 +1094,7 @@ class ScoreBox {
     const { ctx } = this;
     ctx.fillStyle = '#07080a';
     ctx.fillRect(0, 0, 256, 96);
-    ctx.font = 'bold 72px "Space Grotesk", monospace';
+    ctx.font = 'bold 72px ui-monospace, Menlo, Consolas, monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = 'rgba(255,60,40,0.12)';

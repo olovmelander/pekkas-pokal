@@ -932,7 +932,13 @@ export async function createFencing(container) {
     else if (name === 'again') showTitle();
   }
 
+  /** Clicked buttons drop focus, so a later Space lunges instead of re-clicking them. */
+  function unfocus() {
+    document.activeElement?.blur?.();
+  }
+
   function onPanelClick(e) {
+    unfocus();
     const chip = e.target.closest('[data-fencer]');
     if (chip) {
       fencerName = chip.dataset.fencer;
@@ -1022,12 +1028,19 @@ export async function createFencing(container) {
     playerLunge(true);
   };
   const muteClick = () => {
+    unfocus();
     sfx.resume();
     sfx.setMuted(!sfx.muted);
     el.mute.classList.toggle('off', sfx.muted);
   };
-  const infoClick = () => setHelp(!helpOpen);
-  const helpCloseClick = () => setHelp(false);
+  const infoClick = () => {
+    unfocus();
+    setHelp(!helpOpen);
+  };
+  const helpCloseClick = () => {
+    unfocus();
+    setHelp(false);
+  };
 
   canvasHost.addEventListener('pointerdown', onPointerDown);
   window.addEventListener('pointermove', onPointerMove);
