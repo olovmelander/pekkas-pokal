@@ -33,7 +33,7 @@ function buildStudioEnvironment(renderer) {
   const pos = domeGeo.attributes.position;
   const top = new THREE.Color(0.85, 0.66, 0.42);
   const mid = new THREE.Color(0.16, 0.12, 0.08);
-  const bottom = new THREE.Color(0.01, 0.01, 0.012);
+  const bottom = new THREE.Color(0.06, 0.045, 0.03);
   const c = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const y = pos.getY(i) / 20;
@@ -60,6 +60,8 @@ function buildStudioEnvironment(renderer) {
   box(1.4, 12, 7, 0xffe6c4, [-9, 3, -3]); // kantljus vänster
   box(1.4, 12, 6, 0xdfe8ff, [9, 3, -2]); // kallt kantljus höger
   box(6, 1.2, 3.5, 0xffd9a0, [3, 0.5, 9]); // låg varm fyllnad framifrån
+  box(12, 5, 1.5, 0xffdcaa, [0, 2.2, 12]); // bred varm svep bakom kameran — bålen glöder i stället för att svartna
+  box(16, 9, 2.2, 0xffcf8f, [0, -4, 7]); // studsljus från golvet — kupans nedåtvända underdel speglar det
   box(14, 3, 1.4, 0xffffff, [0, 14, 0], [0, 0, 0]); // takets breda sken
 
   const pmrem = new THREE.PMREMGenerator(renderer);
@@ -161,7 +163,7 @@ function plateTexture(lines, { width = 1024, height = 256, title = false } = {})
   ctx.strokeStyle = 'rgba(70, 48, 12, 0.55)';
   ctx.lineWidth = 6;
   ctx.strokeRect(14, 14, width - 28, height - 28);
-  ctx.fillStyle = 'rgba(52, 34, 6, 0.92)';
+  ctx.fillStyle = 'rgb(40, 25, 4)';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   if (title) {
@@ -179,7 +181,7 @@ function plateTexture(lines, { width = 1024, height = 256, title = false } = {})
       ctx.font = `400 ${Math.round(height * 0.15)}px "JetBrains Mono", monospace`;
       ctx.textAlign = 'left';
       ctx.fillText(line.year, col * colW + 48, y);
-      ctx.font = `500 ${Math.round(height * 0.17)}px Fraunces, Georgia, serif`;
+      ctx.font = `600 ${Math.round(height * 0.17)}px Fraunces, Georgia, serif`;
       ctx.fillText(line.name, col * colW + 48 + height * 0.62, y);
     });
   }
@@ -267,7 +269,8 @@ export async function mountTrophy(canvas, opts = {}) {
       metalness: 0,
       roughness: 0.35,
       clearcoat: 1,
-      clearcoatRoughness: 0.12
+      clearcoatRoughness: 0.12,
+      envMapIntensity: 0.45 // svart lack ska förbli svart, inte spegla studion grå
     })
   );
 
@@ -329,7 +332,7 @@ export async function mountTrophy(canvas, opts = {}) {
     const chunk = sorted.slice(side * perSide, side * perSide + perSide);
     if (!chunk.length) continue;
     const tex = track(plateTexture(chunk));
-    const mat = track(new THREE.MeshPhysicalMaterial({ color: GOLD_F0, map: tex, metalness: 1, roughness: 0.32 }));
+    const mat = track(new THREE.MeshPhysicalMaterial({ color: GOLD_F0.clone().multiplyScalar(0.82), map: tex, metalness: 1, roughness: 0.4 }));
     const plate = new THREE.Mesh(plateGeo, mat);
     const a = (side * Math.PI) / 2;
     plate.position.set(Math.sin(a) * 1.356, 0.36, Math.cos(a) * 1.356);
@@ -339,7 +342,7 @@ export async function mountTrophy(canvas, opts = {}) {
   const titleTex = track(plateTexture(['PEKKAS POKAL', '63.29°N · 18.73°E · SEDAN 2011'], { width: 1024, height: 256, title: true }));
   const titlePlate = new THREE.Mesh(
     track(new THREE.PlaneGeometry(1.5, 0.375)),
-    track(new THREE.MeshPhysicalMaterial({ color: GOLD_F0, map: titleTex, metalness: 1, roughness: 0.28 }))
+    track(new THREE.MeshPhysicalMaterial({ color: GOLD_F0.clone().multiplyScalar(0.85), map: titleTex, metalness: 1, roughness: 0.36 }))
   );
   titlePlate.position.set(0, 0.97, 1.106);
   trophy.add(titlePlate);
@@ -471,10 +474,13 @@ export async function mountTrophy(canvas, opts = {}) {
     renderer.render(scene, camera);
   }
 
-  function tick(ts) {
+  function tick() {
     raf = requestAnimationFrame(tick);
-    timer.update(ts);
-    const dt = Math.min(timer.getDelta(), 0.05);
+    // Ingen rAF-tidsstämpel: den är bildrutans starttid och kan ligga före
+    // timer.reset() när shaderkompileringen blockerat tråden — då blir
+    // deltat negativt. performance.now() är samma klocka som reset() läser.
+    timer.update();
+    const dt = Math.min(Math.max(timer.getDelta(), 0), 0.05);
     const t = timer.getElapsed();
 
     // Intro: pokalen svänger in och reser sig
