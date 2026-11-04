@@ -760,7 +760,8 @@ function buildKiln(metal) {
   ledPlane.position.set(0.6, 1.53, 0.775);
   g.add(ledPlane);
 
-  return { group: g, hinge, chamberMat, glowMat, led, flue: new THREE.Vector3(0.3, 3.45, -0.3) };
+  // handle: the middle of the door's bar, in the hinge's space (keramikern takes hold of it)
+  return { group: g, hinge, handle: new THREE.Vector3(-0.95, 0, 0.12), chamberMat, glowMat, led, flue: new THREE.Vector3(0.3, 3.45, -0.3) };
 }
 
 export function buildStudio() {

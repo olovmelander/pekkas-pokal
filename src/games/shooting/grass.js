@@ -190,10 +190,14 @@ export function buildGrass(rand, { count = 23000, inner = 0.3, outer = 30, sunDi
     // Keep the mat, the rail and the crowd's feet clear
     if (Math.abs(x) < 0.95 && Math.abs(z) < 1.2) continue;
     if (Math.abs(x) < 3.4 && z > 1.8 && z < 3.2) continue;
-    // And the trap house apron
-    if (Math.abs(x) < 2.6 && z < -14.5 && z > -19.5) continue;
+    // And the trap house itself (its berm, in front, grows grass)
+    if (Math.abs(x) < 2.3 && z < -15.7 && z > -18.9) continue;
+    // On the berm, plant at its surface (range.js: 0.78 m high at the
+    // bunker, falling to the field 2.6 m out)
+    const onBerm = Math.abs(x) < 2.15 && z <= -13.3 && z >= -15.7;
+    const bermY = onBerm ? 0.78 * Math.max(0, 1 - (z + 15.92) / 2.6) ** 1.6 : 0;
 
-    pos.set(x, 0.02, z); // clear of the ground plane, out of z-fight range
+    pos.set(x, 0.02 + bermY, z); // clear of the ground plane, out of z-fight range
     // Yaw, then a real lean. Bolt-upright blades vanish when you look down
     // on them from standing height — a leaning blade always shows a face.
     q.setFromAxisAngle(up, rand() * Math.PI);

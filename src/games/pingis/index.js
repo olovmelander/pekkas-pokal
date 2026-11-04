@@ -828,8 +828,6 @@ export async function createPingis(container) {
   function playerServe() {
     if (state.phase !== 'serve' || !myServe()) return;
     if (renderOn) hud.ghost(false);
-    if (dragging) ghostServes++;
-    if (ghostServes >= 2) ghostSeen = true;
     sfx.toss();
     const power = Math.min(1, 0.4 + Math.hypot(me.dragVX, me.dragVY) * 0.16);
     const spin = THREE.MathUtils.clamp(-me.dragVY * 0.34, -0.9, 0.9);
@@ -1611,7 +1609,11 @@ export async function createPingis(container) {
   }
 
   function onPointerUp() {
-    if (dragging && state.phase === 'serve' && myServe()) playerServe();
+    if (dragging && state.phase === 'serve' && myServe()) {
+      // Two serves of its own, and a finger no longer needs the ghost
+      if (++ghostServes >= 2) ghostSeen = true;
+      playerServe();
+    }
     dragging = false;
   }
 

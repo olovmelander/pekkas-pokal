@@ -247,8 +247,11 @@ const IDENTITY = new THREE.Quaternion();
  * @param {THREE.Vector3} o.banding   banding wheel top centre
  * @param {number} o.bandingRadius
  * @param {THREE.Vector3} o.kilnDoor  the kiln door (what he watches while it fires)
+ * @param {THREE.Vector3} [o.kilnSpot]   where he tends the kiln (beside its door)
+ * @param {THREE.Object3D} [o.kilnHinge] the door's hinge group, which the game swings
+ * @param {THREE.Vector3} [o.kilnHandle] the door handle, in the hinge's space
  */
-export function createKeramiker({ home, judge, wheel, banding, bandingRadius, kilnDoor }) {
+export function createKeramiker({ home, judge, wheel, banding, bandingRadius, kilnDoor, kilnSpot = null, kilnHinge = null, kilnHandle = null }) {
   const person = createPerson(LOOK);
   smearApron(person);
   const { root, bones, sockets } = person;
@@ -276,7 +279,8 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
     now: 0,
     walkW: 0,
     phase: 0, // walk cycle
-    rim: 0, // IK weights: hand on the banding wheel, fist on the chin
+    rim: 0, // IK weights: hand on the banding wheel, fist on the chin, hand on the kiln door
+    door: 0,
     chin: 0,
     expr: '',
     talking: -1,
@@ -286,7 +290,7 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
     overT: -1
   };
   /** What this frame asks for, filled by the plan* functions below. */
-  const plan = { look: null, exprKey: '', expr: null, talk: false, nod: 0, shake: 0, tilt: 0, lean: false };
+  const plan = { look: null, exprKey: '', expr: null, talk: false, nod: 0, shake: 0, tilt: 0, lean: false, door: 0 };
 
   const goal = new THREE.Vector3();
   const faceAt = new THREE.Vector3();
@@ -303,6 +307,7 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
   const ay = new THREE.Vector3();
   const az = new THREE.Vector3();
   const v1 = new THREE.Vector3();
+  const doorLook = new THREE.Vector3();
   const v2 = new THREE.Vector3();
 
   /** World quaternion for a bone whose local X and Y should point along x and y (orthonormalised). */
@@ -405,6 +410,13 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
     faceAt.copy(kilnDoor);
     plan.look = kilnDoor;
     goalW.hips = 1;
+    // He shuts the door himself, hand on the handle as it swings home, and
+    // pulls it open again when the firing is done
+    if (kilnHinge && ctx.fireT !== undefined && root.position.distanceTo(goal) < 0.2) {
+      const ft = ctx.fireT;
+      plan.door = Math.max(window01(ft, 1.0, 1.8, 0.22), window01(ft, 3.5, 4.12, 0.18));
+      if (plan.door > 0.5) plan.look = doorLook.copy(kilnHandle).applyMatrix4(kilnHinge.matrixWorld);
+    }
     if (ctx.heat > 0.3) express('kiln', { focus: 0.7 });
     else express('watch', { focus: 0.35 });
   }
@@ -500,6 +512,8 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
     POSES.idle(t, base);
     if (st.walkW > 1e-3) mixAll(base, POSES.walk(st.phase, walkP), st.walkW);
     for (const [name, fn] of LAYERS) if (w[name] > 1e-3) mixUpper(base, fn(t, buf[name]), w[name]);
+    // A hand on the kiln door closes round its handle
+    if (st.door > 1e-3) base.gripL += (0.92 - base.gripL) * ease(st.door);
     person.setPose(base, 1);
   }
 
@@ -510,7 +524,8 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
     st.chin += ((plan.lean ? 1 : 0) - st.chin) * k(3.5);
     const pointW = ctx.attention ? w.point : 0;
     const foldW = w.crossed;
-    if (st.rim < 0.004 && st.chin < 0.004 && pointW < 0.004 && foldW < 0.004) return;
+    st.door += (plan.door - st.door) * k(plan.door > st.door ? 7 : 5);
+    if (st.rim < 0.004 && st.chin < 0.004 && pointW < 0.004 && foldW < 0.004 && st.door < 0.004) return;
     root.updateMatrixWorld(true);
     if (foldW > 0.004) {
       // Arms folded the way people fold them — not an X at the wrists: the
@@ -527,6 +542,16 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
       basisQuat(v1.set(0, 0, -1).applyQuaternion(qa), v2.set(-0.9, 0, 0.3).applyQuaternion(qa), handQ);
       C(-0.6, -0.25, 0.3, pole);
       reachFor('R', target, handQ, pole, foldW);
+    }
+    if (st.door > 0.004) {
+      // Left hand round the door's vertical bar: thumb up, palm to the bar
+      kilnHinge.updateMatrixWorld(true);
+      target.copy(kilnHandle).applyMatrix4(kilnHinge.matrixWorld);
+      bones.upperArmL.getWorldPosition(tmp2);
+      const back = tmp2.sub(target).setY(0).normalize();
+      basisQuat(v1.set(Math.cos(root.rotation.y), 0, -Math.sin(root.rotation.y)), back, handQ);
+      bones.chest.localToWorld(pole.set(0.6 * s, -0.5 * s, -0.25 * s));
+      reachFor('L', target, handQ, pole, st.door);
     }
     if (st.rim > 0.004) {
       // The rim point on his left, riding round with the wheel and back
@@ -583,9 +608,10 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
     plan.shake = 0;
     plan.tilt = 0;
     plan.lean = false;
+    plan.door = 0;
 
     const atJudge = phase === 'judge' || (phase === 'fire' && ctx.opened);
-    goal.copy(atJudge ? judge : home);
+    goal.copy(atJudge ? judge : phase === 'fire' && kilnSpot ? kilnSpot : home);
     if (phase === 'idle' || phase === 'over') planWaiting(t, ctx);
     else if (phase === 'intro' || phase === 'throw') planThrow(dt, t, ctx);
     else if (!atJudge) planKiln(ctx);

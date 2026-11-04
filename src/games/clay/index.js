@@ -428,7 +428,11 @@ export async function createClay(container) {
     wheel: new THREE.Vector3(0, wheel.headY + 1, 0),
     banding: studio.reveal.clone().setY(studio.banding.position.y + 0.02),
     bandingRadius: 0.36,
-    kilnDoor: studio.kiln.group.localToWorld(new THREE.Vector3(0, 1.2, 0.8))
+    kilnDoor: studio.kiln.group.localToWorld(new THREE.Vector3(0, 1.2, 0.8)),
+    // Beside the door on its free (left) side, clear of its swing, within reach of the handle
+    kilnSpot: studio.kiln.group.localToWorld(new THREE.Vector3(-0.7, 0, 1.1)).setY(0),
+    kilnHinge: studio.kiln.hinge,
+    kilnHandle: studio.kiln.handle
   });
   scene.add(keramiker.root);
   const attention = new THREE.Vector3();
@@ -1569,6 +1573,7 @@ export async function createClay(container) {
     keramiker.update(ph === 'fire' && state.fast ? dt * 2.5 : dt, t, {
       phase: ph,
       opened: ph === 'fire' && state.t >= FIRE.open,
+      fireT: ph === 'fire' ? state.t : undefined,
       attention,
       piece: fired ? pieceMid : null,
       camera: camera.position,

@@ -355,21 +355,21 @@ function mergeGeos(list, colors) {
 export const WAVE_GLSL = `
   float waveH(vec2 p, float t) {
     float fade = 1.0 - smoothstep(60.0, 140.0, length(p));
-    return (sin(p.x * 0.32 + t * 1.10) * 0.30
-          + sin(p.y * 0.41 - t * 0.85) * 0.24
-          + sin((p.x + p.y) * 0.19 + t * 1.60) * 0.16
-          + sin(p.x * 1.70 + t * 2.60) * 0.045
-          + sin(p.y * 1.90 - t * 2.20) * 0.040) * fade;
+    return (sin(p.x * 0.32 + t * 1.10) * 0.21
+          + sin(p.y * 0.41 - t * 0.85) * 0.17
+          + sin((p.x + p.y) * 0.19 + t * 1.60) * 0.12
+          + sin(p.x * 1.70 + t * 2.60) * 0.026
+          + sin(p.y * 1.90 - t * 2.20) * 0.022) * fade;
   }
 `;
 
 /** The same five waves the vertex shader uses — for things that float. */
 export function waveHeight(x, z, t) {
-  return Math.sin(x * 0.32 + t * 1.1) * 0.3 +
-    Math.sin(z * 0.41 - t * 0.85) * 0.24 +
-    Math.sin((x + z) * 0.19 + t * 1.6) * 0.16 +
-    Math.sin(x * 1.7 + t * 2.6) * 0.045 +
-    Math.sin(z * 1.9 - t * 2.2) * 0.04;
+  return Math.sin(x * 0.32 + t * 1.1) * 0.21 +
+    Math.sin(z * 0.41 - t * 0.85) * 0.17 +
+    Math.sin((x + z) * 0.19 + t * 1.6) * 0.12 +
+    Math.sin(x * 1.7 + t * 2.6) * 0.026 +
+    Math.sin(z * 1.9 - t * 2.2) * 0.022;
 }
 
 /**
@@ -477,12 +477,12 @@ export function buildWater(caustics, noise, reflect) {
         float t = uTime;
         float fade = 1.0 - smoothstep(60.0, 140.0, length(w.xz));
         w.y += waveH(w.xz, t);
-        float dx = cos(w.x * 0.32 + t * 1.10) * 0.30 * 0.32
-                 + cos((w.x + w.z) * 0.19 + t * 1.60) * 0.16 * 0.19
-                 + cos(w.x * 1.70 + t * 2.60) * 0.045 * 1.70;
-        float dz = cos(w.z * 0.41 - t * 0.85) * 0.24 * 0.41
-                 + cos((w.x + w.z) * 0.19 + t * 1.60) * 0.16 * 0.19
-                 + cos(w.z * 1.90 - t * 2.20) * 0.040 * 1.90;
+        float dx = cos(w.x * 0.32 + t * 1.10) * 0.21 * 0.32
+                 + cos((w.x + w.z) * 0.19 + t * 1.60) * 0.12 * 0.19
+                 + cos(w.x * 1.70 + t * 2.60) * 0.026 * 1.70;
+        float dz = cos(w.z * 0.41 - t * 0.85) * 0.17 * 0.41
+                 + cos((w.x + w.z) * 0.19 + t * 1.60) * 0.12 * 0.19
+                 + cos(w.z * 1.90 - t * 2.20) * 0.022 * 1.90;
         vNrm = normalize(vec3(-dx * fade, 1.0, -dz * fade));
         vWorld = w.xyz;
         vec4 mv = viewMatrix * w;
@@ -519,7 +519,7 @@ export function buildWater(caustics, noise, reflect) {
         vec2 q = vWorld.xz;
         vec2 r1 = texture2D(uNoise, q * 0.31 + uTime * vec2(0.031, 0.017)).rg;
         vec2 r2 = texture2D(uNoise, q * 0.83 - uTime * vec2(0.023, 0.041)).rg;
-        vec3 N = normalize(N0 + vec3(r1.x + r2.x - 1.0, 0.0, r1.y + r2.y - 1.0) * (0.05 + 0.13 * near));
+        vec3 N = normalize(N0 + vec3(r1.x + r2.x - 1.0, 0.0, r1.y + r2.y - 1.0) * (0.04 + 0.09 * near));
         vec3 V = normalize(cameraPosition - vWorld);
         vec3 col;
         float alpha;
@@ -554,9 +554,11 @@ export function buildWater(caustics, noise, reflect) {
           vec3 refl = skyCol(R);
           // The far shore mirrored in the lake, rank by rank. The ripples
           // bend it only part way, so the trees waver instead of shattering
-          vec3 Rs = reflect(-V, normalize(mix(N0, N, 0.4)));
+          vec3 Ns = normalize(vec3(N0.x * 0.55, 1.0, N0.z * 0.55) + (N - N0) * 0.22);
+          vec3 Rs = reflect(-V, Ns);
           Rs.y = abs(Rs.y);
           vec4 sh = shoreRefl(vWorld, Rs);
+          sh.a *= smoothstep(3.0, 26.0, vDepth);
           refl = mix(refl, sh.rgb, sh.a);
           vec3 body = uBody * (0.75 + 0.5 * web(vWorld.xz) * uCausticStrength * 0.25);
           col = mix(body, refl, clamp(fres * 1.25, 0.0, 1.0));
@@ -1168,7 +1170,7 @@ export function buildLilies() {
   padMesh.renderOrder = 3;
   const tint = new THREE.Color();
   pads.forEach((p, i) => {
-    tint.setHSL(0.22 + rand() * 0.06, 0.32, 0.2 + rand() * 0.08);
+    tint.setHSL(0.24 + rand() * 0.06, 0.4, 0.11 + rand() * 0.06);
     padMesh.setColorAt(i, tint);
   });
 

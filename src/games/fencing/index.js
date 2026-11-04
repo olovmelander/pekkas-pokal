@@ -1253,7 +1253,7 @@ export async function createFencing(container) {
       subject.j.torso.getWorldPosition(v3);
       const drift = Math.sin(t * 0.11) * 0.18;
       if (aspect < 0.9) {
-        const d = ph === 'title' ? 6.1 : 6.6;
+        const d = ph === 'title' ? 6.1 : 7.1;
         goal.look.set(v3.x, 0.92, 0);
         goal.pos.set(v3.x + 0.5 + drift, 1.3, d);
         goal.fov = 40;

@@ -617,6 +617,7 @@ export async function createPinball(container, opts = {}) {
   // Inserts from the drain upward, for chases
   const INSERT_ORDER = ['save', 'leftRamp', 'rightRamp', 'leftOrbit', 'castle', 'trolls'];
   const lampFx = { kind: '', t: 0, dur: 0, color: new THREE.Color() };
+  let attractFlash = -1;
   function lampShow(kind, color, dur = 1.5) {
     // Reduced motion: lamps may still run up the table, but nothing strobes
     lampFx.kind = reduceMotion && kind === 'strobe' ? 'chase' : kind;
@@ -2031,7 +2032,6 @@ export async function createPinball(container, opts = {}) {
    * kickback and inlanes. Solid when collected, blinking when it is the shot
    * to make, running patterns in attract.
    */
-  let attractFlash = -1;
   function driveMatrix(now, attract, strobeOn) {
     const lm = refs.lamps;
     const t = now / 1000;

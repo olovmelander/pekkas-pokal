@@ -85,8 +85,8 @@ function spruceRadius(y, H, W, tiers) {
   if (y < 0 || y > H) return -1;
   const k = (y / H) * tiers;
   const f = k - Math.floor(k);
-  const cone = (1 - y / H) ** 0.92;
-  return W * cone * (0.5 + 0.5 * (1 - f) ** 1.6) + (y < H * 0.12 ? W * 0.05 : 0);
+  const cone = (1 - y / H) ** 0.8;
+  return W * cone * (0.58 + 0.42 * (1 - f) ** 1.4) + (y < H * 0.12 ? W * 0.05 : 0);
 }
 
 /** Height of a spruce's outline at |dx| from its trunk (0 outside it). */
@@ -280,7 +280,7 @@ function headShore(x) {
   return -41 - Math.sin(x * 0.07) * 4 - Math.max(0, 16 - x) * 1.6 - Math.max(0, x - 60) * 0.12;
 }
 function headGround(x, z, n) {
-  const inland = headShore(x) - z;
+  const inland = Math.min(headShore(x) - z, (x - 10) * 1.3);
   if (inland < -2) return -2;
   const rise = smooth(-2, 14, inland);
   return -1.2 + rise * (3.6 + n(x * 0.06 + z * 0.04) * 3.2) + smooth(30, 60, inland) * 2;
@@ -309,9 +309,9 @@ function buildHeadland(lite) {
   for (let i = 0; i < gp.count; i++) gp.setY(i, G(gp.getX(i), gp.getZ(i)));
   const granite = col(0x8a7a76);
   const graniteDark = col(0x5c5150);
-  const moss = col(0x45562c);
-  const grass = col(0x6b7a3a);
-  const heath = col(0x5a4a3a);
+  const moss = col(0x2c3a1e);
+  const grass = col(0x45502a);
+  const heath = col(0x4a3a2e);
   const tmp = new THREE.Color();
   kit.add(ground, (v) => {
     const k = n(v.x * 0.31 + v.z * 0.17);
@@ -333,8 +333,8 @@ function buildHeadland(lite) {
 
   /* Trees. Height-field entries go into `trees` for the reflection. */
   const trees = [];
-  const spruceC = col(0x1b3527);
-  const spruceTip = col(0x2f5236);
+  const spruceC = col(0x122419);
+  const spruceTip = col(0x24402a);
   const spruce = (x, z, H) => {
     const g = G(x, z) - 0.2;
     const W = H * (0.2 + r() * 0.05);
@@ -353,7 +353,7 @@ function buildHeadland(lite) {
     kit.add(trunk, 0x3a2a20);
     trees.push({ x, z, g, H, W, birch: false, tiers });
   };
-  const birchLeaf = [col(0x6f9a3e), col(0x89a94a), col(0x5c8a3a)];
+  const birchLeaf = [col(0x4f6e2e), col(0x5f7a34), col(0x44652c)];
   const bark = col(0xe8e4da);
   const barkDark = col(0x2a2622);
   const birch = (x, z, H) => {
@@ -518,12 +518,12 @@ function buildMist(noise, sunAz, timeU, lite) {
     for (let k = 0; k < 4; k++) seed.push(sd, a, w / 40);
     idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
   };
-  band(0, -0.6, -117, 640, 9, 0.85);   // along the near forest
-  band(-50, -0.6, -84, 70, 4, 0.55);   // round the holme
-  band(10, -0.6, -172, 900, 12, 0.7);  // the far shore
+  band(0, -0.6, -117, 640, 4.2, 0.42); // along the near forest
+  band(-50, -0.6, -84, 70, 2.6, 0.35); // round the holme
+  band(10, -0.6, -172, 900, 6, 0.4);   // the far shore
   const wisps = lite ? 4 : 7;
   for (let i = 0; i < wisps; i++) {
-    band(-60 + r() * 120, -0.8, -26 - i * 11 - r() * 6, 30 + r() * 40, 2.6 + r() * 1.6, 0.32 + r() * 0.2);
+    band(-60 + r() * 120, -0.8, -26 - i * 11 - r() * 6, 30 + r() * 40, 2.2 + r() * 1.2, 0.2 + r() * 0.14);
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
@@ -723,10 +723,10 @@ export function buildShore({ sunDir, noise, timeU, lite = false }) {
       top: 0x2a3550, mist: 0xc99c92, birchTint: 0x48604e,
       ground: (x) => 1.2 + 4.5 * smooth(0.3, 0.9, fbm(landN, x * 0.02 + 7, 3)),
       trees: (x, r) => {
-        const birch = r() < 0.18;
-        return birch ? { birch, H: 7 + r() * 4, W: 2 + r() * 1.2 } : { H: 8 + r() * 7, W: 1.5 + r() * 0.9 };
+        const birch = r() < 0.2;
+        return birch ? { birch, H: 7.5 + r() * 3, W: 2.6 + r() * 1.2 } : { H: 9 + r() * 3.5, W: 2.1 + r() * 0.8 };
       },
-      gap: (x, r) => 1.3 + r() * 2.2
+      gap: (x, r) => 1.6 + r() * 2.4
     },
     {
       name: 'near forest', z: -121, x0: -320, x1: 320, step: 0.2, base: -0.5, seed: 31, mistH: 3.2, midMix: 0.3, glow: 0.55,
@@ -734,10 +734,10 @@ export function buildShore({ sunDir, noise, timeU, lite = false }) {
       ground: (x) => 0.5 + 2.2 * smooth(0.3, 0.9, fbm(landN, x * 0.03 + 21, 3)),
       trees: (x, r) => {
         if (x > 8 && x < 150 && r() < 0.6) return null; // the headland stands in front here
-        const birch = r() < 0.22;
-        return birch ? { birch, H: 9 + r() * 5, W: 2.4 + r() * 1.4 } : { H: 10 + r() * 9, W: 1.8 + r() * 1.1 };
+        const birch = r() < 0.24;
+        return birch ? { birch, H: 10 + r() * 3.5, W: 3.2 + r() * 1.4 } : { H: 11.5 + r() * 4.5, W: 2.5 + r() * 0.9 };
       },
-      gap: (x, r) => 1.1 + r() * 2.4
+      gap: (x, r) => 1.7 + r() * 2.6
     },
     {
       name: 'holme', z: -86, x0: -76, x1: -26, step: 0.15, base: -0.7, seed: 41, mistH: 1.6, midMix: 0.25, glow: 0.4,
@@ -746,7 +746,7 @@ export function buildShore({ sunDir, noise, timeU, lite = false }) {
         const k = 1 - ((x + 51) / 24) ** 2;
         return k > 0 ? -0.6 + 2.6 * Math.sqrt(k) + Math.sin(x * 1.3) * 0.15 : -0.7;
       },
-      trees: (x, r) => (Math.abs(x + 51) < 15 && r() < 0.85 ? { H: 6 + r() * 7 * (1 - Math.abs(x + 51) / 18), W: 1.3 + r() * 0.7 } : null),
+      trees: (x, r) => (Math.abs(x + 51) < 15 && r() < 0.85 ? { H: 6 + r() * 6 * (1 - Math.abs(x + 51) / 18), W: 1.7 + r() * 0.7 } : null),
       gap: (x, r) => 1.2 + r() * 2.2
     }
   ];

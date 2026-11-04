@@ -261,9 +261,7 @@ function stoneTexture(THREE) {
 
 /** Re-maps a (world-space) geometry's UVs: box projection, or around a tower's axis */
 function worldUV(geo, scale, cyl) {
-  const p = geo.attributes.position;
-  const n = geo.attributes.normal;
-  const uv = geo.attributes.uv;
+  const { position: p, normal: n, uv } = geo.attributes;
   if (!p || !n || !uv) return;
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i);
@@ -909,8 +907,9 @@ export function buildGlass(THREE) {
   // additive quad is blended whether it adds anything or not, and this is a
   // phone-first game, so the bars are sized to what actually reads.
   [
-    { w: 2.6, l: 34, x: -4.2, z: 0, rot: 0.11, a: 0.36 },
-    { w: 1.8, l: 26, x: 4.4, z: -6, rot: -0.08, a: 0.26 }
+    // Faint: they read as glass, not as searchlights over the play
+    { w: 2.4, l: 34, x: -4.2, z: 0, rot: 0.11, a: 0.17 },
+    { w: 1.6, l: 26, x: 4.4, z: -6, rot: -0.08, a: 0.12 }
   ].forEach((b) => {
     const mesh = new THREE.Mesh(
       geo,
@@ -1630,7 +1629,7 @@ function buildLamps(THREE, materials, mergeGeometries) {
     const cu = (i % cols) / cols;
     const cvv = 1 - (Math.floor(i / cols) + 1) / rows;
     const lens = new THREE.CircleGeometry(d.r, SEG);
-    const uv = lens.attributes.uv;
+    const { uv } = lens.attributes;
     for (let k = 0; k < uv.count; k++) uv.setXY(k, cu + uv.getX(k) / cols, cvv + uv.getY(k) / rows);
     flatten(lens).translate(d.x, 0.032, -d.y);
     lensGeos.push(lens.toNonIndexed());

@@ -543,27 +543,44 @@ export function buildRange(rand, { envMap, lite = false } = {}) {
   // blåklocka as a nodding bell.
   const flowers = new Batch();
   const STARS = [[0xf2c230, 0xf7f3e6], [0xf2c230, 0xf7f3e6], [0xe8a820, 0xf0d43a], [0xf7e9a0, 0xe9eef2]];
-  for (let i = 0; i < 230; i++) {
-    const a = rand() * Math.PI * 2;
-    const r = 2.4 + rand() * 22;
-    const fx = Math.cos(a) * r;
-    const fz = Math.sin(a) * r;
-    if (Math.abs(fx) < 1.4 && Math.abs(fz) < 1.8) continue;
-    const h = 0.28 + rand() * 0.2;
+  // In drifts, the way a verge flowers: a patch of daisies here, clover there
+  const flowerAt = (fx, fz, kind) => {
+    const h = 0.26 + rand() * 0.22;
     const lean = [(rand() - 0.5) * 0.5, 0, (rand() - 0.5) * 0.5];
     flowers.put(cyl(0.006, 0.01, h, 3), 0x7c9a48, { at: [fx, h / 2, fz] });
-    const kind = rand();
     if (kind < 0.6) {
       const [eye, tip] = STARS[Math.floor(rand() * STARS.length)];
-      const head = flowerHead(0.05 + rand() * 0.025, kind < 0.4 ? 8 : 5, eye, tip);
+      const head = flowerHead(0.06 + rand() * 0.03, kind < 0.4 ? 8 : 5, eye, tip);
       flowers.put(head, null, { at: [fx, h, fz], rot: lean });
     } else if (kind < 0.8) {
-      flowers.put(new THREE.IcosahedronGeometry(0.03 + rand() * 0.012, 1), 0xc8507a,
-        { at: [fx, h, fz], scale: [1, 1.15, 1], darken: 0.35 });
+      flowers.put(new THREE.IcosahedronGeometry(0.036 + rand() * 0.014, 1), 0xd0588a,
+        { at: [fx, h, fz], scale: [1, 1.15, 1], darken: 0.25 });
     } else {
-      flowers.put(new THREE.ConeGeometry(0.026, 0.05, 6, 1, true), 0x6f62c8,
-        { at: [fx, h - 0.02, fz], rot: [Math.PI + lean[0], 0, lean[2]], darken: 0.3 });
+      flowers.put(new THREE.ConeGeometry(0.032, 0.06, 6, 1, true), 0x7a6ad8,
+        { at: [fx, h - 0.02, fz], rot: [Math.PI + lean[0], 0, lean[2]], darken: 0.25 });
     }
+  };
+  for (let i = 0; i < 64; i++) {
+    const a = rand() * Math.PI * 2;
+    const r = 2.6 + rand() * 22;
+    const cx = Math.cos(a) * r;
+    const cz = Math.sin(a) * r;
+    const kind = rand();
+    const n = 3 + Math.floor(rand() * 6);
+    for (let k = 0; k < n; k++) {
+      const fx = cx + (rand() - 0.5) * 1.6;
+      const fz = cz + (rand() - 0.5) * 1.6;
+      if (Math.abs(fx) < 1.4 && Math.abs(fz) < 1.8) continue;
+      if (Math.abs(fx) < 2.6 && fz < -13.2 && fz > -19) continue;
+      flowerAt(fx, fz, rand() < 0.8 ? kind : rand());
+    }
+  }
+  // …and a few more right where the vista's camera looks down past the gang
+  for (let i = 0; i < 60; i++) {
+    const fx = -3 + rand() * 9;
+    const fz = 3.6 + rand() * 5;
+    if (fx > 2.6 && fx < 3.9 && fz < 3.1) continue;
+    flowerAt(fx, fz, rand());
   }
   const flowerMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide });
   g.add(flowers.mesh(flowerMat));
