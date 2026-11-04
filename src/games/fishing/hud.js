@@ -16,7 +16,12 @@
 const TARGET_ICON = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="1" fill="currentColor"/></svg>';
 const BOOK_ICON = '<svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M3 4.5c2.2-1 4.6-1 7 .6 2.4-1.6 4.8-1.6 7-.6V16c-2.2-1-4.6-1-7 .6-2.4-1.6-4.8-1.6-7-.6Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 5.1v11.5" stroke="currentColor" stroke-width="1.6"/></svg>';
 
-export function buildHud(root, zones, species, bottom) {
+export function buildHud(root, zones, species, bottom, touch) {
+  // Controls are named for the device in hand: a finger drags and taps,
+  // a desktop steers with the mouse or the arrow keys and clicks
+  const steerText = touch ? 'Tre kast. Dra med fingret för att styra draget.'
+    : 'Tre kast. Styr draget med musen eller ←/→.';
+  const tapWord = touch ? 'Tryck' : 'Klicka';
   const ticks = zones.map((z) => `<li style="top:${(z.at / bottom) * 100}%"><span>${z.at} m</span></li>`).join('');
   const bands = species.map((sp) => {
     const top = (sp.min / bottom) * 100;
@@ -51,7 +56,7 @@ export function buildHud(root, zones, species, bottom) {
       <div class="fi-announce" id="fi-announce"><b id="fi-announce-big"></b><span id="fi-announce-sub"></span></div>
       <div class="pb-toast" id="fg-toast"></div>
       <div class="fg-pops" id="fg-pops"></div>
-      <div class="fi-hint" id="fi-hint" hidden><span class="fi-hint-hand"></span><span id="fi-hint-text">Dra åt sidan för att styra draget</span></div>
+      <div class="fi-hint" id="fi-hint" hidden><span class="fi-hint-hand"></span><span>${touch ? 'Dra åt sidan för att styra draget' : 'Flytta musen eller håll ←/→ för att styra'}</span></div>
       <div class="fi-tunna" id="fi-tunna" hidden>I TUNNAN <b id="fi-tunna-n">0</b></div>
     </div>
 
@@ -69,11 +74,11 @@ export function buildHud(root, zones, species, bottom) {
       <div class="pb-panel fi-panel">
         <span class="fi-kicker" id="fi-kicker">2024 · Midnattssol över sjön</span>
         <h2 id="fg-title">Pekkas Fiske</h2>
-        <p id="fg-text">Tre kast. Dra med fingret för att styra draget.</p>
+        <p id="fg-text">${steerText}</p>
         <ul class="fg-steps" id="fg-steps">
           <li><i style="--c:#7fd8e8"></i><b>Ner</b> Väj för fisken — varje fisk du slipper förbi höjer multiplikatorn.</li>
           <li><i style="--c:#f2c14e"></i><b>Upp</b> Nu gäller tvärtom: fånga allt på vägen upp.</li>
-          <li><i style="--c:#5eead4"></i><b>I luften</b> Tryck på fångsten så åker den i tunnan — dubbla poäng.</li>
+          <li><i style="--c:#5eead4"></i><b>I luften</b> ${tapWord} på fångsten så åker den i tunnan — dubbla poäng.</li>
         </ul>
         <div class="pb-scoreline" id="fg-scoreline" hidden></div>
         <div class="fi-stars" id="fi-stars" hidden></div>
@@ -83,6 +88,7 @@ export function buildHud(root, zones, species, bottom) {
           <button class="pb-btn" id="fg-start">Kasta i!</button>
           <button class="fi-btn-ghost" id="fi-book-open">${BOOK_ICON}<span>Fångstdagbok</span><b id="fi-book-count">0/6</b></button>
         </div>
+        ${touch ? '' : '<p class="fi-keys"><kbd>Mellanslag</kbd> kastar i · <kbd>←</kbd><kbd>→</kbd> styr · <kbd>?</kbd> regler</p>'}
       </div>
     </div>
 
@@ -134,7 +140,7 @@ export function buildHud(root, zones, species, bottom) {
     zone: q('#fi-zone'), zoneDepth: q('#fi-zone-depth'), zoneName: q('#fi-zone-name'), zoneSub: q('#fi-zone-sub'),
     phase: q('#fg-phase'), toast: q('#fg-toast'), pops: q('#fg-pops'),
     announce: q('#fi-announce'), announceBig: q('#fi-announce-big'), announceSub: q('#fi-announce-sub'),
-    hint: q('#fi-hint'), hintText: q('#fi-hint-text'),
+    hint: q('#fi-hint'),
     tunna: q('#fi-tunna'), tunnaN: q('#fi-tunna-n'),
     round: q('#fg-round'), roundKicker: q('#fg-round-kicker'), roundNo: q('#fg-round-no'),
     roundHaul: q('#fg-round-haul'), roundMission: q('#fi-round-mission'), roundNext: q('#fi-round-next'),

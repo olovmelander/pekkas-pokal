@@ -17,7 +17,7 @@
  */
 
 import * as THREE from 'three';
-import { patchWaterFog } from './world.js';
+import { patchWaterFog, fogWithReach } from './world.js';
 
 /* ------------------------------------------------------------- geometry kit */
 
@@ -240,6 +240,7 @@ export const SPECIES = [
   {
     id: 'mort',
     name: 'Mört',
+    def: 'mörten', // bestämd form, för "största mörten hittills"
     pts: 100,
     min: 1,
     max: 15,
@@ -260,6 +261,7 @@ export const SPECIES = [
   {
     id: 'abborre',
     name: 'Abborre',
+    def: 'abborren',
     pts: 250,
     min: 4,
     max: 28,
@@ -282,6 +284,7 @@ export const SPECIES = [
   {
     id: 'sik',
     name: 'Sik',
+    def: 'siken',
     pts: 400,
     min: 12,
     max: 40,
@@ -304,6 +307,7 @@ export const SPECIES = [
   {
     id: 'gadda',
     name: 'Gädda',
+    def: 'gäddan',
     pts: 800,
     min: 18,
     max: 52,
@@ -326,6 +330,7 @@ export const SPECIES = [
   {
     id: 'lax',
     name: 'Lax',
+    def: 'laxen',
     pts: 1500,
     min: 30,
     max: 57,
@@ -348,6 +353,7 @@ export const SPECIES = [
   {
     id: 'pekka',
     name: 'PEKKAGÄDDAN',
+    def: 'Pekkagäddan',
     pts: 5000,
     min: 48,
     max: 59,
@@ -590,7 +596,7 @@ function buildJunk(j) {
     }
   }
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75, metalness: 0.2 });
-  material.onBeforeCompile = patchWaterFog;
+  material.onBeforeCompile = fogWithReach(1);
   material.customProgramCacheKey = () => 'fiske-junk';
   return { junk: j, geometry: mergeParts(parts), material };
 }
@@ -737,9 +743,9 @@ export function speciesSvg(sp, known = true) {
   const by = -p.radius((p.x(0) - d.at) / (p.x(0) - p.x(1))) * p.height + 0.04;
   const dorsal = `${d.at},${by} ${d.at - d.w * 0.35},${by - d.h} ${d.at - d.w},${by - d.h * 0.25} ${d.at - d.w},${by}`;
   const id = `fi-g${++svgSeq}`; // unique: the same fish is drawn in several panels
-  const back = known ? hex(sp.back) : '#0b1a24';
-  const belly = known ? hex(sp.belly) : '#14293a';
-  const fin = known ? hex(sp.fin) : '#0b1a24';
+  const back = known ? hex(sp.back) : '#1a3142';
+  const belly = known ? hex(sp.belly) : '#2a4a5e';
+  const fin = known ? hex(sp.fin) : '#1a3142';
   const ex = p.x(sp.snout ? 0.2 : 0.13);
   const ey = -p.radius(0.15) * p.height * 0.3;
   const minX = tx - 0.7;
@@ -749,7 +755,7 @@ export function speciesSvg(sp, known = true) {
       <stop offset="0" stop-color="${back}"/><stop offset="0.62" stop-color="${belly}"/></linearGradient></defs>
     <polygon points="${tail}" fill="${fin}"/>
     <polygon points="${dorsal}" fill="${fin}"/>
-    <polygon points="${top.join(' ')} ${nose},0 ${bot.join(' ')}" fill="url(#${id})"/>
+    <polygon points="${top.join(' ')} ${bot.join(' ')} ${nose},0" fill="url(#${id})"/>
     ${known ? `<circle cx="${ex}" cy="${ey}" r="${sp.eye * 0.75}" fill="${hex(sp.iris)}"/><circle cx="${ex + 0.015}" cy="${ey}" r="${sp.eye * 0.42}" fill="#05080f"/>` : ''}
     ${sp.crown && known ? `<polygon points="0.16,${-p.radius(0.32) * p.height - 0.02} 0.2,${-p.radius(0.32) * p.height - 0.26} 0.28,${-p.radius(0.32) * p.height - 0.12} 0.34,${-p.radius(0.32) * p.height - 0.3} 0.4,${-p.radius(0.32) * p.height - 0.12} 0.48,${-p.radius(0.32) * p.height - 0.26} 0.5,${-p.radius(0.32) * p.height - 0.02}" fill="#ffd34d"/>` : ''}
   </svg>`;

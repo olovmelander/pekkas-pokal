@@ -128,6 +128,11 @@
   transition: opacity 0.35s ease;
 }
 
+/* On a phone the clock steps left of centre to stay clear of ? and mute */
+.pm-ui.pm-tall .pm-clockbox {
+  left: calc(50% - 28px);
+}
+
 .pm-ui[data-phase='idle'] .pm-clockbox,
 .pm-ui[data-phase='over'] .pm-clockbox {
   opacity: 0;
@@ -296,6 +301,16 @@
   transition: transform 0.2s var(--pm-spring), border-color 0.2s;
 }
 
+.pm-ui .pm-dot {
+  position: relative;
+}
+
+.pm-ui .pm-dot::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+}
+
 .pm-ui .pm-dot:hover {
   transform: scale(1.2);
   border-color: rgba(245, 238, 221, 0.8);
@@ -435,7 +450,6 @@
   top: 0;
   bottom: 0;
   width: 50%;
-  transition: background-color 0.35s ease;
 }
 
 .pm-ui .pm-chip-target {
@@ -602,9 +616,11 @@
 }
 
 .pm-ui .pm-hint span {
+  display: -webkit-box;
   overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 1.25;
 }
 
 .pm-ui .pm-delta {
@@ -725,11 +741,12 @@
 
 .pm-ui .pm-btn.nudge {
   border-color: var(--pm-gold);
+  color: var(--pm-gold-hi);
   animation: pm-nudge 1s ease-in-out infinite;
 }
 
 @keyframes pm-nudge {
-  50% { box-shadow: 0 0 0 4px rgba(233, 191, 92, 0.28); }
+  50% { transform: scale(1.05); }
 }
 
 .pm-ui .pm-btn-gold,
@@ -752,13 +769,60 @@
   filter: saturate(0.65) brightness(0.9);
 }
 
+.pm-ui .pm-btn-paint {
+  position: relative;
+}
+
+/* Ready to paint: a halo that breathes. Opacity on a pseudo-element, not an
+   animated box-shadow — inside a backdrop-blurred panel the latter forces
+   a re-blur every frame on a phone. */
+.pm-ui .pm-btn-paint::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: inherit;
+  box-shadow: 0 0 0 4px rgba(233, 191, 92, 0.35), 0 8px 30px rgba(233, 191, 92, 0.55);
+  opacity: 0;
+  pointer-events: none;
+}
+
 .pm-ui .pm-btn-paint.ready {
   filter: none;
+}
+
+.pm-ui .pm-btn-paint.ready::after {
   animation: pm-ready 1.3s ease-in-out infinite;
 }
 
 @keyframes pm-ready {
-  50% { box-shadow: 0 0 0 5px rgba(233, 191, 92, 0.3), 0 10px 34px rgba(233, 191, 92, 0.6); }
+  50% { opacity: 1; }
+}
+
+/* Key hints on the buttons, only where there is a keyboard to press them */
+.pm-ui .pm-btn kbd {
+  display: none;
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  font-family: inherit;
+  font-size: 0.6rem;
+  font-weight: 800;
+  line-height: 1.4;
+  letter-spacing: 0;
+  color: inherit;
+  background: rgba(0, 0, 0, 0.14);
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+  opacity: 0.75;
+}
+
+.pm-ui .pm-btn-ghost kbd {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .pm-ui .pm-btn kbd {
+    display: inline-block;
+  }
 }
 
 /* ------------------------------------------------- callouts, toasts, pops */
@@ -932,6 +996,8 @@
 .pm-ui.pm-wide .pm-overlay[data-card='reveal'] {
   justify-content: flex-end;
   padding-right: 16px;
+  /* below the top bar: the ? and mute buttons and the site's close button */
+  padding-top: max(62px, calc(env(safe-area-inset-top) + 52px));
   background: linear-gradient(270deg, rgba(10, 8, 6, 0.6) 0%, rgba(10, 8, 6, 0) 55%);
 }
 
@@ -966,6 +1032,10 @@
   border-bottom: none;
   padding-bottom: max(20px, env(safe-area-inset-bottom));
   animation-name: pm-sheet-in;
+}
+
+.pm-ui.pm-tall .pm-reveal.show {
+  max-height: 71%;
 }
 
 @keyframes pm-sheet-in {
@@ -1461,6 +1531,23 @@
   font-size: 0.95rem;
 }
 
+/* The way on always stays in reach, however long the verdict scrolls */
+.pm-ui .pm-reveal .pm-btn-gold,
+.pm-ui .pm-gallery .pm-cta,
+.pm-ui .pm-final .pm-cta {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+}
+
+.pm-ui .pm-gallery .pm-cta,
+.pm-ui .pm-final .pm-cta {
+  margin-left: -8px;
+  margin-right: -8px;
+  padding: 10px 8px 0;
+  background: linear-gradient(180deg, rgba(16, 14, 12, 0), rgba(16, 14, 12, 0.96) 40%);
+}
+
 /* The evening's exhibition */
 
 .pm-ui .pm-final.show {
@@ -1595,11 +1682,12 @@
   padding: 6px;
   cursor: zoom-in;
   background-clip: padding-box;
-  transition: transform 0.25s var(--pm-out);
+  transition: filter 0.2s ease, box-shadow 0.2s ease;
 }
 
 .pm-ui .pm-gal .pm-gilt:hover {
-  transform: translateY(-3px) rotate(-0.6deg);
+  filter: brightness(1.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 240, 200, 0.6), 0 0 0 2px rgba(233, 191, 92, 0.5), 0 14px 30px rgba(0, 0, 0, 0.55);
 }
 
 .pm-ui .pm-zoom.show {
@@ -1632,9 +1720,18 @@
   justify-content: center;
 }
 
-/* The ? button sits next to the mute, clear of the site's close button */
+/* The ? button sits next to the mute, clear of the site's close button.
+   Both are drawn at the shared 34px but take a 44px tap. */
 .pm-ui .pm-info {
   z-index: 40;
+}
+
+.pm-ui .pb-info::after,
+.pm-ui .pb-mute::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
 }
 
 /* ------------------------------------------------------- small screens */
@@ -1667,8 +1764,13 @@
     margin-top: 0;
   }
 
-  .pm-ui .pm-btn {
-    min-height: 40px;
+  .pm-ui.pm-wide .pm-diptych {
+    max-width: 270px;
+    margin-inline: auto;
+  }
+
+  .pm-ui.pm-wide .pm-rv-title {
+    font-size: 1.6rem;
   }
 
   .pm-ui.pm-wide .pm-ref {

@@ -203,8 +203,12 @@ function patchRW(mat, wetDark, wetRough) {
   mat.customProgramCacheKey = () => `lr-rw-${wetDark}-${wetRough}`;
 }
 
-/** Raw, wet terracotta on the wheel. */
-export function clayMaterial(maps) {
+/**
+ * Raw, wet terracotta on the wheel. `lite` (phones) drops the sheen lobe —
+ * the clay fills much of a phone screen and the wet clearcoat film is the
+ * part that sells it.
+ */
+export function clayMaterial(maps, lite = false) {
   const mat = new THREE.MeshPhysicalMaterial({
     color: 0xb4693f,
     map: maps.albedo,
@@ -214,7 +218,7 @@ export function clayMaterial(maps) {
     metalness: 0,
     clearcoat: 0.7,
     clearcoatRoughness: 0.2,
-    sheen: 0.45,
+    sheen: lite ? 0 : 0.45,
     sheenRoughness: 0.55,
     sheenColor: new THREE.Color(0xffc49a),
     vertexColors: true

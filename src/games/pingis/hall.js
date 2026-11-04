@@ -334,7 +334,11 @@ function barrierTexture(label, sub) {
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#f6ead6';
   ctx.letterSpacing = '8px';
-  ctx.font = '700 62px "Schibsted Grotesk", "Space Grotesk", Inter, sans-serif';
+  let size = 64;
+  do {
+    ctx.font = `700 ${size}px "Schibsted Grotesk", "Space Grotesk", Inter, sans-serif`;
+    size -= 2;
+  } while (size > 20 && ctx.measureText(label).width > w - 70);
   ctx.fillText(label, w / 2 + 4, h * 0.44);
   ctx.letterSpacing = '6px';
   ctx.font = '700 24px Inter, sans-serif';
@@ -511,7 +515,7 @@ const FloorReflectShader = {
     tDiffuse: { value: null },
     textureMatrix: { value: null },
     tPlanks: { value: null },
-    uStrength: { value: 0.5 }
+    uStrength: { value: 0.8 }
   },
   vertexShader: /* glsl */ `
     uniform mat4 textureMatrix;
@@ -553,29 +557,36 @@ const FloorReflectShader = {
 /* -------------------------------------------------------- merging helper */
 
 /**
- * Bake the hall's static props into one mesh per material. The room is a
- * few hundred little boxes; a phone GPU runs out of draw calls long before
- * it runs out of triangles, and the floor mirror renders the room twice.
+ * Bake static props into one mesh per material. The room is a few hundred
+ * little boxes; a phone GPU runs out of draw calls long before it runs out
+ * of triangles, and the floor mirror renders the room twice. `shallow`
+ * merges only a group's own meshes — how each joint of a figure is baked
+ * without welding the joints below it.
  */
-function mergeStatic(root) {
+function mergeStatic(root, shallow = false) {
   root.updateMatrixWorld(true);
   const inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
   const buckets = new Map();
   const victims = [];
   const m = new THREE.Matrix4();
-  root.traverse((o) => {
+  const visit = (o) => {
     if (!o.isMesh || o.isInstancedMesh || o.userData.keep || Array.isArray(o.material)) return;
-    if (o.material.transparent) return;
+    if (o.matrixWorld.determinant() < 0) return; // mirrored: baking would flip its winding
     const g = o.geometry;
+    // Transparent glows merge too — additive light has no draw order to
+    // keep — but only with others of the same material and render order.
     const key = [
       o.material.uuid,
       g.index ? 'i' : 'n',
       Object.keys(g.attributes).sort().join(','),
       o.castShadow ? 'c' : '',
-      o.receiveShadow ? 'r' : ''
+      o.receiveShadow ? 'r' : '',
+      o.renderOrder
     ].join('|');
     if (!buckets.has(key)) {
-      buckets.set(key, { material: o.material, cast: o.castShadow, receive: o.receiveShadow, geos: [] });
+      buckets.set(key, {
+        material: o.material, cast: o.castShadow, receive: o.receiveShadow, order: o.renderOrder, geos: []
+      });
     }
     m.multiplyMatrices(inv, o.matrixWorld);
     const gg = g.clone();
@@ -583,7 +594,9 @@ function mergeStatic(root) {
     gg.applyMatrix4(m);
     buckets.get(key).geos.push(gg);
     victims.push(o);
-  });
+  };
+  if (shallow) root.children.slice().forEach(visit);
+  else root.traverse(visit);
   const usedGeos = new Set();
   victims.forEach((o) => {
     o.removeFromParent();
@@ -597,6 +610,7 @@ function mergeStatic(root) {
     const mesh = new THREE.Mesh(merged, b.material);
     mesh.castShadow = b.cast;
     mesh.receiveShadow = b.receive;
+    mesh.renderOrder = b.order;
     root.add(mesh);
   });
 }
@@ -659,6 +673,36 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
     group.add(reflector);
     refs.reflector = reflector;
   }
+
+  /* Phones get the cheap version of the lacquer: a stretched glow on the
+     floor where each pendant's mirror image would be — the reflection a
+     glance actually registers — moved with the camera every frame. */
+  const fakes = [];
+  if (tier !== 'high') {
+    const streakMat = new THREE.MeshBasicMaterial({
+      map: glow, color: 0xffd9a0, transparent: true, opacity: 0.32,
+      depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false
+    });
+    [[0, 3.24, -1.05], [0, 3.24, 0], [-3, 3.24, -3.2], [3, 3.24, -3.2]].forEach(([x, y, z]) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), streakMat);
+      m.rotation.order = 'YXZ';
+      m.rotation.x = -Math.PI / 2;
+      m.renderOrder = 1;
+      group.add(m);
+      fakes.push({ m, src: new THREE.Vector3(x, y, z) });
+    });
+  }
+  const toFloor = new THREE.Vector3();
+  const updateReflections = (cam) => {
+    fakes.forEach(({ m, src }) => {
+      // Where the line from the eye to the lamp's mirror image meets the floor
+      const t = cam.y / (cam.y + src.y);
+      toFloor.set(src.x - cam.x, 0, src.z - cam.z).multiplyScalar(t);
+      m.position.set(cam.x + toFloor.x, 0.004, cam.z + toFloor.z);
+      m.rotation.y = Math.atan2(toFloor.x, toFloor.z);
+      m.scale.set(0.28, 1.1, 1);
+    });
+  };
 
   /* Walls: tongue-and-groove above a dark wainscot and a rail */
   const wallTex = boardTexture(0x9c8c6c, { boards: 10, seed: 5, groove: 0.22, repeat: [9, 1] });
@@ -728,28 +772,22 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
   addWindow(1, 0.3);
 
   /* Wall sconces between the windows: warm accents the bloom picks up */
-  refs.sconces = [];
   const sconceGlow = new THREE.MeshBasicMaterial({
     map: glow, color: 0xffb070, transparent: true, opacity: 0.55,
     depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false
   });
+  const sconceCup = lambert(0xd9c9a0, { side: THREE.DoubleSide });
   const sconceBulb = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 2.4, 1.4), toneMapped: false });
   [[-1, -4.2], [-1, -1.65], [1, -3.1], [1, -1.0]].forEach(([side, z]) => {
     const x = side * (HALL_W / 2 - 0.08);
-    const cup = add(new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.05, 0.14, 10, 1, true), lambert(0xd9c9a0, { side: THREE.DoubleSide })), x, 2.55, z);
-    cup.userData.keep = true;
-    const bulb = add(new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), sconceBulb), x, 2.58, z, group);
-    bulb.userData.keep = true;
-    const halo = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.5), sconceGlow);
-    halo.position.set(x - side * 0.03, 2.62, z);
+    add(new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.05, 0.14, 10, 1, true), sconceCup), x, 2.55, z);
+    add(new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), sconceBulb), x, 2.58, z);
+    const halo = add(new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.5), sconceGlow), x - side * 0.03, 2.62, z);
     halo.rotation.y = -side * Math.PI / 2;
     halo.renderOrder = 3;
-    group.add(halo);
-    refs.sconces.push(bulb);
   });
 
   /* Pendant lamps over the table — the hall's dominant light, drawn */
-  refs.lamps = [];
   refs.lampApex = [];
   const shadeMat = standard(0x1d5a43, 0.38, { side: THREE.DoubleSide, metalness: 0.3 });
   const cordMat = lambert(0x1a1611);
@@ -763,20 +801,18 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
       g.add(cord);
       const shade = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.17, 20, 1, true), shadeMat);
       shade.position.y = 3.32;
-      shade.userData.keep = true;
       g.add(shade);
       const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), bulbMat);
       bulb.position.y = 3.24;
-      bulb.userData.keep = true;
       g.add(bulb);
     }
     if (cone) {
-      const mat = coneMaterial(0xffe2b0, 0.075 * coneI);
+      const mat = coneMaterial(0xffe2b0, 0.11 * coneI);
       const c = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.62, 2.1, 28, 1, true), mat);
       c.position.y = 2.15;
       c.renderOrder = 4;
       g.add(c);
-      refs.lampMats.push({ mat, base: 0.075 * coneI });
+      refs.lampMats.push({ mat, base: 0.11 * coneI });
       refs.lampApex.push(new THREE.Vector3(x, 3.22, z));
     }
     if (pool) {
@@ -791,9 +827,7 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
       g.add(p);
       refs.poolMats.push({ mat: pm, base: 0.05 });
     }
-    group.add(g);
-    refs.lamps.push(g);
-    return g;
+    statics.add(g);
   };
   // The nearest pendant hangs over the player's head, out of frame: its
   // fixture would float as a pale ellipse over the HUD and its cone would
@@ -820,12 +854,15 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
   const edgeMat = standard(0xffffff, 0.45, { map: srgbTexture(edgeCv[0]) });
   const topMat = standard(0xffffff, 0.34, { map: tableTexture() });
   refs.tableTopMat = topMat;
-  const top = new THREE.Mesh(
-    new THREE.BoxGeometry(T.width, 0.045, T.length),
-    [edgeMat, edgeMat, topMat, standard(0x0c2440, 0.8), edgeMat, edgeMat]
-  );
-  top.position.y = T.height - 0.0225;
-  top.castShadow = true;
+  // The slab in the edge paint, the playing surface as its own plane: one
+  // material per mesh, so the slab bakes in with the rest of the table.
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(T.width, 0.045, T.length), edgeMat);
+  slab.position.y = T.height - 0.0225;
+  slab.castShadow = true;
+  table.add(slab);
+  const top = new THREE.Mesh(new THREE.PlaneGeometry(T.width, T.length), topMat);
+  top.rotation.x = -Math.PI / 2;
+  top.position.y = T.height + 0.0004;
   top.receiveShadow = true;
   table.add(top);
 
@@ -879,6 +916,7 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
   );
   net.position.y = T.height + T.netH / 2;
   net.renderOrder = 2;
+  net.userData.keep = true; // its vertices shiver after a net ball
   table.add(net);
   refs.net = net;
   refs.netBase = Float32Array.from(net.geometry.attributes.position.array);
@@ -975,8 +1013,7 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
     const c = new THREE.Mesh(geo, velvetMat(6));
     c.position.set(s * (OPEN - 0.42), (OPEN_TOP + STAGE_H) / 2, STAGE_Z - 0.5);
     c.scale.x = -s;
-    c.userData.keep = true; // mirrored: merging would flip its winding
-    group.add(c);
+    statics.add(c);
   });
   // The valance (kappa) across the top of the opening, with a gold fringe
   {
@@ -986,24 +1023,21 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
     add(new THREE.Mesh(new THREE.BoxGeometry(OPEN * 2 - 0.1, 0.035, 0.05), goldMat), 0, OPEN_TOP - 0.35, STAGE_Z - 0.3);
   }
   // Stage lights on the header bar
-  refs.stageLights = [];
+  const canMat = lambert(0x15171c);
   const spotGlow = new THREE.MeshBasicMaterial({
     map: glow, color: 0xffd9a0, transparent: true, opacity: 0.5,
     depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false
   });
   [-2.4, -0.8, 0.8, 2.4].forEach((x) => {
-    const can = add(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.2, 10), lambert(0x15171c)), x, OPEN_TOP - 0.5, STAGE_Z - 0.55);
+    const can = add(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.2, 10), canMat), x, OPEN_TOP - 0.5, STAGE_Z - 0.55);
     can.rotation.x = -0.6;
-    const halo = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.5), spotGlow);
-    halo.position.set(x, OPEN_TOP - 0.56, STAGE_Z - 0.44);
+    const halo = add(new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.5), spotGlow), x, OPEN_TOP - 0.56, STAGE_Z - 0.44);
     halo.renderOrder = 3;
-    group.add(halo);
   });
   // A warm wash down onto the stage from those lights
   const stageWash = new THREE.PointLight(0xffc58a, 2.2, 6, 2);
   stageWash.position.set(0, OPEN_TOP - 0.6, STAGE_Z - 0.4);
   group.add(stageWash);
-  refs.stageWash = stageWash;
 
   /* The house sign over the back curtain — Olympia has carried that name
      since 1938, and the gable above the stage is where a hall puts it. */
@@ -1029,7 +1063,6 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
     const signLamp = new THREE.PointLight(0xff9c6a, 1.4, 5, 2);
     signLamp.position.set(0, 2.1, BACK + 0.9);
     group.add(signLamp);
-    refs.sign = sign;
   }
 
   /* Anundsjö IF's pennant, hung to the right of the house sign.
@@ -1094,13 +1127,13 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
   /* Pekkas bunting strung across the room: one instanced draw */
   {
     const flagGeo = new THREE.BufferGeometry();
-    flagGeo.setAttribute('position', new THREE.Float32BufferAttribute([-0.1, 0, 0, 0.1, 0, 0, 0, -0.26, 0], 3));
+    flagGeo.setAttribute('position', new THREE.Float32BufferAttribute([-0.075, 0, 0, 0.075, 0, 0, 0, -0.2, 0], 3));
     flagGeo.setAttribute('normal', new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1, 0, 0, 1], 3));
     const strings = [
-      [-4.4, 3.45, -3.9, 4.4, 3.45, -3.9],
-      [-4.4, 3.5, -1.6, 4.4, 3.5, -1.6],
-      [-4.4, 3.35, -5.2, -1.2, 3.6, -0.4],
-      [4.4, 3.35, -5.2, 1.2, 3.6, -0.4]
+      [-4.4, 3.75, -3.9, 4.4, 3.75, -3.9],
+      [-4.4, 3.8, -1.6, 4.4, 3.8, -1.6],
+      [-4.4, 3.7, -5.2, -1.2, 3.85, -0.4],
+      [4.4, 3.7, -5.2, 1.2, 3.85, -0.4]
     ];
     const per = 22;
     const flags = new THREE.InstancedMesh(flagGeo, lambert(0xffffff, { side: THREE.DoubleSide }), strings.length * per);
@@ -1110,13 +1143,13 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
     const e = new THREE.Euler();
     const s = new THREE.Vector3(1, 1, 1);
     const p = new THREE.Vector3();
-    const lineMat = new THREE.LineBasicMaterial({ color: 0x2a2018 });
+    const segs = [];
     let n = 0;
     strings.forEach(([x0, y0, z0, x1, y1, z1]) => {
       const pts = [];
       for (let i = 0; i <= per; i++) {
         const k = i / per;
-        p.set(x0 + (x1 - x0) * k, y0 + (y1 - y0) * k - Math.sin(k * Math.PI) * 0.42, z0 + (z1 - z0) * k);
+        p.set(x0 + (x1 - x0) * k, y0 + (y1 - y0) * k - Math.sin(k * Math.PI) * 0.3, z0 + (z1 - z0) * k);
         pts.push(p.clone());
         if (i === per) break;
         e.set((rand() - 0.5) * 0.3, Math.atan2(x1 - x0, z1 - z0) + Math.PI / 2, (rand() - 0.5) * 0.15);
@@ -1126,8 +1159,12 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
         flags.setColorAt(n, cols[n % 3]);
         n++;
       }
-      group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lineMat));
+      for (let i = 1; i < pts.length; i++) segs.push(pts[i - 1], pts[i]);
     });
+    group.add(new THREE.LineSegments(
+      new THREE.BufferGeometry().setFromPoints(segs),
+      new THREE.LineBasicMaterial({ color: 0x2a2018 })
+    ));
     flags.count = n;
     group.add(flags);
   }
@@ -1220,15 +1257,17 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
     });
     statics.add(g);
   };
-  for (let i = 0; i < 6; i++) {
+  // Only as far forward as the wide lens sees them well: a spectator right
+  // beside the camera is a blurred giant at the edge of the frame.
+  for (let i = 0; i < 4; i++) {
     const z = -2.25 + i * 0.62;
     chair(-3.55, z, Math.PI / 2 - 0.2);
     if (i !== 2) refs.seats.push({ x: -3.55, y: 0.45, z, ry: Math.PI / 2 - 0.2, pose: 'chair' });
   }
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 4; i++) {
     const z = -2.5 + i * 0.62;
     chair(3.55, z, -Math.PI / 2 + 0.2);
-    if (i !== 3) refs.seats.push({ x: 3.55, y: 0.45, z, ry: -Math.PI / 2 + 0.2, pose: 'chair' });
+    if (i !== 1) refs.seats.push({ x: 3.55, y: 0.45, z, ry: -Math.PI / 2 + 0.2, pose: 'chair' });
   }
   // Along the front lip of the stage, legs dangling, facing the table.
   // Staggered a little in depth: a row of identical heads at one z reads
@@ -1244,7 +1283,7 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
   });
 
   mergeStatic(statics);
-  return { group, refs };
+  return { group, refs, updateReflections };
 }
 
 /* -------------------------------------------------------------- trophies */
@@ -1308,7 +1347,6 @@ export function buildPlayer(shirt, opts = {}) {
   const shirtMat = standard(shirt, 0.78);
   const skinMat = standard(skin, 0.58);
   const shortsMat = standard(shortsColor, 0.82);
-  const sockMat = standard(0xf0ece2, 0.9);
   const shoeMat = standard(0x1b1e26, 0.5);
   const whiteMat = standard(0xf2efe6, 0.7);
   const hairMat = standard(hairColor, 0.85);
@@ -1335,7 +1373,7 @@ export function buildPlayer(shirt, opts = {}) {
     knee.position.y = -0.42;
     hip.add(knee);
     knee.add(capsule(0.056, 0.3, skinMat, -0.19));
-    const sock = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.056, 0.11, 10), sockMat);
+    const sock = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.056, 0.11, 10), whiteMat);
     sock.position.y = -0.34;
     knee.add(sock);
     const shoe = shadow(new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.14, 3, 8), shoeMat));
@@ -1394,8 +1432,8 @@ export function buildPlayer(shirt, opts = {}) {
   jaw.scale.set(1, 0.8, 1);
   jaw.position.set(0, 0.06, -0.02);
   headG.add(jaw);
-  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.118, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.52), hairMat);
-  hair.scale.set(0.95, 1.08, 1.04);
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.118, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.6), hairMat);
+  hair.scale.set(0.96, 1.08, 1.05);
   hair.position.set(0, 0.135, 0.008);
   hair.rotation.x = 0.22;
   headG.add(hair);
@@ -1424,7 +1462,7 @@ export function buildPlayer(shirt, opts = {}) {
   nose.rotation.x = -Math.PI / 2 - 0.5;
   nose.position.set(0, 0.105, -0.112);
   headG.add(nose);
-  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.008, 0.01), standard(0x7a3a34, 0.6));
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.008, 0.01), darkMat);
   mouth.position.set(0, 0.058, -0.098);
   headG.add(mouth);
   // Headband in the club colour — the detail that says "athlete"
@@ -1438,9 +1476,9 @@ export function buildPlayer(shirt, opts = {}) {
     const shoulder = new THREE.Group();
     shoulder.position.set(side * 0.22, 0.36, 0);
     torso.add(shoulder);
-    const sleeve = shadow(new THREE.Mesh(new THREE.SphereGeometry(0.072, 12, 8), shirtMat));
-    sleeve.scale.set(1, 1.15, 1);
-    sleeve.position.y = -0.03;
+    // A T-shirt sleeve: a short tube down the upper arm, not a ball on the shoulder
+    const sleeve = shadow(new THREE.Mesh(new THREE.CapsuleGeometry(0.06, 0.07, 4, 10), shirtMat));
+    sleeve.position.y = -0.055;
     shoulder.add(sleeve);
     shoulder.add(capsule(0.044, 0.18, skinMat, -0.13));
     const elbow = new THREE.Group();
@@ -1451,7 +1489,7 @@ export function buildPlayer(shirt, opts = {}) {
     hand.scale.set(0.9, 1.15, 0.75);
     hand.position.y = -0.28;
     elbow.add(hand);
-    return { shoulder, elbow, hand };
+    return { shoulder, elbow };
   };
   refs.armL = makeArm(-1);
   refs.armR = makeArm(1);
@@ -1485,6 +1523,12 @@ export function buildPlayer(shirt, opts = {}) {
   refs.armR.shoulder.rotation.z = -0.42;
   refs.armR.elbow.rotation.x = 0.5;
 
+  // Bake each joint's own pieces together: 44 meshes become ~25 draws
+  [refs.legL, refs.legR, refs.armL, refs.armR].forEach((limb) => {
+    Object.values(limb).forEach((j) => mergeStatic(j, true));
+  });
+  mergeStatic(torso, true);
+  mergeStatic(headG, true);
   return { group: g, refs };
 }
 
@@ -1521,6 +1565,7 @@ export function buildPaddle(opts = {}) {
   blade.position.y = 0.112; // clear of the hand, as a blade sits
   blade.castShadow = true;
   g.add(blade);
+  mergeStatic(g, true);
   g.userData.rubber = red;
   return g;
 }

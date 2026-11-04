@@ -116,10 +116,12 @@ function framing(aspect) {
   return {
     fov: lerp(64, 50, w),
     dist: lerp(11.5, 13.8, w),
-    follow: lerp(0.55, 0.28, w),
-    look: lerp(0.75, 0.4, w),
-    idleCam: wide ? [-6.6, 3.4, 14.8] : [-3.2, 3.0, 13.5],
-    idleLook: wide ? [-3.8, 2.3, 0] : [0.6, 1.5, 0]
+    follow: lerp(0.62, 0.28, w),
+    look: lerp(0.88, 0.4, w),
+    // Start/end screens: on a wide screen the panel sits left and the boat
+    // right; in portrait the panel docks low and the boat and sun sit above
+    idleCam: wide ? [-6.6, 3.4, 14.8] : [-3.2, 3.4, 13.5],
+    idleLook: wide ? [-3.8, 2.3, 0] : [0.4, -3.4, 0]
   };
 }
 
@@ -133,10 +135,9 @@ export async function createFishing(container) {
   const hudHost = document.createElement('div');
   hudHost.className = 'pb-ui fg-ui fiske-ui';
   container.appendChild(hudHost);
-  const hud = buildHud(hudHost, ZONES, SPECIES, BOTTOM);
-
   const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const coarse = window.matchMedia?.('(pointer: coarse)').matches;
+  const hud = buildHud(hudHost, ZONES, SPECIES, BOTTOM, !!coarse);
   // A simple quality tier: touch or small screens get fewer particles,
   // less kelp and a lower pixel-ratio ceiling. Adaptive resolution below
   // steps the ratio down further if frames still run long.
@@ -268,7 +269,7 @@ export async function createFishing(container) {
     const f = newFish(si, kind);
     if (!f) return;
     let z = (Math.random() - 0.5) * 1.4;
-    if (kind === 'deco') z = Math.random() < 0.5 ? 3.5 + Math.random() * 2.5 : -3.5 - Math.random() * 6;
+    if (kind === 'deco') z = Math.random() < 0.4 ? 2.5 + Math.random() * 1.5 : -3.5 - Math.random() * 6;
     else if (kind === 'far') {
       z = -11 - Math.random() * 6;
       f.speed *= 0.6;
@@ -378,6 +379,7 @@ export async function createFishing(container) {
     reelChain: 0,
     lastCatchT: -9,
     tossLeft: 0,
+    tossDone: false,
     tunnaN: 0,
     slow: 1,
     slowOn: false,
@@ -579,7 +581,7 @@ export async function createFishing(container) {
     sfx.dodge(state.dodges);
     // A close shave pays extra — the reason to thread a gap rather than
     // swing wide around everything
-    if (Math.abs(dx) < rx + 0.9) {
+    if (Math.abs(dx) < rx + 0.6) {
       state.mult = Math.min(10, state.mult + 0.25);
       sfx.nearMiss();
       popScore('SNÄVT!', f.mesh.position, 'near');
@@ -674,7 +676,7 @@ export async function createFishing(container) {
         later(() => announce('NY ART!', `${f.sp.name} i fångstdagboken`, 'gold'), state.reelChain >= 2 ? 650 : 0);
         sfx.announce(4);
       } else if (logged.record) {
-        toast(`Största ${f.sp.name.toLowerCase()}n hittills: ${fmtKg(f.kg)}`);
+        toast(`Största ${f.sp.def} hittills: ${fmtKg(f.kg)}`);
       }
     }
     checkMission();
@@ -682,7 +684,9 @@ export async function createFishing(container) {
 
   function startToss() {
     state.phase = 'toss';
+    state.tossDone = false;
     hud.zone.classList.remove('show');
+    hud.mult.classList.remove('show');
     state.tapChain = 0;
     state.tunnaN = 0;
     state.slow = 1;
@@ -710,7 +714,7 @@ export async function createFishing(container) {
       later(endCast, 1100);
       return;
     }
-    setPhaseLabel('TRYCK PÅ FISKEN — i tunnan för dubbelt');
+    setPhaseLabel(`${coarse ? 'TRYCK' : 'KLICKA'} PÅ FISKEN — i tunnan för dubbelt`);
     hud.tunna.hidden = false;
     hud.tunnaN.textContent = '0';
     // Cut straight to the above-water framing: watching this from under the
@@ -761,12 +765,15 @@ export async function createFishing(container) {
   }
 
   function endCast() {
+    if (state.phase !== 'toss') return;
     setPhaseLabel('');
     hud.mult.classList.remove('show');
     hud.tunna.hidden = true;
     state.slowOn = false;
     hudHost.classList.remove('fi-slow');
     progress.bestCast = Math.max(progress.bestCast, state.castScore);
+    // Anything still arcing toward the tunna is in it by now
+    state.caught.forEach((f) => setVisible(f, false));
     if (state.castNo >= CASTS_PER_GAME) {
       gameOver();
       return;
@@ -774,7 +781,6 @@ export async function createFishing(container) {
     const finished = state.castNo;
     const haul = state.caught.length;
     const pts = state.castScore;
-    state.caught.forEach((f) => setVisible(f, false));
     state.castNo++;
     state.phase = 'between';
     state.betweenT = 0;
@@ -820,6 +826,7 @@ export async function createFishing(container) {
     hud.start.textContent = 'Fiska igen';
     renderBook(hud, progress, SPECIES, speciesSvg, fmt, fmtKg);
     hud.overlay.classList.add('show');
+    hudHost.classList.add('fi-menu', 'fi-over');
   }
 
   function startGame() {
@@ -840,6 +847,7 @@ export async function createFishing(container) {
     hud.haul.hidden = true;
     hud.steps.hidden = false;
     hud.overlay.classList.remove('show');
+    hudHost.classList.remove('fi-menu', 'fi-over');
     setBook(false);
     hideRoundCard();
     startCast();
@@ -965,9 +973,12 @@ export async function createFishing(container) {
       announce(TAP_WORDS[Math.min(state.tapChain, TAP_WORDS.length - 1)], `kedja ×${chainBonus.toFixed(2).replace(/0$/, '')}`);
       sfx.announce(state.tapChain + 1);
     }
-    // Arc it into the tunna
-    const target = boat.position.x + 1.75;
-    bestF.air.vx = (target - pos.x) * 2.2;
+    // Arc it into the tunna: launch at 7.5 m/s up and solve the flight time
+    // to the barrel's rim, so the horizontal speed lands it dead centre
+    // (y = y0 + 7.5t − 10t², rim at 1.3 m)
+    const T = (7.5 + Math.sqrt(56.25 + 40 * Math.max(0, pos.y - 1.3))) / 20;
+    bestF.air.vx = (boat.position.x + 1.75 - pos.x) / T;
+    bestF.air.vz = -pos.z / T;
     bestF.air.vy = 7.5;
     bestF.air.spin *= 2.2;
     checkMission();
@@ -975,6 +986,8 @@ export async function createFishing(container) {
   }
 
   function finishToss() {
+    if (state.tossDone) return; // a tap and a splash can land on the same frame
+    state.tossDone = true;
     const all = state.caught.length > 0 && state.caught.every((f) => f.air && f.air.done === 'hit');
     if (all) state.rec.perfect = true;
     if (all && state.caught.length > 1) {
@@ -1301,7 +1314,10 @@ export async function createFishing(container) {
     seabed.visible = under && eyeD > 30;
     snow.points.visible = under;
 
-    volume.uniforms.uMid.value.copy(scene.fog.color);
+    // The volume is a direction lookup: keep it centred on the eye, or its
+    // gradient drifts off the fog's as the camera sinks
+    volume.mesh.position.copy(camera.position);
+    WATER_FOG.uFogMid.value.copy(scene.fog.color);
     gradient(RAY_STOPS, eyeD, volume.uniforms.uRay.value);
     volume.uniforms.uRayStr.value = 0.55 - ke * 0.42;
 
@@ -1364,6 +1380,7 @@ export async function createFishing(container) {
       air.vy -= 20 * dt;
       air.x += air.vx * dt;
       air.y += air.vy * dt;
+      air.z += (air.vz || 0) * dt;
       f.mesh.position.set(air.x, air.y, air.z);
       f.mesh.rotation.z += air.spin * dt;
       f.mesh.rotation.y = 0;
@@ -1386,7 +1403,10 @@ export async function createFishing(container) {
           size: 1.1 + Math.random() * 0.9, size1: 0, life: 0.28, cell: CELL.GLINT, color: 0xfff1d0
         });
       }
-      if (air.y < -0.5 && air.done !== 'hit') {
+      if (air.y < -1 && air.done === 'hit') {
+        air.done = true; // missed the rim somehow — let it go quietly
+        setVisible(f, false);
+      } else if (air.y < -0.5 && air.done !== 'hit') {
         air.done = true;
         setVisible(f, false);
         state.tossLeft--;
@@ -1487,7 +1507,7 @@ export async function createFishing(container) {
     shafts.uniforms.uTime.value = t;
     snow.uniforms.uTime.value = t;
     shore.userData.vimpel.rotation.y = Math.sin(t * 2.3) * 0.3 + Math.sin(t * 5.1) * 0.08;
-    seabed.userData.pokal.material.emissiveIntensity = 0.45 + Math.sin(t * 2.1) * 0.25;
+    seabed.userData.pokal.material.emissiveIntensity = 0.85 + Math.sin(t * 2.1) * 0.3;
     lilies.userData.update(t);
 
     updateBoat(dt, t);
@@ -1666,6 +1686,7 @@ export async function createFishing(container) {
     hud.catchlist.innerHTML = `<b>Rekord</b><span>${fmt(progress.high)}</span>`;
   }
   hud.overlay.classList.add('show');
+  hudHost.classList.add('fi-menu');
   spawnFishSet();
 
   /* Deterministic hooks for automated tests */
@@ -1673,6 +1694,7 @@ export async function createFishing(container) {
     state,
     scene,
     camera,
+    renderer,
     progress,
     startGame,
     forceHook() {
@@ -1690,9 +1712,11 @@ export async function createFishing(container) {
     toBottom() {
       state.depth = BOTTOM - 0.5;
     },
-    tapAll() {
+    /** Tap every airborne fish into the tunna, leaving `keep` in the air. */
+    tapAll(keep = 0) {
+      let left = state.caught.filter((f) => f.air && !f.air.done).length;
       state.caught.forEach((f) => {
-        if (f.air && !f.air.done) {
+        if (f.air && !f.air.done && left-- > keep) {
           f.air.done = 'hit';
           state.tossLeft--;
           state.rec.tapped++;

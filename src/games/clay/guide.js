@@ -21,7 +21,7 @@ import { N, H } from './clay.js';
 
 const TOL = 0.035; // what still counts as "on the line"
 const PUSH = new THREE.Color(1.0, 0.42, 0.24);
-const PULL = new THREE.Color(0.35, 0.78, 1.0);
+const PULL = new THREE.Color(0.2, 0.62, 1.0);
 
 function ghostStrip(profile, side, width) {
   const M = 72;
@@ -189,7 +189,7 @@ export function buildGuide() {
           bandPos[(k + 1) * 3 + 1] = y;
           bandPos[(k + 1) * 3 + 2] = 0;
           const c = d > 0 ? PUSH : PULL;
-          const a = Math.min(1, Math.max(0, (Math.abs(d) - TOL) / 0.12)) * 0.5 * strength;
+          const a = Math.min(1, Math.max(0, (Math.abs(d) - TOL) / 0.12)) * 0.42 * strength;
           for (const v of [k, k + 1]) {
             bandCol[v * 4] = c.r;
             bandCol[v * 4 + 1] = c.g;

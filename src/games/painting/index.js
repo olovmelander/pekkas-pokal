@@ -29,7 +29,7 @@ import {
 } from './garden.js';
 import {
   ARTWORKS, mixPigments, colourDistance, hexToRgb, rgbToCss, paintIdMap,
-  mixAdvice, accuracy, MATCH_DE, MAX_DROPS
+  mixAdvice, accuracy, MATCH_DE, MAX_DROPS, PIGMENT_WORD
 } from './artworks.js';
 import { ART_W, ART_H, LiveCanvas, renderPainting, analyse } from './canvasart.js';
 import { Palette, PIGMENTS } from './palette.js';
@@ -103,7 +103,11 @@ const store = {
   }
 };
 
-const packRgb = (c) => (c ? (Math.round(c[0] * 255) << 16) | (Math.round(c[1] * 255) << 8) | Math.round(c[2] * 255) : -1);
+const packRgb = (c) => (c ? c.reduce((h, v) => (h << 8) | Math.round(v * 255), 0) : -1);
+/** Every region in the colour the master gave it. */
+const targetsOf = (w) => w.regions.map((rg) => hexToRgb(rg.color));
+/** Pixel height of a canvas `px` wide, at the easel's proportions. */
+const tall = (px) => Math.round((px * ART_H) / ART_W);
 const unpackRgb = (h) => (h >= 0 ? hexToRgb(h) : null);
 
 /**
@@ -350,8 +354,9 @@ export async function createPainting(container) {
 
   /* Mikael Hägglund, strolling between the easels until he is needed */
   const judge = buildJudge();
-  const JUDGE_HOME = { x: 2.15, z: -2.7, ry: -0.7 };
-  const JUDGE_SPOT = { x: 0.98, z: -0.2 };
+  const JUDGE_HOME = { x: 1.75, z: -3.4, ry: -0.9 };
+  // Beside the easel, level with the canvas, so he never stands in front of it
+  const JUDGE_SPOT = { x: 1.22, z: -0.5 };
   judge.group.position.set(JUDGE_HOME.x, 0, JUDGE_HOME.z);
   judge.group.rotation.y = JUDGE_HOME.ry;
   scene.add(judge.group);
@@ -432,13 +437,13 @@ export async function createPainting(container) {
       // leaves free: the left of a wide screen, the top of a tall one
       const free = wide
         ? { x: 0, y: lay.top, w: W - lay.card - 28, h: H - lay.top }
-        : { x: 0, y: lay.top, w: W, h: H * 0.34 };
+        : { x: 0, y: lay.top - 10, w: W, h: H * 0.3 - lay.top + 16 };
       const fov = wide ? 36 : 46;
       const tan = Math.tan(THREE.MathUtils.degToRad(fov / 2));
-      const ppu = Math.min((free.h * 0.9) / 2.3, (free.w * 0.9) / 2.1);
+      const ppu = Math.min((free.h * 0.86) / 2.35, (free.w * 0.86) / 2.3);
       const d = H / (2 * tan * ppu);
-      const tgt = new THREE.Vector3(0.3, 1.32, -0.35);
-      const dir = new THREE.Vector3(1.05, 0.28, 2.0).normalize();
+      const tgt = new THREE.Vector3(0.45, 1.15, -0.5);
+      const dir = new THREE.Vector3(0.62, 0.22, 2.0).normalize();
       return {
         pos: tgt.clone().addScaledVector(dir, d), tgt, fov,
         ox: W / 2 - (free.x + free.w / 2), oy: H / 2 - (free.y + free.h / 2)
@@ -449,7 +454,9 @@ export async function createPainting(container) {
     const R = wide ? 6.4 : 8.6;
     const c = new THREE.Vector3(0.2, 1.2, -3.0);
     return {
-      pos: new THREE.Vector3(c.x + Math.sin(a) * R, 2.35 + (reduced ? 0 : Math.sin(t * 0.11) * 0.15), c.z + Math.cos(a) * R),
+      pos: new THREE.Vector3(
+        c.x + Math.sin(a) * R, 2.35 + (reduced ? 0 : Math.sin(t * 0.11) * 0.15), c.z + Math.cos(a) * R
+      ),
       tgt: new THREE.Vector3(-0.1, 1.35, -3.2),
       fov: wide ? 44 : 56,
       ox: wide ? -W * 0.15 : 0,
@@ -587,7 +594,7 @@ export async function createPainting(container) {
   function sizeRefCanvases() {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const big = Math.round(clamp(view.lay.side || 240, 160, 300) * dpr);
-    const bh = Math.round((big * ART_H) / ART_W);
+    const bh = tall(big);
     [hud.refCv, hud.refSel].forEach((c) => {
       if (c.width !== big) {
         c.width = big;
@@ -595,7 +602,7 @@ export async function createPainting(container) {
       }
     });
     const mini = Math.round(60 * dpr);
-    const mh = Math.round((mini * ART_H) / ART_W);
+    const mh = tall(mini);
     [hud.miniCv, hud.miniSel].forEach((c) => {
       if (c.width !== mini) {
         c.width = mini;
@@ -678,22 +685,16 @@ export async function createPainting(container) {
     hud.mixed.style.background = total() ? rgbToCss(mixed) : 'transparent';
     hud.mixed.classList.toggle('empty', !total());
     hud.region.textContent = sel >= 0 ? work.regions[sel].name : 'Välj en yta i tavlan';
-    let acc = 0;
-    let advice = null;
-    if (target && total()) {
-      advice = mixAdvice(drops, target);
-      acc = accuracy(advice.dE);
-    }
-    const match = !!advice && advice.dE < MATCH_DE;
+    const advice = target ? mixAdvice(drops, target) : null;
+    const has = !!advice && total() > 0;
+    const acc = has ? accuracy(advice.dE) : 0;
+    const match = has && advice.dE < MATCH_DE;
     hud.meterFill.style.width = `${((1 - acc) * 100).toFixed(1)}%`;
     hud.meterMark.style.left = `${(acc * 100).toFixed(1)}%`;
-    hud.meter.dataset.zone = !advice ? 'none' : match ? 'hot' : acc > 0.62 ? 'warm' : 'cold';
+    hud.meter.dataset.zone = !has ? 'none' : match ? 'hot' : acc > 0.62 ? 'warm' : 'cold';
     hud.chip.classList.toggle('match', match);
     hud.apply.classList.toggle('ready', match);
-    hud.hint.textContent = !target
-      ? 'Tryck på en yta i tavlan'
-      : advice ? advice.say : 'Droppa pigment på paletten';
-    if (prevDE != null && advice) {
+    if (prevDE != null && has) {
       const d = prevDE - advice.dE;
       if (Math.abs(d) > 0.35 && !match) {
         hud.delta.textContent = d > 0 ? '▲ varmare' : '▼ kallare';
@@ -710,12 +711,24 @@ export async function createPainting(container) {
     updateTip();
   }
 
-  /** After a while stuck on one region, the palette points at a drop. */
+  /**
+   * The hint under the meter. It always says which way the mix is off —
+   * too light, too grey, wrong hue — and only after a few seconds stuck on
+   * a region does it (and the palette) name the drop to add. Learning to
+   * read the direction is the game; being rescued is the safety net.
+   */
   function updateTip() {
     const a = state.advice;
-    const show = state.phase === 'paint' && a && a.tip && state.regionTime > TIP_AFTER;
-    palette.setTip(show && a.tip !== 'wipe' ? a.tip : null);
-    hud.wipe.classList.toggle('nudge', !!(show && a.tip === 'wipe'));
+    const stuck = state.phase === 'paint' && !!a && !!a.tip && state.regionTime > TIP_AFTER;
+    palette.setTip(stuck && a.tip !== 'wipe' ? a.tip : null);
+    hud.wipe.classList.toggle('nudge', stuck && a.tip === 'wipe');
+    let txt;
+    if (!a) txt = 'Tryck på en yta i tavlan';
+    else if (!total()) txt = stuck ? `Droppa pigment · börja med ${PIGMENT_WORD[a.tip]}` : 'Droppa pigment på paletten';
+    else if (!a.tip) txt = a.axis;
+    else if (!stuck) txt = a.axis;
+    else txt = a.tip === 'wipe' ? `${a.axis} · torka och börja om` : `${a.axis} · mer ${PIGMENT_WORD[a.tip]}`;
+    hud.hint.textContent = txt;
   }
 
   function currentDE() {
@@ -904,7 +917,7 @@ export async function createPainting(container) {
     selTex.needsUpdate = true;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const rw = Math.round(300 * dpr);
-    refImage = renderPainting(work, work.regions.map((rg) => hexToRgb(rg.color)), rw, Math.round((rw * ART_H) / ART_W), { museum: true });
+    refImage = renderPainting(work, targetsOf(work), rw, tall(rw), { museum: true });
     drawRefImages();
     hud.refTitle.textContent = work.title;
     hud.refArtist.textContent = `${work.artist}, ${work.year}`;
@@ -937,7 +950,8 @@ export async function createPainting(container) {
     setShot('easel', 2.1);
     judgeGoHome();
     later(() => {
-      if (state.phase === 'draw') beginPaint();
+      // state.hold lets a test (or a slow reader) keep the slip up
+      if (state.phase === 'draw' && !state.hold) beginPaint();
     }, 3400);
   }
 
@@ -964,6 +978,7 @@ export async function createPainting(container) {
     if (state.phase !== 'paint') return;
     setPhase('judging');
     live.finish();
+    brushState.on = 0;
     artTex.needsUpdate = true;
     surfTex.needsUpdate = true;
     live.setSelection(-1, -1);
@@ -988,6 +1003,9 @@ export async function createPainting(container) {
     const stars = starsFor(grade);
     const verdict = VERDICTS.find((v) => grade >= v.at) || VERDICTS[VERDICTS.length - 1];
     const bonus = Math.round(grade * 220 + Math.max(0, state.timeLeft) * 6);
+    // Banked now, shown when the grade has counted up: skipping the verdict
+    // must not cost the bonus (or the record)
+    state.score += bonus;
     const prev = bests[work.id];
     const pb = !prev || grade > prev.g;
     if (pb) {
@@ -1017,15 +1035,19 @@ export async function createPainting(container) {
 
   function showReveal(r) {
     setPhase('reveal');
-    judgeState.mode = 'verdict';
-    judgeState.t = 0;
+    // If he is still on his way over, the verdict waits until he arrives
+    if (judgeState.mode === 'walk') judgeState.then = 'verdict';
+    else {
+      judgeState.mode = 'verdict';
+      judgeState.t = 0;
+    }
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const pw = Math.round(clamp(view.lay.wide ? (view.lay.card - 70) / 2 : (view.w - 60) / 2, 120, 280) * dpr);
-    const ph = Math.round((pw * ART_H) / ART_W);
+    const ph = tall(pw);
     hud.rvNo.textContent = `${state.workNo}/${WORKS_PER_GAME}`;
     hud.rvTitle.textContent = r.work.title;
     hud.rvYours.replaceChildren(renderPainting(r.work, r.painted, pw, ph));
-    hud.rvOrig.replaceChildren(renderPainting(r.work, r.work.regions.map((rg) => hexToRgb(rg.color)), pw, ph, { museum: true }));
+    hud.rvOrig.replaceChildren(renderPainting(r.work, targetsOf(r.work), pw, ph, { museum: true }));
     hud.rvOrigCap.textContent = `${r.work.artist}, ${r.work.year}`;
     hud.rvGrade.textContent = '0,0';
     hud.rvStars.innerHTML = starsHtml(0, 'big');
@@ -1044,7 +1066,7 @@ export async function createPainting(container) {
       <span>Bästa svit <b>×${r.bestStreak}</b></span>
       <span>Tid kvar <b>${Math.floor(tl / 60)}:${String(tl % 60).padStart(2, '0')}</b></span>
       <span class="pm-bonus">+${fmt(r.bonus)} poäng</span>`;
-    hud.rvNext.textContent = state.workNo < WORKS_PER_GAME ? 'Dra nästa lapp' : 'Kvällens resultat';
+    hud.rvNextTxt.textContent = state.workNo < WORKS_PER_GAME ? 'Dra nästa lapp' : 'Kvällens resultat';
     hud.showCard('reveal');
 
     // The grade counts up, then the stars land one at a time
@@ -1062,7 +1084,7 @@ export async function createPainting(container) {
       },
       done() {
         hud.rvGrade.textContent = grade1(r.grade);
-        setScore(state.score + r.bonus);
+        setScore(state.score);
         for (let i = 0; i < r.stars; i++) {
           later(() => {
             hud.rvStars.innerHTML = starsHtml(i + 1, 'big');
@@ -1109,7 +1131,7 @@ export async function createPainting(container) {
       : `Snittbetyg ${grade1(avg)}. Bäst: ${best.work.title}. Olov tog hem 2021 med Skriet. Ta en öl och försök igen.`;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const pw = Math.round(clamp(view.lay.wide ? 190 : (view.w - 70) / 3, 90, 220) * dpr);
-    const ph = Math.round((pw * ART_H) / ART_W);
+    const ph = tall(pw);
     hud.fnWall.replaceChildren(...res.map((r) => {
       const fig = document.createElement('figure');
       const gilt = document.createElement('div');
@@ -1121,6 +1143,7 @@ export async function createPainting(container) {
       return fig;
     }));
     hud.fnScore.textContent = fmt(state.score);
+    hud.score.textContent = fmt(state.score);
     hud.fnSub.textContent = isHigh ? 'poäng · nytt rekord!' : `poäng · rekord ${fmt(high)}`;
     hud.root.classList.toggle('pm-record', isHigh);
     state.returnCard = 'final';
@@ -1156,7 +1179,7 @@ export async function createPainting(container) {
   function originalThumb(w, px) {
     const key = `${w.id}:${px}`;
     if (!thumbCache.has(key)) {
-      thumbCache.set(key, renderPainting(w, w.regions.map((rg) => hexToRgb(rg.color)), px, Math.round((px * ART_H) / ART_W), { museum: true, lit: false }));
+      thumbCache.set(key, renderPainting(w, targetsOf(w), px, tall(px), { museum: true, lit: false }));
     }
     return thumbCache.get(key);
   }
@@ -1172,7 +1195,7 @@ export async function createPainting(container) {
       img.className = 'pm-best-img';
       const c = document.createElement('canvas');
       c.width = px;
-      c.height = Math.round((px * ART_H) / ART_W);
+      c.height = tall(px);
       c.getContext('2d').drawImage(originalThumb(w, px), 0, 0);
       img.appendChild(c);
       const t = document.createElement('div');
@@ -1189,7 +1212,7 @@ export async function createPainting(container) {
     if (!gallery.length) return;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const pw = Math.round((view.lay.wide ? 150 : (view.w - 64) / 2) * dpr);
-    const ph = Math.round((pw * ART_H) / ART_W);
+    const ph = tall(pw);
     const items = gallery.map((g, idx) => {
       const w = ARTWORKS.find((a) => a.id === g.id);
       if (!w) return null;
@@ -1216,7 +1239,7 @@ export async function createPainting(container) {
     if (!w) return;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const pw = Math.round(clamp(Math.min(view.w - 48, (view.h - 200) * (ART_W / ART_H)), 200, 520) * dpr);
-    hud.zoomImg.replaceChildren(renderPainting(w, g.c.map(unpackRgb), pw, Math.round((pw * ART_H) / ART_W)));
+    hud.zoomImg.replaceChildren(renderPainting(w, g.c.map(unpackRgb), pw, tall(pw)));
     hud.zoomCap.innerHTML = `<b>${esc(w.title)}</b> efter ${esc(w.artist)} ${starsHtml(g.s, 'sm')} <span>${grade1(g.g)} · ${esc(g.d)}</span>`;
     hud.showCard('zoom');
   }
@@ -1276,7 +1299,7 @@ export async function createPainting(container) {
     g.position.y = 0;
     if (js.mode === 'walk') {
       const dist = Math.hypot(js.toX - js.fromX, js.toZ - js.fromZ);
-      const dur = Math.max(0.6, dist / 1.3);
+      const dur = Math.max(0.6, dist / 1.6);
       const k = Math.min(1, js.t / dur);
       const e = easeInOut(k);
       g.position.x = js.fromX + (js.toX - js.fromX) * e;
@@ -1431,7 +1454,9 @@ export async function createPainting(container) {
   on(hud.again, 'click', startGame);
   on(hud.rvNext, 'click', nextFromReveal);
   on(hud.overlay, 'click', (e) => {
-    if (state.phase === 'draw' && e.target.closest('.pm-slip')) beginPaint();
+    // Anywhere on the screen puts the slip away and starts the clock — but
+    // not the very click on the button that drew it, still bubbling up here
+    if (state.phase === 'draw' && !e.target.closest('button')) beginPaint();
     const g = e.target.closest('.pm-gallery .pm-gilt');
     if (g) zoomGallery(Number(g.dataset.idx));
   });
@@ -1589,6 +1614,9 @@ export async function createPainting(container) {
     state,
     scene,
     camera,
+    /** True once the camera has arrived at its current shot. */
+    settled: () => rig.t >= 1,
+    rig: () => ({ name: rig.name, t: rig.t, dur: rig.dur }),
     drops: () => drops,
     startGame,
     beginPaint,
@@ -1658,6 +1686,25 @@ export async function createPainting(container) {
       renderDots();
     },
     openGallery,
+    /** Client coordinates of a canvas point (0..1), for tap/click tests. */
+    screenOf(u, v) {
+      const p = canvasPoint(u, v).project(camera);
+      const r = canvasHost.getBoundingClientRect();
+      return { x: r.left + (p.x * 0.5 + 0.5) * r.width, y: r.top + (-p.y * 0.5 + 0.5) * r.height };
+    },
+    /** Client coordinates of a point inside region i's visible area (a
+        stroke position, so it is guaranteed to be on the region). */
+    regionScreen(i) {
+      const { strokes } = analyse(work).regions[i];
+      const s = strokes[Math.floor(strokes.length / 2)];
+      return this.screenOf(s.x, s.y);
+    },
+    /** Client coordinates of a pigment on the palette. */
+    wellScreen(key) {
+      const r = hud.palette.getBoundingClientRect();
+      const w = palette.wellPos(key);
+      return { x: r.left + w.x, y: r.top + w.y };
+    },
     info() {
       return {
         drawCalls: renderer.info.render.calls,

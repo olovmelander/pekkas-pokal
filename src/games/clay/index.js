@@ -70,7 +70,7 @@ const PIECES = [
     id: 'skal',
     name: 'Skålen',
     brief: 'En öppen skål — bred mun, mjuk buk, stadig fot.',
-    glaze: { color: 0xc07a22, rim: 0x6e3414, metal: false },
+    glaze: { color: 0xd89a2c, rim: 0x6e3414, metal: false },
     css: '#d4952f',
     glazeName: 'honungsglasyr',
     profile: profileOf([[0, 0.62], [0.14, 0.5], [0.35, 0.62], [0.7, 0.95], [1, 1.18]])
@@ -124,6 +124,10 @@ const TITLES = [
   [3, 'Lärling', 'Det börjar likna något. En vända till?'],
   [0, 'Lerkladdare', 'Tre alster i fönstret och lera överallt. En vända till?']
 ];
+
+/* The piece shrinks into the kiln (clay shrinks when fired — a little less than this) */
+const KILN_SCALE = 0.36;
+const REVEAL_SCALE = 0.3;
 
 /* Firing timeline, seconds from KLAR */
 const FIRE = { lift: 0.35, fly: 1.25, close: 1.65, heat: 3.95, open: 4.35, slide: 5.05, cool: 6.55 };
@@ -198,12 +202,22 @@ export async function createClay(container) {
   const hud = buildHud(hudHost);
 
   const sfx = new Sfx();
+  const coarsePointer = window.matchMedia?.('(pointer: coarse)').matches;
+  // Controls are taught where they are used: key hints for mouse users,
+  // a finger hint for touch
+  if (!coarsePointer) {
+    hud.smoothKey.textContent = 'håll G';
+    hud.doneKey.textContent = 'Enter';
+    hud.skip.textContent = 'Klicka eller mellanslag för att snabbspola';
+  }
+  const COACH = coarsePointer
+    ? 'Dra fingret mot leran — inåt trycker, utåt drar. Håll GLÄTTA för att jämna.'
+    : 'Dra med musen mot leran — inåt trycker, utåt drar · håll G glättar · Enter bränner';
   const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
   /* Quality tier: phones get a lighter pixel ratio, no MSAA, smaller shadows */
-  const coarse = window.matchMedia?.('(pointer: coarse)').matches;
   const smallScreen = Math.min(window.screen?.width || 1e4, window.screen?.height || 1e4) < 820;
-  const lowTier = (coarse && smallScreen) || (navigator.deviceMemory && navigator.deviceMemory <= 4);
+  const lowTier = (coarsePointer && smallScreen) || (navigator.deviceMemory && navigator.deviceMemory <= 4);
 
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, lowTier ? 1.5 : 2));
@@ -239,7 +253,7 @@ export async function createClay(container) {
   /* ---- Lights: one dominant, a couple of fills, accents ---------------- */
 
   // DOMINANT: the evening sun, entering only through the window
-  const sun = new THREE.DirectionalLight(0xffc185, 3.4);
+  const sun = new THREE.DirectionalLight(0xffbf80, 6.0);
   const sunTarget = new THREE.Vector3(0, 1.2, 0);
   sun.position.copy(sunTarget).addScaledVector(studio.sunDir, -24);
   sun.target.position.copy(sunTarget);
@@ -257,9 +271,9 @@ export async function createClay(container) {
   scene.add(sun, sun.target);
 
   // FILLS: cool sky from above, warm front fill from the potter's side
-  const hemi = new THREE.HemisphereLight(0xa8b8d8, 0x5a3622, 0.42);
+  const hemi = new THREE.HemisphereLight(0xa8b8d8, 0x5a3622, 0.38);
   scene.add(hemi);
-  const front = new THREE.DirectionalLight(0xffe6c8, 0.85);
+  const front = new THREE.DirectionalLight(0xffe6c8, 0.7);
   front.position.set(3, 4, 9);
   scene.add(front);
 
@@ -275,7 +289,7 @@ export async function createClay(container) {
 
   const maps = ringMaps();
   const body = new ClayBody();
-  const clayMat = clayMaterial(maps);
+  const clayMat = clayMaterial(maps, lowTier);
 
   const clayGroup = new THREE.Group(); // moves (wheel → kiln)
   clayGroup.position.y = wheel.headY;
@@ -384,6 +398,7 @@ export async function createClay(container) {
     spin: 0,
     wobble: 0,
     wobbleWarned: false,
+    coached: 0, // seconds of shaping so far; the hint goes once you have the feel
     fast: false,
     heat: 0,
     lastToast: 0,
@@ -543,6 +558,7 @@ export async function createClay(container) {
   /* ---- Phases ----------------------------------------------------------- */
 
   function setThrowHud(on) {
+    if (!on) hud.coach.classList.remove('show');
     hud.task.classList.toggle('show', on);
     hud.meter.classList.toggle('show', on);
     hud.tools.classList.toggle('show', on);
@@ -566,7 +582,7 @@ export async function createClay(container) {
     clayGroup.position.set(0, wheel.headY + 1.6, 0);
     clayGroup.scale.setScalar(1);
     contact.visible = true;
-    clayMat.color.set(0xb4693f);
+    studio.kiln.led.draw('  20');
     guide.setTarget(p.profile);
     guide.updateDiff(r, 0);
     renderTask();
@@ -576,6 +592,8 @@ export async function createClay(container) {
     hud.verdict.classList.remove('show');
     setPhaseLabel(p === BONUS ? 'BONUS: POKALEN I GULD' : p.brief);
     later(() => setPhaseLabel(''), 3400);
+    hud.coach.textContent = COACH;
+    hud.coach.classList.toggle('show', state.coached < 1.2);
   }
 
   function finishPiece() {
@@ -900,39 +918,39 @@ export async function createClay(container) {
   }
 
   const DIR_THROW = new THREE.Vector3(0, 0.2, 1);
-  const DIR_KILN = new THREE.Vector3(-0.55, 0.22, 1);
+  const DIR_KILN = new THREE.Vector3(0.15, 0.25, 1);
   const DIR_REVEAL = new THREE.Vector3(-0.42, 0.2, 1);
   const DIR_SHOW = new THREE.Vector3(0.05, 0.12, 1);
   const REVEAL_LOOK = new THREE.Vector3();
   const SHOW_LOOK = new THREE.Vector3(studio.window.x, 1.95, -5.2);
-  const IDLE_LOOK = new THREE.Vector3(0.4, 1.9, -1.2);
+  const IDLE_LOOK = new THREE.Vector3(-0.7, 2.0, -1.8);
   const THROW_LOOK = new THREE.Vector3(0, 1.78, 0);
   const kilnLook = new THREE.Vector3();
   const kilnMouth = new THREE.Vector3();
   const kilnFlue = new THREE.Vector3();
   studio.group.updateMatrixWorld(true);
-  studio.kiln.group.localToWorld(kilnLook.set(0, 1.5, 0.4));
+  studio.kiln.group.localToWorld(kilnLook.set(0, 1.75, 0.4));
   studio.kiln.group.localToWorld(kilnMouth.set(0, 0.63, 0.05));
   studio.kiln.group.localToWorld(kilnFlue.copy(studio.kiln.flue));
   const kilnFront = new THREE.Vector3();
-  studio.kiln.group.localToWorld(kilnFront.set(0, 1.15, 1.25));
+  studio.kiln.group.localToWorld(kilnFront.set(0, 1.25, 1.7));
 
   function updateCamera(t, dt) {
     const P = view.portrait;
     const ph = state.phase;
     if (ph === 'idle') {
-      idleDir.set(Math.sin(t * 0.12) * 0.12 - 0.15, 0.22, 1);
-      frame(IDLE_LOOK, idleDir, P ? 2.4 : 4.6, 2.4, 0.9, P ? [0, 0.3] : [0.28, 0]);
+      idleDir.set(Math.sin(t * 0.12) * 0.12 - 0.1, 0.18, 1);
+      frame(IDLE_LOOK, idleDir, P ? 2.4 : 5.6, 2.8, 0.9, P ? [0, 0.3] : [0.24, 0]);
     } else if (ph === 'intro' || ph === 'throw' || (ph === 'fire' && state.t < FIRE.lift)) {
       frame(THROW_LOOK, DIR_THROW, 1.72, 1.3, P ? 0.94 : 0.6, P ? [0, 0.04] : [0.04, 0]);
     } else if (ph === 'fire' && state.t < FIRE.open) {
-      frame(kilnLook, DIR_KILN, P ? 1.25 : 2.2, 1.6, P ? 0.92 : 0.82);
+      frame(kilnLook, DIR_KILN, P ? 1.25 : 2.2, 1.9, P ? 0.92 : 0.85);
     } else if (ph === 'fire' || ph === 'judge') {
       REVEAL_LOOK.copy(studio.reveal);
       REVEAL_LOOK.x += 0.15;
       REVEAL_LOOK.y += 0.45;
       frame(REVEAL_LOOK, DIR_REVEAL, P ? 0.75 : 1.3, 0.7, P ? 0.9 : 0.75,
-        ph === 'judge' ? (P ? [0, 0.42] : [-0.3, 0]) : [0, P ? 0.1 : 0]);
+        ph === 'judge' ? (P ? [0, 0.42] : [0.3, 0]) : [0, P ? 0.1 : 0]);
     } else if (ph === 'over') {
       frame(SHOW_LOOK, DIR_SHOW, 1.55, 0.75, P ? 0.92 : 0.7, P ? [0, 0.45] : [-0.3, 0]);
     }
@@ -1095,6 +1113,10 @@ export async function createClay(container) {
 
     const moved = applyBrush(dt);
     const working = dragging && brush;
+    if (working && state.coached < 1.2) {
+      state.coached += dt;
+      if (state.coached >= 1.2) hud.coach.classList.remove('show');
+    }
     shapingEnergy += (Math.min(1, moved * 26) - shapingEnergy) * Math.min(1, dt * 9);
     sfx.setShaping(working || smoothing || keySmooth ? 0.15 + shapingEnergy : 0, state.wobble);
     // Rings and wetness change continuously, so the mesh is rebuilt every frame
@@ -1206,7 +1228,7 @@ export async function createClay(container) {
     clayGroup.visible = false;
     fired.mesh.visible = true;
     fired.mesh.position.copy(kilnMouth);
-    fired.mesh.scale.setScalar(0.4);
+    fired.mesh.scale.setScalar(KILN_SCALE);
     fired.mesh.material.emissiveIntensity = 1.4;
   }
 
@@ -1228,7 +1250,7 @@ export async function createClay(container) {
       const k = ease((ft - FIRE.lift) / (FIRE.fly - FIRE.lift));
       clayGroup.position.set(0, wheel.headY + 0.3, 0).lerp(kilnMouth, k);
       clayGroup.position.y += Math.sin(Math.PI * k) * 1.1;
-      clayGroup.scale.setScalar(1 - 0.6 * k);
+      clayGroup.scale.setScalar(1 - (1 - KILN_SCALE) * k);
       hinge.rotation.y = OPEN;
       tilt.rotation.set(0, 0, 0);
     } else if (ft < FIRE.close) {
@@ -1265,7 +1287,7 @@ export async function createClay(container) {
       const k = ease((ft - FIRE.open) / (FIRE.slide - FIRE.open));
       fired.mesh.position.lerpVectors(kilnMouth, studio.reveal, k);
       fired.mesh.position.y += Math.sin(Math.PI * k) * 0.35;
-      fired.mesh.scale.setScalar(0.4 + 0.02 * k);
+      fired.mesh.scale.setScalar(KILN_SCALE + (REVEAL_SCALE - KILN_SCALE) * k);
       fired.mesh.rotation.y += dt * 2;
       setHeat(0.65 - 0.3 * k);
     } else {
@@ -1294,7 +1316,7 @@ export async function createClay(container) {
     const flash = ft > FIRE.heat && ft < FIRE.heat + 0.5 ? Math.sin(((ft - FIRE.heat) / 0.5) * Math.PI) * (reduceMotion ? 0.6 : 2.2) : 0;
     accent.position.copy(kilnFront);
     accent.color.setRGB(1, 0.45 + state.heat * 0.2, 0.15);
-    accent.intensity = state.heat * 9 + flash * 6;
+    accent.intensity = state.heat * 4.5 + flash * 4;
     haze.enabled = state.heat > 0.15;
     if (haze.enabled) {
       tmpV.copy(kilnFlue).add(kilnLook).multiplyScalar(0.5).project(camera);
@@ -1342,6 +1364,40 @@ export async function createClay(container) {
     accent.intensity += (goal - accent.intensity) * Math.min(1, dt * 3);
   }
 
+  /**
+   * Keramikern watches the wheel from beside the kiln; when a piece goes in
+   * he walks round behind the banding wheel to judge it (out of the kiln
+   * shot), and throws an arm up for good work.
+   */
+  const JUDGE_HOME = studio.judge.guy.position.clone();
+  const JUDGE_SPOT = new THREE.Vector3(3.3, 0, -1.6);
+  const judgeGoal = new THREE.Vector3();
+  function updateJudge(dt, t) {
+    const { guy, head, armR } = studio.judge;
+    const away = state.phase === 'fire' || state.phase === 'judge';
+    judgeGoal.copy(away ? JUDGE_SPOT : JUDGE_HOME);
+    const dist = guy.position.distanceTo(judgeGoal);
+    const step = Math.min(dist, dt * 1.6);
+    const walking = dist > 0.02;
+    // At home he faces the wheel; away, the banding wheel (and the camera)
+    let face = away ? Math.atan2(studio.reveal.x - guy.position.x, studio.reveal.z - guy.position.z) : -0.75;
+    if (walking) {
+      tmpV.subVectors(judgeGoal, guy.position).normalize();
+      guy.position.addScaledVector(tmpV, step);
+      face = Math.atan2(tmpV.x, tmpV.z);
+    }
+    guy.position.y = walking ? Math.abs(Math.sin(t * 9)) * 0.04 : 0;
+    let dr = face - guy.rotation.y;
+    dr = Math.atan2(Math.sin(dr), Math.cos(dr));
+    guy.rotation.y += dr * Math.min(1, dt * 4);
+    const judging = state.phase === 'judge' || (state.phase === 'fire' && state.t > FIRE.open);
+    head.rotation.x = judging ? Math.sin(t * 2.6) * 0.09 : head.rotation.x * (1 - Math.min(1, dt * 3));
+    head.rotation.y = judging || walking ? 0 : Math.sin(t * 0.4) * 0.25;
+    const res = state.results[state.slot];
+    const cheer = state.phase === 'judge' && res && res.grade >= 8;
+    armR.rotation.z += ((cheer ? 2.5 + Math.sin(t * 6) * 0.15 : 0.08) - armR.rotation.z) * Math.min(1, dt * 5);
+  }
+
   /** Pieces gliding to the window sill. */
   function updateGallery(dt) {
     gallery.forEach((g) => {
@@ -1360,12 +1416,15 @@ export async function createClay(container) {
   let raf = 0;
   let last = performance.now();
   let running = true;
+  let timeScale = 1; // tests on software GL fast-forward with this
+  renderer.info.autoReset = false; // count the whole composer frame, not its last pass
 
   function tick(now) {
     raf = requestAnimationFrame(tick);
-    const dt = clampDt(now - last);
+    const dt = clampDt(now - last) * timeScale;
     last = now;
     if (!running) return;
+    renderer.info.reset();
     const t = now / 1000;
     plopGap -= dt;
 
@@ -1407,15 +1466,7 @@ export async function createClay(container) {
     }
     updateGallery(dt);
 
-    // Keramikern: watches the wheel, turns to judge, celebrates good work
-    const { guy, head, armR } = studio.judge;
-    const judging = state.phase === 'judge' || (state.phase === 'fire' && state.t > FIRE.open);
-    const res = state.results[state.slot];
-    guy.rotation.y += ((judging ? -1.35 : -0.75) - guy.rotation.y) * Math.min(1, dt * 2);
-    head.rotation.x = judging ? Math.sin(t * 2.6) * 0.09 : head.rotation.x * (1 - Math.min(1, dt * 3));
-    head.rotation.y = judging ? 0 : Math.sin(t * 0.4) * 0.25;
-    const cheer = state.phase === 'judge' && res && res.grade >= 8;
-    armR.rotation.x += ((cheer ? -2.4 + Math.sin(t * 6) * 0.15 : 0) - armR.rotation.x) * Math.min(1, dt * 5);
+    updateJudge(dt, t);
 
     // Score counts up
     if (state.shownScore !== state.score) {
@@ -1444,8 +1495,6 @@ export async function createClay(container) {
     composer.render();
   }
 
-  raf = requestAnimationFrame(tick);
-
   const onVisibility = () => {
     running = !document.hidden;
     last = performance.now();
@@ -1457,6 +1506,38 @@ export async function createClay(container) {
   showStart();
   // Start with the camera already on its idle mark
   updateCamera(0, 10);
+
+  /*
+   * Compile every program now, behind the site's loading screen. Hidden
+   * things (the hand, the sponge, the guide, particles, both glaze kinds)
+   * would otherwise each compile on first use — a visible hitch in the
+   * middle of a drag or the kiln reveal. The two glaze templates stay
+   * alive so their programs stay cached for the fired pieces.
+   */
+  const glazeTemplates = [glazeMaterial(maps, false), glazeMaterial(maps, true)].map((m) => {
+    const mesh = new THREE.Mesh(body.geometry, m);
+    mesh.position.y = -50;
+    scene.add(mesh);
+    return mesh;
+  });
+  const hidden = [];
+  scene.traverse((o) => {
+    if (!o.visible) {
+      hidden.push(o);
+      o.visible = true;
+    }
+  });
+  // Synchronous on purpose: compileAsync warns wherever the parallel-compile
+  // extension is missing, and the loading screen is up anyway
+  renderer.compile(scene, camera);
+  hidden.forEach((o) => {
+    o.visible = false;
+  });
+  glazeTemplates.forEach((m) => {
+    m.visible = false;
+  });
+  last = performance.now();
+  raf = requestAnimationFrame(tick);
 
   /* Deterministic hooks for automated tests */
   window.__ppLera = {
@@ -1474,6 +1555,14 @@ export async function createClay(container) {
     },
     skipFire() {
       if (state.phase === 'fire') state.t = Math.max(state.t, FIRE.cool - 0.01);
+    },
+    setTimeScale(k = 1) {
+      timeScale = Math.max(0.1, Math.min(8, k));
+    },
+    /** Software-GL test runs render functional passes at a reduced ratio. */
+    setPixelRatio(pr) {
+      renderer.setPixelRatio(pr);
+      resize();
     },
     unlockBonus() {
       if (state.pieces.length === 3) state.pieces.push(BONUS);
@@ -1526,9 +1615,9 @@ export async function createClay(container) {
     maps.normal.dispose();
     maps.albedo.dispose();
     envRT.dispose();
+    composer.passes.forEach((pass) => pass.dispose?.());
     composer.dispose();
     rt.dispose();
-    bloom.dispose();
     renderer.dispose();
     renderer.forceContextLoss?.();
     if (sfx.ctx) sfx.ctx.close();

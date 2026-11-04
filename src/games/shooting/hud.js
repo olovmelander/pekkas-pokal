@@ -157,17 +157,22 @@ export function endPanelHtml(r) {
   const recordLine = r.isRecord
     ? '<div class="sk-best new">Nytt rekord!</div>'
     : `<div class="sk-best">Ditt rekord <b>${fmt(r.record)}</b></div>`;
+  // Two halves: stacked on a phone, side by side on a short landscape screen
   return `
-    <div class="sk-kicker">Rundan är slut · ${r.hits}/25 duvor</div>
-    <div class="sk-medal tier-${r.tier}"><span>${tierName}</span></div>
-    <div class="sk-stars">${stars}</div>
-    <h2>${r.title}</h2>
-    <div class="sk-total"><span id="sk-total">0</span><small>poäng</small></div>
-    <div class="sk-endcard">${cardHtml(r.card, r.goldHit, { labels: true })}</div>
-    <dl class="sk-break">${rows}</dl>
-    <div class="sk-vs">Ludvig 2022 <b>${fmt(r.ludvig)}</b> · ${vs}</div>
-    ${recordLine}
-    <button class="pb-btn" data-act="start">Ny runda</button>
+    <div class="sk-end-a">
+      <div class="sk-kicker">Rundan är slut · ${r.hits}/25 duvor</div>
+      <div class="sk-medal tier-${r.tier}"><span>${tierName}</span></div>
+      <div class="sk-stars">${stars}</div>
+      <h2>${r.title}</h2>
+      <div class="sk-total"><span id="sk-total">0</span><small>poäng</small></div>
+      <div class="sk-vs">Ludvig 2022 <b>${fmt(r.ludvig)}</b> · ${vs}</div>
+      ${recordLine}
+    </div>
+    <div class="sk-end-b">
+      <div class="sk-endcard">${cardHtml(r.card, r.goldHit, { labels: true })}</div>
+      <dl class="sk-break">${rows}</dl>
+      <button class="pb-btn" data-act="start">Ny runda</button>
+    </div>
   `;
 }
 

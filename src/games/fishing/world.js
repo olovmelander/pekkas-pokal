@@ -29,7 +29,7 @@ export const BOTTOM = 60;
 
 /* ------------------------------------------------------------- procedural */
 
-export function mulberry(seed) {
+function mulberry(seed) {
   let a = seed;
   return () => {
     a |= 0;
@@ -197,21 +197,34 @@ export function particleAtlas(size = 128) {
 /* ------------------------------------------------------------- shared sky */
 
 /** Low midnight sun, a little right of straight ahead. */
-export const SUN_DIR = new THREE.Vector3(0.16, 0.125, -0.978).normalize();
+const SUN_DIR = new THREE.Vector3(0.16, 0.125, -0.978).normalize();
 
 /**
  * Refracted into the water (Snell: sin θt = sin θi / 1.33), the same sun
  * comes from much higher — this is where the underwater rays fan from.
  */
-export const SUN_UNDER = (() => {
+const SUN_UNDER = (() => {
   const h = new THREE.Vector2(SUN_DIR.x, SUN_DIR.z).normalize();
   const st = Math.sqrt(1 - SUN_DIR.y * SUN_DIR.y) / 1.333;
   return new THREE.Vector3(h.x * st, Math.sqrt(1 - st * st), h.y * st);
 })();
 
+/**
+ * Lit materials fade toward a colour that depends on the view direction —
+ * brighter looking up toward the surface, darker looking down — matching
+ * the background dome, so silhouettes melt into the water instead of
+ * standing out as flat-fogged cut-outs. Shared uniform objects, patched
+ * into each material's fog chunk.
+ */
+export const WATER_FOG = {
+  uFogMid: { value: new THREE.Color(0x1f8f96) },
+  uFogUp: { value: new THREE.Color(0x3ec2c4) },
+  uFogDown: { value: new THREE.Color(0x0b4667) }
+};
+
 const SKY_UNIFORMS = {
-  uZenith: { value: new THREE.Color(0x2c4f8f) },
-  uHorizon: { value: new THREE.Color(0xffc08a) },
+  uZenith: { value: new THREE.Color(0x284a8e) },
+  uHorizon: { value: new THREE.Color(0xffb27a) },
   uSunColor: { value: new THREE.Color(0xfff0c8) },
   uSunDir: { value: SUN_DIR }
 };
@@ -237,6 +250,7 @@ const SKY_GLSL = `
     c = mix(c, vec3(0.92, 0.66, 0.74), smoothstep(0.02, 0.1, h) * (1.0 - smoothstep(0.1, 0.3, h)) * (1.0 - toward) * 0.35);
     c += uSunColor * smoothstep(0.9986, 0.9994, s) * 3.2;
     c += uSunColor * pow(s, 26.0) * 0.75;
+    c += vec3(1.0, 0.58, 0.28) * pow(s, 9.0) * 0.42; // the warm halo of a sun that never sets
     c += uSunColor * pow(s, 3.0) * 0.2;
     return c;
   }
@@ -486,6 +500,7 @@ export function buildWater(caustics, noise) {
     uBody: { value: new THREE.Color(0x1b5868) },
     uDeepTint: { value: new THREE.Color(0x06202e) },
     uFogColor: { value: new THREE.Color(0x1d6b74) },
+    uFogUp: WATER_FOG.uFogUp,
     uFogDensity: { value: 0.02 },
     uCausticStrength: { value: 1 },
     uShoreTint: { value: new THREE.Color(0x1a2532) }
@@ -532,7 +547,7 @@ export function buildWater(caustics, noise) {
     fragmentShader: `
       ${SKY_GLSL}
       uniform sampler2D uCaustics, uNoise;
-      uniform vec3 uBody, uDeepTint, uFogColor, uShoreTint;
+      uniform vec3 uBody, uDeepTint, uFogColor, uFogUp, uShoreTint;
       uniform float uFogDensity, uTime, uCausticStrength;
       varying vec3 vWorld;
       varying vec3 vNrm;
@@ -582,7 +597,9 @@ export function buildWater(caustics, noise) {
             col += vec3(0.55, 0.85, 0.95) * (1.0 - smoothstep(0.0, 0.12, T.y)) * 0.35;
             col += vec3(0.55, 0.85, 0.8) * caust * (0.2 + tr * 0.8);
           }
-          alpha = 0.95;
+          // Far away the ceiling dissolves into the water volume behind it,
+          // where the god rays are — no hard line where the two meet
+          alpha = 0.95 * (1.0 - smoothstep(25.0, 85.0, vDepth));
         } else {
           // --- from above: fresnel between the lake body and the sky it
           // reflects, the treeline mirrored in it, and the glitter path
@@ -606,7 +623,12 @@ export function buildWater(caustics, noise) {
         }
 
         float f = 1.0 - exp(-uFogDensity * uFogDensity * vDepth * vDepth);
-        col = mix(col, uFogColor, f);
+        // Seen from below, the surface is always above: fog it toward the
+        // brighter colour the volume shows looking up
+        vec3 fogC = cameraPosition.y < vWorld.y
+          ? mix(uFogColor, uFogUp, smoothstep(0.0, 0.8, normalize(vWorld - cameraPosition).y))
+          : uFogColor;
+        col = mix(col, fogC, f);
         gl_FragColor = vec4(col, alpha);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
@@ -622,36 +644,49 @@ export function buildWater(caustics, noise) {
 
 /* ------------------------------------------------------ underwater volume */
 
-/**
- * Lit materials fade toward a colour that depends on the view direction —
- * brighter looking up toward the surface, darker looking down — matching
- * the background dome, so silhouettes melt into the water instead of
- * standing out as flat-fogged cut-outs. Shared uniform objects, patched
- * into each material's fog chunk.
- */
-export const WATER_FOG = {
-  uFogUp: { value: new THREE.Color(0x3ec2c4) },
-  uFogDown: { value: new THREE.Color(0x0b4667) }
-};
-
-export function patchWaterFog(shader) {
+export function patchWaterFog(shader, reach = 1) {
+  shader.uniforms.uFogMid = WATER_FOG.uFogMid;
   shader.uniforms.uFogUp = WATER_FOG.uFogUp;
   shader.uniforms.uFogDown = WATER_FOG.uFogDown;
   shader.vertexShader = shader.vertexShader
     .replace('#include <fog_pars_vertex>', '#include <fog_pars_vertex>\nvarying float vFogDirY;')
-    .replace('#include <fog_vertex>',
-      '#include <fog_vertex>\nvFogDirY = normalize(transpose(mat3(viewMatrix)) * mvPosition.xyz).y;');
+    .replace('#include <fog_vertex>', `#include <fog_vertex>
+      vec4 fogWorld = vec4(transformed, 1.0);
+      #ifdef USE_INSTANCING
+        fogWorld = instanceMatrix * fogWorld;
+      #endif
+      fogWorld = modelMatrix * fogWorld;
+      vFogDirY = normalize(fogWorld.xyz - cameraPosition).y;`);
   shader.fragmentShader = shader.fragmentShader
     .replace('#include <fog_pars_fragment>',
-      '#include <fog_pars_fragment>\nuniform vec3 uFogUp, uFogDown;\nvarying float vFogDirY;')
+      '#include <fog_pars_fragment>\nuniform vec3 uFogMid, uFogUp, uFogDown;\nvarying float vFogDirY;')
     .replace('#include <fog_fragment>', `
       #ifdef USE_FOG
+        // All three colours are linear here. (three's own fogColor is not:
+        // r187 uploads it pre-encoded, because fog runs AFTER tone mapping
+        // and sRGB encoding.) So build the tint in linear and put it through
+        // the same two steps the volume shader takes — then a fully fogged
+        // rock is exactly the colour of the water behind it.
         vec3 fogTint = vFogDirY > 0.0
-          ? mix(fogColor, uFogUp, smoothstep(0.0, 0.8, vFogDirY))
-          : mix(fogColor, uFogDown, smoothstep(0.0, 0.7, -vFogDirY));
-        float fogFactor = 1.0 - exp(-fogDensity * fogDensity * vFogDepth * vFogDepth);
+          ? mix(uFogMid, uFogUp, smoothstep(0.0, 0.8, vFogDirY))
+          : mix(uFogMid, uFogDown, smoothstep(0.0, 0.7, -vFogDirY));
+        #ifdef TONE_MAPPING
+          fogTint = toneMapping(fogTint);
+        #endif
+        fogTint = linearToOutputTexel(vec4(fogTint, 1.0)).rgb;
+        float fogD = vFogDepth * ${reach.toFixed(2)};
+        float fogFactor = 1.0 - exp(-fogDensity * fogDensity * fogD * fogD);
         gl_FragColor.rgb = mix(gl_FragColor.rgb, fogTint, fogFactor);
       #endif`);
+}
+
+/**
+ * The same patch with a longer reach: the basin walls and the kelp on them
+ * fog out faster than fish, so they frame the sides up close but melt into
+ * the haze toward the back instead of standing there as a dark cut-out.
+ */
+export function fogWithReach(reach) {
+  return (shader) => patchWaterFog(shader, reach);
 }
 
 /**
@@ -663,7 +698,7 @@ export function patchWaterFog(shader) {
  */
 export function buildVolume(noise) {
   const uniforms = {
-    uMid: { value: new THREE.Color(0x1f8f96) },
+    uMid: WATER_FOG.uFogMid,
     uUp: WATER_FOG.uFogUp,
     uDown: WATER_FOG.uFogDown,
     uRay: { value: new THREE.Color(0xbfeee0) },
@@ -700,7 +735,9 @@ export function buildVolume(noise) {
         float ang = atan(dot(d, t2), dot(d, t1)) / 6.28318;
         float a = texture2D(uNoise, vec2(ang * 23.0, uTime * 0.012)).r;
         float b = texture2D(uNoise, vec2(ang * 11.0 + 0.5, -uTime * 0.017)).g;
-        float rays = smoothstep(0.42, 0.85, a * 0.6 + b * 0.55);
+        // Rays from above only: kept off the horizon band, where the fogged
+        // basin walls have to melt into plain water colour
+        float rays = smoothstep(0.42, 0.85, a * 0.6 + b * 0.55) * smoothstep(0.04, 0.35, d.y);
         float toward = max(dot(d, s), 0.0);
         c += uRay * rays * pow(toward, 2.2) * uRayStr;
         c += uRay * pow(toward, 12.0) * uRayStr * 0.6; // the glow where the sun is
@@ -940,13 +977,19 @@ export function buildBoat() {
 
 /* ----------------------------------------------------------- the basin */
 
-const BASIN = { R: 34, zc: 6, th0: Math.PI + 0.1, th1: Math.PI * 2 - 0.1, top: -2.4, bottom: -64 };
+const SPAN = Math.acos(0.35) - 0.1; // each side wall covers |cos θ| from ~1 down to 0.35
+const BASIN = { R: 34, zc: 6, th0: Math.PI + 0.1, th1: Math.PI * 2 - 0.1, span: SPAN, top: -2.4, bottom: -64 };
 
-/** Radius of the rock wall at angle th, height y — terraced every 9 m. */
+/**
+ * Radius of the rock wall at angle th, height y — terraced every 9 m. Only
+ * the two sides are built: toward the back each wall bends away into the
+ * haze, so the middle of the frame stays open water with the god rays in it.
+ */
 function wallRadius(th, y) {
   const d = -y;
   const terrace = 2.4 * smooth(0.62, 1, (d / 9) % 1);
-  return BASIN.R - d * 0.07 +
+  const open = 40 * (1 - smooth(0.35, 0.85, Math.abs(Math.cos(th))));
+  return BASIN.R + open - d * 0.07 +
     Math.sin(th * 7 + d * 0.13) * 1.6 +
     Math.sin(th * 17 - d * 0.31) * 0.8 +
     Math.sin(d * 0.9 + th * 3) * 0.5 -
@@ -958,7 +1001,13 @@ function smooth(a, b, x) {
   return t * t * (3 - 2 * t);
 }
 
-export function wallPoint(th, y, inset = 0) {
+/** A wall angle on one of the two near sides, where kelp and boulders show. */
+function sideAngle(rand) {
+  const k = rand() * BASIN.span * 0.7;
+  return rand() < 0.5 ? BASIN.th0 + k : BASIN.th1 - k;
+}
+
+function wallPoint(th, y, inset = 0) {
   const r = wallRadius(th, y) - inset;
   return new THREE.Vector3(Math.cos(th) * r, y, BASIN.zc + Math.sin(th) * r);
 }
@@ -969,25 +1018,29 @@ export function wallPoint(th, y, inset = 0) {
  * wide screen the side walls frame the shaft you are falling down.
  */
 export function buildBasin() {
-  const cols = 64;
+  const cols = 26;
   const rows = 46;
   const pos = [];
   const idx = [];
-  for (let r = 0; r <= rows; r++) {
-    const y = BASIN.top + (BASIN.bottom - BASIN.top) * (r / rows);
-    for (let c = 0; c <= cols; c++) {
-      const th = BASIN.th0 + (BASIN.th1 - BASIN.th0) * (c / cols);
-      const p = wallPoint(th, y);
-      pos.push(p.x, p.y, p.z);
+  // Two strips: the left wall sweeps from beside the camera toward the back,
+  // the right wall mirrors it
+  [BASIN.th0, BASIN.th1 - BASIN.span].forEach((start) => {
+    const base = pos.length / 3;
+    for (let r = 0; r <= rows; r++) {
+      const y = BASIN.top + (BASIN.bottom - BASIN.top) * (r / rows);
+      for (let c = 0; c <= cols; c++) {
+        const p = wallPoint(start + BASIN.span * (c / cols), y);
+        pos.push(p.x, p.y, p.z);
+      }
     }
-  }
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const a = r * (cols + 1) + c;
-      const b = a + cols + 1;
-      idx.push(a, b, a + 1, a + 1, b, b + 1);
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const a = base + r * (cols + 1) + c;
+        const b = a + cols + 1;
+        idx.push(a, b, a + 1, a + 1, b, b + 1);
+      }
     }
-  }
+  });
   let geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
   geo.setIndex(idx);
@@ -999,9 +1052,9 @@ export function buildBasin() {
   const N = geo.attributes.normal;
   const col = new Float32Array(P.count * 3);
   const c = new THREE.Color();
-  const moss = new THREE.Color(0x3a4f30);
-  const rock = new THREE.Color(0x3c4552);
-  const deep = new THREE.Color(0x1a202a);
+  const moss = new THREE.Color(0x46603a);
+  const rock = new THREE.Color(0x4c5866);
+  const deep = new THREE.Color(0x283240);
   const silt = new THREE.Color(0x58584a);
   for (let i = 0; i < P.count; i++) {
     const d = -P.getY(i);
@@ -1015,8 +1068,8 @@ export function buildBasin() {
   }
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide });
-  mat.onBeforeCompile = patchWaterFog;
-  mat.customProgramCacheKey = () => 'fiske-rock';
+  mat.onBeforeCompile = fogWithReach(1.3);
+  mat.customProgramCacheKey = () => 'fiske-wall';
   return new THREE.Mesh(geo, mat);
 }
 
@@ -1068,7 +1121,7 @@ export function buildKelp(count, timeUniform) {
         float kY = position.y * position.y;
         transformed.x += sin(uTime * 0.8 + kPh + position.y * 2.2) * kY * 0.22;
         transformed.z += cos(uTime * 0.6 + kPh * 1.3 + position.y * 1.7) * kY * 0.12;`);
-    patchWaterFog(shader);
+    patchWaterFog(shader, 1.2);
   };
   mat.customProgramCacheKey = () => 'fiske-kelp';
 
@@ -1096,7 +1149,7 @@ export function buildKelp(count, timeUniform) {
       tint.setRGB(0.55, 0.55, 0.5);
     } else {
       // The terraces: thick in the shallows, thinning with depth
-      const th = BASIN.th0 + rand() * (BASIN.th1 - BASIN.th0);
+      const th = sideAngle(rand);
       const y = -3 - (rand() ** 1.8) * 40;
       p = wallPoint(th, y, 0.6);
       h = 2.2 + rand() * 4.5 * (1 - (-y) / 60);
@@ -1145,13 +1198,13 @@ export function buildSeabed() {
   bed.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   bed.computeVertexNormals();
   const bedMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
-  bedMat.onBeforeCompile = patchWaterFog;
+  bedMat.onBeforeCompile = fogWithReach(1);
   bedMat.customProgramCacheKey = () => 'fiske-rock';
   g.add(new THREE.Mesh(bed, bedMat));
 
   // Boulders, one instanced draw: strewn on the bed and perched on terraces
   const stoneMat = new THREE.MeshLambertMaterial({ color: 0x4a5266, flatShading: true });
-  stoneMat.onBeforeCompile = patchWaterFog;
+  stoneMat.onBeforeCompile = fogWithReach(1);
   stoneMat.customProgramCacheKey = () => 'fiske-rock-plain';
   const stones = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), stoneMat, 46);
   const m = new THREE.Matrix4();
@@ -1164,7 +1217,7 @@ export function buildSeabed() {
     if (i < 22) {
       p = new THREE.Vector3(-32 + rand() * 64, r * 0.35, -14 + rand() * 18);
     } else {
-      const th = BASIN.th0 + rand() * (BASIN.th1 - BASIN.th0);
+      const th = sideAngle(rand);
       const y = -6 - rand() * 50;
       p = wallPoint(th, y - (y % 9) - 0.5, 0.9);
       p.y += BOTTOM + 1.4; // the group sits at the bottom
@@ -1188,7 +1241,7 @@ export function buildSeabed() {
   const wg = new THREE.ExtrudeGeometry(wshape, { depth: 1.4, bevelEnabled: false, curveSegments: 4 });
   wg.translate(0, 0, -0.7);
   const wreckMat = new THREE.MeshLambertMaterial({ color: 0x3b4a44, flatShading: true });
-  wreckMat.onBeforeCompile = patchWaterFog;
+  wreckMat.onBeforeCompile = fogWithReach(1);
   wreckMat.customProgramCacheKey = () => 'fiske-rock-plain';
   wreck.add(new THREE.Mesh(wg, wreckMat));
   const plank = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.08, 0.3), wreckMat);
@@ -1206,7 +1259,7 @@ export function buildSeabed() {
   prof.forEach(([x, y]) => pts.push(new THREE.Vector2(x, y)));
   const pokal = new THREE.Mesh(
     new THREE.LatheGeometry(pts, 18),
-    new THREE.MeshStandardMaterial({ color: 0xf2c14e, metalness: 1, roughness: 0.22, emissive: 0x6a4a08, emissiveIntensity: 0.6 })
+    new THREE.MeshStandardMaterial({ color: 0xf2c14e, metalness: 0.85, roughness: 0.25, emissive: 0xb07a12, emissiveIntensity: 0.9 })
   );
   pokal.position.set(-5.2, -0.15, -2.4);
   pokal.rotation.set(0.5, 0, -0.9);
@@ -1259,10 +1312,15 @@ export function buildShafts(noise, count = 22) {
     uColor: { value: new THREE.Color(0xbfeee0) },
     uStrength: { value: 0.3 }
   };
+  // No depth test: the shafts are light scattered in the water between the
+  // eye and everything else, so they lie over the rock walls and the fish
+  // alike. Tested against depth, the walls hid the shafts behind them and
+  // stood out as dark slabs next to the lit gap.
   const mat = new THREE.ShaderMaterial({
     uniforms,
     transparent: true,
     depthWrite: false,
+    depthTest: false,
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
     fog: false,

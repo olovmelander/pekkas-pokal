@@ -280,7 +280,7 @@ export class Shards {
       it.v.set(Math.cos(a) * out, (1 + rand() * 4.5) * power, Math.sin(a) * out).addScaledVector(clayVel, 0.55);
       it.q.setFromEuler(new THREE.Euler(rand() * 6, rand() * 6, rand() * 6));
       it.w.set(rand() - 0.5, rand() - 0.5, rand() - 0.5).normalize().multiplyScalar(8 + rand() * 16);
-      const s = 0.55 + rand() * 0.9;
+      const s = 0.9 + rand() * 1.1;
       it.s.set(s * (0.8 + rand() * 0.5), s, s * (0.8 + rand() * 0.5));
     }
     this.mesh.instanceColor.needsUpdate = true;
@@ -489,9 +489,9 @@ export function buildAmbient(rand, { sunDir, sunColor }) {
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
         vec3 view = normalize((modelMatrix * vec4(p, 1.0)).xyz - cameraPosition);
         float back = max(dot(view, uSunDir), 0.0);
-        vGlow = (0.03 + 1.6 * pow(back, 12.0)) * smoothstep(0.4, 1.6, -mv.z) * (1.0 - smoothstep(14.0, 26.0, -mv.z));
+        vGlow = (0.03 + 0.95 * pow(back, 12.0)) * smoothstep(2.5, 5.0, -mv.z) * (1.0 - smoothstep(14.0, 26.0, -mv.z));
         float size = (aSeed.z < 0.5 ? 0.03 : 0.045) * aSeed.w;
-        gl_PointSize = min(size * uScale / max(0.1, -mv.z), 24.0);
+        gl_PointSize = min(size * uScale / max(0.1, -mv.z), 9.0);
         gl_Position = projectionMatrix * mv;
       }
     `,

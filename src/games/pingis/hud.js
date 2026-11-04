@@ -19,6 +19,12 @@ function medal(level, big = false) {
 export function buildHud(root, { mouse }) {
   const moveHint = mouse ? 'Rör musen — racketen följer pekaren.' : 'Dra med fingret — racketen följer dig längs bordet.';
   const serveHint = mouse ? 'klicka för att serva' : 'dra och släpp';
+  // Controls on screen while you play: keys on a desktop, the gesture on a phone
+  const keysHint = mouse
+    ? '<span><kbd>Mus</kbd> eller <kbd>←</kbd><kbd>→</kbd> flyttar</span>' +
+      '<span>dra musen <kbd>↑</kbd><kbd>↓</kbd> i träffen = skruv</span>' +
+      '<span><kbd>klick</kbd> / <kbd>mellanslag</kbd> servar</span><span><kbd>?</kbd> hjälp</span>'
+    : '<span>Dra = flytta racketen · flicka UPP i träffen = topspin, NED = backspin</span>';
   root.innerHTML = `
     <div class="pb-hud">
       <div class="pb-top">
@@ -44,6 +50,7 @@ export function buildHud(root, { mouse }) {
       <div class="fg-phase" id="pg-phase"></div>
       <div class="pb-toast" id="pg-toast"></div>
       <div class="fg-pops" id="pg-pops"></div>
+      <div class="pg-keys${mouse ? '' : ' touch'}" id="pg-keys">${keysHint}</div>
     </div>
 
     <div class="pg-replay" id="pg-replay" aria-hidden="true">
@@ -90,7 +97,7 @@ export function buildHud(root, { mouse }) {
     score: q('#pg-score'), hi: q('#pg-hi'), bug: q('#pg-bug'), my: q('#pg-my'), ai: q('#pg-ai'),
     aiName: q('#pg-ainame'), dotMe: q('#pg-dot-me'), dotAi: q('#pg-dot-ai'), pips: q('#pg-pips'),
     mp: q('#pg-mp'), mpWho: q('#pg-mp-who'), rally: q('#pg-rally'), rallyN: q('#pg-rally-n'),
-    rallyWord: q('#pg-rally-word'), callout: q('#pg-callout'), phase: q('#pg-phase'),
+    rallyWord: q('#pg-rally-word'), keys: q('#pg-keys'), callout: q('#pg-callout'), phase: q('#pg-phase'),
     toast: q('#pg-toast'), pops: q('#pg-pops'), replay: q('#pg-replay'), intro: q('#pg-intro'),
     overlay: q('#pg-overlay'), panel: q('#pg-panel'), help: q('#pg-help'), mute: q('#pg-mute')
   };
@@ -152,6 +159,9 @@ export function buildHud(root, { mouse }) {
         const cls = i < matchNo - 1 ? `won m-${medals[i] || 1}` : i === matchNo - 1 ? 'now' : '';
         return `<i class="${cls}"></i>`;
       }).join('')}<span class="pg-pip-label">MATCH ${matchNo}/3</span>`;
+    },
+    showKeys(on) {
+      el.keys.classList.toggle('show', on);
     },
     showBug(on) {
       el.bug.classList.toggle('show', on);

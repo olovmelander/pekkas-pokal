@@ -52,8 +52,8 @@ const PILASTERS = [
   WIN_X[0] - 2.7, (WIN_X[0] + WIN_X[1]) / 2, (WIN_X[1] + WIN_X[2]) / 2, WIN_X[2] + 2.7,
   WIN_X[0] - 5.4, WIN_X[2] + 5.4
 ];
-const WIN_Y0 = 2.9; // sill
-const WIN_Y1 = 5.7; // spring of the arch
+const WIN_Y0 = 2.5; // sill
+const WIN_Y1 = 5.3; // spring of the arch
 const WIN_R = WIN_W / 2;
 /** Direction the sunlight travels: from behind the back wall, down into the room */
 export const SUN_DIR = new THREE.Vector3(0.12, -0.5, 1).normalize();
@@ -564,18 +564,19 @@ void main() {
   float len = tf - tn;
   if (len <= 0.0) discard;
   float acc = 0.0;
-  for (int i = 0; i < 5; i++) {
-    float tt = tn + (float(i) + 0.5) / 5.0 * len;
+  for (int i = 0; i < SAMPLES; i++) {
+    float tt = tn + (float(i) + 0.5) / float(SAMPLES) * len;
     vec3 b = o + d * tt;
     float edge = smoothstep(0.0, 0.2, b.x) * smoothstep(1.0, 0.8, b.x)
                * smoothstep(0.0, 0.16, b.y) * smoothstep(1.0, 0.86, b.y);
     vec3 wp = ro + rd * tt;
     float n = texture2D(uNoise, vec2(b.x * 1.3 + uTime * 0.012, b.z * 0.9 - uTime * 0.02)).r;
     float n2 = texture2D(uNoise, vec2(b.x * 3.1 - uTime * 0.02, b.y * 2.0 + b.z * 2.2)).g;
-    float fade = (1.0 - b.z * 0.55) * smoothstep(0.0, 0.5, wp.y + 0.2);
+    // Densest near the window, thinning out towards the floor
+    float fade = pow(max(1.0 - b.z, 0.0), 1.6) * smoothstep(0.0, 0.9, wp.y);
     acc += edge * fade * (0.55 + 0.55 * n + 0.25 * n2);
   }
-  float glow = acc / 5.0 * min(len, 6.0);
+  float glow = acc / float(SAMPLES) * min(len, 4.0);
   gl_FragColor = vec4(uColor * glow * uIntensity, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -622,7 +623,7 @@ function shaftGeometry(cx, X, Y) {
   return { geo, O, H, len: floorW(O.y + H) };
 }
 
-function buildShafts(noise) {
+function buildShafts(noise, high) {
   const X = new THREE.Vector3(1, 0, 0);
   const Y = new THREE.Vector3(0, 1, 0);
   const parts = WIN_X.map((cx) => shaftGeometry(cx, X, Y));
@@ -637,13 +638,14 @@ function buildShafts(noise) {
   const geo = mergeGeometries(parts.map((p) => p.geo));
   parts.forEach((p) => p.geo.dispose());
   const mat = new THREE.ShaderMaterial({
+    defines: { SAMPLES: high ? 5 : 3 },
     vertexShader: SHAFT_VERT,
     fragmentShader: SHAFT_FRAG,
     uniforms: {
       uInv: { value: inv },
       uColor: { value: new THREE.Color(0xffc48a) },
       uTime: { value: 0 },
-      uIntensity: { value: 0.11 },
+      uIntensity: { value: 0.07 },
       uNoise: { value: noise }
     },
     transparent: true,
@@ -793,7 +795,8 @@ const HAIRS = [0x2b1d12, 0x4a3220, 0x6b4e2e, 0x8a7a68, 0xc9a464, 0x1a1a1a];
 class Crowd {
   constructor(seats) {
     const rand = mulberry(41);
-    const mat = new THREE.MeshStandardMaterial({ roughness: 0.82 });
+    // Dimmed: the crowd is backdrop, it must never compete with the blades
+    const mat = new THREE.MeshStandardMaterial({ roughness: 0.82, color: new THREE.Color(0.62, 0.6, 0.58) });
     const legGeo = mergeGeometries([
       new THREE.BoxGeometry(0.34, 0.15, 0.44).translate(0, 0.6, 0.16),
       new THREE.BoxGeometry(0.3, 0.5, 0.13).translate(0, 0.3, 0.36),
@@ -1121,7 +1124,7 @@ class ScoreBox {
       // Lit lamps hum a little, as the real ones do through a camera
       const target = on ? 7 + Math.sin(t * 50) * 0.4 : 0.05;
       m.emissiveIntensity += (target - m.emissiveIntensity) * Math.min(1, dt * (on ? 30 : 8));
-      lightI += on ? 26 : 0;
+      lightI += on ? 4 : 0;
     });
     this.light.intensity += (lightI - this.light.intensity) * Math.min(1, dt * 14);
   }
@@ -1158,7 +1161,7 @@ export function buildSalle({ glow, high }) {
   g.add(lights);
   const hemi = new THREE.HemisphereLight(0x9cb2d8, 0x3a2414, 0.5);
   lights.add(hemi);
-  const key = new THREE.DirectionalLight(0xffc68a, 3.4);
+  const key = new THREE.DirectionalLight(0xffc68a, 2.3);
   const keyTarget = new THREE.Vector3(0.6, 0, 0.5);
   key.position.copy(keyTarget).addScaledVector(SUN_DIR, -40);
   key.target.position.copy(keyTarget);
@@ -1182,7 +1185,7 @@ export function buildSalle({ glow, high }) {
   lights.add(rimCool);
   const candles = [-3.6, 3.6].map((x) => {
     const l = new THREE.PointLight(0xffaa5c, 11, 13, 2);
-    l.position.set(x, 4.9, -1.6);
+    l.position.set(x, 4.4, -1.6);
     lights.add(l);
     return l;
   });
@@ -1193,7 +1196,7 @@ export function buildSalle({ glow, high }) {
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(32, 24),
     new THREE.MeshStandardMaterial({
-      map: parquet, roughness: 0.34, metalness: 0, bumpMap: parquet, bumpScale: 0.6, envMapIntensity: 0.9
+      map: parquet, roughness: 0.52, metalness: 0, bumpMap: parquet, bumpScale: 0.6, envMapIntensity: 0.9
     })
   );
   floor.rotation.x = -Math.PI / 2;
@@ -1321,7 +1324,7 @@ export function buildSalle({ glow, high }) {
   // Chandeliers: stem, two brass rings, eight arms with cups
   const brass = 0xb08a46;
   const chX = [-3.6, 3.6];
-  const chY = 5.05;
+  const chY = 4.55;
   const chZ = -1.6;
   chX.forEach((x) => {
     metal.add(new THREE.CylinderGeometry(0.025, 0.025, 9.6 - chY, 6), 0x2f281e, x, (9.6 + chY) / 2, chZ);
@@ -1421,7 +1424,7 @@ export function buildSalle({ glow, high }) {
   g.add(trophyGlow);
 
   /* ---- Shafts and dust ---- */
-  const shafts = buildShafts(noise);
+  const shafts = buildShafts(noise, high);
   g.add(shafts.mesh);
   const motes = buildMotes(shafts, high ? 700 : 380);
   g.add(motes.points);

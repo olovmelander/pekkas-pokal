@@ -137,7 +137,7 @@ export async function createShooting(container) {
   // Automated runs (screenshots, tests) get a fixed quality so the result
   // is deterministic; real players get adaptive resolution.
   const adaptive = !navigator.webdriver;
-  hud.pullKey.textContent = touch ? 'eller håll fingret på skärmen' : 'mellanslag';
+  hud.pullKey.textContent = touch ? 'eller tryck på fältet' : 'mellanslag';
 
   const sfx = new Sfx();
   const rand = mulberry(2022);
@@ -301,6 +301,7 @@ export async function createShooting(container) {
   let tracking = false;
   const lead = { t: 0, center: new THREE.Vector3(), clay: new THREE.Vector3(), dots: [], radius: 0 };
   const follow = { yaw: 0, pitch: 0 };
+  const flare = { t: 0, pos: new THREE.Vector3() };
   const perf = { ema: 16, slowFor: 0 };
 
   const tmpV = new THREE.Vector3();
@@ -482,6 +483,11 @@ export async function createShooting(container) {
 
   function startGame() {
     sfx.resume();
+    // Nothing from the last round may fire into this one
+    timers.forEach((id) => clearTimeout(id));
+    timers.clear();
+    hud.pops.innerHTML = '';
+    hideLead();
     Object.assign(state, {
       phase: 'between', serieNo: 1, throwNo: 0, score: 0, streak: 0, bestStreak: 0,
       isGold: false, isDouble: false, gold: null, thrown: 0, passedLudvig: false,
@@ -502,7 +508,6 @@ export async function createShooting(container) {
     // Into the gun: the camera flies from the vista to the shoulder
     camTarget = 1;
     camSpeed = 0.62;
-    later(() => sfx.reload(), 900);
     later(startSerie, 1500);
   }
 
@@ -518,10 +523,12 @@ export async function createShooting(container) {
 
   function armPull() {
     state.phase = 'armed';
+    // Break the gun, eject, two fresh shells, snap shut
+    later(() => sfx.reload(), 80);
     state.shells = state.isGold ? 1 : 2;
     renderShells();
     renderPull();
-    if (state.firstPull) hint('pull', touch ? 'Tryck PULL — eller håll fingret på skärmen' : 'Klicka eller tryck mellanslag för PULL');
+    if (state.firstPull) hint('pull', touch ? 'Tryck PULL — eller tryck på fältet och håll kvar fingret' : 'Klicka eller tryck mellanslag för PULL');
   }
 
   function callPull() {
@@ -686,37 +693,48 @@ export async function createShooting(container) {
   /** Dust, chips, the 3D shards and a hot core — the money shot. */
   function breakFx(clay, at) {
     const color = clay.gold ? GOLD : ORANGE;
-    shards.burst(at, clay.vel, color, clay.gold ? 16 : 13, fxRand, clay.gold ? 1.3 : 1);
-    const dust = clay.gold ? new THREE.Color(0xe8c46a) : new THREE.Color(0xd9773a);
-    for (let i = 0; i < 26; i++) {
+    shards.burst(at, clay.vel, color, clay.gold ? 18 : 15, fxRand, clay.gold ? 1.3 : 1);
+    // The cloud a clay leaves: a dense orange core that billows and drifts
+    const dust = clay.gold ? new THREE.Color(0xd08a1c) : new THREE.Color(0xe0682a);
+    for (let i = 0; i < 34; i++) {
       const a = fxRand() * Math.PI * 2;
-      const e = (fxRand() - 0.3) * 1.6;
-      const sp = 1.5 + fxRand() * 4.5;
+      const e = (fxRand() - 0.35) * 1.4;
+      const sp = 1 + fxRand() * 5;
       soft.spawn({
         pos: at,
-        vel: tmpV.set(Math.cos(a) * sp, e * sp * 0.6, Math.sin(a) * sp).addScaledVector(clay.vel, 0.35),
-        life: 1.1 + fxRand() * 1.3, size: 0.35, size1: 1.6 + fxRand() * 1.4,
-        color: dust.clone().offsetHSL(0, -0.1, (fxRand() - 0.5) * 0.15), alpha: 0.62, drag: 2.4, grav: -0.15, wind: 1
+        vel: tmpV.set(Math.cos(a) * sp, e * sp * 0.7, Math.sin(a) * sp).addScaledVector(clay.vel, 0.3),
+        life: 1.4 + fxRand() * 1.6, size: 0.6, size1: 2.4 + fxRand() * 2.2,
+        color: dust.clone().offsetHSL((fxRand() - 0.5) * 0.03, -0.05, (fxRand() - 0.6) * 0.2),
+        alpha: 0.78, drag: 2.2, grav: -0.12, wind: 1
       });
     }
-    // Fine grit: small, fast, falls
-    for (let i = 0; i < 26; i++) {
+    // Black pitch dust from the underside, and grit that falls
+    for (let i = 0; i < 12; i++) {
       soft.spawn({
         pos: at,
-        vel: tmpV.set(fxRand() - 0.5, fxRand() * 0.8, fxRand() - 0.5).multiplyScalar(14).addScaledVector(clay.vel, 0.5),
-        life: 0.8 + fxRand() * 0.6, size: 0.09, size1: 0.07, color: new THREE.Color(0x3a2418),
-        alpha: 0.9, drag: 1.2, grav: 9.8
+        vel: tmpV.set(fxRand() - 0.5, fxRand() - 0.6, fxRand() - 0.5).multiplyScalar(5).addScaledVector(clay.vel, 0.3),
+        life: 1 + fxRand(), size: 0.4, size1: 1.6, color: new THREE.Color(0x3a2a20), alpha: 0.5, drag: 2, wind: 1
+      });
+    }
+    for (let i = 0; i < 30; i++) {
+      soft.spawn({
+        pos: at,
+        vel: tmpV.set(fxRand() - 0.5, fxRand() * 0.8, fxRand() - 0.5).multiplyScalar(16).addScaledVector(clay.vel, 0.5),
+        life: 0.9 + fxRand() * 0.7, size: 0.14, size1: 0.1, color: new THREE.Color(0x4a2814),
+        alpha: 0.95, drag: 1.1, grav: 9.8
       });
     }
     // The hot core — a bloom-bright pop for a frame or two
-    bright.spawn({ pos: at, life: 0.16, size: 2.6, size1: 4.2, color: new THREE.Color(3.2, 2.2, 1.3), alpha: 1 });
+    bright.spawn({ pos: at, life: 0.14, size: 1.8, size1: 3.4, color: new THREE.Color(2.2, 1.3, 0.6), alpha: 1 });
     if (clay.gold) {
-      for (let i = 0; i < 70; i++) {
+      flare.t = 1;
+      flare.pos.copy(at);
+      for (let i = 0; i < 80; i++) {
         bright.spawn({
           pos: at,
-          vel: tmpV.set(fxRand() - 0.5, fxRand() - 0.2, fxRand() - 0.5).normalize().multiplyScalar(2 + fxRand() * 9),
-          life: 1.6 + fxRand() * 1.6, size: 0.22, size1: 0.08,
-          color: new THREE.Color(2.4, 1.7, 0.6), alpha: 1, drag: 1.4, grav: 1.6, wind: 0.6
+          vel: tmpV.set(fxRand() - 0.5, fxRand() - 0.2, fxRand() - 0.5).normalize().multiplyScalar(2 + fxRand() * 10),
+          life: 1.8 + fxRand() * 1.8, size: 0.3, size1: 0.1,
+          color: new THREE.Color(2.4, 1.7, 0.6), alpha: 1, drag: 1.3, grav: 1.4, wind: 0.6
         });
       }
     }
@@ -789,7 +807,6 @@ export async function createShooting(container) {
       }
       return;
     }
-    later(() => sfx.reload(), 120);
     armPull();
   }
 
@@ -860,7 +877,7 @@ export async function createShooting(container) {
         pos: muzzle,
         vel: tmpV.copy(shotDir).multiplyScalar(2 + fxRand() * 5).add(tmpV2.set(fxRand() - 0.5, fxRand() * 0.6, fxRand() - 0.5)),
         life: 1.4 + fxRand() * 1.4, size: 0.12, size1: 0.9 + fxRand() * 0.8,
-        color: new THREE.Color(0xd9d4ca), alpha: 0.26, drag: 2.6, grav: -0.25, wind: 1
+        color: new THREE.Color(0xd9d4ca), alpha: 0.18, drag: 2.6, grav: -0.25, wind: 1
       });
     }
 
@@ -870,7 +887,6 @@ export async function createShooting(container) {
       sfx.slowmo();
       flashScreen('slow');
     }
-    if (state.shells > 0) later(() => sfx.reload(), 300);
   }
 
   /** Shots land once their time of flight has elapsed (in game time). */
@@ -1027,9 +1043,19 @@ export async function createShooting(container) {
     tracking = false;
   }
 
+  // Esc closes the help card, not the whole game: caught on the way down,
+  // before the site's own Esc-closes-the-stage handler sees it
+  function onKeyCapture(e) {
+    if (helpOpen && e.key === 'Escape') {
+      e.stopPropagation();
+      e.preventDefault();
+      setHelp(false);
+    }
+  }
+
   function onKeyDown(e) {
-    if (e.key === '?' || (e.key === 'Escape' && helpOpen)) {
-      setHelp(e.key === '?' ? !helpOpen : false);
+    if (e.key === '?') {
+      setHelp(!helpOpen);
       return;
     }
     if (helpOpen) return;
@@ -1071,6 +1097,7 @@ export async function createShooting(container) {
   canvasHost.addEventListener('pointermove', onPointerMove);
   window.addEventListener('pointerup', onPointerUp);
   window.addEventListener('pointercancel', onPointerCancel);
+  window.addEventListener('keydown', onKeyCapture, true);
   window.addEventListener('keydown', onKeyDown);
   hud.overlay.addEventListener('click', onOverlayClick);
   hud.pull.addEventListener('click', callPull);
@@ -1179,11 +1206,13 @@ export async function createShooting(container) {
     const portrait = view.aspect < 0.9;
     const drift = reduceMotion ? 0 : 1;
     if (portrait) {
-      vista.pos.set(1.6 + Math.sin(t * 0.07) * 0.4 * drift, 2.9, 9.2 + Math.cos(t * 0.05) * 0.3 * drift);
-      lookAt.set(-4.5, 2.0, -40);
-      vista.fov = 64;
+      // Narrow frame: look toward the sun so barn, flag and sun share the
+      // top of the screen, with the gang's heads along the sheet's edge
+      vista.pos.set(2.6 + Math.sin(t * 0.07) * 0.3 * drift, 2.5, 10.5 + Math.cos(t * 0.05) * 0.3 * drift);
+      lookAt.set(-9, 1.2, -30);
+      vista.fov = 60;
       vista.ox = 0;
-      vista.oy = view.h * 0.2;
+      vista.oy = view.h * 0.25;
     } else {
       vista.pos.set(5.6 + Math.sin(t * 0.07) * 0.6 * drift, 3.4 + Math.sin(t * 0.11) * 0.06 * drift,
         10.6 + Math.cos(t * 0.05) * 0.3 * drift);
@@ -1238,6 +1267,8 @@ export async function createShooting(container) {
       else camera.clearViewOffset();
       camera.updateProjectionMatrix();
     }
+    // The gun, the aim ray and the HUD projections all read this frame's pose
+    camera.updateMatrixWorld();
   }
 
   /* ---- Loop ------------------------------------------------------------ */
@@ -1369,8 +1400,18 @@ export async function createShooting(container) {
     });
   }
 
-  function updateGlint(t) {
+  function updateGlint(t, dt) {
     const g = clays.find((c) => c.active && c.gold);
+    if (flare.t > 0) {
+      // The golden dove's break: a star that blooms out and fades (in slow motion)
+      flare.t = Math.max(0, flare.t - dt * 1.4);
+      glint.position.copy(flare.pos);
+      glint.scale.setScalar(2 + (1 - flare.t) * 9);
+      glintMat.opacity = flare.t;
+      glintMat.rotation = t * 0.5;
+      return;
+    }
+    glint.scale.setScalar(1.6);
     glintMat.opacity = g ? 0.75 + Math.sin(t * 22) * 0.25 : 0;
     if (g) {
       glint.position.copy(g.mesh.position);
@@ -1436,7 +1477,7 @@ export async function createShooting(container) {
     ambient.uniforms.uScale.value = ps;
 
     updateGun(realDt);
-    updateGlint(t);
+    updateGlint(t, dt);
     updateCrowd(realDt, t);
     updateHud(realDt);
     if (rand() < realDt * 0.15) sfx.bird();
@@ -1458,6 +1499,38 @@ export async function createShooting(container) {
   showStartPanel();
   renderSerie();
   renderGhost();
+
+  /**
+   * Test support: play every still-empty box of the 24 through the real
+   * scoring (streaks, clean series, doubles), deciding hit or miss with
+   * `decide()`; `forceMiss` lists [series, box] pairs that must miss.
+   */
+  function simulateSeries(decide, forceMiss = []) {
+    for (let si = state.serieNo - 1; si < 3; si++) {
+      state.serieNo = si + 1;
+      const row = state.card[si];
+      for (let bi = 0; bi < row.length; bi++) {
+        if (row[bi] !== null) continue;
+        const hit = !forceMiss.some(([s, b]) => s === si && b === bi) && decide();
+        row[bi] = hit;
+        if (hit) scoreBird(false);
+        else state.streak = 0;
+      }
+      if (row.every((v) => v === true)) {
+        state.score += 500;
+        state.stats.clean++;
+      }
+      if (si === 2) {
+        [4, 6].forEach((b) => {
+          if (row[b] && row[b + 1]) {
+            state.score += 200;
+            state.stats.pairs++;
+          }
+        });
+      }
+    }
+    state.thrown = 24;
+  }
 
   /* Deterministic hooks for automated tests */
   window.__ppSkytte = {
@@ -1494,6 +1567,18 @@ export async function createShooting(container) {
       resetSwing();
       return true;
     },
+    /** Page coordinates (CSS px) of the first clay — or of its lead point — for input-driven tests. */
+    clayPoint(withLead = true) {
+      const c = airborne()[0];
+      if (!c) return null;
+      const tof = withLead ? c.mesh.position.distanceTo(camera.position) / SHOT_SPEED : 0;
+      projected.copy(predictClay(c, tof, tmpV)).project(camera);
+      const rect = canvasHost.getBoundingClientRect();
+      return {
+        x: rect.left + (projected.x * 0.5 + 0.5) * rect.width,
+        y: rect.top + (-projected.y * 0.5 + 0.5) * rect.height
+      };
+    },
     smashFirst() {
       const c = airborne()[0];
       if (c) smash(c);
@@ -1507,47 +1592,27 @@ export async function createShooting(container) {
     },
     /** Jump straight to the golden dove with a plausible card. */
     skipToGold() {
-      state.card = SERIES.map(() => new Array(8).fill(true));
-      state.card[1][3] = false;
-      state.thrown = 24;
-      state.serieNo = 3;
-      state.score = 3100;
+      simulateSeries(() => true, [[1, 3]]);
       state.phase = 'between';
       camTarget = 1;
       camBlend = 1;
       hud.overlay.classList.remove('show');
       renderScore();
+      checkLudvig();
       startGold();
     },
     /** Fill in the rest of the round at a hit rate and show the end screen. */
     finishRound(rate = 0.8) {
       const sim = mulberry(7);
+      simulateSeries(() => sim() < rate);
+      state.isGold = true;
+      state.gold = sim() < rate;
+      if (state.gold) scoreBird(true);
+      else state.streak = 0;
+      state.thrown = 25;
       camBlend = 1;
       camTarget = 1;
       hud.overlay.classList.remove('show');
-      for (let si = state.serieNo - 1; si < 3; si++) {
-        state.serieNo = si + 1;
-        state.card[si] = state.card[si].map((v) => {
-          if (v !== null) return v;
-          const hit = sim() < rate;
-          if (hit) scoreBird(false);
-          else state.streak = 0;
-          return hit;
-        });
-        if (state.card[si].every((v) => v === true)) {
-          state.score += 500;
-          state.stats.clean++;
-        }
-        const row = state.card[si];
-        if (si === 2 && row[4] && row[5]) {
-          state.score += 200;
-          state.stats.pairs++;
-        }
-      }
-      state.gold = sim() < rate;
-      if (state.gold) scoreBird(true);
-      state.thrown = 25;
-      state.isGold = true;
       renderScore();
       gameOver();
     },
@@ -1577,6 +1642,7 @@ export async function createShooting(container) {
     canvasHost.removeEventListener('pointermove', onPointerMove);
     window.removeEventListener('pointerup', onPointerUp);
     window.removeEventListener('pointercancel', onPointerCancel);
+    window.removeEventListener('keydown', onKeyCapture, true);
     window.removeEventListener('keydown', onKeyDown);
     hud.overlay.removeEventListener('click', onOverlayClick);
     hud.pull.removeEventListener('click', callPull);

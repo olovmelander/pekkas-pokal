@@ -82,12 +82,12 @@ function blotchTexture() {
     c.beginPath();
     for (let i = 0; i <= 18; i++) {
       const a = (i / 18) * Math.PI * 2;
-      const r = 20 + 7 * Math.sin(a * 3 + 1) * Math.sin(a * 5);
+      const r = 22 + 4 * Math.sin(a * 3 + 1) + 2.5 * Math.sin(a * 7);
       if (i === 0) c.moveTo(Math.cos(a) * r, Math.sin(a) * r);
       else c.lineTo(Math.cos(a) * r, Math.sin(a) * r);
     }
     c.fill();
-    [[18, -16, 5], [-22, 12, 4], [6, 25, 3], [-14, -24, 3]].forEach(([x, y, r]) => {
+    [[22, -16, 4], [-25, 10, 3]].forEach(([x, y, r]) => {
       c.beginPath();
       c.arc(x, y, r, 0, Math.PI * 2);
       c.fill();
@@ -231,7 +231,7 @@ class Splats {
       alphaMap: this.tex,
       transparent: true,
       depthWrite: false,
-      roughness: 0.38,
+      roughness: 0.9,
       polygonOffset: true,
       polygonOffsetFactor: -2,
       polygonOffsetUnits: -2
@@ -254,7 +254,8 @@ class Splats {
     this.q.setFromAxisAngle(this.up, Math.random() * Math.PI * 2);
     this.m.compose(new THREE.Vector3(x, y, z), this.q, new THREE.Vector3(size, 1, size * (0.7 + Math.random() * 0.5)));
     this.mesh.setMatrixAt(i, this.m);
-    this.c.setRGB(0.55 * tone, 0.32 * tone, 0.2 * tone);
+    // Dried slip: paler and duller than the wet clay it came from
+    this.c.setRGB(0.3 * tone, 0.15 * tone, 0.08 * tone);
     this.mesh.setColorAt(i, this.c);
     this.mesh.count = Math.min(this.max, Math.max(this.mesh.count, i + 1));
     this.mesh.instanceMatrix.needsUpdate = true;

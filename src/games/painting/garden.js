@@ -401,7 +401,9 @@ export function buildGarden({ lowTier = false } = {}) {
     const cloudMat = new THREE.MeshBasicMaterial({
       map: cloudTexture(), transparent: true, depthWrite: false, fog: false, opacity: 0.9
     });
-    const spots = [[-26, 10, -44, 1.25], [9, 13.5, -46, 1], [30, 8.5, -40, 0.85], [-5, 15.5, -50, 0.7], [-44, 12, -42, 0.9]];
+    const spots = [
+      [-26, 10, -44, 1.25], [9, 13.5, -46, 1], [30, 8.5, -40, 0.85], [-5, 15.5, -50, 0.7], [-44, 12, -42, 0.9]
+    ];
     const clouds = new THREE.InstancedMesh(new THREE.PlaneGeometry(24, 12), cloudMat, spots.length);
     clouds.frustumCulled = false;
     refs.clouds = { mesh: clouds, spots };
@@ -435,7 +437,7 @@ export function buildGarden({ lowTier = false } = {}) {
       });
     }
     const bedMat = windify(lambert(0xffffff), wind, { amp: 0.6, base: -1, span: 2, freq: 1.4, key: 'bed' });
-    group.add(instanced(new THREE.IcosahedronGeometry(1, 0), flowers, bedMat));
+    group.add(instanced(new THREE.SphereGeometry(1, 6, 4), flowers, bedMat));
   }
 
   /* The house — Terrassvägen 47: falu red with white knots, as it should be */
@@ -527,7 +529,8 @@ export function buildGarden({ lowTier = false } = {}) {
         trunks.add(mark);
       }
       for (let i = 0; i < 5; i++) {
-        const crown = new THREE.Mesh(new THREE.SphereGeometry(1 + rand() * 0.5, 7, 5), lambert(0x6d9c3c + Math.floor(rand() * 3) * 0x040602));
+        const leaf = 0x6d9c3c + Math.floor(rand() * 3) * 0x040602;
+        const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(1 + rand() * 0.5, 1), lambert(leaf));
         crown.position.set(x + (rand() - 0.5) * 1.6, h + rand() * 1.2, z + (rand() - 0.5) * 1.6);
         crowns.add(crown);
       }

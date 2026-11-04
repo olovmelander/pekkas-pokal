@@ -173,9 +173,9 @@ const smooth = (a, b, x) => {
  */
 function framing(aspect, out) {
   const k = smooth(0.56, 1.6, aspect);
-  out.fov = THREE.MathUtils.lerp(58, 41, k);
-  out.pos.set(0, THREE.MathUtils.lerp(2.5, 2.32, k), THREE.MathUtils.lerp(3.85, 4.35, k));
-  out.look.set(0, THREE.MathUtils.lerp(1.02, 1.08, k), THREE.MathUtils.lerp(-1.1, -1.5, k));
+  out.fov = THREE.MathUtils.lerp(58, 38, k);
+  out.pos.set(0, THREE.MathUtils.lerp(2.5, 2.3, k), THREE.MathUtils.lerp(3.85, 4.3, k));
+  out.look.set(0, THREE.MathUtils.lerp(1.02, 1.0, k), THREE.MathUtils.lerp(-1.1, -1.25, k));
   return out;
 }
 
@@ -488,6 +488,7 @@ export async function createPingis(container) {
   let hitStop = 0;
   let simT = 0; // simulation clock (stops for hit-stop, help and replays)
   let pointSimT = 0; // simT when the last point was decided (replay anchor)
+  let touchHints = coarse ? 3 : Infinity; // a finger gets the hint for its first points
   /* Balance runs play thousands of matches headless. The whole loop is
      dt-driven, so the only thing standing between a match and running in
      milliseconds is the frame we never look at. */
@@ -1105,6 +1106,7 @@ export async function createPingis(container) {
     state.rallyTier = 0;
     dead.on = false;
     if (!renderOn) return;
+    hud.showKeys(touchHints-- > 0);
     trail.clear();
     hud.setRally(0, '', 0);
     const mp = matchPointFor();
@@ -1173,11 +1175,13 @@ export async function createPingis(container) {
     hud.hidePanel();
     hud.hideIntro();
     hud.replay(false);
+    hud.showKeys(false);
   }
 
   function showMenu() {
     clearRun();
     state.phase = 'menu';
+    hudHost.classList.add('pg-inmenu');
     camMode = 'menu';
     hud.showBug(false);
     canvasHost.classList.remove('pg-playing');
@@ -1191,6 +1195,7 @@ export async function createPingis(container) {
   function startTournament() {
     sfx.resume();
     clearRun();
+    hudHost.classList.remove('pg-inmenu');
     state.mode = 'tour';
     state.matchNo = 1;
     state.score = 0;
@@ -1203,6 +1208,7 @@ export async function createPingis(container) {
   function startSingle(idx) {
     sfx.resume();
     clearRun();
+    hudHost.classList.remove('pg-inmenu');
     singleIdx = idx;
     state.mode = 'single';
     state.matchNo = idx + 1;
@@ -1260,6 +1266,7 @@ export async function createPingis(container) {
     state.decided = false;
     camMode = 'play';
     hud.showBug(true);
+    hud.showKeys(touchHints > 0);
     canvasHost.classList.add('pg-playing');
     renderPts();
     if (renderOn) hud.toast(`${first()} — ${opp().title}`, true);
@@ -1275,6 +1282,7 @@ export async function createPingis(container) {
     hud.setMatchPoint(0);
     hud.phase('');
     hud.setRally(0, '', 0);
+    hud.showKeys(false);
     canvasHost.classList.remove('pg-playing');
     if (won) {
       const level = medalFor(my, them);
@@ -1615,6 +1623,7 @@ export async function createPingis(container) {
   let raf = 0;
   let last = performance.now();
   let running = true;
+  let frozen = false; // test hook: hold the last frame (screenshots under software GL)
   let frameT = 0; // the picture's clock: keeps running through hit-stop
   let perfAcc = 0;
   let perfN = 0;
@@ -1692,7 +1701,7 @@ export async function createPingis(container) {
     raf = requestAnimationFrame(tick);
     const rawDt = clampDt(now - last);
     last = now;
-    if (!running) return;
+    if (!running || frozen) return;
     frameT += rawDt;
 
     // Hit-stop freezes the rules for a beat, never the picture
@@ -1909,9 +1918,9 @@ export async function createPingis(container) {
       // so the card can take the left, on a phone he stands above it
       const wide = camera.aspect > 1.05;
       const fx = foe ? foe.group.position.x : 0;
-      tPos.set(fx + (wide ? 0.25 : 0.12), wide ? 1.72 : 1.5, -0.25);
-      tLook.set(fx - (wide ? 0.55 : 0), wide ? 1.48 : 1.12, -2.1);
-      fov = wide ? 38 : 50;
+      tPos.set(fx + (wide ? 0.4 : 0.15), wide ? 1.85 : 1.7, wide ? -0.05 : 0.6);
+      tLook.set(fx - (wide ? 0.62 : 0), wide ? 1.58 : 1.25, -2.1);
+      fov = wide ? 36 : 50;
       rate = 2.2;
     } else if (camMode === 'replay') {
       tPos.set(2.35, 1.22, THREE.MathUtils.clamp(v.bz * 0.45, -1.1, 1.2) + 0.25);
@@ -2071,6 +2080,7 @@ export async function createPingis(container) {
     confetti.update(dt, t, (x, z) => (Math.abs(x) < T.width / 2 && Math.abs(z) < T.length / 2 ? T.height + 0.003 : 0.004));
 
     updateCamera(v, t, dt);
+    hall.updateReflections(camera.position);
     post.render();
   }
 
@@ -2108,6 +2118,18 @@ export async function createPingis(container) {
       me.x = x;
       me.aimX = x;
       me.vx = 0;
+    },
+    /** Framing check: where a world point lands on screen, in pixels. */
+    project(x, y, z) {
+      const p = new THREE.Vector3(x, y, z).project(camera);
+      return [Math.round((p.x * 0.5 + 0.5) * viewW), Math.round((-p.y * 0.5 + 0.5) * viewH)];
+    },
+    camState() {
+      return { pos: camera.position.toArray().map((v) => +v.toFixed(2)), fov: +camera.fov.toFixed(1), mode: camMode };
+    },
+    /** Screenshot helper: hold everything on the current frame. */
+    freeze(on) {
+      frozen = on;
     },
     /** Balance harness: play out matches without paying for the picture. */
     setRender(on) {

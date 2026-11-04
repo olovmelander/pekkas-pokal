@@ -47,7 +47,8 @@ function blobPath(ctx, x, y, r, phase, wobble = 0.09, squash = 1) {
   ctx.beginPath();
   for (let i = 0; i <= N; i++) {
     const a = (i / N) * Math.PI * 2;
-    const k = 1 + wobble * (Math.sin(a * 2 + phase) * 0.6 + Math.sin(a * 3 + phase * 1.7) * 0.4 + Math.sin(a * 5 + phase * 0.6) * 0.25);
+    const h = Math.sin(a * 2 + phase) * 0.6 + Math.sin(a * 3 + phase * 1.7) * 0.4 + Math.sin(a * 5 + phase * 0.6) * 0.25;
+    const k = 1 + wobble * h;
     const px = x + Math.cos(a) * r * k;
     const py = y + Math.sin(a) * r * k * squash;
     if (i) ctx.lineTo(px, py);
@@ -140,7 +141,9 @@ export class Palette {
     this.blobR = Math.max(13, Math.min(26, unit * 0.4));
     this.wells = PIGMENTS.map((p, i) => {
       const a = -Math.PI * (0.86 - (i / (PIGMENTS.length - 1)) * 0.72);
-      return { ...p, x: this.cx + Math.cos(a) * this.rx * 0.8, y: this.cy + Math.sin(a) * this.ry * 0.62, phase: i * 1.9 + 0.4 };
+      const x = this.cx + Math.cos(a) * this.rx * 0.8;
+      const y = this.cy + Math.sin(a) * this.ry * 0.62;
+      return { ...p, x, y, phase: i * 1.9 + 0.4 };
     });
     this.poolX = this.cx + this.rx * 0.04;
     this.poolY = this.cy + this.ry * 0.16;
@@ -194,7 +197,8 @@ export class Palette {
     [[0.72, 0.3, 0.06], [0.2, 0.62, 0.04]].forEach(([kx, ky, kr]) => {
       for (let j = 0; j < 4; j++) {
         ctx.beginPath();
-        ctx.ellipse(cx - rx + kx * rx * 2, cy - ry + ky * ry * 2, kr * w * (1 + j * 0.5), kr * w * 0.45 * (1 + j * 0.6), 0.1, 0, Math.PI * 2);
+        const kw = kr * w * (1 + j * 0.5);
+        ctx.ellipse(cx - rx + kx * rx * 2, cy - ry + ky * ry * 2, kw, kw * 0.45 * (1 + j * 0.1), 0.1, 0, Math.PI * 2);
         ctx.strokeStyle = `rgba(100,62,26,${0.22 - j * 0.04})`;
         ctx.lineWidth = 1;
         ctx.stroke();
@@ -231,19 +235,35 @@ export class Palette {
     ctx.stroke();
 
     // Thumb hole, at the left end where the thumb actually goes
-    const tx = cx - rx * 0.8;
-    const ty = cy + ry * 0.12;
-    const tr = Math.min(rx * 0.075, ry * 0.2);
+    const tx = cx - rx * 0.84;
+    const ty = cy + ry * 0.32;
+    const tr = Math.min(rx * 0.055, ry * 0.15);
     ctx.save();
     ctx.globalCompositeOperation = 'destination-out';
     ctx.beginPath();
     ctx.ellipse(tx, ty, tr * 1.25, tr, -0.2, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
+    // ...with the painter's thumb through it, so it reads as a thumb hole
+    // and not as a sixth, black pigment
+    ctx.save();
     ctx.beginPath();
     ctx.ellipse(tx, ty, tr * 1.25, tr, -0.2, 0, Math.PI * 2);
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = 'rgba(70,42,16,0.6)';
+    ctx.clip();
+    const sk = ctx.createRadialGradient(tx - tr * 0.4, ty - tr * 0.4, tr * 0.1, tx, ty, tr * 1.4);
+    sk.addColorStop(0, '#f2c39a');
+    sk.addColorStop(1, '#b97a52');
+    ctx.fillStyle = sk;
+    ctx.fillRect(tx - tr * 2, ty - tr * 2, tr * 4, tr * 4);
+    ctx.beginPath();
+    ctx.ellipse(tx + tr * 0.25, ty - tr * 0.15, tr * 0.5, tr * 0.38, -0.2, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,236,224,0.75)';
+    ctx.fill();
+    ctx.restore();
+    ctx.beginPath();
+    ctx.ellipse(tx, ty, tr * 1.25, tr, -0.2, 0, Math.PI * 2);
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = 'rgba(70,42,16,0.75)';
     ctx.stroke();
   }
 
@@ -447,7 +467,8 @@ export class Palette {
     this.ripples.forEach((r) => {
       const k = r.t / 0.5;
       ctx.beginPath();
-      ctx.ellipse(this.poolX, this.poolY, (this.poolR + 4) * (1 + k * 0.5), (this.poolR + 4) * 0.78 * (1 + k * 0.5), 0, 0, Math.PI * 2);
+      const rr = (this.poolR + 4) * (1 + k * 0.5);
+      ctx.ellipse(this.poolX, this.poolY, rr, rr * 0.78, 0, 0, Math.PI * 2);
       ctx.strokeStyle = `rgba(255,248,230,${0.5 * (1 - k)})`;
       ctx.lineWidth = 2;
       ctx.stroke();
@@ -473,7 +494,8 @@ export class Palette {
       }
       // A squeezed-out coil: two overlapping lobes, the tube's twist on top
       wetBlob(ctx, wl.x - r * 0.28, wl.y + r * 0.08, r * 0.8, wl.css, wl.phase + 1, { squash: 0.8 - p * 0.15 });
-      wetBlob(ctx, wl.x + r * 0.12, wl.y - r * 0.06, r * 0.86, wl.css, wl.phase, { squash: 0.82 - p * 0.15, shadow: false });
+      const top = { squash: 0.82 - p * 0.15, shadow: false };
+      wetBlob(ctx, wl.x + r * 0.12, wl.y - r * 0.06, r * 0.86, wl.css, wl.phase, top);
       const n = this.drops[wl.key];
       if (n > 0) {
         const bx = wl.x + r * 0.95;

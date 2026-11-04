@@ -151,15 +151,15 @@ function plasterTexture() {
   const size = 256;
   const [cv, ctx] = canvas(size, size);
   const rand = mulberry(17);
-  ctx.fillStyle = '#d6b48a';
+  ctx.fillStyle = '#dcc09a';
   ctx.fillRect(0, 0, size, size);
-  for (let i = 0; i < 70; i++) {
+  for (let i = 0; i < 90; i++) {
     const x = rand() * size;
     const y = rand() * size;
-    const r = 10 + rand() * 50;
+    const r = 6 + rand() * 22;
     const g = ctx.createRadialGradient(x, y, 0, x, y, r);
     const light = rand() < 0.5;
-    g.addColorStop(0, light ? 'rgba(255,236,206,0.16)' : 'rgba(120,80,50,0.12)');
+    g.addColorStop(0, light ? 'rgba(255,236,206,0.07)' : 'rgba(120,80,50,0.05)');
     g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g;
     // draw the blob at all wrapped offsets so the texture tiles
@@ -514,7 +514,7 @@ function addShelfPots(batch, rand, count, spanX, shelfYs, matrix) {
 
 /* ------------------------------------------------------------- the studio */
 
-const WIN = { x: -3.0, y: 3.6, half: 1.2, sill: 1.6 }; // spring line y, half width
+const WIN = { x: -4.2, y: 3.6, half: 1.2, sill: 1.6 }; // spring line y, half width
 
 /** Arched window outline (counter-clockwise), in wall coordinates. */
 function windowOutline(seg = 12) {
@@ -556,7 +556,7 @@ function buildShaft(sunDir, length) {
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   geo.setIndex(idx);
   const mat = new THREE.ShaderMaterial({
-    uniforms: { uColor: { value: new THREE.Color(1.0, 0.72, 0.42) }, uStrength: { value: 0.22 }, uTime: { value: 0 } },
+    uniforms: { uColor: { value: new THREE.Color(1.0, 0.72, 0.42) }, uStrength: { value: 0.12 }, uTime: { value: 0 } },
     vertexShader: /* glsl */ `
       varying vec2 vUv;
       varying vec3 vN;
@@ -813,7 +813,7 @@ export function buildStudio() {
   addWindowFrame(wood);
 
   /* Shelves with fired pots, framing the room */
-  addShelfUnit(wood, glossy, -6.3, -4.5, 0.32, 7);
+  addShelfUnit(wood, glossy, -7.3, -2.6, 1.1, 7);
   addShelfUnit(wood, glossy, 6.6, -4.4, -0.38, 20);
 
   /* Tool rack on the back wall: ribs, wire, needle tool, sponges */
@@ -902,7 +902,7 @@ export function buildStudio() {
   g.add(glossMesh);
 
   /* Sun direction: from the window centre onto the wheel */
-  const sunDir = new THREE.Vector3(3.0, -1.35, 5.5).normalize();
+  const sunDir = new THREE.Vector3(-WIN.x, -1.35, 5.5).normalize();
   const shaft = buildShaft(sunDir, 6.2);
   g.add(shaft);
 
@@ -975,7 +975,7 @@ export function buildWheel() {
   body.add(new THREE.BoxGeometry(0.34, 0.08, 0.46), 0x2c2f35, [0.95, 0.04, 1.35], [0.12, -0.4, 0]);
   // Double-sided: the lathe paths fold back on themselves (the pan's lip)
   const bodyMesh = body.mesh(new THREE.MeshStandardMaterial({
-    vertexColors: true, roughness: 0.4, metalness: 0.35, side: THREE.DoubleSide
+    vertexColors: true, roughness: 0.45, metalness: 0.1, side: THREE.DoubleSide
   }));
   bodyMesh.castShadow = true;
   bodyMesh.receiveShadow = true;
@@ -1051,10 +1051,14 @@ export function buildHand() {
   thumb.rotateZ(Math.PI / 2 + 0.6);
   b.add(thumb, skin, [0.2, -0.15, 0.05]);
   b.add(new THREE.SphereGeometry(0.16, 12, 10), skin, [0.36, -0.01, 0], [0, 0, 0], [0.75, 1.0, 0.5]);
-  const fore = new THREE.CapsuleGeometry(0.11, 0.9, 4, 10);
-  fore.rotateZ(Math.PI / 2 + 0.5);
-  fore.rotateY(-0.5);
-  b.add(fore, skin, [0.8, -0.27, 0.22]);
+  // Forearm: from the wrist, down and out toward the potter
+  const wrist = new THREE.Vector3(0.44, -0.07, 0.02);
+  const elbow = new THREE.Vector3(1.3, -0.72, 0.55);
+  const axis = elbow.clone().sub(wrist);
+  const fore = new THREE.CapsuleGeometry(0.1, axis.length() - 0.1, 4, 10);
+  fore.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis.clone().normalize()));
+  const mid = wrist.clone().add(elbow).multiplyScalar(0.5);
+  b.add(fore, skin, [mid.x, mid.y, mid.z]);
   const mesh = b.mesh(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55 }));
   // Paint the slip coat onto the fingertips: blend by distance from the tips
   const pos = mesh.geometry.attributes.position;

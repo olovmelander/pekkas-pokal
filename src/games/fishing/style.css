@@ -80,6 +80,36 @@
 
 /* ---- Toppen ---- */
 
+/* Bakom start- och slutpanelen behövs ingen spel-HUD */
+.fiske-ui .pb-top {
+  transition: opacity 0.3s ease;
+}
+
+.fiske-ui.fi-menu .pb-top {
+  opacity: 0;
+}
+
+/* Ljud- och ?-knapparna: 44 px tryckyta, fritt från sajtens stängknapp */
+.fiske-ui .pb-mute,
+.fiske-ui .pb-info {
+  width: 44px;
+  height: 44px;
+  top: max(10px, env(safe-area-inset-top));
+}
+
+.fiske-ui .pb-mute {
+  right: calc(60px + env(safe-area-inset-right));
+}
+
+.fiske-ui .pb-info {
+  right: calc(112px + env(safe-area-inset-right));
+}
+
+.fiske-ui .pb-top {
+  left: max(12px, env(safe-area-inset-left));
+  right: calc(166px + env(safe-area-inset-right));
+}
+
 .fiske-ui .pb-hud {
   position: absolute;
   inset: 0;
@@ -135,7 +165,7 @@
 
 .fiske-ui .fi-mission {
   position: absolute;
-  left: 12px;
+  left: max(12px, env(safe-area-inset-left));
   top: calc(var(--top) + 60px);
   max-width: min(64vw, 340px);
   display: flex;
@@ -194,6 +224,7 @@
 
 /* Multiplikatorn — under uppdraget */
 .fiske-ui .fg-mult {
+  left: max(12px, env(safe-area-inset-left));
   top: calc(var(--top) + 94px);
   font-size: 1.55rem;
   text-shadow: 0 0 18px rgba(94, 234, 212, 0.55), 0 2px 8px rgba(2, 10, 20, 0.6);
@@ -213,7 +244,7 @@
 
 .fiske-ui .fi-gauge {
   position: absolute;
-  right: 14px;
+  right: max(14px, env(safe-area-inset-right));
   top: calc(var(--top) + 96px);
   bottom: calc(14% + env(safe-area-inset-bottom));
   width: 40px;
@@ -584,7 +615,7 @@
 /* ---- Rundkortet ---- */
 
 .fiske-ui .fg-round {
-  padding-top: 30%;
+  padding: 22vh 16px 0;
   z-index: 7;
 }
 
@@ -681,10 +712,31 @@
   margin-top: 0;
 }
 
+.fiske-ui .fi-keys {
+  margin: 12px 0 0;
+  font-size: 0.68rem;
+  color: rgba(200, 225, 236, 0.6);
+}
+
+.fiske-ui .fi-keys kbd {
+  display: inline-block;
+  min-width: 1.5em;
+  margin: 0 1px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  border: 1px solid rgba(200, 225, 236, 0.3);
+  border-bottom-width: 2px;
+  font: inherit;
+  font-size: 0.64rem;
+  font-weight: 700;
+  color: rgba(230, 244, 250, 0.85);
+}
+
 .fiske-ui .fi-btn-ghost {
   display: inline-flex;
   align-items: center;
   gap: 7px;
+  min-height: 44px;
   padding: 0.7rem 1.05rem;
   border-radius: 999px;
   font: inherit;
@@ -746,8 +798,9 @@
 }
 
 .fiske-ui .fi-haul {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 6px;
   margin: 10px 0 12px;
 }
@@ -757,6 +810,7 @@
 }
 
 .fiske-ui .fi-haul > span {
+  width: 104px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -779,6 +833,28 @@
 .fiske-ui .fi-haul small {
   font-size: 0.64rem;
   color: rgba(205, 236, 244, 0.65);
+}
+
+/* Smal skärm: fasetiketten under uppdraget och multiplikatorn, och den
+   får bryta rad hellre än att rinna ut över kanten */
+.fiske-ui:not(.fi-wide) .fg-phase {
+  top: calc(var(--top) + 138px);
+  width: max-content;
+  max-width: calc(100% - 32px);
+  white-space: normal;
+  text-align: center;
+}
+
+/* Stående telefon: panelen dockar nedtill så båten och solen syns ovanför */
+.fiske-ui:not(.fi-wide) .pb-overlay {
+  align-items: flex-end;
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, rgba(3, 10, 18, 0) 0%, rgba(3, 10, 18, 0.15) 35%, rgba(3, 10, 18, 0.7) 100%);
+  backdrop-filter: none;
+}
+
+.fiske-ui:not(.fi-wide) .fi-panel {
+  max-height: calc(100% - 120px);
 }
 
 /* På bred skärm: panelen till vänster, båten och midnattssolen syns */
@@ -904,7 +980,6 @@
   font-weight: 700;
   letter-spacing: 0.04em;
   color: #ffd98a;
-  font-variant-numeric: tabular-nums;
 }
 
 .fiske-ui .fi-book-records {
@@ -982,6 +1057,94 @@
 
   .fiske-ui .fg-phase {
     font-size: 0.74rem;
+  }
+}
+
+/* Telefon på tvären: låg skärm — kompaktare paneler, kortet centrerat */
+@media (max-height: 520px) {
+  .fiske-ui .fi-panel {
+    width: min(560px, 100%);
+    padding: 14px 18px 12px;
+  }
+
+  .fiske-ui .fi-panel h2 {
+    font-size: 1.7rem;
+  }
+
+  .fiske-ui .fi-panel p {
+    margin-top: 4px;
+  }
+
+  .fiske-ui .fi-panel .fg-steps {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin: 10px 0 4px;
+  }
+
+  .fiske-ui .fi-panel .fg-steps li {
+    font-size: 11px;
+  }
+
+  .fiske-ui .fi-actions {
+    margin-top: 10px;
+  }
+
+  .fiske-ui .pb-scoreline {
+    margin-top: 6px;
+  }
+
+  .fiske-ui .pb-scoreline span {
+    font-size: 1.9rem;
+  }
+
+  .fiske-ui .fi-stars i {
+    font-size: 1.4rem;
+  }
+
+  .fiske-ui .fi-haul {
+    margin: 6px 0;
+  }
+
+  /* Slutpanelen på en låg skärm: fångsten som små brickor, ingen
+     brödtext och djupet på raden ovanför — knapparna måste synas */
+  .fiske-ui.fi-over .fi-panel #fg-text,
+  .fiske-ui.fi-over .fi-panel .fg-catchlist,
+  .fiske-ui.fi-over .fi-haul small {
+    display: none;
+  }
+
+  .fiske-ui.fi-over .fi-haul > span {
+    width: auto;
+    flex-direction: row;
+    gap: 4px;
+    padding: 2px 8px 2px 4px;
+  }
+
+  .fiske-ui.fi-over .fi-haul svg {
+    width: 40px;
+    height: 20px;
+  }
+
+  .fiske-ui .fg-round {
+    align-items: center;
+    padding-top: 0;
+  }
+
+  .fiske-ui .fg-round-card {
+    padding: 0.7rem 1.2rem 0.8rem;
+  }
+
+  .fiske-ui .fi-zone {
+    top: 24%;
+  }
+
+  .fiske-ui .fi-gauge {
+    top: calc(var(--top) + 60px);
+    bottom: 12%;
+  }
+
+  .fiske-ui .fi-hint {
+    bottom: 10%;
   }
 }
 

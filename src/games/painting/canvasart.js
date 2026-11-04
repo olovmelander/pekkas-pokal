@@ -36,12 +36,12 @@ export const ART_H = 762;
 const GW = 150;
 const GH = Math.round((GW * ART_H) / ART_W);
 
-const STAMP_W = 160;
-const STAMP_H = 44;
+const STAMP_W = 200;
+const STAMP_H = 40;
 const VARIANTS = 4;
 /** Each stroke is drawn in one of three values of its colour — broken colour
     is most of what separates paint from a flat fill. */
-const SHADES = [0.1, 0, -0.12];
+const SHADES = [0.075, 0, -0.085];
 
 /** Surface encoding: R = height, G = roughness (×255). */
 const LINEN_ROUGH = 236;
@@ -89,9 +89,11 @@ function shadeCss([r, g, b], k) {
 /* --------------------------------------------------------------- stamps */
 
 /*
- * One brushstroke, as alpha: twenty-odd bristle tracks of uneven load,
- * a rounded loaded start and a dry, broken tail. Drawn once at startup in
- * four variants; every stroke on every canvas is one of these, tinted.
+ * One brushstroke, as alpha: a loaded body with a square-ish start, thirty
+ * bristle tracks of uneven load running through it, and a dry, broken tail
+ * where the outer bristles give out first. Drawn once at startup in four
+ * variants; every stroke on every canvas is one of these, tinted. The
+ * bristle tracks are what the bump map turns into grooves.
  */
 let stampSet = null;
 function stamps() {
@@ -101,34 +103,49 @@ function stamps() {
   for (let v = 0; v < VARIANTS; v++) {
     const c = makeCanvas(STAMP_W, STAMP_H);
     const ctx = c.getContext('2d');
-    const n = 20 + v * 3;
-    const bend = (rnd() - 0.5) * 7;
+    const bend = (rnd() - 0.5) * 5;
+    // The body of paint under the bristles
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.beginPath();
+    ctx.moveTo(10, 4);
+    ctx.quadraticCurveTo(STAMP_W * 0.4, 3 + bend * 0.5, STAMP_W * (0.6 + rnd() * 0.1), 5);
+    ctx.lineTo(STAMP_W * (0.6 + rnd() * 0.1), STAMP_H - 5);
+    ctx.quadraticCurveTo(STAMP_W * 0.4, STAMP_H - 3 + bend * 0.5, 10, STAMP_H - 4);
+    ctx.quadraticCurveTo(2, STAMP_H / 2, 10, 4);
+    ctx.fill();
     ctx.lineCap = 'round';
+    const n = 26 + v * 3;
     for (let i = 0; i < n; i++) {
       const k = i / (n - 1);
-      const y = 5 + k * (STAMP_H - 10) + (rnd() - 0.5) * 2.2;
-      const x0 = 6 + rnd() * 14;
+      const y = 3.5 + k * (STAMP_H - 7) + (rnd() - 0.5) * 1.6;
+      const x0 = 5 + rnd() * 9 + Math.abs(k - 0.5) * 8;
       // Outer bristles run dry first, which is what makes the tail ragged
       const edge = Math.abs(k - 0.5) * 2;
-      const x1 = STAMP_W - 6 - rnd() * (18 + edge * 46);
+      const x1 = STAMP_W - 4 - rnd() * (14 + edge * 70);
       ctx.beginPath();
       ctx.moveTo(x0, y);
-      ctx.quadraticCurveTo((x0 + x1) / 2, y + bend * (0.6 + rnd() * 0.4), x1, y + (rnd() - 0.5) * 2);
-      ctx.lineWidth = 1.5 + rnd() * 1.9;
-      ctx.strokeStyle = `rgba(255,255,255,${(0.42 + rnd() * 0.58).toFixed(3)})`;
+      ctx.quadraticCurveTo((x0 + x1) / 2, y + bend * (0.6 + rnd() * 0.4), x1, y + bend * 0.3 + (rnd() - 0.5) * 1.5);
+      ctx.lineWidth = 0.9 + rnd() * 1.6;
+      ctx.strokeStyle = `rgba(255,255,255,${(0.3 + rnd() * 0.7).toFixed(3)})`;
       ctx.stroke();
     }
-    // The envelope: loaded at the start, thinning to nothing at the tail
+    // Envelope: loaded at the start, thinning to nothing at the tail, with
+    // the long edges softened just enough not to alias
     ctx.globalCompositeOperation = 'destination-in';
     const g = ctx.createLinearGradient(0, 0, STAMP_W, 0);
-    g.addColorStop(0, 'rgba(0,0,0,0.75)');
-    g.addColorStop(0.12, 'rgba(0,0,0,1)');
-    g.addColorStop(0.62, 'rgba(0,0,0,0.95)');
+    g.addColorStop(0, 'rgba(0,0,0,0.85)');
+    g.addColorStop(0.08, 'rgba(0,0,0,1)');
+    g.addColorStop(0.6, 'rgba(0,0,0,0.92)');
     g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.ellipse(STAMP_W / 2, STAMP_H / 2, STAMP_W / 2 - 2, STAMP_H / 2 - 1, 0, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.fillRect(0, 0, STAMP_W, STAMP_H);
+    const e = ctx.createLinearGradient(0, 0, 0, STAMP_H);
+    e.addColorStop(0, 'rgba(0,0,0,0)');
+    e.addColorStop(0.14, 'rgba(0,0,0,1)');
+    e.addColorStop(0.86, 'rgba(0,0,0,1)');
+    e.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = e;
+    ctx.fillRect(0, 0, STAMP_W, STAMP_H);
     stampSet.push(c);
   }
   return stampSet;
@@ -364,9 +381,9 @@ export function analyse(work) {
 
     const rnd = seeded(seed0 + ri * 7919);
     // Sizes are fractions of the canvas width: big fields get big brushes
-    const L = clamp(0.36 * Math.sqrt(area), 0.024, 0.13);
-    const Wd = clamp(L * 0.34, 0.008, 0.04);
-    const count = clamp(Math.round((area * (GH / GW)) / (L * Wd) * 1.7), 6, 240);
+    const L = clamp(0.44 * Math.sqrt(area), 0.03, 0.16);
+    const Wd = clamp(L * 0.25, 0.008, 0.036);
+    const count = clamp(Math.round((area * (GH / GW)) / (L * Wd) * 1.6), 6, 280);
     const strokes = [];
     for (let k = 0; k < count; k++) {
       const p = s.pix[(rnd() * s.pix.length) | 0];
@@ -416,9 +433,17 @@ export function analyse(work) {
 
 /* -------------------------------------------------------------- drawing */
 
+/*
+ * Laying one region is described by a "job" — which work, which region, at
+ * what size, in what colour — and drawn twice: into the colour image and
+ * into the surface image. `from`/`to` pick a slice of the region's strokes,
+ * so the live canvas can lay them a few at a time.
+ */
+const job = (work, an, i, W, H, tints, rgb) => ({ work, an, i, W, H, tints, rgb });
+
 /** A region's paint: a thin wash over the whole field, then the strokes. */
-function drawRegionColour(ctx, work, an, i, W, H, tints, rgb, from, to, wash) {
-  const { strokes } = an.regions[i];
+function drawRegionColour(ctx, jb, from, to, wash) {
+  const { work, i, W, H, tints, rgb } = jb;
   ctx.save();
   ctx.beginPath();
   work.regions[i].path(ctx, W, H);
@@ -428,12 +453,12 @@ function drawRegionColour(ctx, work, an, i, W, H, tints, rgb, from, to, wash) {
     ctx.fillStyle = shadeCss(rgb, 0);
     ctx.fillRect(0, 0, W, H);
   }
-  drawStrokes(ctx, strokes, W, H, from, to, (s) => tints[s.t][s.v], 1);
+  drawStrokes(ctx, jb, [from, to], (s) => tints[s.t][s.v], 1);
   ctx.restore();
 }
 
-function drawRegionHeight(ctx, work, an, i, W, H, from, to, wash) {
-  const { strokes } = an.regions[i];
+function drawRegionHeight(ctx, jb, from, to, wash) {
+  const { work, i, W, H } = jb;
   const hs = heightStamps();
   ctx.save();
   ctx.beginPath();
@@ -445,11 +470,13 @@ function drawRegionHeight(ctx, work, an, i, W, H, from, to, wash) {
     ctx.fillStyle = `rgb(112,${PAINT_ROUGH},0)`;
     ctx.fillRect(0, 0, W, H);
   }
-  drawStrokes(ctx, strokes, W, H, from, to, (s) => hs[s.v], 0.62);
+  drawStrokes(ctx, jb, [from, to], (s) => hs[s.v], 0.62);
   ctx.restore();
 }
 
-function drawStrokes(ctx, strokes, W, H, from, to, pick, alphaK) {
+function drawStrokes(ctx, jb, [from, to], pick, alphaK) {
+  const { W, H } = jb;
+  const { strokes } = jb.an.regions[jb.i];
   const end = Math.min(to, strokes.length);
   for (let k = from; k < end; k++) {
     const s = strokes[k];
@@ -467,7 +494,7 @@ function drawStrokes(ctx, strokes, W, H, from, to, pick, alphaK) {
 
 /** Outlines of the drawing (strong where still bare, faint under paint)
     and the work's ink pass. */
-function drawInk(ctx, work, W, H, painted, outlines = true) {
+function drawInk(ctx, work, [W, H], painted, outlines = true) {
   if (outlines) {
     work.regions.forEach((rg, i) => {
       ctx.beginPath();
@@ -544,10 +571,11 @@ export function renderPainting(work, colours, W, H, opts = {}) {
     if (!rgb) return;
     tintInto(tints, rgb);
     const n = an.regions[i].strokes.length;
-    drawRegionColour(cctx, work, an, i, W, H, tints, rgb, 0, n, true);
-    drawRegionHeight(hctx, work, an, i, W, H, 0, n, true);
+    const jb = job(work, an, i, W, H, tints, rgb);
+    drawRegionColour(cctx, jb, 0, n, true);
+    drawRegionHeight(hctx, jb, 0, n, true);
   });
-  drawInk(cctx, work, W, H, colours.map((c) => !!c), outlines);
+  drawInk(cctx, work, [W, H], colours.map((c) => !!c), outlines);
   overlayWeave(cctx, W, H, 0.4);
   if (lit) lightPainting(cctx, hctx, W, H);
   if (museum) varnish(cctx, W, H);
@@ -611,8 +639,9 @@ export class LiveCanvas {
       if (!rgb) return;
       tintInto(this.tints, rgb);
       const n = this.an.regions[i].strokes.length;
-      drawRegionColour(this.paintCtx, work, this.an, i, W, H, this.tints, rgb, 0, n, true);
-      drawRegionHeight(this.surfCtx, work, this.an, i, W, H, 0, n, true);
+      const jb = job(work, this.an, i, W, H, this.tints, rgb);
+      drawRegionColour(this.paintCtx, jb, 0, n, true);
+      drawRegionHeight(this.surfCtx, jb, 0, n, true);
     });
     this.redrawInk();
     this.composite();
@@ -621,7 +650,7 @@ export class LiveCanvas {
 
   redrawInk() {
     this.inkCtx.clearRect(0, 0, this.W, this.H);
-    drawInk(this.inkCtx, this.work, this.W, this.H, this.painted);
+    drawInk(this.inkCtx, this.work, [this.W, this.H], this.painted);
   }
 
   composite() {
@@ -676,14 +705,15 @@ export class LiveCanvas {
     const target = Math.ceil(a.n * (1 - (1 - p) ** 1.6));
     const tp = this.tmpPaint.getContext('2d');
     const ts = this.tmpSurf.getContext('2d');
+    const jb = job(work, an, a.i, W, H, this.tints, a.rgb);
     if (!a.washed) {
-      drawRegionColour(tp, work, an, a.i, W, H, this.tints, a.rgb, 0, 0, true);
-      drawRegionHeight(ts, work, an, a.i, W, H, 0, 0, true);
+      drawRegionColour(tp, jb, 0, 0, true);
+      drawRegionHeight(ts, jb, 0, 0, true);
       a.washed = true;
     }
     if (target > a.k) {
-      drawRegionColour(tp, work, an, a.i, W, H, this.tints, a.rgb, a.k, target, false);
-      drawRegionHeight(ts, work, an, a.i, W, H, a.k, target, false);
+      drawRegionColour(tp, jb, a.k, target, false);
+      drawRegionHeight(ts, jb, a.k, target, false);
     }
     const last = an.regions[a.i].strokes[Math.max(0, Math.min(a.n - 1, target - 1))];
     a.k = target;

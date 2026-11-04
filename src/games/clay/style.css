@@ -53,7 +53,7 @@
   position: absolute;
   top: var(--lr-safe-top);
   left: 14px;
-  right: 150px; /* clear ?, mute and the site's close button */
+  right: 162px; /* clear ?, mute and the site's close button */
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -93,14 +93,14 @@
   50% { opacity: 0.55; transform: scale(1.06); }
 }
 
-/* Piece chips: one per piece of the evening, plus the locked Pokal */
+/* Piece chips: one per piece of the evening, plus the locked Pokal. On a
+   phone they get their own row under the task card. */
 .lr-chips {
   position: absolute;
-  top: calc(var(--lr-safe-top) + 56px);
-  right: 2px;
+  top: 126px; /* relative to the top bar: just under the task card */
+  left: -4px;
   display: flex;
   gap: 4px;
-  transform: translateX(138px); /* the bar stops short of the buttons; the chips need not */
 }
 
 .lr-chip {
@@ -468,6 +468,10 @@
   box-shadow: 0 6px 22px rgba(224, 138, 60, 0.45);
 }
 
+.lr-tool.primary small {
+  color: rgba(42, 22, 6, 0.65);
+}
+
 .lr-tool.primary:active {
   background: linear-gradient(140deg, #ffd98a, #e89a4c);
 }
@@ -613,7 +617,7 @@
 
 .lr-verdict h3 {
   margin: 2px 0 0;
-  font-family: var(--font-display);
+  font-family: var(--ff-serif, var(--font-display));
   font-size: 1.5rem;
   font-weight: 700;
   color: #fff4e2;
@@ -751,8 +755,14 @@
   text-align: left;
 }
 
+.lr-ui .lr-overlay.show .lr-panel {
+  pointer-events: auto; /* so a long summary can be scrolled on a phone */
+}
+
 .lr-ui .lr-panel h2 {
   margin-top: 4px;
+  font-family: var(--ff-serif, var(--font-display));
+  font-weight: 600;
   font-size: clamp(1.7rem, 7vw, 2.4rem);
   line-height: 1.05;
   background: linear-gradient(120deg, #ffd9a0, #fff4e2 50%, #e9a25b);
@@ -922,6 +932,56 @@
   color: rgba(244, 222, 200, 0.6);
 }
 
+/* ---- Corner buttons at a proper 44px tap size ------------------------------ */
+
+.lr-ui .pb-mute,
+.lr-ui .pb-info {
+  width: 44px;
+  height: 44px;
+  top: max(10px, env(safe-area-inset-top));
+  background: rgba(30, 17, 10, 0.62);
+}
+
+.lr-ui .pb-mute {
+  right: 58px;
+}
+
+.lr-ui .pb-info {
+  right: 108px;
+}
+
+/* ---- Coach hint: how to use your hands, until you have used them ---------- */
+
+.lr-coach {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--lr-safe-bottom) + 118px);
+  width: max-content;
+  max-width: min(88vw, 520px);
+  transform: translate(-50%, 6px);
+  padding: 0.4rem 0.9rem;
+  border-radius: 12px;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  text-align: center;
+  color: #fff4e2;
+  background: rgba(30, 17, 10, 0.7);
+  border: 1px dashed rgba(255, 214, 170, 0.35);
+  backdrop-filter: blur(6px);
+  opacity: 0;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.lr-coach.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  animation: lr-coach 2.4s ease-in-out infinite;
+}
+
+@keyframes lr-coach {
+  50% { border-color: rgba(94, 234, 212, 0.7); }
+}
+
 /* ---- Help card in the studio's colours ----------------------------------- */
 
 .lr-ui .pb-help-card {
@@ -946,7 +1006,6 @@
 
 .lr-ui.lr-wide .lr-chips {
   position: static;
-  transform: none;
   align-self: center;
   margin: 0 auto;
 }
@@ -1008,6 +1067,10 @@
   bottom: calc(var(--lr-safe-bottom) + 70px);
 }
 
+.lr-ui.lr-wide .lr-coach {
+  bottom: calc(var(--lr-safe-bottom) + 128px);
+}
+
 .lr-ui.lr-wide .lr-meter-bar {
   height: 14px;
 }
@@ -1022,13 +1085,13 @@
 }
 
 .lr-ui.lr-wide .lr-verdict {
-  left: auto;
-  right: clamp(20px, 5vw, 80px);
+  left: clamp(20px, 5vw, 80px);
+  right: auto;
   bottom: auto;
   top: 50%;
   width: 340px;
   padding: 20px 22px 18px;
-  transform: translate(30px, -50%);
+  transform: translate(-30px, -50%);
 }
 
 .lr-ui.lr-wide .lr-verdict.show {
@@ -1063,19 +1126,109 @@
   font-size: clamp(2.2rem, 3.4vw, 3rem);
 }
 
+/* Every panel can scroll rather than overflow a short screen */
+.lr-panel {
+  max-height: calc(100% - 8px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 /* Short landscape phones: keep the cards from colliding */
 @media (max-height: 520px) {
   .lr-ui.lr-wide .lr-task-brief,
-  .lr-ui.lr-wide .lr-legend {
+  .lr-ui.lr-wide .lr-legend,
+  .lr-ui.lr-wide .lr-panel .fg-steps,
+  .lr-ui.lr-wide .lr-overlay.summary .lr-panel > p {
     display: none;
+  }
+
+  .lr-ui.lr-wide .lr-task {
+    width: 200px;
+    padding: 10px 12px;
+  }
+
+  .lr-ui.lr-wide .lr-task-name {
+    font-size: 1.1rem;
   }
 
   .lr-ui.lr-wide .lr-diff {
-    height: 90px;
+    height: 84px;
   }
 
-  .lr-ui.lr-wide .lr-panel .fg-steps {
-    display: none;
+  .lr-ui.lr-wide .lr-meter {
+    bottom: calc(var(--lr-safe-bottom) + 60px);
+    width: min(360px, 40vw);
+  }
+
+  .lr-ui.lr-wide .lr-coach {
+    bottom: calc(var(--lr-safe-bottom) + 108px);
+    max-width: 38vw;
+    font-size: 0.66rem;
+  }
+
+  .lr-ui.lr-wide .lr-phase {
+    top: 22%;
+  }
+
+  .lr-ui.lr-wide .lr-verdict {
+    width: 300px;
+    padding: 12px 14px;
+  }
+
+  .lr-ui.lr-wide .lr-verdict h3 {
+    font-size: 1.3rem;
+  }
+
+  .lr-ui.lr-wide .lr-grade b {
+    font-size: 2.6rem;
+  }
+
+  .lr-ui.lr-wide .lr-stars-big .lr-star svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .lr-ui.lr-wide .lr-verdict blockquote {
+    margin-top: 6px;
+    font-size: 0.76rem;
+  }
+
+  .lr-ui.lr-wide .lr-lines {
+    margin-top: 6px;
+    padding-top: 6px;
+    font-size: 0.68rem;
+  }
+
+  .lr-ui.lr-wide .lr-verdict .pb-btn,
+  .lr-ui.lr-wide .lr-panel .pb-btn {
+    margin-top: 8px;
+    padding: 0.7rem 1.4rem;
+  }
+
+  .lr-ui.lr-wide .lr-panel h2 {
+    font-size: 1.8rem;
+  }
+
+  .lr-ui.lr-wide .lr-overlay {
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .lr-summary {
+    gap: 4px;
+    margin-top: 8px;
+  }
+
+  .lr-summary li {
+    padding: 3px 8px 3px 4px;
+  }
+
+  .lr-ui .lr-panel .pb-scoreline {
+    margin-top: 6px;
+  }
+
+  .lr-ui .lr-panel .pb-scoreline span {
+    font-size: 1.8rem;
   }
 }
 

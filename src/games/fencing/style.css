@@ -49,6 +49,18 @@
   }
 }
 
+/* The shared ?- and mute buttons, grown to a 44 px touch target and
+   spaced off the site's close button */
+.fen .pb-mute,
+.fen .pb-info {
+  width: 44px;
+  height: 44px;
+  top: max(10px, env(safe-area-inset-top));
+}
+
+.fen .pb-mute { right: 58px; }
+.fen .pb-info { right: 108px; }
+
 /* ---- Atmosphere: vignette, hit flash, letterbox ---- */
 
 .fen-vignette {
@@ -347,7 +359,7 @@
 .fen-coach {
   position: absolute;
   left: 50%;
-  bottom: calc(var(--safe-b) + 170px);
+  bottom: calc(var(--safe-b) + 112px);
   transform: translateX(-50%);
   max-width: min(360px, 82vw);
   padding: 0.6rem 1rem;
@@ -680,7 +692,8 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 0.45rem 0.75rem;
+  min-height: 44px;
+  padding: 0.45rem 0.85rem;
   border-radius: 999px;
   font: 600 0.78rem/1 var(--font-body);
   color: rgba(240, 232, 214, 0.85);
@@ -756,6 +769,12 @@
 }
 
 .fen-bcol {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 8px;
+}
+
+.fen-bms {
   display: flex;
   flex-direction: column;
   justify-content: space-around;
@@ -934,13 +953,13 @@
 /* ---- Portrait / phones ---- */
 
 .fen[data-orient='portrait'] .fen-board {
-  top: calc(var(--safe-t) + 50px);
+  top: calc(var(--safe-t) + 54px);
 }
 
 .fen[data-orient='portrait'] .fen-side { min-width: 74px; }
 .fen[data-orient='portrait'] .fen-name { font-size: 0.68rem; }
 .fen[data-orient='portrait'] .fen-call { top: 27%; }
-.fen[data-orient='portrait'] .fen-coach { bottom: calc(var(--safe-b) + 175px); }
+.fen[data-orient='portrait'] .fen-coach { bottom: calc(var(--safe-b) + 186px); }
 .fen[data-orient='portrait'] .fen-line { width: 100px; height: 50px; }
 .fen[data-orient='portrait'] .fen-lunge { width: 100px; height: 100px; }
 
@@ -972,8 +991,20 @@
 }
 
 @media (max-height: 520px) {
-  .fen-steps { display: none; }
-  .fen-panel { padding: 16px 20px 14px; }
+  .fen-steps,
+  .fen-opp,
+  .fen-stats { display: none; }
+  .fen-bm-row { padding: 2px 8px; font-size: 0.66rem; }
+  .fen-bms { gap: 4px; }
+  .fen-bcol { gap: 4px; }
+  .fen-panel { padding: 14px 18px 12px; }
+  .fen-screen { padding-top: calc(var(--safe-t) + 44px); }
+  .fen .fen-go { margin-top: 12px; }
+  .fen-bracket { margin-top: 8px; }
+  .fen-opp { margin-top: 10px; padding: 8px 12px; }
+  .fen-big-score { font-size: 2.2rem; margin-top: 6px; }
+  .fen-lead { font-size: 0.8rem; margin-top: 6px; }
+  .fen-medal-big svg { width: 64px; height: 64px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

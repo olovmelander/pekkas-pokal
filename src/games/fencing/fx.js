@@ -224,6 +224,14 @@ export class Trail {
     }
     const speed = dt > 0 ? tip.distanceTo(this.last) / dt : 0;
     this.last.copy(tip);
+    if (this.gain === 0) {
+      // Strike over: leave the smear where it was and let it die out,
+      // rather than stretching it to wherever the blade is knocked next
+      const fade = Math.max(0, 1 - dt * 14);
+      for (let i = 0; i < this.n; i++) this.alpha[i] *= fade;
+      this.writeColors();
+      return;
+    }
     this.tips.copyWithin(3, 0, (this.n - 1) * 3);
     this.mids.copyWithin(3, 0, (this.n - 1) * 3);
     this.alpha.copyWithin(1, 0, this.n - 1);
@@ -231,12 +239,19 @@ export class Trail {
     this.mids.set([mid.x, mid.y, mid.z], 0);
     if (dt > 0) this.alpha[0] = Math.min(1, Math.max(0, (speed - 1.6) / 5)) * this.gain;
     const p = this.posAttr.array;
+    for (let i = 0; i < this.n; i++) {
+      p.set(this.tips.subarray(i * 3, i * 3 + 3), i * 6);
+      p.set(this.mids.subarray(i * 3, i * 3 + 3), i * 6 + 3);
+    }
+    this.posAttr.needsUpdate = true;
+    this.writeColors();
+  }
+
+  writeColors() {
     const c = this.colAttr.array;
     const col = this.color;
     for (let i = 0; i < this.n; i++) {
       const fade = this.alpha[i] * (1 - i / this.n) ** 1.5;
-      p.set(this.tips.subarray(i * 3, i * 3 + 3), i * 6);
-      p.set(this.mids.subarray(i * 3, i * 3 + 3), i * 6 + 3);
       c[i * 6] = col.r * fade;
       c[i * 6 + 1] = col.g * fade;
       c[i * 6 + 2] = col.b * fade;
@@ -245,7 +260,6 @@ export class Trail {
       c[i * 6 + 4] = col.g * fade * 0.15;
       c[i * 6 + 5] = col.b * fade * 0.15;
     }
-    this.posAttr.needsUpdate = true;
     this.colAttr.needsUpdate = true;
   }
 
@@ -353,8 +367,8 @@ export class Flashes {
       it.rim.visible = true;
       it.core.material.opacity = (1 - k) ** 2;
       it.core.scale.setScalar(it.size * (0.5 + k * 0.6));
-      it.rim.material.opacity = (1 - k) * 0.9;
-      it.rim.scale.setScalar(it.size * (0.25 + k * 1.6));
+      it.rim.material.opacity = (1 - k) ** 2 * 0.55;
+      it.rim.scale.setScalar(it.size * (0.2 + k * 1.2));
     });
   }
 
@@ -393,8 +407,8 @@ export class Confetti {
 
   start(cx, cz) {
     for (let i = 0; i < this.n; i++) {
-      this.p.set([cx + (Math.random() - 0.5) * 9, 5 + Math.random() * 6, cz + (Math.random() - 0.5) * 5], i * 3);
-      this.v.set([(Math.random() - 0.5) * 0.4, -0.6 - Math.random() * 0.6, (Math.random() - 0.5) * 0.4], i * 3);
+      this.p.set([cx + (Math.random() - 0.5) * 7, 3 + Math.random() * 5, cz + (Math.random() - 0.5) * 4], i * 3);
+      this.v.set([(Math.random() - 0.5) * 0.4, -0.8 - Math.random() * 0.7, (Math.random() - 0.5) * 0.4], i * 3);
       this.r.set([Math.random() * 6, Math.random() * 6, Math.random() * 6], i * 3);
     }
     this.active = true;

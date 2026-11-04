@@ -134,43 +134,120 @@ export const accuracy = (dE) => Math.max(0, 1 - dE / MISS_DE);
 /** Most drops of one pigment the palette will take. */
 export const MAX_DROPS = 12;
 
-const ADVICE_PIGMENT = { r: 'rött', y: 'gult', b: 'blått', w: 'vitt', k: 'svart' };
+/** How the advice names a pigment ("mer gult"). */
+export const PIGMENT_WORD = { r: 'rött', y: 'gult', b: 'blått', w: 'vitt', k: 'svart' };
+const KEYS = ['r', 'y', 'b', 'w', 'k'];
+
+/*
+ * Every recipe of up to sixteen drops that lands solidly inside the
+ * bullseye, per target colour. A mix depends only on the RATIOS of its
+ * drops (two of each is the same colour as one of each), so this short list
+ * covers every reachable match once scaled up. It is about twenty thousand
+ * mixes, so it is worked out once per colour and kept.
+ */
+const recipeCache = new Map();
+
+/** Every five-pigment recipe of at most `T` drops in total. */
+function eachRecipe(T, fn) {
+  const d = [0, 0, 0, 0, 0];
+  const step = (i, left) => {
+    if (i === 5) {
+      fn(d);
+      return;
+    }
+    for (let v = 0; v <= left; v++) {
+      d[i] = v;
+      step(i + 1, left - v);
+    }
+  };
+  step(0, T);
+}
+function goodRecipes(target, T = 16) {
+  const key = target.map((v) => v.toFixed(4)).join(',');
+  if (recipeCache.has(key)) return recipeCache.get(key);
+  const [tl, ta, tb] = rgbToLab(target);
+  const all = [];
+  eachRecipe(T, ([r, y, b, w, k]) => {
+    if (r + y + b + w + k === 0) return;
+    const [l, aa, bb] = rgbToLab(mixPigments({ r, y, b, w, k }));
+    const dE = Math.hypot(l - tl, aa - ta, bb - tb);
+    if (dE < MATCH_DE) all.push([r, y, b, w, k, dE]);
+  });
+  // A few colours (the right-hand apostles' brown-grey) need more than
+  // sixteen drops; only those pay for the bigger search
+  if (!all.length && T < 24) return goodRecipes(target, T + 6);
+  // Prefer recipes comfortably inside the bullseye; keep the rest only if
+  // a colour has nothing better
+  const solid = all.filter((rc) => rc[5] < MATCH_DE * 0.85);
+  const out = solid.length ? solid : all;
+  recipeCache.set(key, out);
+  return out;
+}
+
+/**
+ * The fewest drops to ADD to what is on the palette to reach a match —
+ * you cannot take paint back out of a mix — or null when nothing on the
+ * palette's rim can save it any more and it is time to scrape.
+ */
+function nextDrop(drops, target) {
+  const cur = KEYS.map((k) => drops[k] || 0);
+  let best = null;
+  goodRecipes(target).forEach((rc) => {
+    for (let s = 1; s <= MAX_DROPS; s++) {
+      let over = false;
+      let under = false;
+      let add = 0;
+      for (let i = 0; i < 5; i++) {
+        const v = rc[i] * s;
+        if (v > MAX_DROPS) over = true;
+        if (v < cur[i]) under = true;
+        add += v - cur[i];
+      }
+      if (over) return;
+      if (under) continue;
+      if (!best || add < best.add) best = { add, rc, s };
+      return;
+    }
+  });
+  if (!best) return null;
+  let tip = null;
+  let gap = 0;
+  KEYS.forEach((k, i) => {
+    const d = best.rc[i] * best.s - cur[i];
+    if (d > gap) {
+      gap = d;
+      tip = k;
+    }
+  });
+  return tip;
+}
 
 /**
  * What a painter standing next to you would say about the mix. The ΔE is
  * split in LCh into lightness, chroma and hue, and the biggest of the three
- * is put into words — "too light", "too grey", "more yellow" — because a
- * single closeness number says THAT you are off, never which way. `tip` is
- * the one drop that would help most, or 'wipe' when no single drop helps
- * any more, which is the moment a real painter scrapes the palette.
+ * is put into words — too light, too grey, wrong hue — because a single
+ * closeness number says THAT you are off, never which way. `tip` is the
+ * next drop on the shortest road to a match, or 'wipe' when the mix has
+ * gone somewhere no amount of adding can bring back.
  */
 export function mixAdvice(drops, target) {
   const mix = mixPigments(drops);
   const dE = colourDistance(mix, target);
-  if (dE < MATCH_DE) return { dE, say: 'Pricken — måla!', tip: null };
+  // An empty palette is the colour of bare linen, which can be within a
+  // whisker of a pale target — but there is still nothing to paint with
+  const empty = !KEYS.some((k) => drops[k] > 0);
+  if (empty) return { dE, axis: '', tip: nextDrop(drops, target) || 'w' };
+  if (dE < MATCH_DE) return { dE, axis: 'Pricken — måla!', tip: null };
   const [Lm, am, bm] = rgbToLab(mix);
   const [Lt, at, bt] = rgbToLab(target);
   const dL = Lm - Lt;
   const dC = Math.hypot(am, bm) - Math.hypot(at, bt);
   const dH = Math.sqrt(Math.max(0, dE * dE - dL * dL - dC * dC));
-
-  let tip = 'wipe';
-  let best = dE - 0.25;
-  Object.keys(ADVICE_PIGMENT).forEach((key) => {
-    if ((drops[key] || 0) >= MAX_DROPS) return;
-    const d = colourDistance(mixPigments({ ...drops, [key]: (drops[key] || 0) + 1 }), target);
-    if (d < best) {
-      best = d;
-      tip = key;
-    }
-  });
-
-  let say;
-  if (Math.abs(dL) >= dH && Math.abs(dL) >= Math.abs(dC)) say = dL > 0 ? 'För ljus' : 'För mörk';
-  else if (Math.abs(dC) >= dH) say = dC < 0 ? 'För grå' : 'För skarp';
-  else say = 'Fel kulör';
-  const hint = tip === 'wipe' ? 'torka och börja om' : `mer ${ADVICE_PIGMENT[tip]}`;
-  return { dE, say: `${say} · ${hint}`, tip };
+  let axis;
+  if (Math.abs(dL) >= dH && Math.abs(dL) >= Math.abs(dC)) axis = dL > 0 ? 'För ljus' : 'För mörk';
+  else if (Math.abs(dC) >= dH) axis = dC < 0 ? 'För grå' : 'För skarp';
+  else axis = 'Fel kulör';
+  return { dE, axis, tip: nextDrop(drops, target) || 'wipe' };
 }
 
 /* ------------------------------------------------------- shape primitives */

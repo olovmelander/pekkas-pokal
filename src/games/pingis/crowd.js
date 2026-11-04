@@ -160,17 +160,17 @@ export function buildCrowd(seats) {
       // Torso, leaning forward from the hip (+z is toward the table)
       const ty = hip + 0.3 * Math.cos(p.lean);
       const tz = 0.3 * Math.sin(p.lean);
-      setPart(parts.torso, i, 0, ty + breathe, tz, p.lean, 0, 0, 1.1, 1, 0.68);
+      setPart(parts.torso, i, 0, ty + breathe, tz, p.lean, 0, 0, 1.25, 1, 0.7);
       const hy = hip + 0.66 * Math.cos(p.lean) + breathe;
       const hz = 0.66 * Math.sin(p.lean);
       setPart(parts.head, i, 0, hy, hz, 0, p.look, 0, 1, 1.12, 1);
       setPart(parts.hair, i, 0, hy + 0.01, hz - 0.008, -0.25, p.look, 0, 1, 1.05, 1.05);
-      const shY = hip + 0.5 * Math.cos(p.lean);
-      const shZ = 0.5 * Math.sin(p.lean);
+      const shY = hip + 0.47 * Math.cos(p.lean);
+      const shZ = 0.47 * Math.sin(p.lean);
       // Pitch: 0 hangs, π/2 forward, π straight up (negative x-rotation
       // swings a hanging arm toward +z)
-      setPart(parts.arm, i * 2, -0.2, shY, shZ, -p.armL, 0, -0.18, 1, 1, 1);
-      setPart(parts.arm, i * 2 + 1, 0.2, shY, shZ, -p.armR, 0, 0.18, 1, 1, 1);
+      setPart(parts.arm, i * 2, -0.18, shY, shZ, -p.armL, 0, -0.07, 1, 1, 1);
+      setPart(parts.arm, i * 2 + 1, 0.18, shY, shZ, -p.armR, 0, 0.07, 1, 1, 1);
       // Legs: seated thighs run forward, shins hang; standing legs drop
       const sitting = !standing;
       for (let j = 0; j < 2; j++) {

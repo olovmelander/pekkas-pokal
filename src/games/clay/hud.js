@@ -66,9 +66,10 @@ export function buildHud(root) {
         <b id="lr-temp-val">20</b><small>°C</small>
       </div>
 
+      <div class="lr-coach" id="lr-coach"></div>
       <div class="lr-tools" id="lr-tools">
-        <button class="lr-tool" id="lr-smooth"><span>GLÄTTA</span><small>håll</small></button>
-        <button class="lr-tool primary" id="lr-done"><span>KLAR — BRÄNN!</span></button>
+        <button class="lr-tool" id="lr-smooth"><span>GLÄTTA</span><small id="lr-smooth-key">håll</small></button>
+        <button class="lr-tool primary" id="lr-done"><span>KLAR — BRÄNN!</span><small id="lr-done-key"></small></button>
       </div>
       <div class="lr-skip" id="lr-skip">Tryck för att snabbspola</div>
     </div>
@@ -125,6 +126,7 @@ export function buildHud(root) {
     phase: q('#lr-phase'), toast: q('#lr-toast'),
     temp: q('#lr-temp'), tempVal: q('#lr-temp-val'), tempLabel: q('#lr-temp-label'),
     tools: q('#lr-tools'), smooth: q('#lr-smooth'), done: q('#lr-done'), skip: q('#lr-skip'),
+    coach: q('#lr-coach'), smoothKey: q('#lr-smooth-key'), doneKey: q('#lr-done-key'),
     verdict: q('#lr-verdict'), vKicker: q('#lr-v-kicker'), vName: q('#lr-v-name'), vGrade: q('#lr-v-grade'),
     vStars: q('#lr-v-stars'), vWords: q('#lr-v-words'), vLines: q('#lr-v-lines'), vBadge: q('#lr-v-badge'),
     next: q('#lr-next'),

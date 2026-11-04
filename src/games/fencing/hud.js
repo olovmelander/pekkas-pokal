@@ -351,7 +351,7 @@ export function bracketScreen({ bracket, round, results, opp, place }) {
       </div>`).join('');
     return `<div class="fen-bm${cur ? ' cur' : ''}${pending ? ' pending' : ''}">${rows}</div>`;
   };
-  const col = (title, list) => `<div class="fen-bcol"><div class="fen-bhead">${title}</div>${list.map(match).join('')}</div>`;
+  const col = (title, list) => `<div class="fen-bcol"><div class="fen-bhead">${title}</div><div class="fen-bms">${list.map(match).join('')}</div></div>`;
   return `
     <div class="fen-kicker">${ROUNDS[round]} · match ${round + 1} av 3</div>
     <div class="fen-bracket">
@@ -367,7 +367,7 @@ export function bracketScreen({ bracket, round, results, opp, place }) {
         <p>${esc(opp.style)}</p>
       </div>
     </div>
-    <button class="pb-btn fen-go" data-act="fight">En garde!</button>
+    <button class="pb-btn fen-go" data-act="fight">En garde mot ${esc(opp.name.split(' ')[0])}!</button>
     <div class="fen-foot fen-desk">${KEY('Mellanslag')} för att börja</div>
   `;
 }

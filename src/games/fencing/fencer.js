@@ -172,7 +172,7 @@ export class Fencer {
     const m = {
       jacket: std(0xf3f1ea, 0.62),
       knickers: std(0xe9e6dd, 0.66),
-      lame: std(0xc4cad3, 0.3, 0.88, { emissive: 0x000000 }),
+      lame: std(0xdfe3ea, 0.34, 0.8, { emissive: 0x000000, envMapIntensity: 1.4 }),
       sock: std(sockColor, 0.78),
       shoe: std(0x1f2329, 0.45),
       grille: std(0x9aa2ae, 0.42, 0.75, { map: gridTexture() }),
@@ -324,7 +324,7 @@ export class Fencer {
       else out.set(BLADE_START + Math.sin(s * k) / k, (1 - Math.cos(s * k)) / k, 0);
     };
     tipPt(BLADE, this.tipLocal);
-    tipPt(BLADE * 0.45, this.midLocal);
+    tipPt(BLADE * 0.62, this.midLocal);
     this.button.position.copy(this.tipLocal);
   }
 
@@ -360,14 +360,14 @@ export class Fencer {
 
     // Rear arm: blend between the raised carriage and thrown-back lunge
     const b = p[P.back];
-    j.upB.rotation.z = -2.05 + b * 0.95;
-    j.foB.rotation.z = -1.45 + b * 1.35;
+    j.upB.rotation.z = -1.35 + b * 0.25;
+    j.foB.rotation.z = -1.85 + b * 1.75;
 
     j.head.rotation.z = -p[P.nod];
     j.neck.rotation.z = lean * 0.35;
 
     const f = p[P.flash];
-    this.mats.lame.emissiveIntensity = f * 1.6;
+    this.mats.lame.emissiveIntensity = f * 1.1;
   }
 
   /** World position of the blade tip (after apply + matrix update). */
@@ -415,6 +415,142 @@ function springStep(x, v, target, w, dt) {
   const nv = (v + hoo * (target - x)) * inv;
   return [nx, nv];
 }
+
+/**
+ * The actions. Each writes a target pose for its moment `k` (0…1 through
+ * the action) and returns the spring rate: fast for strikes, slow for
+ * recoveries and ceremony.
+ */
+const ACTIONS = {
+  lunge(a, out, ctx) {
+    const hitAt = a.opts.hitAt || a.dur;
+    a.lungePose(out, ctx, a.t / hitAt, a.t >= hitAt * 0.92, a.line);
+    return 46;
+  },
+
+  feint(a, out, ctx, k) {
+    // Half an extension and an appel — the stamp of the front foot
+    a.guardPose(out, ctx);
+    const b = bell(k);
+    const g = GUARD_HAND[a.line];
+    out[P.hx] = g[0] + 0.16 * b;
+    out[P.hy] = g[1] + 0.03 * b;
+    out[P.px] += 0.06 * b;
+    out[P.ffx] += 0.1 * b;
+    out[P.ffy] = ANKLE_H + 0.07 * bell(k * 1.6);
+    out[P.lean] += 0.06 * b;
+    return 40;
+  },
+
+  parry(a, out, ctx, k) {
+    // The beat: a short sharp sweep into the line, then back
+    a.guardPose(out, ctx);
+    const b = bell(clamp(k * 1.6, 0, 1));
+    out[P.fa] += 0.38 * b * (a.line === 2 ? -1 : 1);
+    out[P.fyaw] = 0.04 + 0.42 * b;
+    out[P.hx] += 0.04 * b;
+    return 44;
+  },
+
+  stagger(a, out, ctx, k) {
+    // Blade knocked aside, a stumbling step back, then composure
+    a.guardPose(out, ctx);
+    const b = bell(k);
+    const early = bell(clamp(k * 2.2, 0, 1));
+    out[P.fa] += 0.95 * early + 0.2 * b;
+    out[P.fyaw] = 0.04 - 0.5 * early;
+    out[P.hx] -= 0.1 * b;
+    out[P.hy] += 0.14 * early;
+    out[P.lean] -= 0.16 * b;
+    out[P.px] -= 0.12 * b;
+    out[P.bfx] -= 0.12 * bell(clamp(k * 1.4, 0, 1));
+    out[P.bfy] = ANKLE_H + 0.05 * bell(clamp(k * 2.5, 0, 1));
+    out[P.back] = 0.5 * b;
+    out[P.nod] = -0.12 * b;
+    return 22;
+  },
+
+  bitten(a, out, ctx, k) {
+    // Went for the feint: the parry swings into empty air
+    a.guardPose(out, ctx);
+    const b = bell(clamp(k * 1.3, 0, 1));
+    out[P.fa] -= 0.75 * b;
+    out[P.fyaw] = 0.04 + 0.55 * b;
+    out[P.hy] -= 0.1 * b;
+    out[P.hx] -= 0.05 * b;
+    out[P.lean] -= 0.05 * b;
+    return 30;
+  },
+
+  recover(a, out, ctx, k) {
+    // Pulling back out of the lunge — open for a moment
+    const r = 1 - smooth(clamp(k, 0, 1));
+    a.lungePose(out, ctx, 0.85 * r, false, a.line, r);
+    return 13;
+  },
+
+  telegraph(a, out, ctx, k) {
+    // The coil: sit back, sink, draw the hand back and aim the point
+    a.guardPose(out, ctx);
+    const c = smooth(clamp(k * 1.8, 0, 1));
+    out[P.py] -= 0.1 * c;
+    out[P.px] -= 0.09 * c;
+    out[P.lean] += 0.06 * c;
+    out[P.hx] -= 0.12 * c;
+    out[P.hy] += [0.08, 0.02, -0.06][a.line] * c;
+    out[P.fa] = a.aim(out, ctx, a.line).a + 0.02 * Math.sin(a.t * 40) * c;
+    out[P.back] = -0.15 * c;
+    return 24;
+  },
+
+  salute(a, out, ctx, k) {
+    // Blade to the mask, sweep down towards the opponent, en garde
+    a.guardPose(out, ctx);
+    const up = smooth(clamp(k / 0.4, 0, 1)) * (1 - smooth(clamp((k - 0.55) / 0.2, 0, 1)));
+    const down = smooth(clamp((k - 0.55) / 0.2, 0, 1)) * (1 - smooth(clamp((k - 0.85) / 0.15, 0, 1)));
+    out[P.hx] += (0.08 - out[P.hx]) * up + (0.42 - out[P.hx]) * down;
+    out[P.hy] += (0.0 - out[P.hy]) * up + (-0.18 - out[P.hy]) * down;
+    out[P.fa] += (Math.PI / 2 - out[P.fa]) * up + (-0.55 - out[P.fa]) * down;
+    out[P.fyaw] += 0.1 * up;
+    out[P.py] += 0.08 * (up + down);
+    out[P.nod] += 0.1 * up;
+    return 12;
+  },
+
+  win(a, out, ctx, k) {
+    a.guardPose(out, ctx);
+    const big = a.act === 'champion' ? 1 : 0.6;
+    const r = smooth(clamp(k * 2, 0, 1));
+    out[P.py] = 0.94 + Math.abs(Math.sin(a.t * 7)) * 0.05 * big * r;
+    out[P.hx] += (0.12 - out[P.hx]) * r;
+    out[P.hy] += (0.42 * big - out[P.hy]) * r;
+    out[P.fa] += (1.25 - out[P.fa]) * r;
+    out[P.back] = -0.25 * r;
+    out[P.lean] = -0.04 * r;
+    out[P.nod] = -0.18 * r;
+    return 10;
+  },
+
+  lose(a, out, ctx, k) {
+    a.guardPose(out, ctx);
+    const r = smooth(clamp(k * 1.5, 0, 1));
+    out[P.py] = 0.86 + 0.08 * r;
+    out[P.hx] += (0.18 - out[P.hx]) * r;
+    out[P.hy] += (-0.38 - out[P.hy]) * r;
+    out[P.fa] += (-1.05 - out[P.fa]) * r;
+    out[P.nod] = 0.06 + 0.32 * r;
+    out[P.lean] = 0.1 * r;
+    out[P.back] = 0.6 * r;
+    return 7;
+  },
+
+  guard(a, out, ctx) {
+    a.guardPose(out, ctx);
+    return 16;
+  }
+};
+ACTIONS.attack = ACTIONS.lunge;
+ACTIONS.champion = ACTIONS.win;
 
 /**
  * Drives one fencer. `act` is what the body is doing (guard, lunge,
@@ -551,7 +687,6 @@ export class Animator {
     const out = this.target;
     const { act } = this;
     const k = this.dur > 0 ? this.t / this.dur : 1;
-    let w = 18;
 
     if (this.step) {
       const st = this.step;
@@ -561,135 +696,7 @@ export class Animator {
       if (sk >= 1) this.step = null;
     }
 
-    switch (act) {
-      case 'lunge':
-      case 'attack': {
-        const hitAt = this.opts.hitAt || this.dur;
-        this.lungePose(out, ctx, this.t / hitAt, this.t >= hitAt * 0.92 && !this.opts.parried, this.line);
-        w = 46;
-        break;
-      }
-      case 'feint': {
-        // Half an extension and an appel — the stamp of the front foot
-        this.guardPose(out, ctx);
-        const b = bell(k);
-        const g = GUARD_HAND[this.line];
-        out[P.hx] = g[0] + 0.16 * b;
-        out[P.hy] = g[1] + 0.03 * b;
-        out[P.px] += 0.06 * b;
-        out[P.ffx] += 0.1 * b;
-        out[P.ffy] = ANKLE_H + 0.07 * bell(k * 1.6);
-        out[P.lean] += 0.06 * b;
-        w = 40;
-        break;
-      }
-      case 'parry': {
-        // The beat: a short sharp sweep into the line, then back
-        this.guardPose(out, ctx);
-        const b = bell(clamp(k * 1.6, 0, 1));
-        out[P.fa] += 0.38 * b * (this.line === 2 ? -1 : 1);
-        out[P.fyaw] = 0.04 + 0.42 * b;
-        out[P.hx] += 0.04 * b;
-        w = 44;
-        break;
-      }
-      case 'stagger': {
-        // Blade knocked aside, a stumbling step back, then composure
-        this.guardPose(out, ctx);
-        const b = bell(k);
-        const early = bell(clamp(k * 2.2, 0, 1));
-        out[P.fa] += 0.95 * early + 0.2 * b;
-        out[P.fyaw] = 0.04 - 0.5 * early;
-        out[P.hx] -= 0.1 * b;
-        out[P.hy] += 0.14 * early;
-        out[P.lean] -= 0.16 * b;
-        out[P.px] -= 0.12 * b;
-        out[P.bfx] -= 0.12 * bell(clamp(k * 1.4, 0, 1));
-        out[P.bfy] = ANKLE_H + 0.05 * bell(clamp(k * 2.5, 0, 1));
-        out[P.back] = 0.5 * b;
-        out[P.nod] = -0.12 * b;
-        w = 22;
-        break;
-      }
-      case 'bitten': {
-        // Went for the feint: the parry swings into empty air
-        this.guardPose(out, ctx);
-        const b = bell(clamp(k * 1.3, 0, 1));
-        out[P.fa] -= 0.75 * b;
-        out[P.fyaw] = 0.04 + 0.55 * b;
-        out[P.hy] -= 0.1 * b;
-        out[P.hx] -= 0.05 * b;
-        out[P.lean] -= 0.05 * b;
-        w = 30;
-        break;
-      }
-      case 'recover': {
-        // Pulling back out of the lunge — open for a moment
-        const r = 1 - smooth(clamp(k, 0, 1));
-        this.lungePose(out, ctx, 0.85 * r, false, this.line, r);
-        w = 13;
-        break;
-      }
-      case 'telegraph': {
-        // The coil: sit back, sink, draw the hand back and aim the point
-        this.guardPose(out, ctx);
-        const c = smooth(clamp(k * 1.8, 0, 1));
-        out[P.py] -= 0.06 * c;
-        out[P.px] -= 0.05 * c;
-        out[P.lean] += 0.04 * c;
-        out[P.hx] -= 0.07 * c;
-        out[P.fa] = this.aim(out, ctx, this.line).a + 0.02 * Math.sin(this.t * 40) * c;
-        out[P.back] = -0.15 * c;
-        w = 24;
-        break;
-      }
-      case 'salute': {
-        // Blade to the mask, sweep down towards the opponent, en garde
-        this.guardPose(out, ctx);
-        const up = smooth(clamp(k / 0.4, 0, 1)) * (1 - smooth(clamp((k - 0.55) / 0.2, 0, 1)));
-        const down = smooth(clamp((k - 0.55) / 0.2, 0, 1)) * (1 - smooth(clamp((k - 0.85) / 0.15, 0, 1)));
-        out[P.hx] += (0.08 - out[P.hx]) * up + (0.42 - out[P.hx]) * down;
-        out[P.hy] += (0.0 - out[P.hy]) * up + (-0.18 - out[P.hy]) * down;
-        out[P.fa] += (Math.PI / 2 - out[P.fa]) * up + (-0.55 - out[P.fa]) * down;
-        out[P.fyaw] += 0.1 * up;
-        out[P.py] += 0.08 * (up + down);
-        out[P.nod] += 0.1 * up;
-        w = 12;
-        break;
-      }
-      case 'win':
-      case 'champion': {
-        this.guardPose(out, ctx);
-        const big = act === 'champion' ? 1 : 0.6;
-        const r = smooth(clamp(k * 2, 0, 1));
-        out[P.py] = 0.94 + Math.abs(Math.sin(this.t * 7)) * 0.05 * big * r;
-        out[P.hx] += (0.12 - out[P.hx]) * r;
-        out[P.hy] += (0.42 * big - out[P.hy]) * r;
-        out[P.fa] += (1.25 - out[P.fa]) * r;
-        out[P.back] = -0.25 * r;
-        out[P.lean] = -0.04 * r;
-        out[P.nod] = -0.18 * r;
-        w = 10;
-        break;
-      }
-      case 'lose': {
-        this.guardPose(out, ctx);
-        const r = smooth(clamp(k * 1.5, 0, 1));
-        out[P.py] = 0.86 + 0.08 * r;
-        out[P.hx] += (0.18 - out[P.hx]) * r;
-        out[P.hy] += (-0.38 - out[P.hy]) * r;
-        out[P.fa] += (-1.05 - out[P.fa]) * r;
-        out[P.nod] = 0.06 + 0.32 * r;
-        out[P.lean] = 0.1 * r;
-        out[P.back] = 0.6 * r;
-        w = 7;
-        break;
-      }
-      default: {
-        this.guardPose(out, ctx);
-        w = 16;
-      }
-    }
+    const w = (ACTIONS[act] || ACTIONS.guard)(this, out, ctx, k);
 
     // Footwork: the moving foot lifts in a small arc, the other follows
     if (this.step) {

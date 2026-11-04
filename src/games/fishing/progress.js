@@ -76,7 +76,7 @@ export const fmtKg = (kg) => `${kg.toLocaleString('sv-SE', { minimumFractionDigi
  * The uppdrag. `test` reads the cast record the game keeps:
  * { dodges, deepest, haul, tapped, perfect, peakMult, bottom, species{} }.
  */
-export const MISSIONS = [
+const MISSIONS = [
   { id: 'dodge4', tier: 0, text: 'Väj för 4 fiskar på vägen ner', test: (c) => c.dodges >= 4 },
   { id: 'abborre', tier: 0, text: 'Fånga en abborre', test: (c) => (c.species.abborre || 0) >= 1 },
   { id: 'haul4', tier: 0, text: 'Få upp minst 4 fiskar', test: (c) => c.haul >= 4 },

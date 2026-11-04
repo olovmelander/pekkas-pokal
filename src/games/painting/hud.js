@@ -77,10 +77,10 @@ export function buildHud(root) {
         <button class="pm-btn pm-btn-ghost pm-undo" id="pm-undo" aria-label="Ångra senaste droppen" title="Ångra (Z)">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
         </button>
-        <button class="pm-btn pm-btn-ghost" id="pm-wipe" title="Torka paletten (W)">TORKA</button>
+        <button class="pm-btn pm-btn-ghost" id="pm-wipe" title="Torka paletten (W)">TORKA<kbd>W</kbd></button>
         <button class="pm-btn pm-btn-paint" id="pm-apply" title="Måla ytan (mellanslag)">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.4 2.6a2 2 0 0 1 2.9 2.9L12 14.8l-3-3Z"/><path d="M9 11.8c-2.2-.2-4.6 1.2-4.9 4.4-.2 1.9-1.2 3-3.1 3.8 4.2 1.2 8.9-.1 10.9-3.2"/></svg>
-          <span>MÅLA</span>
+          <span>MÅLA</span><kbd>␣</kbd>
         </button>
       </div>
     </section>
@@ -101,7 +101,7 @@ export function buildHud(root) {
         </ol>
         <div class="pm-bests" id="pm-bests"></div>
         <div class="pm-cta">
-          <button class="pm-btn pm-btn-gold" id="pm-start">Dra en lapp ur hatten</button>
+          <button class="pm-btn pm-btn-gold" id="pm-start">Dra en lapp ur hatten<kbd>␣</kbd></button>
           <button class="pm-btn pm-btn-ghost" id="pm-open-gallery">Galleriet <span id="pm-gallery-n"></span></button>
         </div>
       </div>
@@ -132,7 +132,7 @@ export function buildHud(root) {
         <blockquote class="pm-quote"><p id="pm-rv-quote"></p><cite>— Mikael Hägglund</cite></blockquote>
         <div class="pm-swatches" id="pm-rv-chips"></div>
         <div class="pm-stats" id="pm-rv-stats"></div>
-        <button class="pm-btn pm-btn-gold" id="pm-rv-next">Dra nästa lapp</button>
+        <button class="pm-btn pm-btn-gold" id="pm-rv-next"><span id="pm-rv-next-txt">Dra nästa lapp</span><kbd>␣</kbd></button>
       </div>
 
       <div class="pm-card pm-final" data-card="final">
@@ -142,7 +142,7 @@ export function buildHud(root) {
         <div class="pm-wall" id="pm-fn-wall"></div>
         <div class="pm-total"><b id="pm-fn-score">0</b><small id="pm-fn-sub"></small></div>
         <div class="pm-cta">
-          <button class="pm-btn pm-btn-gold" id="pm-again">Måla igen</button>
+          <button class="pm-btn pm-btn-gold" id="pm-again">Måla igen<kbd>␣</kbd></button>
           <button class="pm-btn pm-btn-ghost" id="pm-fn-gallery">Galleriet</button>
         </div>
       </div>
@@ -208,6 +208,7 @@ export function buildHud(root) {
     rvNo: q('#pm-rv-no'), rvTitle: q('#pm-rv-title'), rvYours: q('#pm-rv-yours'), rvOrig: q('#pm-rv-orig'),
     rvOrigCap: q('#pm-rv-orig-cap'), rvGrade: q('#pm-rv-grade'), rvStars: q('#pm-rv-stars'), rvPb: q('#pm-rv-pb'),
     rvQuote: q('#pm-rv-quote'), rvChips: q('#pm-rv-chips'), rvStats: q('#pm-rv-stats'), rvNext: q('#pm-rv-next'),
+    rvNextTxt: q('#pm-rv-next-txt'),
     fnTitle: q('#pm-fn-title'), fnText: q('#pm-fn-text'), fnWall: q('#pm-fn-wall'), fnScore: q('#pm-fn-score'),
     fnSub: q('#pm-fn-sub'), again: q('#pm-again'), fnGallery: q('#pm-fn-gallery'),
     galleryGrid: q('#pm-gallery-grid'), galleryBack: q('#pm-gallery-back'),
