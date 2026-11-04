@@ -224,8 +224,8 @@ const READY = {
 const CHEER = {
   spine: v3(-0.06, 0, 0), chest: v3(-0.08, 0, 0), neck: v3(-0.06, 0, 0), head: v3(-0.2, 0, 0),
   shoulderL: v3(0, 0, 0.22), shoulderR: v3(0, 0, -0.22),
-  upperArmL: v3(0.12, -0.15, 2.72), upperArmR: v3(0.12, 0.15, -2.72),
-  forearmL: v3(-0.35, 0, 0), forearmR: v3(-0.35, 0, 0),
+  upperArmL: v3(0.1, -0.1, 2.82), upperArmR: v3(0.1, 0.1, -2.82),
+  forearmL: v3(-0.05, 0, 0), forearmR: v3(-0.05, 0, 0),
   handL: v3(0, 0, 0), handR: v3(0, 0, 0),
   thighL: STAND.thighL, thighR: STAND.thighR, shinL: STAND.shinL, shinR: STAND.shinR,
   footL: STAND.footL, footR: STAND.footR,
@@ -317,8 +317,8 @@ export const POSES = {
   cheer(t = 0, out) {
     const p = fill(out, CHEER);
     const w = Math.sin(t * 9);
-    p.upperArmL[2] += w * 0.12;
-    p.upperArmR[2] += w * 0.12;
+    p.upperArmL[2] -= Math.abs(w) * 0.1;
+    p.upperArmR[2] += Math.abs(w) * 0.1;
     p.hipsPos[1] = Math.abs(Math.sin(t * 4.5)) * 0.03;
     return p;
   },
@@ -347,6 +347,26 @@ export const POSES = {
     for (const n of ['hips', 'thighL', 'thighR', 'shinL', 'shinR', 'footL', 'footR']) p[n] = s[n].slice();
     p.hipsPos = s.hipsPos.slice();
     p.spine = v3(0.04, 0, 0);
+    return p;
+  },
+  /** One fist punched up (right), the other pumping at the chest. */
+  fistPump(t = 0, out) {
+    const p = fill(out, CHEER);
+    const w = Math.max(0, Math.sin(t * 7));
+    p.upperArmR = v3(0.12, 0.2, -2.9 + w * 0.15);
+    p.forearmR = v3(-0.08 - w * 0.25, 0, 0);
+    p.upperArmL = v3(-0.55 - w * 0.2, -0.45, 0.35);
+    p.forearmL = v3(-2.0, 0, 0);
+    p.handL = v3(0, 0, -0.2);
+    p.shoulderL = v3(0, 0, 0.05);
+    p.chest = v3(-0.04, 0.1, 0.04);
+    return p;
+  },
+  /** Seated fist pump. */
+  sitFistPump(t = 0, out) {
+    const p = POSES.fistPump(t, out);
+    for (const n of ['hips', 'thighL', 'thighR', 'shinL', 'shinR', 'footL', 'footR']) p[n] = SIT[n].slice();
+    p.hipsPos = SIT.hipsPos.slice();
     return p;
   },
   /** Seated, arms up. */

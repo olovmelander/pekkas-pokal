@@ -285,6 +285,11 @@ export function createMaterials(THREE, playfieldTexture) {
       emissive: 0xffb703,
       emissiveIntensity: 1.4
     }),
+    // Inserts and their pockets sit a few hundredths of a unit above the
+    // wood. That is plenty in a 24-bit depth buffer and nothing in a 16-bit
+    // one (some phones, and the direct-render fallback on others), where the
+    // wood would punch through them in a crawling pattern. A polygon offset
+    // is measured in the depth buffer's own steps, so it holds on both.
     insert: new THREE.MeshStandardMaterial({
       color: 0xffffff,
       roughness: 0.35,
@@ -292,7 +297,10 @@ export function createMaterials(THREE, playfieldTexture) {
       emissive: 0xffffff,
       emissiveIntensity: 0.12,
       transparent: true,
-      opacity: 0.92
+      opacity: 0.92,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2
     }),
     rubber: new THREE.MeshStandardMaterial({
       color: 0x10152a,
@@ -336,7 +344,10 @@ export function createMaterials(THREE, playfieldTexture) {
       color: 0x05070f,
       roughness: 0.9,
       metalness: 0,
-      envMapIntensity: 0.15
+      envMapIntensity: 0.15,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1
     })
   };
 }
@@ -547,9 +558,11 @@ export function buildCabinet(THREE, materials, logo, dmdMaterial) {
   // Body below the playfield, as deep as a real cabinet: on a wide screen
   // the floor is in frame and a shallow box would read as a tray on stilts.
   // Top face must land BELOW the playfield plane, not on it: at y = 0 this
-  // box covers the entire print and the table renders as a dark slab.
+  // box covers the entire print and the table renders as a dark slab. And
+  // well below — the playfield covers it completely, and a top face a
+  // tenth of a unit under the wood fights it in a 16-bit depth buffer.
   const body = new THREE.Mesh(new THREE.BoxGeometry(w, 12, len), materials.cabinet);
-  body.position.set(cx, -6 - 0.12, cz);
+  body.position.set(cx, -6 - 0.5, cz);
   body.receiveShadow = true;
   g.add(body);
 
@@ -900,6 +913,7 @@ export function buildTable(THREE, mergeGeometries, materials) {
   playfield.position.set((ART.x0 + ART.x1) / 2, 0, -(ART.y0 + ART.y1) / 2);
   playfield.receiveShadow = true;
   group.add(playfield);
+  refs.playfield = playfield;
 
   /* ---- Walls ---- */
   const wallShapes = [];
@@ -1215,7 +1229,10 @@ export function buildTable(THREE, mergeGeometries, materials) {
           opacity: 0,
           blending: THREE.AdditiveBlending,
           depthWrite: false,
-          toneMapped: false
+          toneMapped: false,
+          polygonOffset: true,
+          polygonOffsetFactor: -3,
+          polygonOffsetUnits: -3
         })
       );
       pool.position.set(s.x, 0.05, -s.y);

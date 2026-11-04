@@ -21,7 +21,7 @@
  *   crowd.update(dt, t);
  */
 import * as THREE from 'three';
-import { POSES, applyPose } from './people-rig.js';
+import { POSES, applyPose, mirrorPose } from './people-rig.js';
 import { REGION, rng } from './people-build.js';
 import { appearanceFor, resolveLook } from './people-look.js';
 import { buildPersonData, toBindPose, makeSkeleton, crowdAccessories } from './people-assemble.js';
@@ -35,13 +35,17 @@ const VARIANTS = {
     ['cup', (t, o) => POSES.sitCup(0, o)],
     ['clapIn', (t, o) => POSES.sitClap(CLAP_IN_T, o)],
     ['clapOut', (t, o) => POSES.sitClap(0, o)],
-    ['cheer', (t, o) => POSES.sitCheer(0, o)]
+    ['cheer', (t, o) => POSES.sitCheer(0, o)],
+    ['fist', (t, o) => POSES.sitFistPump(0, o)],
+    ['fistL', (t, o) => mirrorPose(POSES.sitFistPump(0), o)]
   ],
   stand: [
     ['idle', (t, o) => POSES.stand(t, o)],
     ['clapIn', (t, o) => POSES.clap(CLAP_IN_T, o)],
     ['clapOut', (t, o) => POSES.clap(0, o)],
-    ['cheer', (t, o) => POSES.cheer(0, o)]
+    ['cheer', (t, o) => POSES.cheer(0, o)],
+    ['fist', (t, o) => POSES.fistPump(0, o)],
+    ['fistL', (t, o) => mirrorPose(POSES.fistPump(0), o)]
   ]
 };
 
@@ -301,7 +305,7 @@ export function createCrowd(opts = {}) {
       delay: r() * 0.3,
       fan: 0.55 + r() * 0.6,
       yaw: 0, pitch: 0, glance: 0, glanceT: r() * 3, bob: 0, lift: 0,
-      variant: 'idle', stand: 0
+      variant: 'idle', stand: 0, cheerStyle: r() < 0.5 ? 0 : r() < 0.5 ? 1 : 2
     };
   });
 
@@ -337,7 +341,8 @@ export function createCrowd(opts = {}) {
       const ph = (t * 2.3 + m.phase / (Math.PI * 2)) % 1;
       v = ph < 0.35 ? 'clapIn' : 'clapOut';
     } else if ((kind === 'cheer' || kind === 'ovation') && env * m.fan > 0.3) {
-      v = 'cheer';
+      // Everyone cheers their own way: arms up in a V, or a fist punched up
+      v = m.cheerStyle === 0 ? 'cheer' : m.cheerStyle === 1 ? 'fist' : 'fistL';
       lift = Math.abs(Math.sin(t * 8 + m.phase)) * 0.05 * env * m.fan;
       if (kind === 'ovation') base = 'stand';
     }
@@ -390,7 +395,7 @@ export function createCrowd(opts = {}) {
           yaw = m.glance;
           pitch = 0.05 * Math.sin(clock * 0.7 + m.phase);
         }
-        if (v === 'cheer') pitch = -0.25;
+        if (v === 'cheer' || v === 'fist' || v === 'fistL') pitch = -0.22;
         m.yaw += (yaw - m.yaw) * k;
         m.pitch += (pitch - m.pitch) * k;
         // Matrix: seat, facing, size; standing up from a chair steps forward

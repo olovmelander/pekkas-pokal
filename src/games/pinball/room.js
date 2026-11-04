@@ -223,7 +223,8 @@ function buildNeighbour(THREE, mergeGeometries, materials, theme, disposables) {
   head.rotateX(-CAB.headTilt);
   head.translate(0, 0, CAB.z1 + 0.4 - cz);
   const body = mergeGeometries([
-    new THREE.BoxGeometry(w, 12, len).translate(0, -6.12, 0),
+    // Top well under the print, as on our own cabinet (16-bit depth safety)
+    new THREE.BoxGeometry(w, 12, len).translate(0, -6.5, 0),
     new THREE.BoxGeometry(0.5, CAB.railY, len).translate(-w / 2 + 0.25, CAB.railY / 2, 0),
     new THREE.BoxGeometry(0.5, CAB.railY, len).translate(w / 2 - 0.25, CAB.railY / 2, 0),
     new THREE.BoxGeometry(w, CAB.railY + 0.4, 0.6).translate(0, (CAB.railY + 0.4) / 2, len / 2 - 0.3),
@@ -244,7 +245,7 @@ function buildNeighbour(THREE, mergeGeometries, materials, theme, disposables) {
   const pfTex = playfieldArt(THREE, theme);
   const pf = new THREE.Mesh(
     new THREE.PlaneGeometry(w - 1.2, len - 1.2).rotateX(-Math.PI / 2),
-    new THREE.MeshBasicMaterial({ map: pfTex, color: 0x6c6c6c })
+    new THREE.MeshBasicMaterial({ map: pfTex, color: 0x6c6c6c, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 })
   );
   pf.position.y = 0.02;
   g.add(pf);

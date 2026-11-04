@@ -179,10 +179,15 @@ export function faceWeights(p, H, lip) {
   const bL = brow(1);
   const bR = brow(-1);
   const neck = sstep(-0.07, -0.115, y) * sstep(0.005, -0.045, z) * (1 - jaw);
-  let sum = jaw + mL + mR + lu + bL + bR + neck;
-  const k = sum > 1 ? 1 / sum : 1;
+  // The mouth corners come first and get the same share on both lips, so a
+  // closed mouth stays sealed however the corners move; the rest share what
+  // is left.
+  const cw = Math.min(0.95, mL + mR);
+  const rest = 1 - cw;
+  let sum = jaw + lu + bL + bR + neck;
+  const k = sum > 1 ? rest / sum : rest;
   sum *= k;
-  out.push(['head', 1 - sum], ['jaw', jaw * k], ['mouthL', mL * k], ['mouthR', mR * k], ['lipUpper', lu * k],
+  out.push(['head', rest - sum], ['jaw', jaw * k], ['mouthL', mL], ['mouthR', mR], ['lipUpper', lu * k],
     ['browL', bL * k], ['browR', bR * k], ['neck', neck * k]);
   return out;
 }
@@ -297,14 +302,14 @@ function headColumns(n, k = 0.55) {
 export function buildHeadSkin(b, ctx) {
   const { field, res, toModel, face } = ctx;
   const { high } = res;
-  const phis = headColumns(high ? 38 : 10, high ? 0.56 : 0.3);
+  const phis = headColumns(high ? 44 : 10, high ? 0.7 : 0.3);
   const cols = phis.length;
   const yTop = 0.035;
   const yBot = -0.096;
-  const topA = high ? [0, 16, 32, 48, 63, 77] : [0, 50];
+  const topA = high ? [0, 19, 38, 56, 73] : [0, 50];
   const my = FACE.mouthY;
   const band = high
-    ? [0.035, 0.026, 0.018, 0.011, 0.005, 0.0, -0.006, -0.013, -0.019, -0.025, -0.0305, -0.0355, -0.041, -0.047, -0.054,
+    ? [0.035, 0.024, 0.016, 0.01, 0.005, 0.0, -0.006, -0.013, -0.019, -0.025, -0.0305, -0.0355, -0.041, -0.047, -0.054,
       my + 0.0075, my + 0.0035, my, my - 0.0035, my - 0.009, my - 0.017, -0.096]
     : [0.035, -0.01, -0.06, -0.096];
   const botA = high ? [107, 128, 152, 180] : [135, 180];
@@ -424,12 +429,12 @@ function headTint(p, ctx) {
   bl -= nose * 0.05;
   const my0 = FACE.mouthY;
   const lipX = 1 - sstep(0.016, 0.024, ax);
-  const upper = lipX * sstep(my0 + 0.0085, my0 + 0.006, y) * sstep(my0 - 0.0005, my0 + 0.001, y);
-  const lower = lipX * sstep(my0 - 0.011, my0 - 0.0085, y) * sstep(my0 + 0.0005, my0 - 0.001, y);
+  const upper = lipX * sstep(my0 + 0.0095, my0 + 0.0065, y) * sstep(my0 - 0.0005, my0 + 0.001, y);
+  const lower = lipX * sstep(my0 - 0.0125, my0 - 0.009, y) * sstep(my0 + 0.0005, my0 - 0.001, y);
   const lips = (upper * 1.15 + lower * 0.85) * sstep(0.07, 0.085, z) * ctx.face.lipTone;
-  r -= lips * 0.06;
-  g -= lips * 0.22;
-  bl -= lips * 0.19;
+  r -= lips * 0.07;
+  g -= lips * 0.3;
+  bl -= lips * 0.26;
   // Cheekbones catch light; the cheek below them hollows a touch
   const bone = gauss(ax - 0.05, 0.012) * gauss(y + 0.008, 0.008) * sstep(0.03, 0.06, z);
   const hollow = gauss(ax - 0.048, 0.012) * gauss(y + 0.04, 0.012) * sstep(0.02, 0.05, z);
@@ -443,12 +448,26 @@ function headTint(p, ctx) {
   const wing = gauss(ax - 0.018, 0.006) * gauss(y + 0.034, 0.008) * 0.06;
   const fold = gauss(ax - lerp(0.018, 0.028, clamp((-0.03 - y) / 0.035, 0, 1)), 0.005) * sstep(-0.028, -0.04, y) * sstep(my - 0.006, my + 0.004, y) * 0.07;
   const subnasal = gauss(ax, 0.01) * gauss(y + 0.04, 0.004) * 0.05;
-  const nostril = gauss(ax - 0.0085, 0.004) * gauss(y + 0.0385, 0.0035) * sstep(0.08, 0.09, z) * 0.35;
+  // Painted nose: lit ridge and tip, shaded flanks, a crease round each wing, dark nostrils
+  const noseZone = sstep(0.075, 0.09, z);
+  const ridge = gauss(ax, 0.0035) * sstep(0.012, 0.0, y) * sstep(-0.032, -0.02, y) * noseZone;
+  const tipHL = gauss(ax, 0.006) * gauss(y + 0.026, 0.005) * sstep(0.098, 0.106, z);
+  const flank = gauss(ax - 0.0095, 0.0035) * sstep(0.008, -0.004, y) * sstep(-0.03, -0.022, y) * noseZone;
+  const wingD = Math.hypot(ax - 0.0122, (y + 0.0335) * 1.1);
+  const crease = gauss(wingD - 0.0098, 0.0016) * sstep(-0.042, -0.036, y) * noseZone;
+  const nostril = gauss(ax - 0.0075, 0.0032) * gauss(y + 0.0398, 0.0028) * noseZone;
+  r += (ridge * 0.05 + tipHL * 0.07);
+  g += (ridge * 0.05 + tipHL * 0.06);
+  bl += (ridge * 0.04 + tipHL * 0.05);
+  // Upper-lid crease just above each eye
+  const lidCrease = gauss(ax - FACE.eyeX, 0.013) * gauss(y - (FACE.eyeY + FACE.eyeR + 0.0035), 0.0022) * sstep(0.06, 0.075, z);
   const corners = gauss(ax - FACE.mouthHalfW, 0.004) * gauss(y - my, 0.004) * 0.12;
   const chinFold = gauss(ax, 0.016) * gauss(y - (my - 0.016), 0.004) * 0.06;
-  const k = 1 - under - socket - wing - fold - subnasal - nostril - corners - chinFold;
+  const k = 1 - under - socket - wing - fold - subnasal - corners - chinFold - flank * 0.07 - crease * 0.12 -
+    nostril * 0.36 - lidCrease * 0.14;
   let tint = [r * k, g * k, bl * k];
   if (ctx.stubble) tint = ctx.stubble(p, tint);
+  if (ctx.hairShadow) tint = ctx.hairShadow(p, tint);
   return tint;
 }
 
@@ -548,6 +567,21 @@ export function buildEyes(b, ctx) {
     emitGrid(b, {
       pts, rows: ringsDef.length, cols, normalFn: nf, center: new THREE.Vector3(...toModel(c)), poles: [0, ringsDef.length - 1],
       weight: () => [[`eye${S}`, 1]]
+    });
+    // A crisp painted catch-light, up and to the viewer's left, on the cornea
+    const cl = new THREE.Vector3(-0.36, 0.2, 0.9).normalize().multiplyScalar(R * 1.05);
+    addBlob(b, {
+      c: toModel([c[0] + cl.x, c[1] + cl.y, c[2] + cl.z]), r: [0.0016, 0.0016, 0.0007].map((v) => v * ctx.scale), n: [2, 2],
+      cols: 5, rows: 3, region: REGION.FIXED, tint: [1.5, 1.5, 1.45], mat: MAT.GLOSS, weight: () => [[`eye${S}`, 1]],
+      warp: (p) => {
+        // Lay the dot flat on the cornea: squash along the eye's surface normal
+        const o = toModel([c[0] + cl.x, c[1] + cl.y, c[2] + cl.z]);
+        const n = cl.clone().normalize();
+        const d = new THREE.Vector3(p[0] - o[0], p[1] - o[1], p[2] - o[2]);
+        const along = d.dot(n);
+        d.addScaledVector(n, -along * 0.6);
+        return [o[0] + d.x, o[1] + d.y, o[2] + d.z];
+      }
     });
     buildLid(b, ctx, s, c, true);
     buildLid(b, ctx, s, c, false);
@@ -671,6 +705,10 @@ export function buildEars(b, ctx) {
 /* ------------------------------------------------------------ hair */
 
 const DEG = Math.PI / 180;
+const hash01 = (i) => {
+  const x = Math.sin(i * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+};
 
 /** Periodic Catmull-Rom through [ψ°, value] keys (ψ symmetric about 0). */
 function periodic(keys) {
@@ -700,13 +738,14 @@ function periodic(keys) {
 }
 
 const HAIRLINE = periodic([
-  [0, 45], [22, 46], [40, 42], [55, 30], [65, 13], [74, 1], [82, 4], [90, 15], [101, 20], [113, 10],
+  [0, 44], [22, 45], [40, 41], [55, 29], [65, 12], [72, -3], [78, -8], [83, -2], [90, 15], [101, 20], [113, 10],
   [125, -14], [145, -35], [180, -43]
 ]);
 const HAIRLINE_HIGH = periodic([
-  [0, 50], [20, 53], [36, 58], [50, 40], [62, 14], [74, 1], [82, 4], [90, 15], [101, 20], [113, 10],
+  [0, 50], [20, 53], [36, 58], [50, 40], [62, 14], [72, -3], [78, -8], [83, -2], [90, 15], [101, 20], [113, 10],
   [125, -14], [145, -35], [180, -43]
 ]);
+export { HAIRLINE, HAIRLINE_HIGH };
 
 function dirFrom(psi, elev) {
   return [Math.sin(psi) * Math.cos(elev), Math.sin(elev), Math.cos(psi) * Math.cos(elev)];
@@ -769,9 +808,16 @@ export function buildHair(b, ctx) {
   for (const t of tRows) {
     for (let j = 0; j < cols; j++) {
       const u = wrap ? j / cols : j / (cols - 1);
-      const psiDeg = lerp(psiRange[0], psiRange[1], u);
+      // Columns crowd towards the face, where the hairline is seen
+      const psiDeg = wrap ? (headColumns(cols, high ? 0.5 : 0)[j] / DEG + 360) % 360 : lerp(psiRange[0], psiRange[1], u);
       const psi = psiDeg * DEG;
-      const elev = line(psiDeg) * DEG;
+      // A broken hairline: a little jitter everywhere, tufts at the fringe and nape
+      const fr = Math.max(0, Math.cos(psi));
+      const nape = Math.max(0, -Math.cos(psi));
+      const jit = high ? (hash01(j * 7 + 3) - 0.5) * (st.jag ?? 2.5) : 0;
+      const tk = hash01(j * 13 + 5);
+      const tuft = high ? (tk > 0.4 ? 0.45 + tk * 0.75 : 0) * ((st.tufts ?? 2.6) * fr * fr + 2.2 * nape * nape) : 0;
+      const elev = (line(psiDeg) + jit - tuft) * DEG;
       let tt = t;
       let bandMax = 1;
       if (st.balding) {
@@ -797,6 +843,8 @@ export function buildHair(b, ctx) {
         h += 0.0035 * sstep(st.part * DEG, (st.part - 90) * DEG, psi) * sstep(0.95, 0.4, tt);
       }
       if (st.noise) h += st.noise * noise3(d[0] * 9 + 3, d[1] * 9, d[2] * 9);
+      // Clumps that lift off the scalp and break the outline
+      if (high) h += (st.clumps ?? 0.0025) * Math.max(0, noise3(d[0] * 7 + 11, d[1] * 7, d[2] * 7) * 1.6 - 0.25) * sstep(0.05, 0.3, tt);
       if (st.curls && high) {
         const n1 = noise3(d[0] * 26, d[1] * 26, d[2] * 26);
         const n2 = noise3(d[0] * 52 + 7, d[1] * 52, d[2] * 52);
@@ -811,7 +859,7 @@ export function buildHair(b, ctx) {
       if (st.balding) edge *= sstep(bandMax, bandMax * 0.55, tt) * sstep(0, 0.1, Math.min(u, 1 - u));
       h = h * edge - 0.0012 * (1 - edge);
       // Low detail: lift clear of the coarse skull's facets
-      if (!high) h += 0.0035 * edge;
+      if (!high) h += 0.005 * edge;
       if (hat && hatCover(psi, Math.asin(clamp(d[1], -1, 1)))) h = Math.min(h, 0.0022);
       const p = [sp[0] + nrm[0] * h, sp[1] + nrm[1] * h, sp[2] + nrm[2] * h];
       if (st.quiff && high) {

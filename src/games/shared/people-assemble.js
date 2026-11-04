@@ -5,11 +5,11 @@
 import * as THREE from 'three';
 import { BONE_DEFS, BONE_INDEX, A_POSE, jointTable, HEAD_SCALE } from './people-rig.js';
 import {
-  Builder, REGION, buildTorso, buildArm, buildLeg, buildHand, buildShoe, buildCollar, buildTorsoExtras
+  Builder, REGION, sstep, buildTorso, buildArm, buildLeg, buildHand, buildShoe, buildCollar, buildTorsoExtras
 } from './people-build.js';
 import {
   headField, buildHeadSkin, buildEyes, buildBrows, buildEars, buildHair, buildFacialHair, buildGlasses,
-  buildHeadwear, beardMask, hatEdge, sweep
+  buildHeadwear, beardMask, hatEdge, sweep, HAIRLINE, HAIRLINE_HIGH
 } from './people-head.js';
 import { buildFactors } from './people-look.js';
 
@@ -92,6 +92,27 @@ export function buildPersonData(look, detail = 'high', opts = {}) {
     });
     hc.stubble = (p, tint) => {
       const m = beardMask(p) * amt;
+      return tint.map((v, i) => v * (1 + (ratio[i] - 1) * m));
+    };
+  }
+  if (!crowd && res.high && look.hairStyle !== 'bald') {
+    // A soft shadow of hair on the skin just below the hairline, so the hair
+    // grows out of the scalp instead of sitting on it like a cap
+    const line = look.hairStyle === 'balding' ? HAIRLINE_HIGH : HAIRLINE;
+    const ratio = [0, 1, 2].map((i) => {
+      const hc2 = [look.hairColor.r, look.hairColor.g, look.hairColor.b][i];
+      const s = [look.skin.r, look.skin.g, look.skin.b][i];
+      return Math.min(1, (hc2 + 0.03) / (s + 0.03));
+    });
+    const buzz = look.hairStyle === 'buzz' ? 0.35 : 0;
+    hc.hairShadow = (p, tint) => {
+      const len = Math.hypot(p[0], p[1], p[2]) || 1;
+      const psi = Math.atan2(p[0], p[2]) * 180 / Math.PI;
+      const elev = Math.asin(p[1] / len) * 180 / Math.PI;
+      const hl = line(psi);
+      let m = sstep(hl - 6, hl - 0.5, elev) * 0.32;
+      if (look.hairStyle === 'balding') m *= sstep(55, 75, Math.abs(psi)) * (elev < hl + 25 ? 1 : 0);
+      m = Math.max(m, buzz * sstep(hl - 1, hl + 2, elev));
       return tint.map((v, i) => v * (1 + (ratio[i] - 1) * m));
     };
   }

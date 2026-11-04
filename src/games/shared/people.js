@@ -202,7 +202,7 @@ export const EXPRESSIONS = {
   neutral: {},
   smile: { mouth: [0.003, 0.0056, -0.0018], jaw: 0, lip: 0, brow: [0.0014, -0.03], lidUp: -0.03, lidLo: 0.16 },
   grin: { mouth: [0.0055, 0.0068, -0.0022], jaw: 0.15, lip: 0.0028, brow: [0.0022, -0.05], lidUp: -0.05, lidLo: 0.24 },
-  shout: { mouth: [0.0008, 0.0, 0.0004], jaw: 0.34, lip: 0.0032, brow: [-0.0016, 0.17], lidUp: 0.06, lidLo: 0.06 },
+  shout: { mouth: [0.0014, 0.0, 0.0004], jaw: 0.37, lip: 0.0032, brow: [-0.0016, 0.17], lidUp: 0.06, lidLo: 0.06 },
   frown: { mouth: [-0.0008, -0.0044, 0.0], jaw: 0.012, lip: 0, brow: [-0.0026, 0.2], lidUp: -0.09, lidLo: 0.05 },
   focus: { mouth: [-0.0018, -0.0008, 0.0004], jaw: 0, lip: 0, brow: [-0.002, 0.15], lidUp: -0.13, lidLo: 0.12 },
   surprised: { mouth: [-0.0042, 0.0, 0.0012], jaw: 0.26, lip: 0.0012, brow: [0.0058, -0.1], lidUp: 0.15, lidLo: -0.07 }
@@ -473,7 +473,7 @@ export function createPerson(specIn = {}) {
       // A hint of a smile at rest reads friendlier than a dead-straight mouth.
       // When the jaw opens the corners drop with it, so the mouth opens round, not V-shaped.
       const jawK = Math.max(0, f.jaw);
-      const cy = f.mouth[1] + 0.0009 * (1 - Math.min(1, jawK * 5)) - jawK * 0.03;
+      const cy = f.mouth[1] + 0.0009 * (1 - Math.min(1, jawK * 5)) - jawK * 0.034;
       const cx = f.mouth[0] - jawK * 0.003;
       setFace('mouthL', cx, cy, f.mouth[2] - jawK * 0.004);
       setFace('mouthR', -cx, cy, f.mouth[2] - jawK * 0.004);
