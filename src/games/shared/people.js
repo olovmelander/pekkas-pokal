@@ -120,6 +120,8 @@
  *       'relaxed' 'open' 'fist' 'point' 'thumbsUp'   hand shapes, no object needed
  *     opts.offset = { position, rotation | quaternion } nudges the object inside the grip frame.
  *     Calling hold/setGrip again with the same grip and sizes changes nothing (safe every frame).
+ *     The first use of a grip + size runs the solve (≈5–50 ms, then cached for everyone with the
+ *     same build): hold or setGrip once while loading to keep it out of gameplay frames.
  *   person.release(side, { detach = true, blend = 0.25 }) → the object; the pose drives the fingers again
  *   person.setGrip(side, grip | null, opts) → sockets.holdX   fingers only (null hands them back)
  *   person.gripOf(side) → grip name | null
