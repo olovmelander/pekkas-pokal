@@ -188,6 +188,20 @@ dina rekord, och den som når botten hittar något gyllene bredvid den sjunkna
 ekan. Fortfarande ingen efterbehandling: allt som glöder är sprites och ACES
 gör graderingen.
 
+**Andra uppgraderingen.** I ekan sitter nu Erik Vallgren – segraren i 2024
+års Fisketävling i Själevad – i röd keps, fiskejacka och gummistövlar, samma
+Erik som i de andra spelen. Han styrs av spöet: vevning, krokryck, när fångsten
+slängs upp, bakåtsvingen och kastet är mål för spöet som armarna löses fram
+till med IK, spöet böjer sig under lasten och linan lämnar den riktiga toppen.
+Mellan kasten vevar han in och kastar ut draget i en båge över fören, och i
+menyn guppar ett flöte på vågorna. Ekan är byggd från en linjeritning –
+klinkbyggd med spant, durkar, toftar, åror och termos – och rider på sjöns egna
+vågor, medan en osynlig torrmask håller sjöytan utanför relingen. För riktiga
+grafikkort kompileras shaderna asynkront bakom laddkortet, spelklockan börjar
+om varje timme så att våg- och simshadrarna aldrig tappar precision, och en
+vakt förenklar vattnet om bilden skulle bli svart (`?gfx=safe` börjar där).
+
+
 **Pekkas Lerskulptur (2026)**
 
 Kvällen i keramikateljén, som i Barcelona: keramikern visar en form, du
@@ -226,6 +240,23 @@ skyline. Alla shaders kompileras bakom laddskärmen så inget hackar mitt i
 ett drag. Ljudet syntetiseras: drejskivans brum och lerans våta klafs är
 kontinuerliga WebAudio-lager som styrs av hur hårt händerna arbetar, och
 ugnen, trådsnittet och glasyrens pling har egna ljud.
+
+**Andra uppgraderingen.** Keramikern är nu en riktig person ur spelens
+gemensamma personsystem: linneskjorta med uppkavlade ärmar under ett
+lerfläckat förkläde, svart basker, runda glasögon och grått helskägg. Han
+pekar på varje ny lerklump, står med armarna i kors och följer dina händer
+medan du drejar, nickar när en stjärna trillar in, höjer ögonbrynen vid tre och
+rynkar pannan när leran slår. Medan ugnen bränner står han med händerna i
+sidorna; sedan kliver han fram till drejskivan, lutar sig över alstret med
+knytnäven under hakan och fäller domen med hela ansiktet — båda armarna i
+luften för en tia, en arm i luften för 8 och 9, tummen upp för godkänt, en
+axelryckning för rustikt och en långsam huvudskakning för resten, medan han
+pratar. Din hand på leran har fått riktiga fingrar och en uppkavlad ärm, och
+möblerna mjuka kontaktskuggor. Grafiken är härdad för riktiga grafikkort:
+skuggkameran omfattar hela rummet, shaderna klarar sig utan NaN, glansen på
+den våta leran klampas så att bloom inte fladdrar, och en vakt sänker
+upplösningen om datorn inte hinner med.
+
 
 **Pekkas Fäktning (2023)**
 
@@ -347,6 +378,19 @@ och slutkortet räknar upp poängen, fyller i hela 25-kortet och delar ut
 brons (1 800), silver (2 800) eller guld — guld betyder att du slog Ludvig.
 Korsarna startar precis utanför bildkanten och deras fart följer bildens
 bredd, så en stående telefon ser samma passage som en datorskärm.
+
+**Andra uppgraderingen.** Gänget på fikastolarna är nu de riktiga
+deltagarna från 2022: Tobias, Viktor, Rickard och Per Olsson med Ludvig –
+mästaren du jagar – på mittenstolen, och Henrik, som arrangerade, står vid
+fikabordet med skjutkortet. De dricker kaffe, pratar och vänder sig mot
+varandra, och efter varje serie vänder kameran sig om mot dem: jubel för en
+felfri serie, applåder för en bra, och Ludvig lutar sig tillbaka med armarna i
+kors om det gick sämre. Slår du hans 3 400 applåderar han medan resten av
+gänget jublar. Grafiken har också gjorts tålig för riktiga grafikkort: alla
+shaders kompileras i förväg för rätt väg, himlen kan inte längre ge svarta
+pixlar, och skulle bilden ändå bli mörk trappar spelet själv ner grafiken
+tills fältet syns.
+
 
 **Pekkas Pingis (2019)**
 
@@ -644,6 +688,20 @@ ger bordet tyngd. På telefon visar bordet vilken skärmhalva som är vilken
 flipper, och ingen knapp är mindre än 44 pixlar. Bildupplösningen sänks
 automatiskt om bildfrekvensen faller under ungefär 45 bilder per sekund.
 
+**Andra uppgraderingen.** Flipperspelet har fått samma grafikvakt som de
+andra spelen: efterbehandlingen ritar i ett format som grafikkretsen faktiskt
+klarar, med kantutjämning, och blir bilden svart förenklas grafiken i tre steg
+med en notis. Alla shaders kompileras innan första bilden, för den buffert de
+verkligen ritas i, så att Windows-datorer inte fastnar på en svart duk.
+Insatserna, ljuspölarna och kontaktskuggorna ligger nu säkert ovanför träet även
+med grovt djupbuffert, och glimtarna i krom och låsbleck klipps under
+bloom-tröskeln så att de inte flimrar. Punktmatrisen glöder med ett eget mjukt
+sken i stället för att blinka i bloom-passet, och dimman följer kameran så att
+bordet aldrig försvinner i små fönster. Väggarna är hela rundade skenor utan
+hål i fogarna, flipprarna har fått riktiga rundade ändar, och förklädet över
+avloppet har fått ett tryckt märke.
+
+
 ---
 
 ## Utveckling
@@ -703,11 +761,12 @@ stänger dem.
 | `src/scripts/achievement-engine.js` | Beräknar vilka utmärkelser varje deltagare låst upp |
 | `src/data/achievements.js` | Definitioner av alla utmärkelser |
 | `src/styles/` | `main` (tokens/teman), `layout`, `components`, `animations`, `games` (arkaden och spelscenen), `game-hud` (spelens delade HUD), `responsive` |
+| `src/games/shared/` | Delat av alla spel: `gfx` (grafikvakten: tålig efterbehandling, NaN-skydd, svart-bild-vakt, förkompilering, `?gfx=safe`), `people` med `people-*` (personsystemet: skelett, ansikten, utseenden, poser, publik) |
 | `src/games/pinball/` | Flipperspelet: `physics` (2D-kollision), `table` (layout + banans grafik), `meshes` (3D), `room` (arkadhallen), `dmd` (punktmatrisen), `fx` (gnistor, bollspår), `audio` (syntetiskt ljud), `hud` (paneler), `scores` (topplistan), `index` (spelloop) |
-| `src/games/fishing/` | Fiskespelet: `species` (procedurella fiskar), `world` (sjö, vattenshader, båt), `fx` (stänk, bubblor, glimtar), `hud` (paneler, fångstdagbok), `progress` (uppdrag och rekord), `audio` (syntetiskt ljud), `index` (spelloop) |
-| `src/games/clay/` | Drejspelet: `studio` (ateljé, ugn, drejskiva), `clay` (krukans nät och material), `guide` (målets guider i 3D), `fx` (stänk, glöd, värmedaller), `hud` (paneler, dom, kvällens utställning), `audio` (syntetiskt ljud), `index` (lerfysik + spelloop) |
+| `src/games/fishing/` | Fiskespelet: `species` (procedurella fiskar), `world` (sjö, vattenshader), `boat` (klinkbyggda ekan), `angler` (Erik i ekan, IK mot spöet), `fx` (stänk, bubblor, glimtar), `hud` (paneler, fångstdagbok), `progress` (uppdrag och rekord), `audio` (syntetiskt ljud), `index` (spelloop) |
+| `src/games/clay/` | Drejspelet: `studio` (ateljé, ugn, drejskiva), `clay` (krukans nät och material), `keramiker` (keramikern och domen), `guide` (målets guider i 3D), `fx` (stänk, glöd, värmedaller), `hud` (paneler, dom, kvällens utställning), `audio` (syntetiskt ljud), `index` (lerfysik + spelloop) |
 | `src/games/fencing/` | Fäktspelet: `salle` (fäktsal, ljusvolymer, publik), `fencer` (IK-riggade fäktare), `fx` (gnistor, klingspår, konfetti), `hud` (paneler, slutspelsträd), `audio` (syntetiskt ljud), `index` (duell-AI + spelloop) |
-| `src/games/shooting/` | Skyttespelet: `range` (fält, lerduvor, gänget), `sky` (himmelsshader och moln), `gun` (bockbössan i PBR), `grass` (instansierad äng med vind), `fx` (skärvor, damm, haglsvärm), `hud` (25-kortet, spökstapeln, slutkortet), `audio` (syntetiskt ljud), `index` (banor + spelloop) |
+| `src/games/shooting/` | Skyttespelet: `range` (fält, lerduvor), `gang` (2022 års gäng på fikastolarna), `sky` (himmelsshader och moln), `gun` (bockbössan i PBR), `grass` (instansierad äng med vind), `fx` (skärvor, damm, haglsvärm), `hud` (25-kortet, spökstapeln, slutkortet), `audio` (syntetiskt ljud), `index` (banor + spelloop) |
 | `src/games/pingis/` | Pingisspelet: `hall` (bygdegård, bord, figurer), `crowd` (instansierad publik), `scoreboard` (fällbara siffror), `fx` (bollspår, ringar, gnistor), `post` (bloom, gradering, spegelgolv), `hud` (paneler, scoutingkort), `audio` (syntetiskt ljud), `index` (fysik, AI och spelloop) |
 | `src/games/painting/` | Målerispelet: `artworks` (motiven + färgblandning i RYB och Lab), `canvasart` (penseldrag och dukens höjdkarta), `palette` (paletten i 3D), `garden` (trädgården, staffli, målare, Hägglund), `hud` (paneler, dom, galleri), `audio` (syntetiskt ljud), `index` (spelloop och dom) |
 | `public/` | Statiska filer: `event.json`, `manifest.json`, ikoner, `brand/` (älgen), `og-image.png`, `games/` (affischbilder), `photos/` |
