@@ -1,90 +1,123 @@
 /**
  * Pekkas Pokal — people: one shared character system for every game.
  *
- * Stylised, soft-vinyl-toy people built entirely in code: a single
- * SkinnedMesh per person (≤ 3 draw calls at high detail — skin & hair,
- * cloth, glossy bits — and one at low detail), a standard skeleton, a pose
- * library, two-bone IK, look-at, expressions with blinking eyelids, and a
- * cheap instanced crowd. The same participant looks the same in all games.
+ * Stylised "soft vinyl toy" people built entirely in code (no assets): one
+ * SkinnedMesh per person — 3 draw calls at high detail (skin & hair, cloth,
+ * glossy eyes/teeth/glasses/leather; a 4th only for a fencing lamé) and 1 at
+ * low detail — on a standard skeleton, with a pose library, two-bone IK,
+ * look-at, expressions with a jaw that really opens, blinking lids, eye
+ * saccades and breathing, plus an instanced crowd. The same participant
+ * looks the same in every game (appearanceFor).
+ *
+ * Files: people.js (this API) · people-rig.js (skeleton, poses, IK) ·
+ * people-build.js (body, clothes) · people-head.js (head, face, hair, hats) ·
+ * people-look.js (appearances, outfits) · people-assemble.js (mesh assembly) ·
+ * people-crowd.js (crowds).
  *
  * ── Quick start ─────────────────────────────────────────────────────────
  *
- *   import { createPerson, appearanceFor, POSES } from '../shared/people.js';
+ *   import { createPerson, appearanceFor, POSES, createCrowd } from '../shared/people.js';
  *
  *   const judge = createPerson(appearanceFor('Mikael Hägglund'));   // polo neck, round glasses
  *   scene.add(judge.root);
- *   judge.setPose(POSES.stand());
- *   // every frame:
- *   judge.setPose(POSES.walk(phase), 0.3);   // blend toward the walk pose
- *   judge.lookAt(camera.position);
+ *   // every frame, in this order:
+ *   judge.setPose(POSES.walk(phase), 0.25);  // blend toward the pose (1 = snap)
+ *   judge.lookAt(camera.position);           // head/neck/eyes, eased (null releases)
  *   judge.update(dt, t);                     // breathing, blinks, saccades, expression easing
  *
- *   // Game outfits on top of the person's own look:
+ *   // Game outfits on top of the person's own look (garment colours reset
+ *   // when the garment type changes; pass topColor etc. to choose):
  *   const fencer = createPerson(appearanceFor('Per Vikman', {
  *     outfit: { top: 'fencing', bottom: 'knickers', accent: 0xc9982e }   // accent = socks
  *   }));
- *   fencer.ikArm('R', swordHandWorld, elbowPoleWorld);
- *   fencer.ikLeg('L', frontAnkleWorld, kneePoleWorld);
- *   fencer.attach(foilGroup, 'gripR');       // the fist's grip socket (handle runs along +Z)
- *
- *   const crowd = createCrowd({ seats, names: PARTICIPANT_NAMES });
- *   scene.add(crowd.root); crowd.react('cheer'); crowd.lookAt(ball.position); crowd.update(dt, t);
+ *   fencer.setPose(POSES.ready(t));
+ *   fencer.ikLeg('L', frontAnkleWorld);                  // knee pole defaults to forward
+ *   fencer.ikArm('R', swordHandWorld, elbowPoleWorld, handWorldQuat);
+ *   fencer.attach(foil, 'gripR');            // fist socket: +Z runs out of the thumb side
+ *   fencer.materials.lame.emissive.set(0x40ff40);        // hit flash (own material)
  *
  * ── createPerson(spec) ──────────────────────────────────────────────────
  *
  *   spec = {
- *     height: 1.80,                 // metres (the whole figure scales)
+ *     height: 1.80,                 // metres (the whole figure scales; head is drawn ×1.15, ~6.6 heads)
  *     build: 'slim'|'average'|'broad',
- *     skin: 0xeabb98,               // or SKIN_TONES.fair …
- *     hair: { style, color },       // style: HAIR_STYLE_NAMES — bald, buzz, crop, tousled, sidePart,
- *                                   //   sweptBack, curly, long, bun, balding
+ *     skin: 0xe8b08b,               // or SKIN_TONES.fair|light|lightWarm|medium|olive|deep
+ *     hair: { style, color },       // HAIR_STYLE_NAMES: bald buzz crop tousled sidePart sweptBack
+ *                                   //   curly long bun balding
  *     facialHair: null|'stubble'|'beard'|'fullBeard'|'moustache',
  *     glasses: null|'round'|'rect', glassesColor,
  *     headwear: null|'cap'|'beret'|'beanie'|'headband' | { style, color },
  *     eyes: 'blue'|'grayBlue'|'green'|'hazel'|'brown'|'darkBrown' | [r, g, b] (linear),
- *     face: { jaw, chin, nose, noseLen, brow, cheek, lips, headW, headL, ears } (≈0.9…1.1),
+ *     face: { jaw, chin, nose, noseLen, brow, cheek, lips, headW, headL, ears } (≈0.9…1.15),
  *     outfit: {
- *       top: 'tshirt'|'polo'|'shirt'|'poloNeck'|'sweater'|'jacket'|'apron'|'jersey'|'fishingJacket'|'fencing'|'none',
- *       topColor, bottom: 'trousers'|'jeans'|'shorts'|'knickers', bottomColor,
+ *       top: 'tshirt'|'polo'|'shirt'|'poloNeck'|'sweater'|'jacket'|'apron'|'jersey'|
+ *            'fishingJacket'|'fencing'|'none', topColor,
+ *       bottom: 'trousers'|'jeans'|'shorts'|'knickers', bottomColor,
  *       shoes: 'sneakers'|'leather'|'boots', shoeColor,
- *       accent                     // apron, jersey trims, cap/beanie, fencing socks
+ *       accent                     // apron, jersey trims, knicker socks (and hats without a colour)
  *     },
- *     detail: 'high'|'low',         // ~8k vs ~0.9k triangles
- *     ownMaterials: false           // true: private materials (e.g. to tint one person)
+ *     detail: 'high'|'low',         // ≈8.5–10k vs ≈0.9–1.2k triangles
+ *     ownMaterials: false           // materials are SHARED between people (vertex colours carry
+ *                                   //   all colour); true gives this person private ones to tint
  *   }
  *
  *   → person = {
- *     root,            // Object3D to add to the scene; place/rotate it on the floor
- *     mesh,            // the SkinnedMesh
- *     bones,           // { hips, spine, chest, neck, head, shoulderL, upperArmL, forearmL, handL, …R,
- *                      //   thighL, shinL, footL, …R, plus fingers and face bones }
- *     sockets,         // { gripL, gripR, headTop, face } attach points
- *     height,          // metres
- *     materials,       // { skin, cloth, gloss, lame? }
- *     setPose(pose, blend = 1),         // pose object (POSES.*) — blend < 1 slerps toward it
- *     ikArm(side, target, pole?, handWorldQuat?)   // side 'L'|'R'; world Vector3s
- *     ikLeg(side, target, pole?, footWorldQuat?)
- *     lookAt(point|null, weight = 1),   // head, neck and eyes track a world point (eased)
- *     setExpression(name|{name: w}, amount = 1)   // neutral smile grin shout frown focus surprised
- *     blink(), talk(amount 0..1),
- *     update(dt, t),                    // call once per frame AFTER posing
- *     attach(object, boneOrSocket, { position, rotation, quaternion, scale }?),
- *     dispose()
+ *     root,        // Group to add to the scene; it stands on its origin, facing +Z
+ *     mesh,        // the SkinnedMesh (castShadow/receiveShadow on; generous bounding sphere)
+ *     bones,       // by name, see below
+ *     sockets,     // gripL, gripR (in the fist; +Z out of the thumb side, +Y up the forearm),
+ *                  // headTop (crown), face (in front of the eyes)
+ *     height, triangles, materials { skin, cloth, gloss, lame? }, look (resolved spec),
+ *     setPose(pose, blend = 1),
+ *     ikArm(side 'L'|'R', target, pole?, handWorldQuat?) → metres out of reach (0 = reached)
+ *     ikLeg(side, target, pole?, footWorldQuat?)        → idem
+ *     lookAt(point|null, weight = 1),
+ *     setExpression(name | { smile: .5, focus: .5 }, amount = 1),   // EXPRESSION_NAMES:
+ *                  // neutral smile grin shout frown focus surprised
+ *     blink(), talk(0..1)  // talk flaps the jaw irregularly until talk(0)
+ *     update(dt, t),       // once per frame AFTER posing/IK (also drives lids, eyes, forearm roll)
+ *     attach(object, boneOrSocket, { position, rotation, quaternion, scale } | Matrix4),
+ *     dispose()            // geometry, skeleton texture, materials (refcounted), detaches attachments
  *   }
  *
- * Frames: the person faces +Z with +X to their LEFT; zero rotation on every
- * bone is "standing to attention, arms straight down". Signs per bone are
- * listed at the top of people-rig.js. Per frame: setPose → IK → lookAt →
- * update. Games may also write bone rotations directly between setPose and
- * update; update() layers breathing and look-at on top without drift.
+ * ── Skeleton ────────────────────────────────────────────────────────────
  *
- * Seated: POSES.sit puts the seat under the hips at SEAT_HEIGHT × height/1.8,
- * SEAT_BACK behind the root. Walking: move the root WALK_STRIDE × height/1.8
- * per 2π of walk phase.
+ *   hips → spine → chest → neck → head
+ *   chest → shoulderL/R (clavicle) → upperArmL/R → forearmL/R → handL/R
+ *           forearmTwistL/R (driven by update: half the hand's twist, for a clean wrist)
+ *           handL/R → thumb, index → indexTip, fingers → fingersTip (driven by grip/point)
+ *   hips → thighL/R → shinL/R → footL/R
+ *   head → jaw, lipUpper, mouthL/R, browL/R, eyeL/R, lidUpL/R, lidLoL/R (driven by expressions)
+ *
+ *   Axes: at zero rotation every bone is parallel to the root — X = the person's LEFT,
+ *   Y = up, Z = forward — and the pose is "attention, arms straight down". The bind/rest pose
+ *   is an A-pose (upperArm z = ±A_POSE). Rotation signs per bone are listed in people-rig.js.
+ *   Pose objects: { [bone]: [x, y, z] Euler radians, hipsPos: [x, y, z] metres at 1.80 m,
+ *   gripL/gripR: 0 open … 1 fist, pointL/pointR: 0…1 index extended }. Missing bones = zero.
+ *
+ * ── Pose library (POSES.name(t, out?) → pose; mixPoses, mirrorPose) ────────
+ *
+ *   stand, idle(t), sit, sitCup(t), sitRod(t), sitClap(t), sitCheer(t), cheer(t), clap(t),
+ *   point (right hand; mirrorPose for the left), handsOnHips, armsCrossed, ready(t) (athletic
+ *   stance), explain(t) (talking gesture), holdNotebook(t), walk(phase).
+ *   Seated: the seat is SEAT_HEIGHT × height/1.8 up, centred SEAT_BACK behind the root.
+ *   Walking: move the root WALK_STRIDE × height/1.8 forward per 2π of phase.
+ *   Games may also write bone.rotation directly between setPose and update; update()
+ *   layers breathing and look-at on top without drifting.
+ *
+ * ── createCrowd(opts) (see people-crowd.js) ─────────────────────────────
+ *
+ *   const crowd = createCrowd({ seats: [{ position, rotationY, pose: 'sit'|'stand', cup? }],
+ *                               names: PARTICIPANT_NAMES, seed, hats: 0.12, castShadow: true });
+ *   scene.add(crowd.root);
+ *   crowd.react('cheer' | 'clap' | 'ovation' | 'idle', seconds = 2.2);  // one-shot
+ *   crowd.setMood('idle' | 'clap' | 'cheer' | 'ovation');               // between reactions
+ *   crowd.lookAt(ball.position | null);  crowd.update(dt, t);  crowd.drawCalls;  crowd.dispose();
+ *   Typically 2–5 draw calls for any number of spectators (one per pose variant in use).
  */
 import * as THREE from 'three';
 import {
-  BONE_DEFS, POSES, applyPose, solveTwoBone, emptyPose, mixPoses, mirrorPose, SEAT_HEIGHT, SEAT_BACK, WALK_STRIDE,
+  BONE_DEFS, A_POSE, POSES, applyPose, solveTwoBone, emptyPose, mixPoses, mirrorPose, SEAT_HEIGHT, SEAT_BACK, WALK_STRIDE,
   HEAD_C, HEAD_SCALE, FACE
 } from './people-rig.js';
 import { REGION, MAT, noise3, rng } from './people-build.js';
@@ -94,7 +127,7 @@ import { buildPersonData, toBindPose, toGeometry, makeSkeleton } from './people-
 import { createCrowd } from './people-crowd.js';
 
 export {
-  POSES, mixPoses, mirrorPose, emptyPose, SEAT_HEIGHT, SEAT_BACK, WALK_STRIDE, BONE_DEFS,
+  POSES, mixPoses, mirrorPose, emptyPose, SEAT_HEIGHT, SEAT_BACK, WALK_STRIDE, BONE_DEFS, A_POSE,
   appearanceFor, PARTICIPANT_NAMES, SKIN_TONES, HAIR_COLORS, EYE_COLORS, HAIR_STYLE_NAMES, createCrowd
 };
 
@@ -114,8 +147,8 @@ function makeMaterials(detail) {
   });
   // Cloth: matte with a velvety rim
   const cloth = new THREE.MeshPhysicalMaterial({
-    vertexColors: true, roughness: 0.84, metalness: 0, sheen: 0.7, sheenRoughness: 0.55,
-    sheenColor: new THREE.Color(0.55, 0.55, 0.55)
+    vertexColors: true, roughness: 0.82, metalness: 0, sheen: 0.4, sheenRoughness: 0.6,
+    sheenColor: new THREE.Color(0.38, 0.38, 0.38)
   });
   // Eyes, teeth, glasses, buttons, leather: a wet, glossy coat
   const gloss = new THREE.MeshPhysicalMaterial({

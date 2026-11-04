@@ -124,7 +124,7 @@ function bakeVariant(b, joints, poseFn, extra) {
   }
   root.updateMatrixWorld(true);
   const M = list.map((bone, i) => bone.matrixWorld.clone().multiply(inv[i]));
-  const n = b.n;
+  const { n } = b;
   const pos = new Float32Array(n * 3);
   const nor = new Float32Array(n * 3);
   const p = new THREE.Vector3();
@@ -331,7 +331,7 @@ export function createCrowd(opts = {}) {
     const kind = active ? mood.kind : mood.base;
     const env = active ? Math.min(1, lt / 0.15) * Math.min(1, (mood.dur - lt) / 0.4) : kind === 'idle' ? 0 : 1;
     let v = m.cup && m.base === 'sit' ? 'cup' : 'idle';
-    let base = m.base;
+    let { base } = m;
     let lift = 0;
     if (kind === 'clap' && env * m.fan > 0.35) {
       const ph = (t * 2.3 + m.phase / (Math.PI * 2)) % 1;

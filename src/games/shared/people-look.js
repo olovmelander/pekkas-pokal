@@ -27,30 +27,30 @@ const P = (o) => o;
 /** The thirteen, as they appear in competition-data.csv. */
 export const PARTICIPANTS = {
   'Olov Melander': P({ height: 1.83, build: 'average', skin: 'light', hair: ['sidePart', 'brown'], facialHair: 'stubble', eyes: 'blue',
-    face: { jaw: 1.05, nose: 1.02, chin: 1.06, brow: 1.02, cheek: 0.98 }, outfit: { topColor: 0x2f4f6e, bottomColor: 0x3a4250 } }),
+    face: { jaw: 1.05, nose: 1.02, chin: 1.06, brow: 1.02, cheek: 0.98 }, outfit: { topColor: 0x2f4f6e, bottomColor: 0x3b5578 } }),
   'Mikael Hägglund': P({ height: 1.8, build: 'slim', skin: 'light', hair: ['sweptBack', 'gray'], glasses: 'round', eyes: 'grayBlue',
     face: { jaw: 0.9, nose: 1.14, noseLen: 1.15, chin: 0.96, headL: 1.05, cheek: 0.95, brow: 1.08 }, glassesColor: 0x17171a,
     outfit: { top: 'poloNeck', topColor: 0x1f2026, bottomColor: 0x8f8268, shoes: 'leather' } }),
   'Viktor Jones': P({ height: 1.82, build: 'average', skin: 'medium', hair: ['curly', 'black'], facialHair: 'stubble', eyes: 'darkBrown',
     face: { jaw: 1.04, lips: 1.25, nose: 1.1, cheek: 1.05, chin: 1.02 }, outfit: { topColor: 0xa8202c, bottomColor: 0x2a2e38 } }),
   'Per Vikman': P({ height: 1.79, build: 'average', skin: 'lightWarm', hair: ['crop', 'darkBrown'], facialHair: 'beard', eyes: 'brown',
-    face: { jaw: 1.08, nose: 1.05, brow: 1.14, cheek: 1.02 }, outfit: { topColor: 0x7a2e2a, bottomColor: 0x2e3440 } }),
+    face: { jaw: 1.08, nose: 1.05, brow: 1.14, cheek: 1.02 }, outfit: { topColor: 0x7a2e2a, bottomColor: 0x5a5348 } }),
   'Erik Vallgren': P({ height: 1.88, build: 'slim', skin: 'fair', hair: ['sweptBack', 'blond'], glasses: 'rect', eyes: 'blue',
     face: { jaw: 0.92, headL: 1.04, noseLen: 1.12, chin: 1.1, cheek: 0.95 }, glassesColor: 0x222831, outfit: { topColor: 0x3e6b56, bottomColor: 0x3a3f4a } }),
   'Henrik Lundqvist': P({ height: 1.85, build: 'broad', skin: 'lightWarm', hair: ['crop', 'brown'], facialHair: 'fullBeard', eyes: 'hazel',
-    face: { jaw: 1.12, nose: 1.08, brow: 1.1, cheek: 1.06, headW: 1.03 }, outfit: { topColor: 0x3f7a46, bottomColor: 0x2b3140 } }),
+    face: { jaw: 1.12, nose: 1.08, brow: 1.1, cheek: 1.06, headW: 1.03 }, outfit: { topColor: 0x3f7a46, bottomColor: 0x4a5a72 } }),
   'Rickard Nilsson': P({ height: 1.86, build: 'broad', skin: 'light', hair: ['buzz', 'black'], facialHair: 'stubble', eyes: 'brown',
     face: { jaw: 1.15, chin: 1.12, brow: 1.16, nose: 0.96, cheek: 1.03 }, outfit: { topColor: 0x2f5f96, bottomColor: 0x1d2230 } }),
   'Niklas Norberg': P({ height: 1.8, build: 'broad', skin: 'light', hair: ['balding', 'lightBrown'], facialHair: 'beard', glasses: 'rect', eyes: 'green',
     face: { jaw: 1.08, cheek: 1.12, nose: 1.12, headW: 1.05, chin: 0.96 }, glassesColor: 0x2b3446, outfit: { topColor: 0x5b4a7a, bottomColor: 0x3c4a62 } }),
   'Per Olsson': P({ height: 1.81, build: 'average', skin: 'fair', hair: ['bun', 'ginger'], facialHair: 'fullBeard', eyes: 'green',
-    face: { brow: 1.18, nose: 1.04, jaw: 1.02, lips: 1.1 }, browThick: 1.35, outfit: { topColor: 0x6b4a2e, bottomColor: 0x33404f } }),
+    face: { brow: 1.18, nose: 1.04, jaw: 1.02, lips: 1.1 }, browThick: 1.35, outfit: { topColor: 0x6b4a2e, bottomColor: 0x6b6a5a, bottom: 'trousers' } }),
   'Tobias Lundqvist': P({ height: 1.78, build: 'slim', skin: 'lightWarm', hair: ['sidePart', 'brown'], glasses: 'round', eyes: 'hazel',
     face: { jaw: 0.94, nose: 0.94, chin: 0.94, cheek: 0.97, lips: 1.08 }, glassesColor: 0x6a4428, outfit: { topColor: 0xc9a24a, bottomColor: 0x2b3140 } }),
   'Lars Sandin': P({ height: 1.77, build: 'average', skin: 'light', hair: ['long', 'ash'], facialHair: 'stubble', eyes: 'grayBlue',
-    face: { jaw: 0.97, headL: 1.03, nose: 1.1, noseLen: 1.1, cheek: 0.96 }, outfit: { topColor: 0x8c3a3a, bottomColor: 0x2f3746 } }),
+    face: { jaw: 0.97, headL: 1.03, nose: 1.1, noseLen: 1.1, cheek: 0.96 }, outfit: { topColor: 0x8c3a3a, bottomColor: 0x4a5a72 } }),
   'Ludvig Ulenius': P({ height: 1.9, build: 'slim', skin: 'fair', hair: ['tousled', 'lightBlond'], eyes: 'blue',
-    face: { jaw: 0.92, chin: 1.04, headW: 0.96, nose: 0.92, cheek: 0.94, lips: 0.95 }, outfit: { topColor: 0x2f5f5c, bottomColor: 0x384050 } }),
+    face: { jaw: 0.92, chin: 1.04, headW: 0.96, nose: 0.92, cheek: 0.94, lips: 0.95 }, outfit: { topColor: 0x2f5f5c, bottomColor: 0x8a7a60, bottom: 'trousers' } }),
   'Jonas Eriksson': P({ height: 1.76, build: 'average', skin: 'lightWarm', hair: ['crop', 'saltPepper'], facialHair: 'moustache', eyes: 'brown',
     face: { jaw: 1.04, nose: 1.14, cheek: 1.1, brow: 1.06, chin: 0.98 }, outfit: { topColor: 0x4d6b42, bottomColor: 0x3a3a40 } })
 };
@@ -105,12 +105,12 @@ export function appearanceFor(name, overrides = {}) {
   }
   const out = { ...spec, ...overrides };
   // A different garment drops the colour that belonged to the everyday one
-  const base = { ...spec.outfit };
+  const everyday = { ...spec.outfit };
   const o = overrides.outfit || {};
-  if (o.top && o.top !== base.top) delete base.topColor;
-  if (o.bottom && o.bottom !== base.bottom) delete base.bottomColor;
-  if (o.shoes && o.shoes !== base.shoes) delete base.shoeColor;
-  out.outfit = { ...base, ...o };
+  if (o.top && o.top !== everyday.top) delete everyday.topColor;
+  if (o.bottom && o.bottom !== everyday.bottom) delete everyday.bottomColor;
+  if (o.shoes && o.shoes !== everyday.shoes) delete everyday.shoeColor;
+  out.outfit = { ...everyday, ...o };
   if (overrides.hair) out.hair = { ...spec.hair, ...overrides.hair };
   if (overrides.face) out.face = { ...spec.face, ...overrides.face };
   return out;
@@ -125,7 +125,7 @@ const lin = (hex) => {
 
 /** Torso/arm garment definitions. Offsets are metres proud of the body. */
 function topDef(kind, o) {
-  const base = { neck: 'crew', hem: 0.85, tucked: false, off: 0.0042, sleeve: 0.15, sleeveOff: 0.0035, sleeveLoose: 0.55, mat: MAT.CLOTH, tint: [1, 1, 1] };
+  const base = { neck: 'crew', hem: 0.838, tucked: false, off: 0.0042, sleeve: 0.15, sleeveOff: 0.0035, sleeveLoose: 0.55, mat: MAT.CLOTH, tint: [1, 1, 1] };
   switch (kind) {
     case 'none':
       return { ...base, neck: null, hem: 0.99, tucked: true, off: 0, sleeve: 0, mat: MAT.SKIN, region: REGION.SKIN };

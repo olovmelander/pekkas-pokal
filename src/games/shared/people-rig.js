@@ -507,6 +507,22 @@ function frameQuat(xAxis, yAxis, out) {
   return out.setFromRotationMatrix(_m);
 }
 
+const _lx = new THREE.Vector3();
+const _ly = new THREE.Vector3();
+const _ql = new THREE.Quaternion();
+/**
+ * World rotation for a bone whose child sits at `childLocal` (in the bone's
+ * own frame), so that the child lands along −yWorld with the hinge (local
+ * +X, kept perpendicular to the child direction) on xWorld.
+ */
+function boneQuat(xWorld, yWorld, childLocal, out) {
+  frameQuat(xWorld, yWorld, out);
+  _ly.copy(childLocal).normalize().negate();
+  _lx.set(1, 0, 0).addScaledVector(_ly, -_ly.x).normalize();
+  frameQuat(_lx, _ly, _ql);
+  return out.multiply(_ql.invert());
+}
+
 function setWorldQuat(bone, worldQ) {
   bone.parent.getWorldQuaternion(_qp);
   bone.quaternion.copy(_qp.invert().multiply(worldQ));
@@ -555,10 +571,10 @@ export function solveTwoBone(upper, lower, end, target, pole, sign, endWorldQ) {
   // Hinge axis, shared by both bones
   _x.crossVectors(_d, _p).multiplyScalar(sign).normalize();
   _y.subVectors(_a, _b).normalize();
-  frameQuat(_x, _y, _qw);
+  boneQuat(_x, _y, lower.position, _qw);
   setWorldQuat(upper, _qw);
   _y.subVectors(_b, _t).normalize();
-  frameQuat(_x, _y, _qw);
+  boneQuat(_x, _y, end.position, _qw);
   setWorldQuat(lower, _qw);
   setWorldQuat(end, _qh);
   return miss;

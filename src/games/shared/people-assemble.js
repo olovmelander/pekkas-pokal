@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { BONE_DEFS, BONE_INDEX, A_POSE, jointTable, HEAD_SCALE } from './people-rig.js';
 import {
-  Builder, MAT, REGION, buildTorso, buildArm, buildLeg, buildHand, buildShoe, buildCollar, buildTorsoExtras
+  Builder, REGION, buildTorso, buildArm, buildLeg, buildHand, buildShoe, buildCollar, buildTorsoExtras
 } from './people-build.js';
 import {
   headField, buildHeadSkin, buildEyes, buildBrows, buildEars, buildHair, buildFacialHair, buildGlasses,
@@ -25,7 +25,7 @@ export function buildPersonData(look, detail = 'high', opts = {}) {
   const build = buildFactors(look.build);
   const joints = jointTable(build.w, build.w > 1 ? 1.04 : build.w < 1 ? 0.97 : 1);
   const crowd = !!opts.crowd;
-  const outfit = look.outfit;
+  const { outfit } = look;
   const white = new THREE.Color(1, 1, 1);
   const palette = crowd
     ? [white, white, white, white, white]
@@ -126,8 +126,8 @@ export function buildPersonData(look, detail = 'high', opts = {}) {
 
 /** Rigidly carry arm-chain vertices into the A-pose bind. */
 export function toBindPose(b, joints) {
-  const P = b.P;
-  const N = b.N;
+  const { P } = b;
+  const { N } = b;
   const chain = (S) => ['upperArm', 'forearm', 'forearmTwist', 'hand', 'thumb', 'index', 'indexTip', 'fingers', 'fingersTip'].map((n) => BONE_INDEX[n + S]);
   const armL = new Set(chain('L'));
   const armR = new Set(chain('R'));

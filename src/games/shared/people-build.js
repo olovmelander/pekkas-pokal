@@ -218,7 +218,7 @@ export function emitGrid(b, { pts, rows, cols, wrap = true, normalFn, center, po
   for (let i = 0; i < rows - 1; i++) {
     for (let j = 0; j < cw; j++) {
       if (skip && skip(i, j)) continue;
-      quads.push([idx(i, j), idx(i, j + 1), idx(i + 1, j), idx(i + 1, j + 1), i, j]);
+      quads.push([idx(i, j), idx(i, j + 1), idx(i + 1, j), idx(i + 1, j + 1)]);
     }
   }
   const A = new THREE.Vector3();
@@ -286,7 +286,7 @@ export function emitGrid(b, { pts, rows, cols, wrap = true, normalFn, center, po
     n.normalize();
     base.push(b.vertex(q.p, [n.x, n.y, n.z], q.region, q.tint, q.w || weight(q.p, q)));
   }
-  for (const [a, bb, c, d, i, j] of quads) {
+  for (const [a, bb, c, d] of quads) {
     const m = pts[a].mat;
     const va = base[a];
     const vb = base[bb];
@@ -299,8 +299,6 @@ export function emitGrid(b, { pts, rows, cols, wrap = true, normalFn, center, po
       b.tri(m, va, vc, vb);
       b.tri(m, vb, vc, vd);
     }
-    void i;
-    void j;
   }
   return base;
 }
@@ -376,10 +374,10 @@ function torsoKeys(build) {
     [1.34, 0.177, 0.112, 0.106, -0.008, 2.6],
     [1.385, 0.177, 0.096, 0.099, -0.012, 2.6],
     [1.42, 0.176, 0.082, 0.09, -0.016, 2.55],
-    [1.443, 0.163, 0.07, 0.08, -0.02, 2.45],
-    [1.465, 0.136, 0.063, 0.073, -0.022, 2.35],
-    [1.485, 0.103, 0.06, 0.067, -0.022, 2.2],
-    [1.505, 0.077, 0.059, 0.063, -0.02, 2.05],
+    [1.443, 0.168, 0.071, 0.081, -0.02, 2.5],
+    [1.465, 0.151, 0.064, 0.074, -0.022, 2.4],
+    [1.485, 0.117, 0.06, 0.068, -0.022, 2.25],
+    [1.505, 0.08, 0.059, 0.063, -0.02, 2.05],
     [1.53, 0.066, 0.058, 0.061, -0.016, 2.0],
     [1.56, 0.062, 0.056, 0.059, -0.01, 2.0],
     [1.595, 0.058, 0.053, 0.056, -0.004, 2.0],
@@ -425,7 +423,7 @@ export function buildTorso(b, ctx) {
     : [0.785, 0.84, 0.95, 1.1, 1.27, 1.4, 1.47, 1.55, 1.632];
   // Bands from the bottom (crotch) to the top (inside the head)
   const bands = [];
-  const waist = bot.waist;
+  const { waist } = bot;
   const hemY = top.tucked ? waist : top.hem;
   bands.push({ from: 0.785, to: Math.min(hemY, waist), region: REGION.BOTTOM, mat: bot.mat, off: bot.off, tint: bot.tint });
   if (top.tucked && bot.belt) {
@@ -434,7 +432,6 @@ export function buildTorso(b, ctx) {
   }
   // The top garment, split into its trims and panels
   const topBand = (from, to, extra = {}) => ({ from, to, region: REGION.TOP, mat: top.mat, off: top.off, tint: top.tint, ...extra });
-  const cuts = [hemY];
   const marks = [];
   if (top.hemBand) marks.push([hemY, hemY + 0.04, { tint: [0.88, 0.88, 0.88], off: top.off + 0.0012, lip: false }]);
   if (top.lame) marks.push([hemY + 0.035, 1.43, { region: REGION.FIXED, mat: MAT.LAME, tint: [0.6, 0.62, 0.64], off: top.off + 0.0012, lip: false }]);
@@ -448,7 +445,6 @@ export function buildTorso(b, ctx) {
     bands.push(topBand(Math.max(f, cur), t, extra));
     cur = t;
   }
-  void cuts;
   bands.push(topBand(cur, yNeck));
   bands.push({ from: yNeck, to: 1.632, region: REGION.SKIN, mat: MAT.SKIN, off: 0 });
   const rings = ringsFromBands(ys, bands, { lipW: 0.008, simple: !res.high });
@@ -504,9 +500,9 @@ export function buildTorso(b, ctx) {
   for (let i = 0; i < rows; i++) {
     const r = rings[i];
     for (let j = 0; j < cols; j++) {
-      const th = thetas[j].th;
-      let region = r.region;
-      let mat = r.mat;
+      const { th } = thetas[j];
+      let { region } = r;
+      let { mat } = r;
       let rtint = r.tint;
       let roff = r.off;
       if (r.band && r.band.apron && inApron(thetas[j])) {
@@ -525,7 +521,7 @@ export function buildTorso(b, ctx) {
       const clothed = region !== REGION.SKIN;
       let off = roff + detail(y, th, clothed);
       if (top.neckRoll && region === REGION.TOP && y > 1.47) off += 0.004 + 0.006 * gauss(y - 1.545, 0.016);
-      if (region !== REGION.SKIN && region !== REGION.BOTTOM && !top.tucked && r.t < 1.2) off += 0.009 * sstep(top.hem + 0.12, top.hem, r.t);
+      if (region !== REGION.SKIN && region !== REGION.BOTTOM && !top.tucked && r.t < 1.2) off += 0.006 * sstep(top.hem + 0.12, top.hem, r.t);
       // Cloth folds: a few soft horizontal creases at the waist and armpits
       if (clothed && res.high && r.lip === 0) {
         off += 0.0016 * Math.sin(y * 95 + th * 2) * gauss(y - 1.0, 0.07) * (region === REGION.TOP ? 1 : 0.4);
@@ -555,7 +551,8 @@ function shadeTorso(tint, y, th, region, outfit) {
   // Soft occlusion where arms and thighs meet the trunk
   const side = Math.abs(Math.sin(th));
   let ao = 1 - 0.18 * gauss(y - 1.33, 0.06) * gauss(side - 1, 0.25);
-  ao *= 1 - 0.08 * gauss(y - 0.79, 0.025);
+  // The crotch faces down into shadow; lift it so it does not read as a hole
+  ao *= 1 + 0.25 * sstep(0.85, 0.8, y);
   ao *= 1 - 0.12 * gauss(y - 1.47, 0.03);
   if (region === REGION.SKIN && y > 1.47) ao *= 1 - 0.1 * sstep(1.5, 1.58, y) * Math.max(0, Math.cos(th));
   if (region === REGION.TOP && outfit.topDef.stripe) {
@@ -587,7 +584,7 @@ function torsoWeights(p) {
 
 const ARM_KEYS = [
   // d, r, rx factor, rz factor
-  [-0.047, 0.003, 1, 1], [-0.043, 0.02, 1, 1], [-0.034, 0.034, 1, 1], [-0.021, 0.044, 1, 1],
+  [-0.047, 0.003, 1, 1], [-0.043, 0.022, 1, 1], [-0.033, 0.036, 1, 1], [-0.02, 0.045, 1, 1],
   [-0.005, 0.0505, 1, 1], [0.016, 0.0518, 1.02, 1], [0.045, 0.0505, 1.02, 1.0], [0.085, 0.048, 1, 1],
   [0.135, 0.0465, 0.98, 1.04], [0.185, 0.0425, 0.97, 1.03], [0.235, 0.0395, 0.98, 1.0], [0.268, 0.0372, 1, 1],
   [0.288, 0.0368, 1, 1], [0.31, 0.0388, 1.02, 1.02], [0.35, 0.0395, 0.98, 1.04], [0.40, 0.0362, 0.92, 1.08],
@@ -641,7 +638,7 @@ export function buildArm(b, ctx, side) {
       rad += 0.0028 * gauss(d - 0.34, 0.04) * Math.max(0, s * 0.7 + c * 0.7);
       rad += 0.0025 * gauss(d - 0.29, 0.012) * Math.max(0, -c);
       const clothed = r.region !== REGION.SKIN;
-      let off = r.off;
+      let { off } = r;
       if (clothed) {
         // Sleeves hang a little looser below the shoulder and crease at the elbow
         off += 0.004 * sstep(0.02, 0.1, d) * (top.sleeveLoose ?? 1);
@@ -650,7 +647,7 @@ export function buildArm(b, ctx, side) {
       const R = rad + off;
       const x = J.x + Math.sin(th) * R * fx;
       const z = J.z + c * R * fz;
-      let tint = r.tint;
+      let { tint } = r;
       if (r.lip === 2) tint = mulTint(r.tint, 0.93);
       const ao = 1 - 0.15 * gauss(d - 0.29, 0.02) * Math.max(0, c) - 0.12 * gauss(d + 0.0, 0.05) * Math.max(0, -s);
       tint = mulTint(tint, ao);
@@ -661,7 +658,7 @@ export function buildArm(b, ctx, side) {
   emitGrid(b, {
     pts, rows: rings.length, cols, center: new THREE.Vector3(J.x, J.y - 0.25, J.z), poles: [0, rings.length - 1],
     weight: (p, q) => {
-      const d = q.d;
+      const { d } = q;
       const fore = sstep(0.258, 0.322, d);
       const hand = sstep(0.528, 0.572, d);
       // The lower forearm rolls with the twist bone (half the hand's twist)
@@ -693,7 +690,7 @@ export function buildLeg(b, ctx, side) {
       0.855, 0.87]
     : [-0.075, -0.03, 0.1, 0.4, 0.6, 0.8, 0.87];
   const bands = [];
-  const legEnd = bot.legEnd;
+  const { legEnd } = bot;
   bands.push({ from: -0.075, to: legEnd, region: REGION.BOTTOM, mat: bot.mat, off: bot.off, tint: bot.tint });
   if (bot.sock) {
     bands.push({ from: legEnd, to: bot.sock.end, region: bot.sock.region, mat: MAT.CLOTH, off: 0.0015, tint: bot.sock.tint });
@@ -728,7 +725,7 @@ export function buildLeg(b, ctx, side) {
       rad += 0.0075 * gauss(d - 0.54, 0.07) * Math.max(0, -c);
       rad += 0.004 * gauss(d - 0.405, 0.022) * Math.max(0, c) * Math.max(0, c);
       rad -= 0.004 * gauss(d - 0.1, 0.12) * Math.max(0, -s);
-      let off = r.off;
+      let { off } = r;
       const clothed = r.region === REGION.BOTTOM;
       if (clothed) {
         // Straight-hanging trouser legs: never tighter than the cut allows
@@ -741,7 +738,7 @@ export function buildLeg(b, ctx, side) {
         }
       }
       const R = rad + off;
-      let tint = r.tint;
+      let { tint } = r;
       if (r.lip === 2) tint = mulTint(r.tint, 0.92);
       const ao = 1 - 0.22 * gauss(d + 0.03, 0.05) * Math.max(0, -s * 0.8 + 0.3) - 0.12 * gauss(d - 0.43, 0.03) * Math.max(0, -c);
       tint = mulTint(tint, ao);
@@ -752,7 +749,7 @@ export function buildLeg(b, ctx, side) {
   emitGrid(b, {
     pts, rows: rings.length, cols, center: new THREE.Vector3(H.x, H.y - 0.4, H.z), poles: [0, rings.length - 1],
     weight: (p, q) => {
-      const d = q.d;
+      const { d } = q;
       const shin = sstep(0.372, 0.458, d);
       const foot = sstep(0.81, 0.855, d);
       const top = sstep(-0.05, 0.03, d);
@@ -839,7 +836,7 @@ export function buildHand(b, ctx, side) {
     // Palm, slightly paler on the inside
     blob(b, {
       c: [W.x + s * 0.001, W.y - 0.05 * hs, W.z + 0.001], r: [0.0158 * hs, 0.054 * hs, 0.0435 * hs], n: [3.2, 3.4],
-      cols: 12, rows: 6, region: skin, mat: MAT.SKIN,
+      cols: 10, rows: 6, region: skin, mat: MAT.SKIN,
       warp: (p, v) => {
         // Taper to the wrist at the top, flare to the knuckles at the bottom
         const k = 1 - 0.22 * sstep(0.45, 0.0, v);
@@ -978,7 +975,7 @@ export function buildCollar(b, ctx, { kind }) {
   const { outfit, res } = ctx;
   const top = outfit.topDef;
   const nk = necklineFn(top.neck);
-  const n = res.high ? 22 : 9;
+  const n = res.high ? 16 : 7;
   const gap = kind === 'stand' ? 0.16 : 0.32;
   // Cross-section loop (out from the neckline, up): inner stand, fold, outer leaf
   const loop = kind === 'stand'
@@ -1045,12 +1042,12 @@ export function buildTorsoExtras(b, ctx, sweepFn) {
   const { outfit, res } = ctx;
   const top = outfit.topDef;
   const bot = outfit.bottomDef;
-  const high = res.high;
+  const { high } = res;
   const tw = (p) => torsoWeights(p);
   if (high && top.buttons) {
     const ys = top.buttons === 2 ? [1.425, 1.385] : Array.from({ length: top.buttons }, (_, i) => 1.4 - i * 0.075);
     for (const y of ys) {
-      surfaceBlob(b, ctx, { y, th: 0, r: [0.0042, 0.0042, 0.0016], lift: 0.0002, region: REGION.TOP, tint: [0.78, 0.78, 0.78], mat: MAT.GLOSS, weight: tw, cols: 6, rows: 3 });
+      surfaceBlob(b, ctx, { y, th: 0, r: [0.0042, 0.0042, 0.0016], lift: 0.0002, region: REGION.TOP, tint: [0.78, 0.78, 0.78], mat: MAT.GLOSS, weight: tw, cols: 5, rows: 2 });
     }
   }
   if (top.zip) {
@@ -1104,7 +1101,7 @@ export function buildTorsoExtras(b, ctx, sweepFn) {
     // The skirt: a stiff slab in front of the thighs, skinned to follow them
     const front = ctx.torsoAt(0.92, 0, 0)[2];
     blob(b, {
-      c: [0, 0.7, front + 0.004], r: [0.185, 0.235, 0.006], n: [4, 4], cols: high ? 14 : 6, rows: high ? 10 : 4,
+      c: [0, 0.7, front + 0.004], r: [0.185, 0.235, 0.006], n: [4, 4], cols: high ? 12 : 6, rows: high ? 7 : 4,
       region: REGION.ACCENT, tint: (p) => [1, 1, 1].map((v) => v * (0.9 + 0.1 * sstep(0.45, 0.9, p[1]))), mat: MAT.CLOTH,
       warp: (p) => {
         const x = p[0];
