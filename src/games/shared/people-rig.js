@@ -59,7 +59,7 @@ export const HEAD_SCALE = 1.15;
 
 /** Face anchors in head space (metres from the head centre, before HEAD_SCALE). */
 export const FACE = {
-  eyeX: 0.032, eyeY: 0.003, eyeZ: 0.0728, eyeR: 0.0138,
+  eyeX: 0.0322, eyeY: 0.003, eyeZ: 0.072, eyeR: 0.0146,
   mouthY: -0.0675, mouthHalfW: 0.0228, browY: 0.03
 };
 

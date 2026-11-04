@@ -96,7 +96,7 @@ export function appearanceFor(name, overrides = {}) {
       skin: pick(r, [SKIN_TONES.fair, SKIN_TONES.light, SKIN_TONES.light, SKIN_TONES.lightWarm, SKIN_TONES.medium, SKIN_TONES.olive]),
       hair: { style: pick(r, styles), color: pick(r, Object.values(HAIR_COLORS)) },
       facialHair: pick(r, [null, null, 'stubble', 'beard', 'fullBeard', 'moustache']),
-      glasses: pick(r, [null, null, null, 'round', 'rect']),
+      glasses: r() < 0.14 ? pick(r, ['round', 'rect']) : null,
       eyes: pick(r, Object.keys(EYE_COLORS)),
       face: { jaw: 0.95 + r() * 0.1, nose: 0.95 + r() * 0.12, chin: 0.95 + r() * 0.1, brow: 0.95 + r() * 0.12, cheek: 0.96 + r() * 0.08 },
       seed: hashName(key),

@@ -142,7 +142,7 @@ function makeMaterials(detail) {
   }
   // Skin and hair: a soft warm sheen stands in for subsurface light
   const skin = new THREE.MeshPhysicalMaterial({
-    vertexColors: true, roughness: 0.55, metalness: 0, sheen: 0.35, sheenRoughness: 0.45,
+    vertexColors: true, roughness: 0.5, metalness: 0, sheen: 0.25, sheenRoughness: 0.45,
     sheenColor: new THREE.Color(0.7, 0.32, 0.24)
   });
   // Cloth: matte with a velvety rim
@@ -152,7 +152,7 @@ function makeMaterials(detail) {
   });
   // Eyes, teeth, glasses, buttons, leather: a wet, glossy coat
   const gloss = new THREE.MeshPhysicalMaterial({
-    vertexColors: true, roughness: 0.3, metalness: 0, clearcoat: 0.8, clearcoatRoughness: 0.12
+    vertexColors: true, roughness: 0.24, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.035
   });
   return { skin, cloth, gloss, list: [skin, cloth, gloss, null] };
 }
@@ -200,7 +200,7 @@ function releaseMaterials(detail, own, mats) {
  */
 export const EXPRESSIONS = {
   neutral: {},
-  smile: { mouth: [0.003, 0.0056, -0.0018], jaw: 0.02, lip: 0.0003, brow: [0.0014, -0.03], lidUp: -0.03, lidLo: 0.16 },
+  smile: { mouth: [0.003, 0.0056, -0.0018], jaw: 0, lip: 0, brow: [0.0014, -0.03], lidUp: -0.03, lidLo: 0.16 },
   grin: { mouth: [0.0055, 0.0068, -0.0022], jaw: 0.15, lip: 0.0028, brow: [0.0022, -0.05], lidUp: -0.05, lidLo: 0.24 },
   shout: { mouth: [0.0008, 0.0, 0.0004], jaw: 0.34, lip: 0.0032, brow: [-0.0016, 0.17], lidUp: 0.06, lidLo: 0.06 },
   frown: { mouth: [-0.0008, -0.0044, 0.0], jaw: 0.012, lip: 0, brow: [-0.0026, 0.2], lidUp: -0.09, lidLo: 0.05 },
@@ -209,8 +209,8 @@ export const EXPRESSIONS = {
 };
 export const EXPRESSION_NAMES = Object.keys(EXPRESSIONS);
 
-const LID_UP_REST = 0.42 - LID_CLOSED_UP;
-const LID_LO_REST = 0.56 + LID_CLOSED_LO;
+const LID_UP_REST = 0.5 - LID_CLOSED_UP;
+const LID_LO_REST = 0.6 + LID_CLOSED_LO;
 
 /* ------------------------------------------------------------ the person */
 

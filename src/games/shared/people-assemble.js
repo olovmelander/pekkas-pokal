@@ -61,7 +61,8 @@ export function buildPersonData(look, detail = 'high', opts = {}) {
   const HS = HEAD_SCALE;
   const toModel = (p) => [p[0] * HS + C.x, p[1] * HS + C.y, p[2] * HS + C.z];
   const toHead = (p) => [(p[0] - C.x) / HS, (p[1] - C.y) / HS, (p[2] - C.z) / HS];
-  const field = headField(look.face);
+  // Low detail skips the eye sockets: the coarse grid only dents oddly there
+  const field = headField({ ...look.face, sockets: res.high });
   const hk = look.headwear;
   const edge = hatEdge(hk);
   const hc = {
@@ -69,7 +70,7 @@ export function buildPersonData(look, detail = 'high', opts = {}) {
     hatEdge: edge,
     hatCovers: (psi, elev) => !!edge && elev * 180 / Math.PI > edge(psi * 180 / Math.PI) - 3,
     hairUnder: look.hairStyle === 'bald' ? 0 : 0.0024,
-    lowBrows: crowd,
+    lowBrows: true,
     // Hats: their own colour when given (the accent slot also dresses aprons and trims)
     hatRegion: !crowd && look.headwearColor ? REGION.FIXED : REGION.ACCENT,
     hatTint: !crowd && look.headwearColor ? [look.headwearColor.r, look.headwearColor.g, look.headwearColor.b] : [1, 1, 1],

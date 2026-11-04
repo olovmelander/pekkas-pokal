@@ -70,22 +70,27 @@ export function headField(F) {
     d = smin(d, ell(x, y, z, 0, -0.085, 0.066 + 0.004 * (F.chin - 1), 0.026 * F.chin, 0.0205, 0.023 * F.chin), 0.018);
     d = smin(d, ell(x, y, z, 0, 0.029, 0.072, 0.06, 0.014 * F.brow, 0.02), 0.012);
     // Cheekbones and the soft pads below them
-    d = smin(d, ell(x, y, z, 0.047, -0.01, 0.05, 0.025, 0.016, 0.023), 0.016);
-    d = smin(d, ell(x, y, z, -0.047, -0.01, 0.05, 0.025, 0.016, 0.023), 0.016);
+    d = smin(d, ell(x, y, z, 0.047, -0.009, 0.051, 0.026, 0.015, 0.024), 0.012);
+    d = smin(d, ell(x, y, z, -0.047, -0.009, 0.051, 0.026, 0.015, 0.024), 0.012);
     d = smin(d, ell(x, y, z, 0.034, -0.034, 0.059, 0.028, 0.026, 0.026), 0.017);
     d = smin(d, ell(x, y, z, -0.034, -0.034, 0.059, 0.028, 0.026, 0.026), 0.017);
     // The mouth mound and the lips
     d = smin(d, ell(x, y, z, 0, my + 0.002, 0.07, 0.03, 0.025, 0.024), 0.016);
-    d = smin(d, ell(x, y, z, 0, my + 0.0052, 0.0872, 0.019, 0.005, 0.0074 * F.lips), 0.004);
-    d = smin(d, ell(x, y, z, 0, my - 0.006, 0.0852, 0.0175, 0.006 * F.lips, 0.0079 * F.lips), 0.004);
+    // Upper lip with a hint of a cupid's bow, fuller lower lip
+    d = smin(d, ell(x, y, z, 0, my + 0.0052, 0.0874, 0.0195, 0.0052, 0.0078 * F.lips), 0.0035);
+    d = smin(d, ell(x, y, z, 0.0055, my + 0.0062, 0.0872, 0.008, 0.0042, 0.0072 * F.lips), 0.003);
+    d = smin(d, ell(x, y, z, -0.0055, my + 0.0062, 0.0872, 0.008, 0.0042, 0.0072 * F.lips), 0.003);
+    d = smin(d, ell(x, y, z, 0, my - 0.0062, 0.0856, 0.0172, 0.0066 * F.lips, 0.0088 * F.lips), 0.0035);
     // Nose: a narrow bridge, a round tip, two wings
-    d = smin(d, cap(x, y, z, 0, 0.012, 0.086, 0, -0.021, 0.1035 + nl, 0.0066, 0.0086 * nose), 0.007);
-    d = smin(d, sph(x, y, z, 0, -0.0265 - 0.004 * (nose - 1), 0.1022 + nl + 0.006 * (nose - 1), 0.0112 * nose ** 1.4), 0.005);
-    d = smin(d, sph(x, y, z, 0.0116 * nose, -0.0332, 0.0925, 0.0078 * nose), 0.004);
-    d = smin(d, sph(x, y, z, -0.0116 * nose, -0.0332, 0.0925, 0.0078 * nose), 0.004);
+    d = smin(d, cap(x, y, z, 0, 0.012, 0.0862, 0, -0.021, 0.104 + nl, 0.0062, 0.0084 * nose), 0.0045);
+    d = smin(d, sph(x, y, z, 0, -0.0265 - 0.004 * (nose - 1), 0.1024 + nl + 0.006 * (nose - 1), 0.0114 * nose ** 1.4), 0.0032);
+    d = smin(d, sph(x, y, z, 0.0122 * nose, -0.0335, 0.0918, 0.0088 * nose), 0.0028);
+    d = smin(d, sph(x, y, z, -0.0122 * nose, -0.0335, 0.0918, 0.0088 * nose), 0.0028);
     // Eye sockets, just bigger than the lids so the lids frame the eye
-    d = smax(d, -sph(x, y, z, ex, ey, ez, FACE.eyeR + 0.0019), 0.004);
-    d = smax(d, -sph(x, y, z, -ex, ey, ez, FACE.eyeR + 0.0019), 0.004);
+    if (F.sockets !== false) {
+      d = smax(d, -sph(x, y, z, ex, ey, ez, FACE.eyeR + 0.0019), 0.004);
+      d = smax(d, -sph(x, y, z, -ex, ey, ez, FACE.eyeR + 0.0019), 0.004);
+    }
     return d;
   };
   const e = 0.0007;
@@ -162,7 +167,7 @@ export function faceWeights(p, H, lip) {
     const dy = (y - my) * (y > my ? 0.8 : 1.15);
     const dz = (z - cz) * 0.8;
     const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
-    return 0.95 * (1 - sstep(0.003, 0.03, d)) * sstep(0.03, 0.06, z) * (lip === 1 ? 0.75 : 1);
+    return 0.95 * (1 - sstep(0.003, 0.03, d)) * sstep(0.03, 0.06, z);
   };
   const mL = corner(1);
   const mR = corner(-1);
@@ -292,14 +297,14 @@ function headColumns(n, k = 0.55) {
 export function buildHeadSkin(b, ctx) {
   const { field, res, toModel, face } = ctx;
   const { high } = res;
-  const phis = headColumns(high ? 36 : 10, high ? 0.44 : 0.3);
+  const phis = headColumns(high ? 38 : 10, high ? 0.56 : 0.3);
   const cols = phis.length;
   const yTop = 0.035;
   const yBot = -0.096;
   const topA = high ? [0, 16, 32, 48, 63, 77] : [0, 50];
   const my = FACE.mouthY;
   const band = high
-    ? [0.035, 0.026, 0.018, 0.011, 0.005, 0.0, -0.006, -0.013, -0.021, -0.03, -0.039, -0.048, -0.056,
+    ? [0.035, 0.026, 0.018, 0.011, 0.005, 0.0, -0.006, -0.013, -0.019, -0.025, -0.0305, -0.0355, -0.041, -0.047, -0.054,
       my + 0.0075, my + 0.0035, my, my - 0.0035, my - 0.009, my - 0.017, -0.096]
     : [0.035, -0.01, -0.06, -0.096];
   const botA = high ? [107, 128, 152, 180] : [135, 180];
@@ -417,10 +422,20 @@ function headTint(p, ctx) {
   const nose = gauss(ax, 0.012) * gauss(y + 0.04, 0.012) * sstep(0.09, 0.105, z);
   g -= nose * 0.05;
   bl -= nose * 0.05;
-  const lips = gauss(ax, 0.017) * gauss(y - FACE.mouthY, 0.0065) * sstep(0.07, 0.085, z) * ctx.face.lipTone;
-  r -= lips * 0.04;
-  g -= lips * 0.16;
-  bl -= lips * 0.14;
+  const my0 = FACE.mouthY;
+  const lipX = 1 - sstep(0.016, 0.024, ax);
+  const upper = lipX * sstep(my0 + 0.0085, my0 + 0.006, y) * sstep(my0 - 0.0005, my0 + 0.001, y);
+  const lower = lipX * sstep(my0 - 0.011, my0 - 0.0085, y) * sstep(my0 + 0.0005, my0 - 0.001, y);
+  const lips = (upper * 1.15 + lower * 0.85) * sstep(0.07, 0.085, z) * ctx.face.lipTone;
+  r -= lips * 0.06;
+  g -= lips * 0.22;
+  bl -= lips * 0.19;
+  // Cheekbones catch light; the cheek below them hollows a touch
+  const bone = gauss(ax - 0.05, 0.012) * gauss(y + 0.008, 0.008) * sstep(0.03, 0.06, z);
+  const hollow = gauss(ax - 0.048, 0.012) * gauss(y + 0.04, 0.012) * sstep(0.02, 0.05, z);
+  r += bone * 0.04 - hollow * 0.03;
+  g += bone * 0.04 - hollow * 0.04;
+  bl += bone * 0.04 - hollow * 0.04;
   const under = sstep(-0.085, -0.11, y) * (1 - sstep(0.02, 0.06, z)) * 0.16;
   const socket = gauss(ax - FACE.eyeX, 0.017) * gauss(y - 0.006, 0.014) * sstep(0.055, 0.075, z) * 0.12;
   // Soft occlusion in the folds: beside the nose, under it, the mouth corners, the lid crease
@@ -428,9 +443,10 @@ function headTint(p, ctx) {
   const wing = gauss(ax - 0.018, 0.006) * gauss(y + 0.034, 0.008) * 0.06;
   const fold = gauss(ax - lerp(0.018, 0.028, clamp((-0.03 - y) / 0.035, 0, 1)), 0.005) * sstep(-0.028, -0.04, y) * sstep(my - 0.006, my + 0.004, y) * 0.07;
   const subnasal = gauss(ax, 0.01) * gauss(y + 0.04, 0.004) * 0.05;
+  const nostril = gauss(ax - 0.0085, 0.004) * gauss(y + 0.0385, 0.0035) * sstep(0.08, 0.09, z) * 0.35;
   const corners = gauss(ax - FACE.mouthHalfW, 0.004) * gauss(y - my, 0.004) * 0.12;
   const chinFold = gauss(ax, 0.016) * gauss(y - (my - 0.016), 0.004) * 0.06;
-  const k = 1 - under - socket - wing - fold - subnasal - corners - chinFold;
+  const k = 1 - under - socket - wing - fold - subnasal - nostril - corners - chinFold;
   let tint = [r * k, g * k, bl * k];
   if (ctx.stubble) tint = ctx.stubble(p, tint);
   return tint;
@@ -473,8 +489,8 @@ function buildMouthInside(b, ctx) {
       weight: () => [['head', 1 - jawW], ['jaw', jawW]]
     });
   };
-  arch(my + 0.0002, H.mouthCornerZ + 0.0035, 0.0205, 0.0052, 0.0011, 0, [0.9, 0.88, 0.82]);
-  arch(my - 0.0072, H.mouthCornerZ + 0.001, 0.0185, 0.0038, 0.001, 1, [0.8, 0.78, 0.72]);
+  arch(my + 0.0002, H.mouthCornerZ + 0.002, 0.0205, 0.0052, 0.0011, 0, [0.9, 0.88, 0.82]);
+  arch(my - 0.0072, H.mouthCornerZ - 0.0005, 0.0185, 0.0038, 0.001, 1, [0.8, 0.78, 0.72]);
 }
 
 /* ------------------------------------------------------------ eyes */
@@ -487,9 +503,11 @@ export function buildEyes(b, ctx) {
     const S = s > 0 ? 'L' : 'R';
     const c = [s * FACE.eyeX, FACE.eyeY, FACE.eyeZ];
     if (!res.high) {
+      // A small dark dot sitting proud of the coarse face reads as an eye at any distance
+      const fz = ctx.field.faceZ(c[0], c[1]);
       addBlob(b, {
-        c: toModel([c[0], c[1], c[2] + R * 0.55]), r: [0.0062, 0.0075, 0.004].map((v) => v * ctx.scale), n: [2, 2], cols: 4, rows: 2,
-        region: REGION.FIXED, tint: [0.06, 0.05, 0.05], mat: MAT.SKIN, weight: () => [['head', 1]]
+        c: toModel([c[0], c[1], fz + 0.0012]), r: [0.0052, 0.0064, 0.003].map((v) => v * ctx.scale), n: [2, 2], cols: 4, rows: 2,
+        region: REGION.FIXED, tint: [0.03, 0.025, 0.025], mat: MAT.SKIN, weight: () => [['head', 1]]
       });
       continue;
     }
@@ -517,8 +535,8 @@ export function buildEyes(b, ctx) {
         else if (kind === 'i1') tint = iris.map((v) => v * 1.05 * swirl);
         else if (kind === 'i2') tint = iris.map((v) => v * 0.8 * swirl);
         else if (kind === 'l') tint = iris.map((v) => v * 0.35);
-        else if (kind === 's') tint = [0.86, 0.83, 0.79];
-        else if (kind === 's2') tint = [0.82, 0.76, 0.72];
+        else if (kind === 's') tint = [0.95, 0.93, 0.9];
+        else if (kind === 's2') tint = [0.9, 0.85, 0.82];
         else tint = [0.6, 0.45, 0.42];
         pts.push({ p: toModel([c[0] + lp[0], c[1] + lp[1], c[2] + lp[2]]), region: REGION.FIXED, tint, mat: MAT.GLOSS, a });
       }
