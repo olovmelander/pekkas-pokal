@@ -1,0 +1,1183 @@
+/**
+ * Pekkas Pokal — people: the head. Skull, face, eyes and lids, brows, a
+ * mouth that really opens, ears, hair styles, facial hair, glasses and
+ * hats.
+ *
+ * The head is sculpted as a signed distance field — smooth unions of a
+ * dozen ellipsoids (cranium, jaw, cheekbones, chin, brow ridge, nose,
+ * lips) minus two eye sockets — and a ring grid is shrink-wrapped onto it.
+ * The grid is a "capsule" map: a top cap and a bottom cap of rays from two
+ * points on the vertical axis, and between them a band of HORIZONTAL rays,
+ * so the eye line and the mouth line are exact grid rows. The mouth row is
+ * split between the two lips, which is what lets the jaw open a real hole;
+ * a dark mouth bag and two rows of teeth sit behind it. Normals come from
+ * the field's gradient, so the face shades smoothly at modest resolution.
+ *
+ * Everything in this file is in head space: metres relative to the head
+ * centre C (between the ears, at eye height), in the 1.80 m model.
+ */
+import * as THREE from 'three';
+import { REGION, MAT, emitGrid, sstep, clamp, gauss, lerp, noise3, addBlob } from './people-build.js';
+import { FACE } from './people-rig.js';
+
+/* ------------------------------------------------------------ SDF */
+
+function ell(x, y, z, cx, cy, cz, rx, ry, rz) {
+  const px = (x - cx) / rx;
+  const py = (y - cy) / ry;
+  const pz = (z - cz) / rz;
+  const k0 = Math.sqrt(px * px + py * py + pz * pz);
+  const k1 = Math.sqrt((px * px) / (rx * rx) + (py * py) / (ry * ry) + (pz * pz) / (rz * rz));
+  return k1 > 1e-9 ? (k0 * (k0 - 1)) / k1 : -Math.min(rx, ry, rz);
+}
+function sph(x, y, z, cx, cy, cz, r) {
+  return Math.sqrt((x - cx) ** 2 + (y - cy) ** 2 + (z - cz) ** 2) - r;
+}
+function cap(x, y, z, ax, ay, az, bx, by, bz, ra, rb) {
+  const pax = x - ax;
+  const pay = y - ay;
+  const paz = z - az;
+  const bax = bx - ax;
+  const bay = by - ay;
+  const baz = bz - az;
+  const h = clamp((pax * bax + pay * bay + paz * baz) / (bax * bax + bay * bay + baz * baz), 0, 1);
+  return Math.sqrt((pax - bax * h) ** 2 + (pay - bay * h) ** 2 + (paz - baz * h) ** 2) - lerp(ra, rb, h);
+}
+function smin(a, b, k) {
+  const h = Math.max(k - Math.abs(a - b), 0) / k;
+  return Math.min(a, b) - h * h * k * 0.25;
+}
+function smax(a, b, k) {
+  return -smin(-a, -b, k);
+}
+
+export { FACE };
+
+/** Build the head field for a person's face parameters. */
+export function headField(F) {
+  const ex = FACE.eyeX;
+  const ey = FACE.eyeY;
+  const ez = FACE.eyeZ;
+  const nose = F.nose;
+  const my = FACE.mouthY;
+  const nl = 0.006 * (F.noseLen - 1);
+  const sdf = (x, y, z) => {
+    // Cranium and the block of the face
+    let d = ell(x, y, z, 0, 0.022, -0.016, 0.08 * F.headW, 0.1, 0.099 * F.headL);
+    d = smin(d, ell(x, y, z, 0, 0.045, 0.03, 0.062 * F.headW, 0.05, 0.055), 0.03);
+    d = smin(d, ell(x, y, z, 0, -0.022, 0.036, 0.065 * F.cheek, 0.075, 0.06), 0.035);
+    d = smin(d, ell(x, y, z, 0, -0.06 - 0.01 * (F.jaw - 1), 0.02, 0.052 * F.jaw ** 1.5, 0.04 * F.jaw, 0.062), 0.025);
+    d = smin(d, ell(x, y, z, 0, -0.085, 0.066 + 0.004 * (F.chin - 1), 0.026 * F.chin, 0.0205, 0.023 * F.chin), 0.018);
+    d = smin(d, ell(x, y, z, 0, 0.029, 0.072, 0.06, 0.014 * F.brow, 0.02), 0.012);
+    // Cheekbones and the soft pads below them
+    d = smin(d, ell(x, y, z, 0.047, -0.01, 0.05, 0.025, 0.016, 0.023), 0.016);
+    d = smin(d, ell(x, y, z, -0.047, -0.01, 0.05, 0.025, 0.016, 0.023), 0.016);
+    d = smin(d, ell(x, y, z, 0.034, -0.034, 0.059, 0.028, 0.026, 0.026), 0.017);
+    d = smin(d, ell(x, y, z, -0.034, -0.034, 0.059, 0.028, 0.026, 0.026), 0.017);
+    // The mouth mound and the lips
+    d = smin(d, ell(x, y, z, 0, my + 0.002, 0.07, 0.03, 0.025, 0.024), 0.016);
+    d = smin(d, ell(x, y, z, 0, my + 0.0052, 0.0872, 0.019, 0.005, 0.0074 * F.lips), 0.004);
+    d = smin(d, ell(x, y, z, 0, my - 0.006, 0.0852, 0.0175, 0.006 * F.lips, 0.0079 * F.lips), 0.004);
+    // Nose: a narrow bridge, a round tip, two wings
+    d = smin(d, cap(x, y, z, 0, 0.012, 0.086, 0, -0.021, 0.1035 + nl, 0.0066, 0.0086 * nose), 0.007);
+    d = smin(d, sph(x, y, z, 0, -0.0265 - 0.004 * (nose - 1), 0.1022 + nl + 0.006 * (nose - 1), 0.0112 * nose ** 1.4), 0.005);
+    d = smin(d, sph(x, y, z, 0.0116 * nose, -0.0332, 0.0925, 0.0078 * nose), 0.004);
+    d = smin(d, sph(x, y, z, -0.0116 * nose, -0.0332, 0.0925, 0.0078 * nose), 0.004);
+    // Eye sockets, just bigger than the lids so the lids frame the eye
+    d = smax(d, -sph(x, y, z, ex, ey, ez, FACE.eyeR + 0.0019), 0.004);
+    d = smax(d, -sph(x, y, z, -ex, ey, ez, FACE.eyeR + 0.0019), 0.004);
+    return d;
+  };
+  const e = 0.0007;
+  const normal = (x, y, z, out) => {
+    const nx = sdf(x + e, y, z) - sdf(x - e, y, z);
+    const ny = sdf(x, y + e, z) - sdf(x, y - e, z);
+    const nz = sdf(x, y, z + e) - sdf(x, y, z - e);
+    const l = Math.hypot(nx, ny, nz) || 1;
+    out[0] = nx / l;
+    out[1] = ny / l;
+    out[2] = nz / l;
+    return out;
+  };
+  /** Outermost surface hit along a ray from o (marching inward from far). */
+  const project = (ox, oy, oz, dx, dy, dz) => {
+    let t = 0.2;
+    let prev = sdf(ox + dx * t, oy + dy * t, oz + dz * t);
+    const step = 0.003;
+    while (t > 0) {
+      const t2 = t - step;
+      const v = sdf(ox + dx * t2, oy + dy * t2, oz + dz * t2);
+      if (v < 0 || t2 <= 0) {
+        let lo = Math.max(t2, 0);
+        let hi = t;
+        void prev;
+        for (let i = 0; i < 12; i++) {
+          const m = (lo + hi) / 2;
+          if (sdf(ox + dx * m, oy + dy * m, oz + dz * m) < 0) lo = m;
+          else hi = m;
+        }
+        return (lo + hi) / 2;
+      }
+      prev = v;
+      t = t2;
+    }
+    return 0.0;
+  };
+  /** Surface point along a direction from the head centre. */
+  const surf = (dx, dy, dz, out) => {
+    const l = Math.hypot(dx, dy, dz);
+    const t = project(0, 0, 0, dx / l, dy / l, dz / l);
+    out[0] = (dx / l) * t;
+    out[1] = (dy / l) * t;
+    out[2] = (dz / l) * t;
+    return out;
+  };
+  /** Face surface z at (x, y), marching back along −Z. */
+  const faceZ = (x, y) => project(x, y, 0, 0, 0, 1);
+  return { sdf, normal, project, surf, faceZ };
+}
+
+/* ------------------------------------------------------------ face weights */
+
+/**
+ * Skin weights for anything on the face (skin, brows, beard, moustache,
+ * mouth parts) from one field, so they always move together.
+ * `lip` forces the jaw: 1 = lower lip copy, 0 = upper lip copy.
+ */
+export function faceWeights(p, H, lip) {
+  const [x, y, z] = p;
+  const ax = Math.abs(x);
+  const my = FACE.mouthY;
+  const out = [];
+  let jaw = Math.max(
+    sstep(my + 0.0015, my - 0.0042, y) * (1 - sstep(0.024, 0.05, ax)),
+    sstep(-0.074, -0.1, y) * sstep(-0.04, 0.01, z) * (1 - 0.35 * sstep(0.045, 0.075, ax))
+  ) * sstep(-0.045, 0.0, z);
+  if (lip === 1) jaw = 1;
+  if (lip === 0) jaw = 0;
+  const cz = H.mouthCornerZ;
+  const corner = (sx) => {
+    const dx = x - sx * H.mouthHalfW;
+    const dy = (y - my) * (y > my ? 0.8 : 1.15);
+    const dz = (z - cz) * 0.8;
+    const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    return 0.95 * (1 - sstep(0.003, 0.03, d)) * sstep(0.03, 0.06, z) * (lip === 1 ? 0.75 : 1);
+  };
+  const mL = corner(1);
+  const mR = corner(-1);
+  const lu = lip === 1 ? 0 : (1 - sstep(0.0, 1.0, Math.hypot(x / 0.022, (y - (my + 0.006)) / 0.009))) * (y > my - 0.0005 ? 1 : 0) * sstep(0.06, 0.08, z);
+  const brow = (sx) => {
+    const d = Math.hypot((x - sx * 0.034) / 0.03, (y - FACE.browY) / 0.02);
+    return (1 - sstep(0.15, 1.0, d)) * sstep(0.004, 0.016, y) * sstep(0.04, 0.07, z);
+  };
+  const bL = brow(1);
+  const bR = brow(-1);
+  const neck = sstep(-0.07, -0.115, y) * sstep(0.005, -0.045, z) * (1 - jaw);
+  let sum = jaw + mL + mR + lu + bL + bR + neck;
+  const k = sum > 1 ? 1 / sum : 1;
+  sum *= k;
+  out.push(['head', 1 - sum], ['jaw', jaw * k], ['mouthL', mL * k], ['mouthR', mR * k], ['lipUpper', lu * k],
+    ['browL', bL * k], ['browR', bR * k], ['neck', neck * k]);
+  return out;
+}
+
+/* ------------------------------------------------------------ helpers */
+
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+
+/** A tube swept along a path (open: capped; closed: seam welded). */
+export function sweep(b, { path, radius, cols = 6, closed = false, region, tint, mat, weight, flat = 1 }) {
+  const n = path.length;
+  const T = [];
+  for (let i = 0; i < n; i++) {
+    const a = path[closed ? (i - 1 + n) % n : Math.max(0, i - 1)];
+    const c = path[closed ? (i + 1) % n : Math.min(n - 1, i + 1)];
+    T.push(c.clone().sub(a).normalize());
+  }
+  // Parallel-transported frame
+  let N0 = Math.abs(T[0].y) < 0.9 ? V(0, 1, 0) : V(1, 0, 0);
+  N0 = N0.sub(T[0].clone().multiplyScalar(N0.dot(T[0]))).normalize();
+  const Ns = [N0];
+  for (let i = 1; i < n; i++) {
+    const prev = Ns[i - 1];
+    const nn = prev.clone().sub(T[i].clone().multiplyScalar(prev.dot(T[i]))).normalize();
+    Ns.push(nn);
+  }
+  const pts = [];
+  const rows = [];
+  const ring = (i, k) => {
+    const P = path[i];
+    const Nn = Ns[i];
+    const B = V(0, 0, 0).crossVectors(T[i], Nn);
+    const r = typeof radius === 'function' ? radius(i / (n - 1)) : radius;
+    for (let j = 0; j < cols; j++) {
+      const a = (j / cols) * Math.PI * 2;
+      const p = P.clone().addScaledVector(Nn, Math.cos(a) * r * k).addScaledVector(B, Math.sin(a) * r * k * flat);
+      pts.push({ p: [p.x, p.y, p.z], region, tint, mat });
+    }
+  };
+  if (!closed) {
+    ring(0, 0);
+    rows.push(0);
+  }
+  for (let i = 0; i < n; i++) ring(i, 1);
+  if (closed) ring(0, 1);
+  else ring(n - 1, 0);
+  const nrows = pts.length / cols;
+  const center = path.reduce((s, p) => s.add(p), V(0, 0, 0)).multiplyScalar(1 / n);
+  // A swept tube is thin: normals point away from each ring's own centre
+  void center;
+  return emitTube(b, pts, nrows, cols, closed ? [] : [0, nrows - 1], weight);
+}
+
+function emitTube(b, pts, rows, cols, poles, weight) {
+  // Normals: from the ring centre outward (robust for thin tubes)
+  const out = [];
+  for (let i = 0; i < rows; i++) {
+    let cx = 0;
+    let cy = 0;
+    let cz = 0;
+    for (let j = 0; j < cols; j++) {
+      const p = pts[i * cols + j].p;
+      cx += p[0];
+      cy += p[1];
+      cz += p[2];
+    }
+    cx /= cols;
+    cy /= cols;
+    cz /= cols;
+    out.push([cx, cy, cz]);
+  }
+  const nf = (p, q) => {
+    const c = out[q.row];
+    let nx = p[0] - c[0];
+    let ny = p[1] - c[1];
+    let nz = p[2] - c[2];
+    if (nx * nx + ny * ny + nz * nz < 1e-14) {
+      const o = out[q.row === 0 ? 1 : q.row - 1];
+      nx = c[0] - o[0];
+      ny = c[1] - o[1];
+      nz = c[2] - o[2];
+      if (q.row === 0) {
+        nx = -nx;
+        ny = -ny;
+        nz = -nz;
+      }
+    }
+    return [nx, ny, nz];
+  };
+  pts.forEach((q, k) => {
+    q.row = Math.floor(k / cols);
+  });
+  return emitGrid(b, {
+    pts, rows, cols, normalFn: nf, center: V(...out[Math.floor(rows / 2)]), poles, weight
+  });
+}
+
+/* ------------------------------------------------------------ the head */
+
+/** Distribute n columns around the head, denser at the face. */
+function headColumns(n, k = 0.55) {
+  const out = [];
+  for (let j = 0; j < n; j++) {
+    const u = j / n;
+    out.push(2 * Math.PI * (u - (k * Math.sin(2 * Math.PI * u)) / (2 * Math.PI)));
+  }
+  return out;
+}
+
+/**
+ * The skin of the head, with the mouth slit, plus mouth bag and teeth.
+ * Returns facts later parts need (mouth corner positions etc.).
+ */
+export function buildHeadSkin(b, ctx) {
+  const { field, res, toModel, face } = ctx;
+  const high = res.high;
+  const phis = headColumns(high ? 38 : 10, high ? 0.44 : 0.3);
+  const cols = phis.length;
+  const yTop = 0.035;
+  const yBot = -0.096;
+  const topA = high ? [0, 16, 32, 48, 63, 77] : [0, 50];
+  const my = FACE.mouthY;
+  const band = high
+    ? [0.035, 0.026, 0.018, 0.011, 0.005, 0.0, -0.006, -0.013, -0.021, -0.03, -0.039, -0.048, -0.056,
+      my + 0.0075, my + 0.0035, my, my - 0.0035, my - 0.009, my - 0.017, -0.096]
+    : [0.035, -0.01, -0.06, -0.096];
+  const botA = high ? [107, 128, 152, 180] : [135, 180];
+  const rowsDef = [
+    ...topA.map((a) => ({ kind: 'top', a: (a * Math.PI) / 180 })),
+    ...band.map((y) => ({ kind: 'band', y })),
+    ...botA.map((a) => ({ kind: 'bot', a: (a * Math.PI) / 180 }))
+  ];
+  const slitRow = high ? rowsDef.findIndex((r) => r.kind === 'band' && Math.abs(r.y - FACE.mouthY) < 1e-6) : -1;
+  // Mouth corners land on grid columns
+  const mz = field.faceZ(0, FACE.mouthY);
+  const halfW = FACE.mouthHalfW * face.mouth;
+  const phiC = Math.atan2(halfW, mz - 0.012);
+  let cornerJ = 1;
+  for (let j = 1; j < cols / 2; j++) {
+    if (Math.abs(phis[j] - phiC) < Math.abs(phis[cornerJ] - phiC)) cornerJ = j;
+  }
+  const inSlit = (j) => {
+    const d = Math.min(j, cols - j);
+    return d < cornerJ;
+  };
+  const rows = rowsDef.length;
+  const P = [];
+  const nrm = [0, 0, 0];
+  for (let i = 0; i < rows; i++) {
+    const r = rowsDef[i];
+    for (let j = 0; j < cols; j++) {
+      const ph = phis[j];
+      let ox = 0;
+      let oy;
+      let dx;
+      let dy;
+      let dz;
+      if (r.kind === 'band') {
+        oy = r.y;
+        dx = Math.sin(ph);
+        dy = 0;
+        dz = Math.cos(ph);
+      } else {
+        oy = r.kind === 'top' ? yTop : yBot;
+        dx = Math.sin(r.a) * Math.sin(ph);
+        dy = Math.cos(r.a);
+        dz = Math.sin(r.a) * Math.cos(ph);
+      }
+      const t = field.project(ox, oy, 0, dx, dy, dz);
+      const p = [ox + dx * t, oy + dy * t, dz * t];
+      field.normal(p[0], p[1], p[2], nrm);
+      let n = nrm.slice();
+      if ((r.kind === 'top' && r.a === 0) || (r.kind === 'bot' && r.a >= Math.PI - 1e-6)) n = [0, r.kind === 'top' ? 1 : -1, 0];
+      // The lip line: a soft groove along the mouth row
+      if (high && Math.abs(i - slitRow) <= 1) {
+        const d = Math.min(j, cols - j);
+        if (d <= cornerJ) {
+          const u = d / cornerJ;
+          const depth = (i === slitRow ? 0.0017 : 0.0005) * Math.sqrt(Math.max(0, 1 - u * u)) + (i === slitRow ? 0.0004 : 0);
+          p[0] -= n[0] * depth;
+          p[1] -= n[1] * depth;
+          p[2] -= n[2] * depth;
+        }
+      }
+      ox = 0;
+      P.push({ p, n });
+    }
+  }
+  const H = { mouthHalfW: Math.abs(P[slitRow >= 0 ? slitRow * cols + cornerJ : 0].p[0]) || halfW, mouthCornerZ: mz - 0.008 };
+  ctx.H = H;
+  const idx = [];
+  const skinTint = (p) => headTint(p, ctx);
+  for (let k = 0; k < P.length; k++) {
+    const i = Math.floor(k / cols);
+    const j = k % cols;
+    const q = P[k];
+    const pm = toModel(q.p);
+    const nm = q.n;
+    const slit = i === slitRow && inSlit(j);
+    const tint = skinTint(q.p);
+    if (slit) {
+      const dark = [tint[0] * 0.55, tint[1] * 0.4, tint[2] * 0.4];
+      const up = b.vertex(pm, nm, REGION.SKIN, dark, faceWeights(q.p, H, 0));
+      const lo = b.vertex(pm, nm, REGION.SKIN, dark, faceWeights(q.p, H, 1));
+      idx.push([up, lo]);
+    } else {
+      const v = b.vertex(pm, nm, REGION.SKIN, tint, faceWeights(q.p, H, i === slitRow ? 0.5 : undefined));
+      idx.push([v, v]);
+    }
+  }
+  for (let i = 0; i < rows - 1; i++) {
+    for (let j = 0; j < cols; j++) {
+      const j2 = (j + 1) % cols;
+      // Quads below the slit row use the lower-lip copies
+      const sel = i === slitRow ? 1 : 0;
+      const a = idx[i * cols + j][sel];
+      const bb = idx[i * cols + j2][sel];
+      const c = idx[(i + 1) * cols + j][0];
+      const d = idx[(i + 1) * cols + j2][0];
+      b.tri(MAT.SKIN, a, c, bb);
+      b.tri(MAT.SKIN, bb, c, d);
+    }
+  }
+  if (high) buildMouthInside(b, ctx);
+  return H;
+}
+
+function headTint(p, ctx) {
+  const [x, y, z] = p;
+  const ax = Math.abs(x);
+  let r = 1;
+  let g = 1;
+  let bl = 1;
+  // Warm cheeks, nose and lips; cooler, darker under the jaw
+  const cheek = gauss(ax - 0.046, 0.02) * gauss(y + 0.03, 0.02) * sstep(0.03, 0.07, z) * ctx.face.blush;
+  r += cheek * 0.03;
+  g -= cheek * 0.06;
+  bl -= cheek * 0.06;
+  const nose = gauss(ax, 0.012) * gauss(y + 0.04, 0.012) * sstep(0.09, 0.105, z);
+  g -= nose * 0.05;
+  bl -= nose * 0.05;
+  const lips = gauss(ax, 0.017) * gauss(y - FACE.mouthY, 0.0065) * sstep(0.07, 0.085, z) * ctx.face.lipTone;
+  r -= lips * 0.04;
+  g -= lips * 0.16;
+  bl -= lips * 0.14;
+  const under = sstep(-0.085, -0.11, y) * (1 - sstep(0.02, 0.06, z)) * 0.16;
+  const socket = gauss(ax - FACE.eyeX, 0.017) * gauss(y - 0.006, 0.014) * sstep(0.055, 0.075, z) * 0.12;
+  // Soft occlusion in the folds: beside the nose, under it, the mouth corners, the lid crease
+  const my = FACE.mouthY;
+  const wing = gauss(ax - 0.018, 0.006) * gauss(y + 0.034, 0.008) * 0.06;
+  const fold = gauss(ax - lerp(0.018, 0.028, clamp((-0.03 - y) / 0.035, 0, 1)), 0.005) * sstep(-0.028, -0.04, y) * sstep(my - 0.006, my + 0.004, y) * 0.07;
+  const subnasal = gauss(ax, 0.01) * gauss(y + 0.04, 0.004) * 0.05;
+  const corners = gauss(ax - FACE.mouthHalfW, 0.004) * gauss(y - my, 0.004) * 0.12;
+  const chinFold = gauss(ax, 0.016) * gauss(y - (my - 0.016), 0.004) * 0.06;
+  const k = 1 - under - socket - wing - fold - subnasal - corners - chinFold;
+  let tint = [r * k, g * k, bl * k];
+  if (ctx.stubble) tint = ctx.stubble(p, tint);
+  return tint;
+}
+
+function buildMouthInside(b, ctx) {
+  const { toModel, H } = ctx;
+  const my = FACE.mouthY;
+  const wf = (p) => {
+    const hp = ctx.toHead(p);
+    const j = sstep(my + 0.002, my - 0.008, hp[1]);
+    return [['head', 1 - j], ['jaw', j]];
+  };
+  // Bag: dark throat at the top, tongue at the bottom
+  addBlob(b, {
+    c: toModel([0, my - 0.005, 0.068]), r: [0.0195, 0.0135, 0.016].map((v) => v * ctx.scale), n: [2, 2], cols: 10, rows: 6,
+    region: REGION.FIXED, mat: MAT.SKIN,
+    tint: (p) => {
+      const hp = ctx.toHead(p);
+      const k = sstep(my - 0.006, my - 0.014, hp[1]);
+      return [lerp(0.13, 0.42, k), lerp(0.04, 0.13, k), lerp(0.04, 0.12, k)];
+    },
+    weight: wf
+  });
+  const arch = (cy, cz, rad, hgt, thick, jawW, tint) => {
+    const n = 9;
+    const loop = [[-thick, hgt / 2], [thick, hgt / 2], [thick * 1.1, 0], [thick, -hgt / 2], [-thick, -hgt / 2], [-thick * 1.1, 0]];
+    const pts = [];
+    for (let i = 0; i < n; i++) {
+      const a = lerp(-0.78, 0.78, i / (n - 1));
+      const pinch = sstep(0, 0.12, i / (n - 1)) * sstep(1, 0.88, i / (n - 1));
+      for (const [ro, dy] of loop) {
+        const rr = rad + ro * (0.3 + 0.7 * pinch);
+        const hp = [Math.sin(a) * rr, cy + dy * (0.3 + 0.7 * pinch), cz + Math.cos(a) * rr - rad];
+        pts.push({ p: toModel(hp), region: REGION.FIXED, tint, mat: MAT.GLOSS });
+      }
+    }
+    emitGrid(b, {
+      pts, rows: n, cols: loop.length, center: new THREE.Vector3(...toModel([0, cy, cz - rad])), poles: [],
+      weight: () => [['head', 1 - jawW], ['jaw', jawW]]
+    });
+  };
+  arch(my + 0.0002, H.mouthCornerZ + 0.0035, 0.0205, 0.0052, 0.0011, 0, [0.9, 0.88, 0.82]);
+  arch(my - 0.0072, H.mouthCornerZ + 0.001, 0.0185, 0.0038, 0.001, 1, [0.8, 0.78, 0.72]);
+}
+
+/* ------------------------------------------------------------ eyes */
+
+/** Eyeball with iris and pupil as crisp rings, and its two lids. */
+export function buildEyes(b, ctx) {
+  const { toModel, res, look } = ctx;
+  const R = FACE.eyeR;
+  for (const s of [1, -1]) {
+    const S = s > 0 ? 'L' : 'R';
+    const c = [s * FACE.eyeX, FACE.eyeY, FACE.eyeZ];
+    if (!res.high) {
+      addBlob(b, {
+        c: toModel([c[0], c[1], c[2] + R * 0.55]), r: [0.0062, 0.0075, 0.004].map((v) => v * ctx.scale), n: [2, 2], cols: 4, rows: 2,
+        region: REGION.FIXED, tint: [0.06, 0.05, 0.05], mat: MAT.SKIN, weight: () => [['head', 1]]
+      });
+      continue;
+    }
+    // Rings by angle from the front: pupil, iris, limbus, sclera
+    const iris = look.iris;
+    const IR = 0.66; // iris angular radius (rad)
+    const PR = 0.26;
+    const ringsDef = [
+      [0, 'p'], [PR, 'p'], [PR, 'i0'], [IR * 0.62, 'i1'], [IR * 0.9, 'i2'], [IR, 'l'], [IR, 's'], [0.95, 's'],
+      [1.4, 's2'], [2.2, 's3'], [Math.PI, 's3']
+    ];
+    const cols = 12;
+    const pts = [];
+    for (const [a, kind] of ringsDef) {
+      for (let j = 0; j < cols; j++) {
+        const ph = (j / cols) * Math.PI * 2;
+        // Cornea: the front bulges a touch so the highlight rolls
+        const bulge = a < IR + 0.1 ? 0.06 * Math.cos(Math.min(1, a / (IR + 0.1)) * Math.PI * 0.5) ** 2 : 0;
+        const rr = R * (1 + bulge);
+        const lp = [Math.sin(a) * Math.cos(ph) * rr, Math.sin(a) * Math.sin(ph) * rr, Math.cos(a) * rr];
+        let tint;
+        const swirl = 1 + 0.12 * Math.sin(ph * 7 + a * 20);
+        if (kind === 'p') tint = [0.015, 0.012, 0.012];
+        else if (kind === 'i0') tint = iris.map((v) => v * 1.25 * swirl);
+        else if (kind === 'i1') tint = iris.map((v) => v * 1.05 * swirl);
+        else if (kind === 'i2') tint = iris.map((v) => v * 0.8 * swirl);
+        else if (kind === 'l') tint = iris.map((v) => v * 0.35);
+        else if (kind === 's') tint = [0.86, 0.83, 0.79];
+        else if (kind === 's2') tint = [0.82, 0.76, 0.72];
+        else tint = [0.6, 0.45, 0.42];
+        pts.push({ p: toModel([c[0] + lp[0], c[1] + lp[1], c[2] + lp[2]]), region: REGION.FIXED, tint, mat: MAT.GLOSS, a });
+      }
+    }
+    const nf = (p) => {
+      const hp = ctx.toHead(p);
+      return [hp[0] - c[0], hp[1] - c[1], hp[2] - c[2]];
+    };
+    emitGrid(b, {
+      pts, rows: ringsDef.length, cols, normalFn: nf, center: new THREE.Vector3(...toModel(c)), poles: [0, ringsDef.length - 1],
+      weight: () => [[`eye${S}`, 1]]
+    });
+    buildLid(b, ctx, s, c, true);
+    buildLid(b, ctx, s, c, false);
+  }
+}
+
+/** Lid shells, modelled CLOSED (edges meet just below the eye centre). */
+export const LID_CLOSED_UP = -0.07;
+export const LID_CLOSED_LO = -0.07;
+
+function buildLid(b, ctx, s, c, upper) {
+  const { toModel } = ctx;
+  const S = s > 0 ? 'L' : 'R';
+  const R = FACE.eyeR;
+  const rOut = R + (upper ? 0.0013 : 0.0009);
+  const rIn = R + 0.0003;
+  const cols = 8;
+  const azMax = 1.3;
+  // Rows from the lid edge into the head: [elevation offset from edge, radius, tint key]
+  const edgeE = upper ? LID_CLOSED_UP : LID_CLOSED_LO;
+  const dir = upper ? 1 : -1;
+  const rowsDef = [
+    [0, rIn, 'lash'], [0.012, (rIn + rOut) / 2 + 0.0004, 'lash'], [0.05, rOut, 'rim'], [0.35, rOut, 'lid'],
+    [0.95, rOut, 'lid'], [1.75, rOut * 0.98, 'lid']
+  ];
+  const skin = ctx.skinTintLid;
+  const pts = [];
+  for (const [de, rr, key] of rowsDef) {
+    for (let j = 0; j < cols; j++) {
+      const az = lerp(-azMax, azMax, j / (cols - 1));
+      // Almond: the edge sits a little lower towards the corners when open
+      const e = edgeE + dir * de;
+      const lp = [Math.sin(az) * Math.cos(e) * rr, Math.sin(e) * rr, Math.cos(az) * Math.cos(e) * rr];
+      let tint = skin;
+      if (key === 'lash') tint = upper ? [0.07, 0.05, 0.045] : [skin[0] * 0.75, skin[1] * 0.6, skin[2] * 0.58];
+      else if (key === 'rim') tint = [skin[0] * 0.92, skin[1] * 0.82, skin[2] * 0.8];
+      const fade = upper ? 1 - 0.1 * gauss(de - 0.3, 0.2) : 1;
+      pts.push({
+        p: toModel([c[0] + lp[0], c[1] + lp[1], c[2] + lp[2]]),
+        region: key === 'lash' && upper ? REGION.FIXED : REGION.SKIN,
+        tint: key === 'lash' && upper ? tint : tint.map((v) => v * fade),
+        mat: MAT.SKIN
+      });
+    }
+  }
+  const bone = upper ? `lidUp${S}` : `lidLo${S}`;
+  emitGrid(b, {
+    pts, rows: rowsDef.length, cols, wrap: false, center: new THREE.Vector3(...toModel(c)),
+    weight: () => [[bone, 1]]
+  });
+}
+
+/* ------------------------------------------------------------ brows, ears */
+
+export function buildBrows(b, ctx) {
+  const { field, toModel, res, look } = ctx;
+  if (!res.high) {
+    if (!ctx.lowBrows) return;
+    for (const s of [1, -1]) {
+      const z = field.faceZ(s * 0.034, 0.03);
+      addBlob(b, {
+        c: toModel([s * 0.034, 0.031, z - 0.001]), r: [0.017, 0.0035, 0.004].map((v) => v * ctx.scale), n: [2, 2], cols: 4, rows: 2,
+        region: REGION.HAIR, tint: [0.7, 0.7, 0.7], mat: MAT.SKIN, weight: (p) => faceWeights(ctx.toHead(p), ctx.H)
+      });
+    }
+    return;
+  }
+  const thick = look.browThick;
+  const n = 7;
+  const nrm = [0, 0, 0];
+  for (const s of [1, -1]) {
+    const path = [];
+    const rad = [];
+    for (let i = 0; i < n; i++) {
+      const u = i / (n - 1);
+      const x = s * lerp(0.0125, 0.056, u);
+      const y = FACE.browY - 0.004 + 0.009 * Math.sin(Math.min(1, u * 1.25) * Math.PI * 0.62) - 0.008 * u * u + look.browArch * Math.sin(u * Math.PI) * 0.004;
+      const z = field.faceZ(x, y);
+      field.normal(x, y, z, nrm);
+      const off = 0.0004;
+      path.push(new THREE.Vector3(...toModel([x + nrm[0] * off, y + nrm[1] * off, z + nrm[2] * off])));
+      rad.push(lerp(0.0026, 0.0014, u) * thick * (u < 0.12 ? 0.75 + u * 2 : 1));
+    }
+    sweep(b, {
+      path, radius: (u) => rad[Math.round(u * (n - 1))] * ctx.scale, cols: 5, region: REGION.HAIR, tint: look.browTint,
+      mat: MAT.SKIN, weight: (p) => faceWeights(ctx.toHead(p), ctx.H), flat: 0.55
+    });
+  }
+}
+
+export function buildEars(b, ctx) {
+  const { toModel, res, face } = ctx;
+  const es = face.ears;
+  for (const s of [1, -1]) {
+    const c = [s * 0.0775, -0.012, -0.012];
+    const rot = new THREE.Euler(0.2, s * -0.3, s * -0.04);
+    const m = new THREE.Matrix4().makeRotationFromEuler(rot);
+    const tmp = new THREE.Vector3();
+    addBlob(b, {
+      c: [0, 0, 0], r: [0.0085 * es, 0.0295 * es, 0.0168 * es], n: [2.2, 2.4], cols: res.high ? 8 : 4, rows: res.high ? 5 : 2,
+      region: REGION.SKIN, mat: MAT.SKIN,
+      tint: (p) => {
+        const inner = p[0] * s > 0.002 ? 1 - 0.25 * gauss(Math.hypot(p[1] / 0.03, p[2] / 0.016), 0.6) : 1;
+        return [1.02 * inner, 0.9 * inner, 0.88 * inner];
+      },
+      warp: (p) => {
+        // Hollow the outer face (the concha) and roll the rim
+        let [x, y, z] = p;
+        const rr = Math.hypot(y / (0.03 * es), z / (0.0165 * es));
+        if (x * s > 0) x -= s * 0.0045 * es * Math.max(0, 1 - rr * rr) ** 1.5;
+        x += s * 0.0025 * es * sstep(0.55, 0.95, rr);
+        tmp.set(x, y, z).applyMatrix4(m);
+        return toModel([c[0] + tmp.x, c[1] + tmp.y, c[2] + tmp.z]);
+      },
+      weight: () => [['head', 1]]
+    });
+  }
+}
+
+/* ------------------------------------------------------------ hair */
+
+const DEG = Math.PI / 180;
+
+/** Periodic Catmull-Rom through [ψ°, value] keys (ψ symmetric about 0). */
+function periodic(keys) {
+  const full = [];
+  for (const [p, v] of keys) {
+    full.push([p, v]);
+    if (p > 0 && p < 180) full.push([-p, v]);
+  }
+  full.sort((a, b) => a[0] - b[0]);
+  if (full[0][0] !== -180) full.unshift([-180, full[full.length - 1][1]]);
+  return (psiDeg) => {
+    let p = ((psiDeg + 180) % 360 + 360) % 360 - 180;
+    const n = full.length;
+    let i = 0;
+    while (i < n - 1 && p > full[i + 1][0]) i++;
+    const p0 = full[(i - 1 + n) % n];
+    const p1 = full[i];
+    const p2 = full[(i + 1) % n];
+    const p3 = full[(i + 2) % n];
+    const span = (p2[0] - p1[0] + 360) % 360 || 360;
+    const t = clamp((p - p1[0]) / span, 0, 1);
+    const t2 = t * t;
+    const t3 = t2 * t;
+    return 0.5 * ((2 * p1[1]) + (-p0[1] + p2[1]) * t + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t2 +
+      (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t3);
+  };
+}
+
+const HAIRLINE = periodic([
+  [0, 45], [22, 46], [40, 42], [55, 30], [65, 13], [74, 1], [82, 4], [90, 15], [101, 20], [113, 10],
+  [125, -14], [145, -35], [180, -43]
+]);
+const HAIRLINE_HIGH = periodic([
+  [0, 50], [20, 53], [36, 58], [50, 40], [62, 14], [74, 1], [82, 4], [90, 15], [101, 20], [113, 10],
+  [125, -14], [145, -35], [180, -43]
+]);
+
+function dirFrom(psi, elev) {
+  return [Math.sin(psi) * Math.cos(elev), Math.sin(elev), Math.cos(psi) * Math.cos(elev)];
+}
+function slerpDir(a, b, t) {
+  const d = clamp(a[0] * b[0] + a[1] * b[1] + a[2] * b[2], -1, 1);
+  const w = Math.acos(d);
+  if (w < 1e-4) return a.slice();
+  const s = Math.sin(w);
+  const ka = Math.sin((1 - t) * w) / s;
+  const kb = Math.sin(t * w) / s;
+  return [a[0] * ka + b[0] * kb, a[1] * ka + b[1] * kb, a[2] * ka + b[2] * kb];
+}
+
+/** Hair styles: shape knobs read by buildHair. */
+export const HAIR_STYLES = {
+  bald: null,
+  buzz: { h: 0.0022, side: 0.0019, ramp: 0.05, crown: [0, 0.9, -0.43], groove: 0.0002, buzz: true },
+  crop: { h: 0.0075, side: 0.0038, ramp: 0.13, crown: [0, 0.9, -0.43], groove: 0.0007, front: 0.003 },
+  tousled: { h: 0.011, side: 0.0062, ramp: 0.08, crown: [0.1, 0.92, -0.38], groove: 0.0012, noise: 0.0035, fringe: 0.006, front: 0.003 },
+  sidePart: { h: 0.0125, side: 0.0058, ramp: 0.085, crown: [0.3, 0.9, -0.3], groove: 0.0009, part: 34, front: 0.004 },
+  sweptBack: { h: 0.0125, side: 0.006, ramp: 0.06, crown: [0, 0.22, -0.97], groove: 0.0014, quiff: 0.008, front: 0.006 },
+  curly: { h: 0.02, side: 0.0145, ramp: 0.07, crown: [0, 0.9, -0.43], groove: 0, curls: 0.0055, front: 0.004 },
+  long: { h: 0.0105, side: 0.0115, ramp: 0.05, crown: [0, 0.6, -0.8], groove: 0.0012, long: true, front: 0.003, part: 0 },
+  bun: { h: 0.0058, side: 0.0048, ramp: 0.05, crown: [0, 0.35, -0.94], groove: 0.0016, bun: true },
+  balding: { h: 0.0048, side: 0.0045, ramp: 0.08, crown: [0, 0.9, -0.43], groove: 0.0006, balding: true }
+};
+export const HAIR_STYLE_NAMES = Object.keys(HAIR_STYLES);
+
+/** Elevation of a hat's lower edge, by azimuth, or null for no hat. */
+export function hatEdge(kind) {
+  switch (kind) {
+    case 'cap': return periodic([[0, 36], [50, 26], [90, 13], [130, 6], [180, 4]]);
+    case 'beanie': return periodic([[0, 30], [50, 20], [90, 8], [130, 0], [180, -6]]);
+    case 'beret': return periodic([[0, 52], [90, 40], [180, 30]]);
+    case 'headband': return periodic([[0, 47], [90, 38], [180, 30]]);
+    default: return null;
+  }
+}
+
+/** The hair shell for a style. */
+export function buildHair(b, ctx) {
+  const { look, res, field, toModel } = ctx;
+  const st = HAIR_STYLES[look.hair];
+  if (!st) return;
+  const high = res.high;
+  const hat = ctx.hatEdge;
+  const hatCover = ctx.hatCovers;
+  const line = st.balding ? HAIRLINE_HIGH : HAIRLINE;
+  const crown = st.crown;
+  const cl = Math.hypot(...crown);
+  const C = [crown[0] / cl, crown[1] / cl, crown[2] / cl];
+  const cols = high ? (st.curls ? 34 : 28) : 10;
+  const tRows = high ? (st.curls ? [0, 0.025, 0.06, 0.11, 0.18, 0.27, 0.38, 0.5, 0.63, 0.77, 0.9, 1] : [0, 0.03, 0.075, 0.14, 0.23, 0.35, 0.5, 0.67, 0.84, 1]) : [0, 0.14, 0.45, 1];
+  const nrm = [0, 0, 0];
+  const sp = [0, 0, 0];
+  const color = look.hairColor;
+  const pts = [];
+  const wrap = !st.balding;
+  const psiRange = st.balding ? [62, 298] : [0, 360];
+  for (const t of tRows) {
+    for (let j = 0; j < cols; j++) {
+      const u = wrap ? j / cols : j / (cols - 1);
+      const psiDeg = lerp(psiRange[0], psiRange[1], u);
+      const psi = psiDeg * DEG;
+      const elev = line(psiDeg) * DEG;
+      let tt = t;
+      let bandMax = 1;
+      if (st.balding) {
+        // A horseshoe: only the lower band of the hair survives
+        const back = Math.cos(psi);
+        bandMax = clamp(0.45 - back * 0.25, 0.08, 0.7) * sstep(0, 0.12, Math.min(u, 1 - u));
+        tt = t * bandMax;
+      }
+      const dh = dirFrom(psi, elev);
+      const d = slerpDir(dh, C, Math.pow(tt, 0.85));
+      field.surf(d[0], d[1], d[2], sp);
+      field.normal(sp[0], sp[1], sp[2], nrm);
+      // Thickness: full on top, thinner at the sides, tucked in at the edge
+      const top = clamp(d[1] * 1.4, 0, 1);
+      let h = lerp(st.side, st.h, top);
+      const frontK = Math.max(0, Math.cos(psi)) ** 1.5 * sstep(0.02, 0.22, tt) * sstep(0.75, 0.3, tt);
+      h += (st.front || 0) * frontK;
+      // Sides and nape are kept short
+      h *= 1 - 0.35 * sstep(0.5, 0.9, Math.abs(Math.sin(psi))) * sstep(0.35, 0.0, tt);
+      if (st.part !== undefined && st.part !== 0) {
+        const dp = (psiDeg - st.part) * DEG;
+        h -= 0.0045 * gauss(dp, 0.09) * sstep(0.85, 0.45, tt) * sstep(0.0, 0.08, tt);
+        h += 0.0035 * sstep(st.part * DEG, (st.part - 90) * DEG, psi) * sstep(0.95, 0.4, tt);
+      }
+      if (st.noise) h += st.noise * noise3(d[0] * 9 + 3, d[1] * 9, d[2] * 9);
+      if (st.curls && high) {
+        const n1 = noise3(d[0] * 26, d[1] * 26, d[2] * 26);
+        const n2 = noise3(d[0] * 52 + 7, d[1] * 52, d[2] * 52);
+        h += st.curls * (Math.abs(n1) * 1.1 + Math.abs(n2) * 0.5 - 0.45);
+      }
+      if (st.groove && high) {
+        const g = noise3(psi * 4.5, tt * 2.5, 1.7) * 0.7 + Math.sin(psi * cols * 0.5 + noise3(psi * 2, tt * 3, 4) * 2) * 0.3;
+        h += st.groove * g * sstep(0.02, 0.15, tt) * sstep(1, 0.75, tt);
+      }
+      // Edge ramp (and the far edge for the horseshoe)
+      let edge = sstep(0, st.ramp, tt);
+      if (st.balding) edge *= sstep(bandMax, bandMax * 0.55, tt) * sstep(0, 0.1, Math.min(u, 1 - u));
+      h = h * edge - 0.0012 * (1 - edge);
+      // Low detail: lift clear of the coarse skull's facets
+      if (!high) h += 0.0035 * edge;
+      if (hat && hatCover(psi, Math.asin(clamp(d[1], -1, 1)))) h = Math.min(h, 0.0022);
+      const p = [sp[0] + nrm[0] * h, sp[1] + nrm[1] * h, sp[2] + nrm[2] * h];
+      if (st.quiff && high) {
+        const q = st.quiff * Math.max(0, Math.cos(psi)) ** 3 * sstep(0.0, 0.08, tt) * sstep(0.45, 0.1, tt);
+        p[1] += q;
+        p[2] += q * 0.3;
+      }
+      if (st.fringe) {
+        const f = st.fringe * Math.max(0, Math.cos(psi)) ** 2 * sstep(0.25, 0.04, tt) * sstep(0, 0.03, tt);
+        p[2] += f * 0.6;
+        p[1] -= f;
+      }
+      // Colour: darker at the roots and in the grooves, lighter on top
+      const strand = noise3(psi * 9, tt * 4, 2.3) * 0.5 + noise3(d[0] * 40, d[1] * 40, d[2] * 40) * 0.5;
+      const shade = (0.62 + 0.38 * edge) * (0.92 + 0.16 * top) * (1 + 0.13 * strand);
+      const region = st.buzz && !ctx.crowd ? REGION.FIXED : REGION.HAIR;
+      const base = st.buzz && !ctx.crowd ? ctx.buzzColor : [1, 1, 1];
+      pts.push({ p: toModel(p), region, tint: base.map((v) => v * shade), mat: MAT.SKIN });
+    }
+  }
+  void color;
+  emitGrid(b, {
+    pts, rows: tRows.length, cols, wrap, center: new THREE.Vector3(...toModel([0, 0, 0])),
+    poles: st.balding ? [] : [tRows.length - 1], weight: () => [['head', 1]]
+  });
+  if (st.long) buildLongHair(b, ctx, st);
+  if (st.bun) buildBun(b, ctx);
+}
+
+function buildLongHair(b, ctx, st) {
+  const { field, toModel, res } = ctx;
+  // A thick curtain from behind the ears around the back, down to the shoulders
+  const n = res.high ? 18 : 7;
+  const loop = res.high
+    ? [[0, 0.0], [0.25, 0.0], [0.6, 0.0], [1.0, 0.0], [1.0, 1], [0.6, 1], [0.25, 1], [0, 1]]
+    : [[0, 0], [1, 0], [1, 1], [0, 1]];
+  const sp = [0, 0, 0];
+  const nrm = [0, 0, 0];
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const u = i / (n - 1);
+    const psiDeg = lerp(92, 268, u);
+    const psi = psiDeg * DEG;
+    const pinch = sstep(0, 0.08, u) * sstep(1, 0.92, u);
+    for (const [v, layer] of loop) {
+      // v: 0 at the top (inside the hair shell) → 1 at the tips
+      const elev = lerp(0.35, -0.3, Math.min(1, v * 1.6));
+      const d = dirFrom(psi, elev);
+      field.surf(d[0], d[1], d[2], sp);
+      field.normal(sp[0], sp[1], sp[2], nrm);
+      const hang = sstep(0.45, 1.0, v);
+      const thick = (layer ? 0.0 : 0.009) * pinch * (1 - 0.5 * hang) + 0.003;
+      const out = st.side * 0.55 + thick;
+      let x = sp[0] + nrm[0] * out;
+      let z = sp[2] + nrm[2] * out;
+      let y = sp[1] + nrm[1] * out;
+      if (v > 0.6) {
+        // Below the skull the hair falls straight, flaring over the shoulders
+        const k = (v - 0.6) / 0.4;
+        y -= k * 0.13;
+        const flare = 1 + k * 0.12;
+        x *= flare;
+        z = z * flare - k * 0.012;
+      }
+      const tipFade = v > 0.95 ? 0.7 : 1;
+      pts.push({ p: toModel([x, y, z]), region: REGION.HAIR, tint: [0.92 * tipFade, 0.92 * tipFade, 0.92 * tipFade], mat: MAT.SKIN, v, y });
+    }
+  }
+  emitGrid(b, {
+    pts, rows: n, cols: loop.length, center: new THREE.Vector3(...toModel([0, -0.05, -0.02])),
+    weight: (p, q) => {
+      const k = sstep(-0.06, -0.19, q.y);
+      return [['head', 1 - k], ['neck', k * 0.5], ['chest', k * 0.5]];
+    }
+  });
+}
+
+function buildBun(b, ctx) {
+  const { field, toModel, res } = ctx;
+  const sp = [0, 0, 0];
+  const nrm = [0, 0, 0];
+  const d = [0, 0.62, -0.78];
+  field.surf(d[0], d[1], d[2], sp);
+  field.normal(sp[0], sp[1], sp[2], nrm);
+  const c = [sp[0] + nrm[0] * 0.022, sp[1] + nrm[1] * 0.022, sp[2] + nrm[2] * 0.022];
+  addBlob(b, {
+    c: toModel(c), r: [0.03, 0.026, 0.027].map((v) => v * ctx.scale), n: [2, 2], cols: res.high ? 10 : 6, rows: res.high ? 7 : 4,
+    region: REGION.HAIR, mat: MAT.SKIN,
+    tint: (p, v, u) => {
+      const k = 0.85 + 0.15 * Math.sin(u * Math.PI * 10 + v * 6);
+      return [k, k, k];
+    },
+    weight: () => [['head', 1]]
+  });
+}
+
+/* ------------------------------------------------------------ facial hair */
+
+/** Mask (0..1) of the beard area in head space; used for stubble. */
+export function beardMask(p) {
+  const [x, y, z] = p;
+  const ax = Math.abs(x);
+  if (z < -0.035) return 0;
+  const my = FACE.mouthY;
+  // Cheek line: from the sideburn down towards the mouth corners
+  const cheekY = lerp(my + 0.006, -0.008, sstep(0.025, 0.075, ax));
+  let m = sstep(cheekY + 0.006, cheekY - 0.01, y);
+  // Keep the lips clear
+  const lip = gauss(ax / 0.024, 1) * gauss((y - my) / 0.0085, 1);
+  m *= 1 - lip;
+  // Moustache area under the nose
+  const mo = (1 - sstep(0.018, 0.028, ax)) * sstep(my + 0.004, my + 0.009, y) * sstep(-0.034, -0.04, y);
+  m = Math.max(m, mo);
+  // Fade out under the jaw towards the neck
+  m *= sstep(-0.135, -0.11, y) * sstep(-0.035, -0.01, z);
+  return clamp(m, 0, 1);
+}
+
+/** Beard and/or moustache shells. kind: 'beard' | 'fullBeard' | 'moustache'. */
+export function buildFacialHair(b, ctx, kind) {
+  const { field, toModel, res } = ctx;
+  const high = res.high;
+  const sp = [0, 0, 0];
+  const nrm = [0, 0, 0];
+  const my = FACE.mouthY;
+  if (kind === 'beard' || kind === 'fullBeard') {
+    const full = kind === 'fullBeard';
+    const O = [0, -0.045, 0];
+    const cols = high ? 20 : 9;
+    const rows = high ? [0, 0.08, 0.22, 0.4, 0.6, 0.78, 0.91, 1] : [0, 0.35, 0.7, 1];
+    const pts = [];
+    // Elevations (from O) of the neck line and of the cheek/lip line
+    const loE = periodic([[0, -74], [30, -68], [60, -54], [90, -36], [110, -22]]);
+    const hiE = periodic([[0, -23], [12, -22], [20, -18], [30, -11], [45, -5], [62, 1], [80, 8], [100, 13], [110, 16]]);
+    for (const t of rows) {
+      for (let j = 0; j < cols; j++) {
+        const u = j / (cols - 1);
+        const psiDeg = lerp(-104, 104, u);
+        const psi = psiDeg * DEG;
+        const e = lerp(loE(psiDeg), hiE(psiDeg), t) * DEG;
+        const d = dirFrom(psi, e);
+        const tt = field.project(O[0], O[1], O[2], d[0], d[1], d[2]);
+        sp[0] = O[0] + d[0] * tt;
+        sp[1] = O[1] + d[1] * tt;
+        sp[2] = O[2] + d[2] * tt;
+        field.normal(sp[0], sp[1], sp[2], nrm);
+        const chin = Math.max(0, Math.cos(psi)) ** 2;
+        let h = (full ? 0.0075 : 0.004) + (full ? 0.006 : 0.0012) * chin * sstep(0.7, 0.1, t);
+        if (high) h += (full ? 0.0016 : 0.0006) * noise3(sp[0] * 120, sp[1] * 120, sp[2] * 120);
+        const edge = sstep(0, 0.3, t) * sstep(1, 0.75, t) * sstep(0, 0.12, u) * sstep(1, 0.88, u);
+        h = h * edge - 0.0012 * (1 - edge) + (high ? 0 : 0.003 * edge);
+        const p = [sp[0] + nrm[0] * h, sp[1] + nrm[1] * h, sp[2] + nrm[2] * h];
+        if (full) p[1] -= 0.007 * chin * sstep(0.6, 0.1, t) * edge;
+        const shade = (0.74 + 0.26 * edge) * (1 + 0.12 * noise3(p[0] * 220, p[1] * 220, p[2] * 220));
+        pts.push({ p: toModel(p), region: REGION.HAIR, tint: [shade, shade, shade], mat: MAT.SKIN, hp: p });
+      }
+    }
+    emitGrid(b, {
+      pts, rows: rows.length, cols, wrap: false, center: new THREE.Vector3(...toModel([0, -0.04, 0.0])),
+      weight: (p, q) => faceWeights(q.hp, ctx.H)
+    });
+  }
+  // Moustache (on its own, or joining the beard)
+  const O2 = [0, my, 0.0];
+  const cols = high ? 11 : 4;
+  const rows = high ? [0, 0.2, 0.5, 0.8, 1] : [0, 1];
+  const pts = [];
+  const big = kind === 'moustache' ? 1.12 : 1;
+  for (const t of rows) {
+    for (let j = 0; j < cols; j++) {
+      const u = j / (cols - 1);
+      const psiDeg = lerp(-23, 23, u) * big;
+      const psi = psiDeg * DEG;
+      const ends = Math.abs(u - 0.5) * 2;
+      const eLo = 3 - 15 * ends ** 2.2;
+      const eHi = 15 - 4 * ends;
+      const e = lerp(eLo, eHi, t) * DEG;
+      const d = dirFrom(psi, e);
+      const tt = field.project(O2[0], O2[1], O2[2], d[0], d[1], d[2]);
+      sp[0] = O2[0] + d[0] * tt;
+      sp[1] = O2[1] + d[1] * tt;
+      sp[2] = O2[2] + d[2] * tt;
+      field.normal(sp[0], sp[1], sp[2], nrm);
+      let h = 0.004 * big * (1 - 0.45 * ends);
+      const edge = sstep(0, 0.3, t) * sstep(1, 0.65, t) * sstep(0, 0.12, u) * sstep(1, 0.88, u);
+      h = h * edge - 0.001 * (1 - edge);
+      const p = [sp[0] + nrm[0] * h, sp[1] + nrm[1] * h, sp[2] + nrm[2] * h];
+      p[1] -= 0.0012 * edge * sstep(0.6, 0.0, t);
+      const shade = (0.76 + 0.24 * edge) * (1 + 0.1 * noise3(p[0] * 260, p[1] * 260, p[2] * 260));
+      pts.push({ p: toModel(p), region: REGION.HAIR, tint: [shade, shade, shade], mat: MAT.SKIN, hp: p });
+    }
+  }
+  emitGrid(b, {
+    pts, rows: rows.length, cols, wrap: false, center: new THREE.Vector3(...toModel([0, my + 0.01, 0.0])),
+    weight: (p, q) => faceWeights(q.hp, ctx.H, 0)
+  });
+}
+
+/* ------------------------------------------------------------ glasses */
+
+export function buildGlasses(b, ctx, kind) {
+  const { field, toModel, res, look } = ctx;
+  const high = res.high;
+  const nrm = [0, 0, 0];
+  const frame = look.glassesTint;
+  const zEye = FACE.eyeZ + FACE.eyeR;
+  let zFront = 0;
+  for (const x of [0.015, 0.03, 0.045]) zFront = Math.max(zFront, field.faceZ(x, 0.0));
+  zFront = Math.max(zFront + 0.006, zEye + 0.011);
+  const cy = FACE.eyeY + 0.001;
+  const round = kind === 'round';
+  const hw = round ? 0.0185 : 0.0245;
+  const hh = round ? 0.0185 : 0.0165;
+  const rr = round ? 0.0016 : 0.0019;
+  const n = high ? 16 : 10;
+  const w = () => [['head', 1]];
+  const rim = (s) => {
+    const cx = s * (round ? 0.0322 : 0.0328);
+    const path = [];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const ca = Math.cos(a);
+      const sa = Math.sin(a);
+      const e = round ? 2 : 4.2;
+      const x = cx + Math.sign(ca) * Math.pow(Math.abs(ca), 2 / e) * hw;
+      const y = cy + Math.sign(sa) * Math.pow(Math.abs(sa), 2 / e) * hh;
+      // Lenses wrap gently with the face
+      const z = zFront - Math.abs(x) * 0.12;
+      path.push(new THREE.Vector3(...toModel([x, y, z])));
+    }
+    sweep(b, { path, radius: rr * ctx.scale, cols: high ? 5 : 4, closed: true, region: REGION.FIXED, tint: frame, mat: MAT.GLOSS, weight: w });
+    return cx;
+  };
+  const cxL = rim(1);
+  rim(-1);
+  // Bridge
+  const bridge = [];
+  for (let i = 0; i <= 6; i++) {
+    const u = i / 6;
+    const x = lerp(-(Math.abs(cxL) - hw * (round ? 0.92 : 1)), Math.abs(cxL) - hw * (round ? 0.92 : 1), u);
+    const y = cy + (round ? 0.006 : 0.008) + 0.003 * Math.sin(u * Math.PI);
+    bridge.push(new THREE.Vector3(...toModel([x, y, zFront - Math.abs(x) * 0.12 + 0.0005])));
+  }
+  sweep(b, { path: bridge, radius: rr * 0.85 * ctx.scale, cols: high ? 5 : 4, region: REGION.FIXED, tint: frame, mat: MAT.GLOSS, weight: w });
+  // Temples: hug the side of the head back to the ears
+  for (const s of [1, -1]) {
+    const path = [];
+    const x0 = s * (Math.abs(cxL) + hw);
+    const steps = high ? 9 : 4;
+    for (let i = 0; i <= steps; i++) {
+      const u = i / steps;
+      const z = lerp(zFront - Math.abs(x0) * 0.12, -0.012, u);
+      const y = cy + 0.006 + 0.004 * u - (u > 0.85 ? (u - 0.85) * 0.12 : 0);
+      // Find the head's side at this (y, z) and sit just outside it
+      let x = Math.abs(x0);
+      for (let k = 0; k < 40; k++) {
+        if (field.sdf(x, y, z) > 0.0035) break;
+        x += 0.0015;
+      }
+      if (i === 0) x = Math.abs(x0);
+      else x = Math.max(x, lerp(Math.abs(x0), 0, 0));
+      field.normal(x, y, z, nrm);
+      path.push(new THREE.Vector3(...toModel([s * x, y, z])));
+    }
+    sweep(b, { path, radius: rr * 0.8 * ctx.scale, cols: 4, region: REGION.FIXED, tint: frame, mat: MAT.GLOSS, weight: w, flat: 0.7 });
+  }
+}
+
+/* ------------------------------------------------------------ headwear */
+
+export function buildHeadwear(b, ctx, kind) {
+  const { field, toModel, res, look } = ctx;
+  const high = res.high;
+  const edgeFn = hatEdge(kind);
+  const sp = [0, 0, 0];
+  const nrm = [0, 0, 0];
+  const w = () => [['head', 1]];
+  const color = ctx.hatRegion ?? REGION.ACCENT;
+  const ht = ctx.hatTint || [1, 1, 1];
+  const tk = (k) => [ht[0] * k, ht[1] * k, ht[2] * k];
+  if (kind === 'beret') {
+    const c = [0.014, 0.088, -0.012];
+    const m = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(-0.2, 0, -0.3));
+    const tmp = new THREE.Vector3();
+    addBlob(b, {
+      c: [0, 0, 0], r: [0.118, 0.036, 0.122], n: [2.3, 2], cols: high ? 22 : 10, rows: high ? 9 : 5, region: color, mat: MAT.CLOTH,
+      tint: (p, v) => tk(v > 0.55 ? 0.8 : 1),
+      warp: (p, v) => {
+        let [x, y, z] = p;
+        if (v > 0.5) y *= 0.35;
+        tmp.set(x, y, z).applyMatrix4(m);
+        return toModel([c[0] + tmp.x, c[1] + tmp.y, c[2] + tmp.z]);
+      },
+      weight: w
+    });
+    const nub = new THREE.Vector3(0, 0.036, 0).applyMatrix4(m);
+    addBlob(b, {
+      c: toModel([c[0] + nub.x, c[1] + nub.y, c[2] + nub.z]), r: [0.006, 0.009, 0.006].map((v) => v * ctx.scale),
+      cols: 5, rows: 3, region: color, tint: tk(0.9), mat: MAT.CLOTH, weight: w
+    });
+    return;
+  }
+  if (kind === 'headband') {
+    const n = high ? 30 : 12;
+    const loop = [[0, -0.018], [0.0045, -0.016], [0.006, 0], [0.0045, 0.016], [0, 0.018], [-0.003, 0]];
+    const pts = [];
+    for (let i = 0; i <= n; i++) {
+      const psiDeg = (i / n) * 360;
+      const psi = psiDeg * DEG;
+      const e0 = edgeFn(psiDeg) * DEG;
+      for (const [o, de] of loop) {
+        const d = dirFrom(psi, e0 + de / 0.1);
+        field.surf(d[0], d[1], d[2], sp);
+        field.normal(sp[0], sp[1], sp[2], nrm);
+        const off = ctx.hairUnder + 0.0025 + o;
+        pts.push({ p: toModel([sp[0] + nrm[0] * off, sp[1] + nrm[1] * off, sp[2] + nrm[2] * off]), region: color, tint: tk(1), mat: MAT.CLOTH });
+      }
+    }
+    emitGrid(b, { pts, rows: n + 1, cols: loop.length, center: new THREE.Vector3(...toModel([0, 0.03, 0])), weight: w });
+    return;
+  }
+  // Dome hats: cap and beanie
+  const beanie = kind === 'beanie';
+  const cols = high ? 32 : 12;
+  const tRows = high ? [0, 0.015, 0.05, 0.12, 0.22, 0.34, 0.48, 0.63, 0.78, 0.9, 1] : [0, 0.05, 0.35, 0.7, 1];
+  const crown = [0, 1, -0.12];
+  const pts = [];
+  const cuffT = beanie ? 0.2 : 0;
+  for (const t of tRows) {
+    for (let j = 0; j < cols; j++) {
+      const psiDeg = (j / cols) * 360;
+      const psi = psiDeg * DEG;
+      const e = edgeFn(psiDeg) * DEG;
+      const d = slerpDir(dirFrom(psi, e), crown.map((v) => v / Math.hypot(...crown)), Math.pow(t, 0.9));
+      field.surf(d[0], d[1], d[2], sp);
+      field.normal(sp[0], sp[1], sp[2], nrm);
+      let off = ctx.hairUnder + (t === 0 ? -0.0008 : 0.0055);
+      if (beanie) {
+        off += 0.002 + (t > 0 && t <= cuffT ? 0.004 : 0) + 0.006 * t * t;
+        if (high && t > cuffT) off += 0.0007 * Math.sin(psi * cols * 0.5);
+      } else {
+        off += 0.009 * t * t + 0.003 * Math.sin(Math.min(1, t * 1.4) * Math.PI) * Math.max(0, Math.cos(psi));
+      }
+      const p = [sp[0] + nrm[0] * off, sp[1] + nrm[1] * off, sp[2] + nrm[2] * off];
+      let k = 1;
+      if (beanie && t > 0 && t <= cuffT) k = 0.9;
+      if (!beanie && high) k = 1 - 0.08 * Math.abs(Math.sin(psi * 3));
+      pts.push({ p: toModel(p), region: color, tint: tk(k), mat: MAT.CLOTH });
+    }
+  }
+  emitGrid(b, { pts, rows: tRows.length, cols, center: new THREE.Vector3(...toModel([0, 0.02, 0])), poles: [tRows.length - 1], weight: w });
+  if (beanie) return;
+  // Cap: brim and button
+  const n = high ? 13 : 6;
+  const loop = [[0, 0.0015], [0.6, 0.002], [1, 0.0012], [1.02, -0.0012], [0.6, -0.002], [0, -0.0015]];
+  const bpts = [];
+  for (let i = 0; i < n; i++) {
+    const u = i / (n - 1);
+    const psiDeg = lerp(-62, 62, u);
+    const psi = psiDeg * DEG;
+    const e = edgeFn(psiDeg) * DEG;
+    const d = dirFrom(psi, e);
+    field.surf(d[0], d[1], d[2], sp);
+    field.normal(sp[0], sp[1], sp[2], nrm);
+    const base = [sp[0] + nrm[0] * (ctx.hairUnder + 0.004), sp[1] + nrm[1] * (ctx.hairUnder + 0.004), sp[2] + nrm[2] * (ctx.hairUnder + 0.004)];
+    const pinch = sstep(0, 0.1, u) * sstep(1, 0.9, u);
+    const len = 0.068 * Math.cos(psi * 0.75) * (0.25 + 0.75 * pinch);
+    for (const [v, th] of loop) {
+      const reach = v * len;
+      const curve = -0.012 * (1 - Math.cos(psi * 1.2)) * v;
+      const p = [
+        base[0] + Math.sin(psi) * reach * 0.6,
+        base[1] - 0.1 * reach + curve + th * (0.4 + 0.6 * pinch) - 0.004,
+        base[2] + Math.cos(psi) * reach
+      ];
+      bpts.push({ p: toModel(p), region: color, tint: tk(th < 0 ? 0.72 : 0.95), mat: MAT.CLOTH });
+    }
+  }
+  emitGrid(b, { pts: bpts, rows: n, cols: loop.length, center: new THREE.Vector3(...toModel([0, 0.03, 0.12])), weight: w });
+  field.surf(crown[0], crown[1], crown[2], sp);
+  addBlob(b, {
+    c: toModel([sp[0], sp[1] + ctx.hairUnder + 0.0145, sp[2]]), r: [0.007, 0.004, 0.007].map((v) => v * ctx.scale),
+    cols: 6, rows: 3, region: color, tint: tk(0.85), mat: MAT.CLOTH, weight: w
+  });
+  void look;
+}

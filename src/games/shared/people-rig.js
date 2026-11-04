@@ -31,9 +31,9 @@ export const A_POSE = 0.7;
 /** [name, parent] in creation order — parents always come first. */
 export const BONE_DEFS = [
   ['hips', null], ['spine', 'hips'], ['chest', 'spine'], ['neck', 'chest'], ['head', 'neck'],
-  ['shoulderL', 'chest'], ['upperArmL', 'shoulderL'], ['forearmL', 'upperArmL'], ['handL', 'forearmL'],
+  ['shoulderL', 'chest'], ['upperArmL', 'shoulderL'], ['forearmL', 'upperArmL'], ['forearmTwistL', 'forearmL'], ['handL', 'forearmL'],
   ['thumbL', 'handL'], ['indexL', 'handL'], ['indexTipL', 'indexL'], ['fingersL', 'handL'], ['fingersTipL', 'fingersL'],
-  ['shoulderR', 'chest'], ['upperArmR', 'shoulderR'], ['forearmR', 'upperArmR'], ['handR', 'forearmR'],
+  ['shoulderR', 'chest'], ['upperArmR', 'shoulderR'], ['forearmR', 'upperArmR'], ['forearmTwistR', 'forearmR'], ['handR', 'forearmR'],
   ['thumbR', 'handR'], ['indexR', 'handR'], ['indexTipR', 'indexR'], ['fingersR', 'handR'], ['fingersTipR', 'fingersR'],
   ['thighL', 'hips'], ['shinL', 'thighL'], ['footL', 'shinL'],
   ['thighR', 'hips'], ['shinR', 'thighR'], ['footR', 'shinR'],
@@ -53,7 +53,15 @@ const FINGER_BONES = ['thumbL', 'indexL', 'indexTipL', 'fingersL', 'fingersTipL'
   'thumbR', 'indexR', 'indexTipR', 'fingersR', 'fingersTipR'];
 
 /** Head centre relative to the head bone, in the 1.80 m model. */
-export const HEAD_C = [0, 0.112, 0.02];
+export const HEAD_C = [0, 0.1, 0.022];
+/** The head is sculpted at life size and drawn this much larger (stylised). */
+export const HEAD_SCALE = 1.15;
+
+/** Face anchors in head space (metres from the head centre, before HEAD_SCALE). */
+export const FACE = {
+  eyeX: 0.032, eyeY: 0.003, eyeZ: 0.0728, eyeR: 0.0138,
+  mouthY: -0.0675, mouthHalfW: 0.0228, browY: 0.03
+};
 
 /**
  * Joint positions (model space, zero pose) for the 1.80 m model.
@@ -66,36 +74,38 @@ export function jointTable(w = 1, hw = 1) {
   set('hips', 0, 0.95, 0);
   set('spine', 0, 1.06, -0.005);
   set('chest', 0, 1.22, -0.012);
-  set('neck', 0, 1.462, -0.022);
-  set('head', 0, 1.548, -0.01);
+  set('neck', 0, 1.47, -0.02);
+  set('head', 0, 1.54, -0.008);
   for (const s of [1, -1]) {
     const S = s > 0 ? 'L' : 'R';
     set(`shoulder${S}`, s * 0.028, 1.418, -0.002);
-    set(`upperArm${S}`, s * 0.172 * w, 1.425, -0.018);
+    set(`upperArm${S}`, s * 0.168 * w, 1.41, -0.018);
     off(`forearm${S}`, `upperArm${S}`, 0, -0.288, 0);
     off(`hand${S}`, `forearm${S}`, 0, -0.262, 0.004);
+    off(`forearmTwist${S}`, `forearm${S}`, 0, -0.16, 0.002);
     off(`thumb${S}`, `hand${S}`, -s * 0.009, -0.026, 0.022);
     off(`index${S}`, `hand${S}`, -s * 0.002, -0.094, 0.024);
     off(`indexTip${S}`, `index${S}`, 0, -0.038, 0);
     off(`fingers${S}`, `hand${S}`, -s * 0.002, -0.097, -0.008);
     off(`fingersTip${S}`, `fingers${S}`, 0, -0.04, 0);
-    set(`thigh${S}`, s * 0.088 * hw, 0.905, 0);
-    off(`shin${S}`, `thigh${S}`, 0, -0.415, 0.004);
+    set(`thigh${S}`, s * 0.088 * hw, 0.905, -0.014);
+    off(`shin${S}`, `thigh${S}`, 0, -0.415, 0.01);
     off(`foot${S}`, `shin${S}`, 0, -0.41, -0.014);
   }
   const c = J.head.clone().add(new THREE.Vector3(...HEAD_C));
-  const hc = (n, x, y, z) => { J[n] = c.clone().add(new THREE.Vector3(x, y, z)); };
-  hc('jaw', 0, -0.032, -0.012);
-  hc('lipUpper', 0, -0.075, 0.094);
-  hc('mouthL', 0.0235, -0.083, 0.084);
-  hc('mouthR', -0.0235, -0.083, 0.084);
-  hc('browL', 0.034, 0.031, 0.09);
-  hc('browR', -0.034, 0.031, 0.09);
+  const hc = (n, x, y, z) => { J[n] = c.clone().add(new THREE.Vector3(x, y, z).multiplyScalar(HEAD_SCALE)); };
+  const F = FACE;
+  hc('jaw', 0, -0.026, -0.012);
+  hc('lipUpper', 0, F.mouthY + 0.007, 0.092);
+  hc('mouthL', F.mouthHalfW, F.mouthY, 0.084);
+  hc('mouthR', -F.mouthHalfW, F.mouthY, 0.084);
+  hc('browL', 0.034, F.browY, 0.09);
+  hc('browR', -0.034, F.browY, 0.09);
   for (const s of [1, -1]) {
     const S = s > 0 ? 'L' : 'R';
-    hc(`eye${S}`, s * 0.0315, 0.002, 0.068);
-    hc(`lidUp${S}`, s * 0.0315, 0.002, 0.068);
-    hc(`lidLo${S}`, s * 0.0315, 0.002, 0.068);
+    hc(`eye${S}`, s * F.eyeX, F.eyeY, F.eyeZ);
+    hc(`lidUp${S}`, s * F.eyeX, F.eyeY, F.eyeZ);
+    hc(`lidLo${S}`, s * F.eyeX, F.eyeY, F.eyeZ);
   }
   J.headCenter = c;
   return J;
@@ -178,7 +188,7 @@ const STAND = {
   thighL: v3(0, 0.06, 0.035), thighR: v3(0, -0.06, -0.035),
   shinL: v3(0.04, 0, 0), shinR: v3(0.04, 0, 0),
   footL: v3(-0.04, 0.1, -0.035), footR: v3(-0.04, -0.1, 0.035),
-  gripL: 0.3, gripR: 0.3
+  gripL: 0.12, gripR: 0.12
 };
 
 /** Seated on a chair whose seat is SEAT_HEIGHT above the floor. */
@@ -188,9 +198,10 @@ export const SEAT_BACK = 0.04;
 const SIT = {
   hipsPos: v3(0, -0.385, -0.02),
   hips: v3(-0.08, 0, 0), spine: v3(0.06, 0, 0), chest: v3(0.08, 0, 0), neck: v3(0.02, 0, 0), head: v3(-0.06, 0, 0),
-  upperArmL: v3(-0.42, 0.18, 0.13), upperArmR: v3(-0.42, -0.18, -0.13),
-  forearmL: v3(-0.78, 0.15, 0), forearmR: v3(-0.78, -0.15, 0),
-  handL: v3(0.2, 0, -0.45), handR: v3(0.2, 0, 0.45),
+  // Arm angles below were solved with the IK so the hands rest on the knees
+  upperArmL: v3(-0.11, -0.62, 0.25), upperArmR: v3(-0.11, 0.62, -0.25),
+  forearmL: v3(-1.2, 0, 0), forearmR: v3(-1.2, 0, 0),
+  handL: v3(0.9, -0.86, 0.77), handR: v3(0.9, 0.86, -0.77),
   thighL: v3(-1.48, 0.08, 0.05), thighR: v3(-1.48, -0.08, -0.05),
   shinL: v3(1.5, 0, 0), shinR: v3(1.5, 0, 0),
   footL: v3(0.06, 0.08, 0), footR: v3(0.06, -0.08, 0),
@@ -201,9 +212,9 @@ const READY = {
   hipsPos: v3(0, -0.085, -0.03),
   hips: v3(-0.12, 0, 0), spine: v3(0.2, 0, 0), chest: v3(0.12, 0, 0), neck: v3(-0.12, 0, 0), head: v3(-0.18, 0, 0),
   shoulderL: v3(0, 0.08, 0), shoulderR: v3(0, -0.08, 0),
-  upperArmL: v3(-0.55, 0.2, 0.32), upperArmR: v3(-0.55, -0.2, -0.32),
-  forearmL: v3(-1.15, 0.2, 0), forearmR: v3(-1.15, -0.2, 0),
-  handL: v3(0.1, 0, -0.15), handR: v3(0.1, 0, 0.15),
+  upperArmL: v3(-0.24, -0.54, 0.43), upperArmR: v3(-0.24, 0.54, -0.43),
+  forearmL: v3(-1.24, 0, 0), forearmR: v3(-1.24, 0, 0),
+  handL: v3(-0.14, -0.32, 0.4), handR: v3(-0.14, 0.32, -0.4),
   thighL: v3(-0.62, 0.22, 0.2), thighR: v3(-0.62, -0.22, -0.2),
   shinL: v3(0.95, 0, -0.02), shinR: v3(0.95, 0, 0.02),
   footL: v3(-0.22, 0.1, -0.2), footR: v3(-0.22, -0.1, 0.2),
@@ -213,7 +224,7 @@ const READY = {
 const CHEER = {
   spine: v3(-0.06, 0, 0), chest: v3(-0.08, 0, 0), neck: v3(-0.06, 0, 0), head: v3(-0.2, 0, 0),
   shoulderL: v3(0, 0, 0.22), shoulderR: v3(0, 0, -0.22),
-  upperArmL: v3(-0.3, 0.2, 2.55), upperArmR: v3(-0.3, -0.2, -2.55),
+  upperArmL: v3(0.12, -0.15, 2.72), upperArmR: v3(0.12, 0.15, -2.72),
   forearmL: v3(-0.35, 0, 0), forearmR: v3(-0.35, 0, 0),
   handL: v3(0, 0, 0), handR: v3(0, 0, 0),
   thighL: STAND.thighL, thighR: STAND.thighR, shinL: STAND.shinL, shinR: STAND.shinR,
@@ -224,9 +235,9 @@ const CHEER = {
 const HIPS_ON_HANDS = {
   ...STAND,
   chest: v3(-0.05, 0, 0), head: v3(-0.06, 0, 0),
-  upperArmL: v3(0.18, -0.25, 0.62), upperArmR: v3(0.18, 0.25, -0.62),
-  forearmL: v3(-1.75, -0.35, 0), forearmR: v3(-1.75, 0.35, 0),
-  handL: v3(0.25, -0.3, 0.55), handR: v3(0.25, 0.3, -0.55),
+  upperArmL: v3(1.14, -0.51, 0.73), upperArmR: v3(1.14, 0.51, -0.73),
+  forearmL: v3(-1.61, 0, 0), forearmR: v3(-1.61, 0, 0),
+  handL: v3(-0.53, 0.3, 0.82), handR: v3(-0.53, -0.3, -0.82),
   thighL: v3(0, 0.1, 0.09), thighR: v3(0, -0.1, -0.09),
   footL: v3(-0.04, 0.16, -0.09), footR: v3(-0.04, -0.16, 0.09),
   gripL: 0.15, gripR: 0.15
@@ -244,7 +255,7 @@ const ARMS_CROSSED = {
 const POINT = {
   ...STAND,
   chest: v3(0, -0.22, 0), head: v3(-0.03, 0.15, 0), neck: v3(0.02, 0.05, 0),
-  upperArmR: v3(-1.35, -0.2, -0.2), forearmR: v3(-0.12, 0, 0), handR: v3(0.1, 0, 0),
+  upperArmR: v3(-1.58, 0.9, -0.04), forearmR: v3(-0.03, 0, 0), handR: v3(0.06, -0.22, -0.08),
   gripR: 1, pointR: 1
 };
 
@@ -279,9 +290,11 @@ export const POSES = {
   /** Seated with a coffee cup in the right hand (attach the cup to `gripR`). */
   sitCup(t = 0, out) {
     const p = fill(out, SIT);
-    p.upperArmR = v3(-0.32, -0.25, -0.18);
-    p.forearmR = v3(-1.75 - Math.max(0, Math.sin(t * 0.4)) * 0.25, -0.45, 0);
-    p.handR = v3(0.25, 0.1, 0.45);
+    const sip = Math.max(0, Math.sin(t * 0.4)) ** 4;
+    p.upperArmR = v3(-0.68 - sip * 0.25, 0.49, -0.74 + sip * 0.2);
+    p.forearmR = v3(-2.04 - sip * 0.25, 0, 0);
+    p.handR = v3(1.36, -0.85, 1.09);
+    p.head[0] -= sip * 0.15;
     p.gripR = 0.85;
     return p;
   },
@@ -289,12 +302,12 @@ export const POSES = {
   sitRod(t = 0, out) {
     const p = fill(out, SIT);
     p.spine[0] = 0.1;
-    p.upperArmR = v3(-0.62, -0.32, -0.22);
-    p.forearmR = v3(-0.95, -0.35, 0);
-    p.handR = v3(0.12, 0.25, 0.55);
-    p.upperArmL = v3(-0.7, 0.42, 0.12);
-    p.forearmL = v3(-1.05, 0.4, 0);
-    p.handL = v3(0.1, -0.2, -0.4);
+    p.upperArmR = v3(-0.21, 0.71, -0.3);
+    p.forearmR = v3(-1.06, 0, 0);
+    p.handR = v3(0.74, -0.76, 0.74);
+    p.upperArmL = v3(-1.4, -0.65, -0.29);
+    p.forearmL = v3(-0.03, 0, 0);
+    p.handL = v3(0.77, 0.67, -0.97);
     p.gripR = 1;
     p.gripL = 0.9;
     p.head[0] = -0.05 + Math.sin(t * 0.5) * 0.03;
@@ -312,16 +325,19 @@ export const POSES = {
   /** Applause, animated by t (seconds). */
   clap(t = 0, out) {
     const p = fill(out, STAND);
-    const k = 0.5 + 0.5 * Math.sin(t * Math.PI * 2 * 2.3);
+    // Solved with the IK: palms meet in front of the chest at k = 1
+    const ph = (t * 2.3) % 1;
+    const k = ph < 0.35 ? Math.sin((ph / 0.35) * Math.PI * 0.5) : Math.cos(((ph - 0.35) / 0.65) * Math.PI * 0.5);
+    const mix = (a, b) => a + (b - a) * k;
     p.chest = v3(0.02, 0, 0);
-    p.upperArmL = v3(-0.62, -0.5, 0.42 - k * 0.2);
-    p.upperArmR = v3(-0.62, 0.5, -0.42 + k * 0.2);
-    p.forearmL = v3(-1.35, -0.2 - k * 0.25, 0);
-    p.forearmR = v3(-1.35, 0.2 + k * 0.25, 0);
-    p.handL = v3(0, -0.2, -0.15);
-    p.handR = v3(0, 0.2, 0.15);
-    p.gripL = 0.1;
-    p.gripR = 0.1;
+    p.upperArmL = v3(mix(0.02, -0.21), mix(-0.46, -0.75), mix(0.58, 0.3));
+    p.upperArmR = v3(mix(0.02, -0.21), mix(0.46, 0.75), mix(-0.58, -0.3));
+    p.forearmL = v3(mix(-1.68, -1.43), 0, 0);
+    p.forearmR = v3(mix(-1.68, -1.43), 0, 0);
+    p.handL = v3(mix(-0.47, -0.41), mix(0.18, 0.01), mix(0.48, 0.78));
+    p.handR = v3(mix(-0.47, -0.41), mix(-0.18, -0.01), mix(-0.48, -0.78));
+    p.gripL = 0.08;
+    p.gripR = 0.08;
     return p;
   },
   /** Seated applause. */
@@ -358,9 +374,9 @@ export const POSES = {
   explain(t = 0, out) {
     const p = fill(out, STAND);
     const b = Math.sin(t * 3.1) * 0.5 + Math.sin(t * 5.3) * 0.2;
-    p.upperArmR = v3(-0.45 - b * 0.1, -0.3, -0.28);
-    p.forearmR = v3(-1.15 + b * 0.12, 0.9, 0);
-    p.handR = v3(0.2, 0.1, -0.35);
+    p.upperArmR = v3(-0.04 - b * 0.12, 0.42, -0.45);
+    p.forearmR = v3(-1.15 + b * 0.15, 0, 0);
+    p.handR = v3(-1.62, -0.78, -1.52);
     p.gripR = 0.12;
     p.head = v3(0.02 + b * 0.04, 0.05, -0.04 * b);
     p.chest = v3(-0.02, -0.06, 0);
@@ -369,12 +385,12 @@ export const POSES = {
   /** Holding something open in the left hand at chest height (a notebook). */
   holdNotebook(t = 0, out) {
     const p = fill(out, STAND);
-    p.upperArmL = v3(-0.3, -0.2, 0.15);
-    p.forearmL = v3(-1.55, -0.6, 0);
-    p.handL = v3(0.15, 0, 0.35);
-    p.upperArmR = v3(-0.3, 0.25, -0.2);
-    p.forearmR = v3(-1.5, 0.75, 0);
-    p.handR = v3(0, 0, 0.2);
+    p.upperArmL = v3(0.05, -0.68, 0.3);
+    p.forearmL = v3(-1.36, 0, 0);
+    p.handL = v3(-0.8, 0.9, 0.67);
+    p.upperArmR = v3(-0.19, 0.46, -0.41);
+    p.forearmR = v3(-1.34, 0, 0);
+    p.handR = v3(1.27, 0.07, 1.36);
     p.gripL = 0.35;
     p.gripR = 0.85;
     p.head = v3(0.25 + Math.sin(t * 0.8) * 0.03, 0.08, 0);
@@ -423,10 +439,10 @@ function fingerRot(name, side, grip, point) {
   const g = Math.max(0, Math.min(1, grip));
   const idx = g * (1 - point);
   switch (name) {
-    case 'fingers': return [0, 0, -s * (0.2 + g * 1.45)];
-    case 'fingersTip': return [0, 0, -s * (0.25 + g * 1.65)];
-    case 'index': return [0, 0, -s * (0.12 + idx * 1.35)];
-    case 'indexTip': return [0, 0, -s * (0.18 + idx * 1.55)];
+    case 'fingers': return [0, 0, -s * (0.1 + g * 1.5)];
+    case 'fingersTip': return [0, 0, -s * (0.14 + g * 1.7)];
+    case 'index': return [0, 0, -s * (0.06 + idx * 1.4)];
+    case 'indexTip': return [0, 0, -s * (0.1 + idx * 1.6)];
     case 'thumb': return [0.15 + g * 0.35, s * (0.2 + g * 0.55), -s * (0.15 + g * 0.55)];
     default: return [0, 0, 0];
   }
