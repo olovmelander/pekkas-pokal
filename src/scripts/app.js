@@ -2044,6 +2044,21 @@
     $('#game-close').addEventListener('click', closeGame);
   }
 
+  /** Each game may ship its own stylesheet next to its module. Loaded once,
+   *  after the shared HUD base, and never blocks the game on a 404. */
+  function loadGameStyle(href) {
+    const abs = new URL(href, document.baseURI).href;
+    if (document.querySelector(`link[data-game-style="${abs}"]`)) return Promise.resolve();
+    return new Promise((resolve) => {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = abs;
+      link.dataset.gameStyle = abs;
+      link.onload = link.onerror = () => resolve();
+      document.head.appendChild(link);
+    });
+  }
+
   async function launchGame(year) {
     const game = GAMES.find((g) => g.year === year);
     if (!game || App.game) return;
@@ -2056,7 +2071,11 @@
 
     try {
       const url = new URL(game.module, document.baseURI).href;
-      const mod = await import(/* @vite-ignore */ url);
+      const [mod] = await Promise.all([
+        import(/* @vite-ignore */ url),
+        loadGameStyle(game.module.replace(/index\.js$/, 'style.css'))
+      ]);
+      stage.dataset.layout = mod.layout === 'full' ? 'full' : 'portrait';
       const create = mod.createPinball || mod.default;
       App.game = await create($('#game-mount'), {
         participants: App.data.participants
