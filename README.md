@@ -474,14 +474,15 @@ mobil.
 
 | | Mobil | Dator |
 | --- | --- | --- |
-| Flippers | Vänster/höger halva av skärmen (fungerar samtidigt) | ←/→, A/D eller Z/M |
-| Avfyrare | Håll för kraft, släpp för att skjuta | Mellanslag |
+| Flippers | Vänster/höger halva av skärmen (fungerar samtidigt) | ←/→, A/D, Z/M eller Shift |
+| Avfyrare | Håll för kraft, släpp för att skjuta | Mellanslag, ↓ eller Enter |
 | Nudga | Knappen NUDGA | N |
-| Strategikort | ?-knappen uppe till höger | ? eller Esc för att stänga |
+| Strategikort | ?-knappen uppe till höger | ? — Esc stänger kortet |
 
 Släpp avfyraren när mätaren står i det turkosa fältet för en **skill shot** —
 och skjut vänster orbit inom tre sekunder för en **super skill shot** (15 000).
-Fyra nudgar för snabbt ger TILT och dödar flipprarna för den bollen.
+Fyra nudgar för snabbt ger TILT: flipprarna dör för den bollen och dess bonus
+går förlorad.
 
 **Bordet (à la Medieval Madness)**
 
@@ -537,6 +538,20 @@ Punktljus är candela och avtar med 1/d². I bordets skala (≈35 enheter över 
 42-tums spelplan) betyder det att en lampa tre enheter över träet behöver en
 intensitet i tiotal innan den lägger ut något ljus alls — allt ljus uttrycks
 därför som multiplar av `LAMP`.
+
+**Arkadhallen och punktmatrisen.** Flipperspelet fyller nu hela skärmen. På en
+bred skärm står maskinen i en mörk arkadhall med neonmatta och två
+grannmaskiner – Pekkas Fiske och Pekkas Pingis – och poäng, grenar och
+topplista ligger bredvid bordet i stället för ovanpå det. Backboxen har fått en
+riktig punktmatris på 128×32 med egen pixelfont. Där visas poängen,
+grenstarterna, jackpottar, multiball, bonusräkningen och TILT, och när ingen
+spelar rullar attraktionsläget medan lamporna jagar över bordet. Topplistan
+sparas på enheten under deltagarnas egna namn. Stora träffar fryser bollen ett
+ögonblick och en räddad boll dräneras i slow motion. Gnistor, bollspår och
+syntetiska ljud – den rullande kulan, solenoiderna och knackaren vid extraboll –
+ger bordet tyngd. På telefon visar bordet vilken skärmhalva som är vilken
+flipper, och ingen knapp är mindre än 44 pixlar. Bildupplösningen sänks
+automatiskt om bildfrekvensen faller under ungefär 45 bilder per sekund.
 
 ---
 
@@ -597,7 +612,7 @@ stänger dem.
 | `src/scripts/achievement-engine.js` | Beräknar vilka utmärkelser varje deltagare låst upp |
 | `src/data/achievements.js` | Definitioner av alla utmärkelser |
 | `src/styles/` | `main` (tokens/teman), `layout`, `components`, `animations`, `games` (arkaden och spelscenen), `game-hud` (spelens delade HUD), `responsive` |
-| `src/games/pinball/` | Flipperspelet: `physics` (2D-kollision), `table` (layout + banans grafik), `meshes` (3D), `index` (spelloop) |
+| `src/games/pinball/` | Flipperspelet: `physics` (2D-kollision), `table` (layout + banans grafik), `meshes` (3D), `room` (arkadhallen), `dmd` (punktmatrisen), `fx` (gnistor, bollspår), `audio` (syntetiskt ljud), `hud` (paneler), `scores` (topplistan), `index` (spelloop) |
 | `src/games/fishing/` | Fiskespelet: `species` (procedurella fiskar), `world` (sjö, vattenshader, båt), `audio` (syntetiskt ljud), `index` (spelloop) |
 | `src/games/clay/` | Drejspelet: `studio` (ateljé, matcaps, drejskiva), `audio` (syntetiskt ljud), `index` (lerfysik + spelloop) |
 | `src/games/fencing/` | Fäktspelet: `salle` (fäktsal, fäktare, texturer), `audio` (syntetiskt ljud), `index` (duell-AI + spelloop) |

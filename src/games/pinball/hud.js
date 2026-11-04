@@ -16,7 +16,7 @@ import { BOARD_SHOWN } from './scores.js';
 const esc = (s) =>
   String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-export function buildHud(root) {
+export function buildHud(root, { touch }) {
   root.insertAdjacentHTML(
     'beforeend',
     `
@@ -58,14 +58,19 @@ export function buildHud(root) {
 
       <div class="pbf-bottom">
         <div class="pbf-plunger" id="pbf-plunger" hidden>
-          <div class="pbf-plunger-label">Håll för kraft — släpp i det turkosa för skill shot</div>
+          <div class="pbf-plunger-label">${
+  touch ? 'Håll fingret på bordet · släpp i det turkosa' : 'Håll mellanslag · släpp i det turkosa'
+}</div>
           <div class="pbf-power"><i class="pbf-skill"></i><span id="pbf-power-fill"></span></div>
         </div>
-        <button class="pbf-nudge" id="pbf-nudge" aria-label="Nudga bordet" hidden>Nudga</button>
       </div>
+      <button class="pbf-nudge" id="pbf-nudge" aria-label="Nudga bordet" hidden>Nudga</button>
 
       <div class="pbf-pops" id="pbf-pops" aria-hidden="true"></div>
-      <div class="pbf-rotate">Vänd telefonen till stående — då blir bordet större.</div>
+      <div class="pbf-zones" id="pbf-zones" aria-hidden="true">
+        <div><span>Vänster flipper</span></div>
+        <div><span>Höger flipper</span></div>
+      </div>
 
       <button class="pbf-round pbf-info" id="pbf-info" aria-label="Strategikort">?</button>
       <button class="pbf-round pbf-mute" id="pbf-mute" aria-label="Ljud på/av">
@@ -89,7 +94,7 @@ export function buildHud(root) {
             <li><i style="--c:#ffd166"></i><b>Finalen</b> Klara alla fem grenar → 60 sekunder multiball där allt räknas ×5.</li>
           </ul>
           <p class="pbf-help-tip">Skill shot: släpp avfyraren i det turkosa fältet — och skjut vänster orbit inom tre sekunder för SUPER (15 000).</p>
-          <div class="pbf-help-keys">Flippers: skärmhalvorna, ←/→ eller Shift · Avfyrare: håll &amp; släpp / mellanslag · Nudge: N · Fyra nudgar för snabbt ger TILT</div>
+          <div class="pbf-help-keys">Flippers: skärmhalvorna, ←/→ eller Shift · Avfyrare: håll &amp; släpp / mellanslag · Nudge: N · Fyra nudgar för snabbt ger TILT · Esc stänger kortet</div>
           <button class="pbf-btn" id="pbf-help-close">Tillbaka till spelet</button>
         </div>
       </div>
@@ -113,6 +118,7 @@ export function buildHud(root) {
     plunger: $('pbf-plunger'),
     powerFill: $('pbf-power-fill'),
     nudge: $('pbf-nudge'),
+    zones: $('pbf-zones'),
     pops: $('pbf-pops'),
     mute: $('pbf-mute'),
     info: $('pbf-info'),
@@ -121,17 +127,30 @@ export function buildHud(root) {
   };
 }
 
-/** The topplista rows; `hi` is the entry to highlight (the one just set). */
-export function boardHtml(board, hi = null) {
-  if (!board.length) {
+/**
+ * The topplista rows; `hi` is the entry to highlight (the one just set).
+ * `live` is the score of a game in progress: it climbs the list as a ghost
+ * row, so there is always a name just above you to chase.
+ */
+export function boardHtml(board, hi = null, live = null) {
+  if (!board.length && live === null) {
     return '<li class="pbf-board-empty">Inga rekord än — bli först på maskinen.</li>';
   }
-  return board
-    .slice(0, BOARD_SHOWN)
-    .map(
-      (e, i) =>
-        `<li class="${e === hi ? 'hi' : ''}"><b>${i + 1}</b><span>${esc(e.n)}</span><em>${fmtScore(e.s)}</em></li>`
-    )
+  const rows = board.map((e) => ({ ...e, src: e }));
+  if (live !== null) {
+    const at = rows.findIndex((e) => live > e.s);
+    rows.splice(at < 0 ? rows.length : at, 0, { n: 'Du', s: live, live: true });
+  }
+  const liveAt = rows.findIndex((e) => e.live);
+  const shown = rows.slice(0, BOARD_SHOWN);
+  // A ghost below the visible five still shows, as a sixth row
+  if (liveAt >= BOARD_SHOWN) shown.push(rows[liveAt]);
+  return shown
+    .map((e) => {
+      const cls = e.live ? 'live' : e.src === hi ? 'hi' : '';
+      const rank = rows.indexOf(e) + 1;
+      return `<li class="${cls}"><b>${rank}</b><span>${esc(e.n)}</span><em>${fmtScore(e.s)}</em></li>`;
+    })
     .join('');
 }
 
@@ -140,10 +159,12 @@ export function startSheet({ touch, board }) {
     ? 'Vänster och höger skärmhalva styr varsin flipper'
     : 'Mellanslag startar · ← → flippar · N nudgar';
   return `
-    <h2>Pekkas Pokal <span>Flipper</span></h2>
+    <h2 class="pbf-port-only">Pekkas Pokal <span>Flipper</span></h2>
+    <h2 class="pbf-land-only">Lägg i en krona</h2>
     <p>Fäll P-O-K-A-L, storma borgen och klara grenarna. Tre bollar — gör dem långa.</p>
     <button class="pbf-btn" data-act="start">Starta spelet</button>
     <p class="pbf-sheet-hint">${how}</p>
+    <p class="pbf-sheet-hint pbf-rotate-hint">Tips: vänd telefonen till stående — då blir bordet större.</p>
     <ol class="pbf-board pbf-sheet-board">${boardHtml(board)}</ol>`;
 }
 

@@ -56,8 +56,8 @@ const SKILL_ZONE = [0.68, 0.86];
 // Where the HUD sits in portrait: a row of chips and buttons across the top,
 // the plunger meter / nudge button along the bottom. The machine is framed
 // into what is left.
-const PORTRAIT_INSETS = { l: 4, r: 4, t: 66, b: 70 };
-const LANDSCAPE_INSETS = { l: 0, r: 0, t: 14, b: 12 };
+const PORTRAIT_INSETS = { l: 4, r: 4, t: 66, b: 80 };
+const LANDSCAPE_INSETS = { l: 0, r: 0, t: 10, b: 6 };
 // Narrower than this either side and the side panels don't fit: use the
 // portrait HUD over a wide canvas instead
 const MIN_SIDE = 210;
@@ -80,7 +80,7 @@ export async function createPinball(container, opts = {}) {
   const canvasHost = document.createElement('div');
   canvasHost.className = 'pb-canvas';
   root.appendChild(canvasHost);
-  const hud = buildHud(root);
+  const hud = buildHud(root, { touch });
 
   // Every game-logic timer goes through here so destroy() can cancel them
   const timers = new Set();
@@ -203,7 +203,7 @@ export async function createPinball(container, opts = {}) {
   });
 
   /* ---- Cabinet with its DMD, the glass, and the room around it ---- */
-  const dmd = new Dmd(THREE);
+  const dmd = new Dmd(THREE, { calm: reduceMotion });
   const cab = buildCabinet(THREE, materials, logo, dmd.material);
   scene.add(cab.group);
   const glass = buildGlass(THREE);
@@ -405,8 +405,16 @@ export async function createPinball(container, opts = {}) {
     hud.grenar.innerHTML = rows.join('');
   }
 
-  function renderBoard(hi = null) {
-    hud.board.innerHTML = boardHtml(board, hi);
+  // The entry just saved stays highlighted until the next game starts
+  let boardHi = null;
+  let boardLive = '';
+  function renderBoard() {
+    const playing = state.phase === 'launch' || state.phase === 'play' || state.phase === 'between';
+    const html = boardHtml(board, boardHi, playing ? state.score : null);
+    if (html !== boardLive) {
+      boardLive = html;
+      hud.board.innerHTML = html;
+    }
   }
 
   // Kept for the rules code below: the status now lives on the DMD and the
@@ -447,6 +455,8 @@ export async function createPinball(container, opts = {}) {
     hud.goalText.textContent = g;
     hud.goal.classList.toggle('on', !!g);
   }
+
+  const clock = (secs) => `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
 
   function addScore(n) {
     const wiz = state.mode && state.mode.wizard ? 5 : 1;
@@ -559,9 +569,10 @@ export async function createPinball(container, opts = {}) {
   const INSERT_ORDER = ['save', 'leftRamp', 'rightRamp', 'leftOrbit', 'castle', 'trolls'];
   const lampFx = { kind: '', t: 0, dur: 0, color: new THREE.Color() };
   function lampShow(kind, color, dur = 1.5) {
-    lampFx.kind = kind;
+    // Reduced motion: lamps may still run up the table, but nothing strobes
+    lampFx.kind = reduceMotion && kind === 'strobe' ? 'chase' : kind;
     lampFx.t = 0;
-    lampFx.dur = reduceMotion ? Math.min(dur, 0.6) : dur;
+    lampFx.dur = reduceMotion ? Math.min(dur, 0.8) : dur;
     lampFx.color.set(color);
   }
 
@@ -745,7 +756,7 @@ export async function createPinball(container, opts = {}) {
         if (!state.mode) {
           state.modeStartLit = true;
           const allDone = MODES.every((m) => state.modeDone.has(m.id));
-          say(allDone ? ['FINALEN TÄND', 'VÄNSTER ORBIT'] : ['P-O-K-A-L!', 'GREN TÄND I VÄNSTER ORBIT'],
+          say(allDone ? ['FINALEN TÄND', 'VÄNSTER ORBIT'] : ['P-O-K-A-L!', 'GREN TÄND · V. ORBIT'],
             { prio: 2, flash: true, border: true, dur: 2.2 });
         } else {
           say(['P-O-K-A-L!', `POÄNG ×${state.mult}`], { prio: 2, flash: true, dur: 2 });
@@ -1231,6 +1242,12 @@ export async function createPinball(container, opts = {}) {
     hud.plunger.hidden = true;
     hud.nudge.hidden = false;
     sfx.launch();
+    // On a phone, show which half of the glass is which flipper until the
+    // player has flipped once (or the moment has passed)
+    if (touch) {
+      hud.zones.classList.add('show');
+      later(() => hud.zones.classList.remove('show'), 3500);
+    }
 
     if (p >= SKILL_ZONE[0] && p <= SKILL_ZONE[1]) {
       const pts = addScore(5000);
@@ -1394,7 +1411,8 @@ export async function createPinball(container, opts = {}) {
     if (rank === 1) sfx.knocker();
     else sfx.complete();
     showSheet(overSheet({ score: pendingScore, rank, onBoard: true, board, hi: res.entry }));
-    renderBoard(res.entry);
+    boardHi = res.entry;
+    renderBoard();
     pendingScore = 0;
   }
 
@@ -1450,8 +1468,9 @@ export async function createPinball(container, opts = {}) {
     renderBalls();
     renderMult();
     renderGrenar();
-    renderBoard();
+    boardHi = null;
     placeInLane();
+    renderBoard();
   }
 
   /* ---- Input ---- */
@@ -1465,8 +1484,12 @@ export async function createPinball(container, opts = {}) {
     const f = side === 'left' ? flipL : flipR;
     if (f.pressed !== pressed) {
       f.pressed = pressed;
-      if (pressed) sfx.flipperUp();
-      else sfx.flipperDown();
+      if (pressed) {
+        sfx.flipperUp();
+        hud.zones.classList.remove('show');
+      } else {
+        sfx.flipperDown();
+      }
     }
   }
 
@@ -1555,6 +1578,16 @@ export async function createPinball(container, opts = {}) {
     else if (k === '?') setHelp(true);
   }
 
+  // Esc closes the strategy card, not the whole game: caught on the way
+  // down, before the site's own Esc-closes-the-stage handler sees it
+  function onKeyCapture(e) {
+    if (helpOpen && e.key === 'Escape') {
+      e.stopPropagation();
+      e.preventDefault();
+      setHelp(false);
+    }
+  }
+
   function onKeyUp(e) {
     const side = sideOf(e);
     if (side) {
@@ -1633,6 +1666,7 @@ export async function createPinball(container, opts = {}) {
   window.addEventListener('pointerup', onPointerUp);
   window.addEventListener('pointercancel', onPointerUp);
   canvasHost.addEventListener('pointermove', onPointerMove);
+  window.addEventListener('keydown', onKeyCapture, true);
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', onKeyUp);
   hud.sheet.addEventListener('click', onSheetClick);
@@ -1848,7 +1882,7 @@ export async function createPinball(container, opts = {}) {
         m.material.emissiveIntensity = 1.2 + Math.sin(t * 2.4 + i * Math.PI) * 0.9;
       });
     } else {
-      const flick = lampFx.t < lampFx.dur && lampFx.kind !== 'wave';
+      const flick = !reduceMotion && lampFx.t < lampFx.dur && lampFx.kind !== 'wave';
       giLamps.forEach((lamp) => {
         const base = gi.color || lamp.userData.home;
         if (flick && strobeOn) {
@@ -1875,7 +1909,7 @@ export async function createPinball(container, opts = {}) {
       const secs = Math.max(0, Math.ceil(m.timeLeft));
       mode = {
         label: m.wizard ? 'FINALEN ×5' : `${m.def.name} ${m.progress}/${m.def.goal}`,
-        time: `0:${String(secs).padStart(2, '0')}`,
+        time: clock(secs),
         secs,
         frac: clamp(m.timeLeft / m.def.time, 0, 1)
       };
@@ -1893,7 +1927,7 @@ export async function createPinball(container, opts = {}) {
 
   /* ---- Loop ---- */
   renderer.info.autoReset = false;
-  const perf = { drawCalls: 0, triangles: 0 };
+  const perf = { drawCalls: 0, triangles: 0, frameMs: 16 };
   // Frame-time watchdog: if the device can't hold ~45 fps, trim the pixel
   // ratio a step at a time. (Skipped under automation, where software GL
   // would trim it to nothing.)
@@ -1904,12 +1938,14 @@ export async function createPinball(container, opts = {}) {
   const FIXED = 1 / 120;
   let running = true;
   const axis = new THREE.Vector3();
+  let boardTick = 0;
 
   function tick(now) {
     raf = requestAnimationFrame(tick);
     const real = Math.max(0, (now - last) / 1000);
     const dtRaw = Math.min(0.05, real);
     last = now;
+    if (real > 0) perf.frameMs += (real * 1000 - perf.frameMs) * 0.1;
     if (!running || helpOpen) return;
     if (root.dataset.phase !== state.phase) root.dataset.phase = state.phase;
 
@@ -2103,13 +2139,18 @@ export async function createPinball(container, opts = {}) {
       hud.mode.hidden = false;
       hud.modeName.textContent = m.wizard ? 'Finalen' : `${m.def.label} '${String(m.def.year).slice(2)}`;
       hud.modeTask.textContent = m.wizard ? 'Allt räknas ×5' : `${m.progress}/${m.def.goal} · ${m.def.hint}`;
-      hud.modeTime.textContent = `0:${String(secs).padStart(2, '0')}`;
+      hud.modeTime.textContent = clock(secs);
       hud.modeTime.classList.toggle('urgent', secs <= 10);
       hud.modeBar.style.transform = `scaleX(${clamp(m.timeLeft / m.def.time, 0, 1)})`;
     } else if (!hud.mode.hidden) {
       hud.mode.hidden = true;
     }
     renderGoal();
+    boardTick += dtRaw;
+    if (view.land && boardTick > 0.4) {
+      boardTick = 0;
+      renderBoard();
+    }
 
     // Ball transforms + rolling spin (mesh pool). Balls riding a wireform are
     // drawn at their 3D curve position instead of on the playfield plane.
@@ -2267,6 +2308,8 @@ export async function createPinball(container, opts = {}) {
     renderer,
     refs,
     dmd,
+    /** The physics flippers: `.pressed` shows input arriving, `.angle` the swing */
+    flippers: colliderRefs.flippers,
     info() {
       return { ...perf, dpr, orient: root.dataset.orient };
     },
@@ -2314,6 +2357,10 @@ export async function createPinball(container, opts = {}) {
     nudge: doNudge,
     /** Drop every ball straight into the drain */
     drain() {
+      state.riders.splice(0).forEach((r) => {
+        r.ball.live = true;
+        state.balls.push(r.ball);
+      });
       state.balls.forEach((b) => b.place(L.centerX, 2, 0, -30));
     },
     saveName,
@@ -2333,6 +2380,7 @@ export async function createPinball(container, opts = {}) {
     canvasHost.removeEventListener('pointermove', onPointerMove);
     window.removeEventListener('pointerup', onPointerUp);
     window.removeEventListener('pointercancel', onPointerUp);
+    window.removeEventListener('keydown', onKeyCapture, true);
     window.removeEventListener('keydown', onKeyDown);
     window.removeEventListener('keyup', onKeyUp);
     if (window.__pbFlipper && window.__pbFlipper.state === state) delete window.__pbFlipper;

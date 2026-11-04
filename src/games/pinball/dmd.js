@@ -128,7 +128,9 @@ void main() {
 }`;
 
 export class Dmd {
-  constructor(THREE) {
+  /** `calm`: no full-screen strobing (prefers-reduced-motion) */
+  constructor(THREE, { calm = false } = {}) {
+    this.calm = calm;
     this.data = new Uint8Array(W * H);
     this.last = new Uint8Array(W * H);
     this.texture = new THREE.DataTexture(this.data, W, H, THREE.RedFormat, THREE.UnsignedByteType);
@@ -234,6 +236,7 @@ export class Dmd {
   }
 
   invert() {
+    if (this.calm) return;
     for (let i = 0; i < this.data.length; i++) this.data[i] = 255 - this.data[i];
   }
 
@@ -266,15 +269,35 @@ export class Dmd {
     }
   }
 
+  /** Breaks text into lines that fit the display at scale 1 */
+  wrap(str) {
+    const out = [];
+    let line = '';
+    String(str).split(/\s+/).forEach((word) => {
+      const next = line ? `${line} ${word}` : word;
+      if (line && this.measure(next) > W - 4) {
+        out.push(line);
+        line = word;
+      } else {
+        line = next;
+      }
+    });
+    if (line) out.push(line);
+    return out;
+  }
+
   /**
    * Picks a scale per line — as big as fits the width — then shrinks the
-   * biggest until the stack fits the height.
+   * biggest until the stack fits the height. Lines too long even at the
+   * smallest size are word-wrapped first.
    */
   layout(lines, maxS = 3) {
-    const sc = lines.map((l) => {
-      let s = maxS;
-      while (s > 1 && this.measure(l, s) > W - 4) s--;
-      return s;
+    const sc = [];
+    lines.forEach((l, i) => {
+      // A subtitle never outsizes its headline
+      let s = i ? Math.min(maxS, sc[0]) : maxS;
+      while (s > 1 && this.measure(l, s) > W - 6) s--;
+      sc.push(s);
     });
     const gap = lines.length > 3 ? 1 : 3;
     const height = () => sc.reduce((a, s) => a + 7 * s, 0) + (lines.length - 1) * gap;
@@ -286,9 +309,10 @@ export class Dmd {
     return { sc, gap, h: height() };
   }
 
-  stack(lines, { maxS = 3, v = 255, dimRest = false, yOff = 0 } = {}) {
+  stack(text, { maxS = 3, v = 255, dimRest = false } = {}) {
+    const lines = text.flatMap((l) => (this.measure(l) > W - 4 ? this.wrap(l) : [l]));
     const { sc, gap, h } = this.layout(lines, maxS);
-    let y = Math.round((H - h) / 2) + yOff;
+    let y = Math.round((H - h) / 2);
     lines.forEach((l, i) => {
       this.text(l, 64, y, { s: sc[i], align: 'center', v: dimRest && i > 0 ? 170 : v });
       y += 7 * sc[i] + gap;
@@ -409,11 +433,11 @@ export class Dmd {
     this.show((d, t) => {
       if (t < 1.4) {
         d.text(`GREN '${String(year).slice(2)}`, 64, 1, { align: 'center', v: 170 });
-        d.text(name, 64, 11, { s: name.length > 7 ? 2 : 3, align: 'center' });
+        d.text(name, 64, 11, { s: d.measure(name, 3) <= 120 ? 3 : 2, align: 'center' });
         if (t < 0.35 && Math.floor(t * 14) % 2) d.invert();
         return;
       }
-      d.stack([task.toUpperCase(), `${secs} SEKUNDER`], { maxS: 1, dimRest: true });
+      d.stack([task, `${secs} SEKUNDER`], { maxS: 1 });
       d.border(t, 140);
     }, 3, 3);
   }
@@ -463,8 +487,7 @@ export class Dmd {
       for (let i = 0; i < 5; i++) {
         const on = lit[i];
         const blink = i === hit && t < 0.6 && Math.floor(t * 10) % 2;
-        if (on && !blink) d.rect(x0 + i * step - 9, 3, 19, 25, 70);
-        d.text(letters[i], x0 + i * step, 5, { s: 3, align: 'center', v: on ? 255 : 60 });
+        d.text(letters[i], x0 + i * step, 5, { s: 3, align: 'center', v: on && !blink ? 255 : 55 });
       }
     }, 1.1, 1);
   }
@@ -494,8 +517,8 @@ export class Dmd {
 
   lock(n) {
     this.show((d, t) => {
-      d.icon('lock', 10, 12 - Math.max(0, 0.3 - t) * 20);
-      d.icon('lock', 113, 12 - Math.max(0, 0.3 - t) * 20);
+      d.icon('lock', 2, 12 - Math.max(0, 0.3 - t) * 20);
+      d.icon('lock', 121, 12 - Math.max(0, 0.3 - t) * 20);
       d.stack([n >= 2 ? 'BOLL 2 LÅST' : 'BOLL LÅST', n >= 2 ? 'MULTIBALL!' : `${n}/2 I BORGEN`], { maxS: 2 });
     }, 2, 3);
   }
@@ -558,8 +581,8 @@ export class Dmd {
 
   highScore(rank, name) {
     this.show((d, t) => {
-      d.text(rank === 1 ? 'NYTT REKORD!' : `PLATS ${rank}`, 64, 2, { s: 2, align: 'center' });
-      d.text(name ? name : 'PÅ TOPPLISTAN', 64, 22, { align: 'center', v: 200 });
+      d.text(rank === 1 ? 'REKORD!' : `PLATS ${rank}`, 64, 1, { s: 3, align: 'center' });
+      d.text(name || 'PÅ TOPPLISTAN', 64, 24, { align: 'center', v: 200 });
       d.sparkle(rank === 1 ? 22 : 10);
       d.border(t, 200, 70);
     }, 3, 4);
@@ -585,7 +608,8 @@ export class Dmd {
       for (let x = 0; x < len; x++) this.px(x, 31, 120);
       return;
     }
-    this.text(`BOLL ${s.ball}`, 1, y, { v: 150 });
+    // Balls as dots (the one in play lit), leaving the middle for status
+    for (let i = 0; i < 3; i++) this.text(i < s.ball ? '●' : '○', 1 + i * 6, y, { v: i === s.ball - 1 ? 230 : 110 });
     if (s.mult > 1) this.text(`×${s.mult}`, 127, y, { align: 'right', v: 210 });
     if (s.status) this.text(s.status, 66, y, { align: 'center', v: s.hot && !blink ? 90 : 230 });
   }
@@ -615,9 +639,9 @@ export class Dmd {
       }] : []),
       (d, tt) => d.text(MARQUEE, 128 - tt * MARQUEE_SPEED, 9, { s: 2 }),
       (d, tt) => {
-        d.icon('castle', 56, 2 + Math.round(Math.sin(tt * 3)));
-        d.text('BORGEN VÄNTAR', 64, 15, { align: 'center' });
-        d.text('STORMA PORTEN', 64, 24, { align: 'center', v: 150 });
+        d.icon('castle', 4, 9 + Math.round(Math.sin(tt * 3)), 255, 2);
+        d.text('BORGEN', 42, 3, { s: 2 });
+        d.text('STORMA PORTEN', 42, 22, { v: 160 });
         d.sparkle(4, 140);
       }
     ];

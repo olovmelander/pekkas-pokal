@@ -15,7 +15,7 @@ import { CAB } from './meshes.js';
 
 // Real cabinets put the playfield about 90 cm off the floor: ≈36 units here
 const FLOOR_Y = -36;
-const GAP = 13; // between cabinets: far enough that only their inner edges show
+const GAP = 15; // between cabinets: far enough that only their inner edges show
 
 function canvas(w, h) {
   const cv = document.createElement('canvas');
@@ -273,7 +273,9 @@ function buildNeighbour(THREE, mergeGeometries, materials, theme, disposables) {
   g.add(headGroup);
 
   disposables.push(pfTex, tlTex);
-  g.position.set((CAB.x0 + CAB.x1) / 2 + theme.side * (w + GAP), 0, cz);
+  // Set back a little from ours, as machines in a row never quite line up —
+  // which also keeps their translites above the frame, away from the HUD
+  g.position.set((CAB.x0 + CAB.x1) / 2 + theme.side * (w + GAP), 0, cz - 9);
   return { group: g, translite: tl.material };
 }
 

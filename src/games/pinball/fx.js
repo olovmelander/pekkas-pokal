@@ -150,9 +150,10 @@ export function createFx(THREE, parent, { ballRadius }) {
     if (!tr.mesh.visible) return;
     const n = hist.length;
     for (let s = 0; s < TRAIL; s++) {
+      // Samples past the end of the history collapse onto its last point
       const q = hist[Math.min(s, n - 1)];
       const nb = hist[Math.min(s + 1, n - 1)];
-      const pr = hist[Math.max(s - 1, 0)];
+      const pr = hist[Math.min(Math.max(s - 1, 0), n - 1)];
       let dx = pr.x - nb.x;
       let dz = pr.z - nb.z;
       const l = Math.hypot(dx, dz) || 1;
