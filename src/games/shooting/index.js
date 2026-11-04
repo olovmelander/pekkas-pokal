@@ -1639,7 +1639,7 @@ export async function createShooting(container) {
     // toothpick in the corner; grow it back about halfway
     gun.group.scale.setScalar(THREE.MathUtils.clamp(0.55 * Math.sqrt(tanV / 0.43), 0.52, 0.7));
     const portrait = view.aspect < 1;
-    gunBase.set(0.66 * tanV * view.aspect * (portrait ? 0.62 : 0.6), -0.66 * tanV * (portrait ? 0.86 : 0.98), -0.66);
+    gunBase.set(0.66 * tanV * view.aspect * (portrait ? 0.62 : 0.6), -0.66 * tanV * (portrait ? 0.8 : 0.9), -0.66);
     gunBase.y -= (1 - raise) * 0.45;
     gun.group.position.copy(gunBase);
     gun.group.position.z += recoil * 0.08;
@@ -1964,6 +1964,7 @@ export async function createShooting(container) {
       return {
         drawCalls: renderer.info.render.calls,
         triangles: renderer.info.render.triangles,
+        forestTriangles: range.forest.triangles,
         bloom: !!composer,
         shadows: renderer.shadowMap.enabled,
         dpr: quality.dpr,

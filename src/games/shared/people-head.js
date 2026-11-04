@@ -483,11 +483,18 @@ function headTint(p, ctx, n) {
   const lidCrease = gauss(ax - FACE.eyeX, 0.013) * gauss(y - (FACE.eyeY + FACE.eyeR + 0.0035), 0.0022) * sstep(0.06, 0.075, z);
   const corners = gauss(ax - FACE.mouthHalfW, 0.004) * gauss(y - my, 0.004) * 0.12;
   const chinFold = gauss(ax, 0.016) * gauss(y - (my - 0.016), 0.004) * 0.06;
+  // Philtrum: a soft groove from the nose to the cupid's bow, lit ridges either side
+  const philY = sstep(my + 0.009, my + 0.013, y) * sstep(-0.036, -0.041, y) * sstep(0.08, 0.09, z);
+  const philG = gauss(ax, 0.0028) * philY * 0.035;
+  const philR = gauss(ax - 0.0055, 0.0018) * philY * 0.025;
+  r += philR;
+  g += philR;
+  bl += philR;
   // Age: deeper smile lines and a soft shadow under the eyes
   const age = ctx.look.age || 0;
   const bags = age * gauss(ax - FACE.eyeX, 0.012) * gauss(y - (FACE.eyeY - FACE.eyeR - 0.004), 0.003) * sstep(0.06, 0.08, z) * 0.06;
   const k = 1 - under - socket - wing - fold * (1 + 1.4 * age) - subnasal - corners - chinFold - flank * 0.03 - crease * 0.05 -
-    nostril * 0.14 - lidCrease * 0.14 - bags;
+    nostril * 0.14 - lidCrease * 0.14 - bags - philG;
   let tint = [r * k, g * k, bl * k];
   if (ctx.stubble) tint = ctx.stubble(p, tint);
   if (ctx.hairShadow) tint = ctx.hairShadow(p, tint);
@@ -806,7 +813,7 @@ function periodic(keys) {
 }
 
 const HAIRLINE = periodic([
-  [0, 44], [22, 45], [40, 41], [55, 29], [65, 12], [72, -3], [78, -8], [83, -2], [90, 15], [101, 20], [113, 10],
+  [0, 40.5], [22, 41.5], [40, 38.5], [55, 28], [65, 12], [72, -3], [78, -8], [83, -2], [90, 15], [101, 20], [113, 10],
   [125, -14], [145, -35], [180, -43]
 ]);
 const HAIRLINE_HIGH = periodic([
@@ -944,7 +951,10 @@ export function buildHair(b, ctx) {
       }
       if (st.noise) h += st.noise * noise3(d[0] * 9 + 3, d[1] * 9, d[2] * 9);
       // Clumps that lift off the scalp and break the outline
-      if (high) h += (st.clumps ?? 0.0025) * Math.max(0, noise3(d[0] * 7 + 11, d[1] * 7, d[2] * 7) * 1.6 - 0.25) * sstep(0.05, 0.3, tt);
+      if (high) {
+        h += (st.clumps ?? 0.0032) * Math.max(0, noise3(d[0] * 6 + 11, d[1] * 6, d[2] * 6) * 1.6 - 0.25) * sstep(0.05, 0.3, tt);
+        h += 0.0012 * noise3(d[0] * 16 + 3, d[1] * 16, d[2] * 16) * sstep(0.1, 0.4, tt);
+      }
       if (st.waves && high) {
         // Broad S-waves that run from the parting down to the ends
         const w = Math.sin(tt * 14 + noise3(psi * 3, 1.3, 0.4) * 2.5 + psi * 2);

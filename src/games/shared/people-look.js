@@ -206,7 +206,8 @@ function bottomDef(kind) {
   const base = { waist: 0.99, legEnd: 0.828, off: 0.004, minR: 0.056, minFrom: 0.42, break: 1, mat: MAT.CLOTH, belt: true, beltTint: [0.42, 0.42, 0.42] };
   switch (kind) {
     case 'jeans': return { ...base, off: 0.0035, minR: 0.051, seam: true, break: 0.7, legEnd: 0.822 };
-    case 'shorts': return { ...base, legEnd: 0.31, off: 0.006, minR: 0.084, minFrom: 0.0, break: 0, sock: { end: 0.87, region: REGION.FIXED, tint: [0.85, 0.85, 0.82], from: 0.74 } };
+    // Loose legs below the seat; the top follows the thigh so a shirt hem sits over it cleanly
+    case 'shorts': return { ...base, legEnd: 0.31, off: 0.006, minR: 0.079, minFrom: 0.14, break: 0, sock: { end: 0.87, region: REGION.FIXED, tint: [0.85, 0.85, 0.82], from: 0.74 } };
     case 'knickers': return { ...base, legEnd: 0.47, off: 0.004, minR: 0.0, break: 0, belt: false, sock: { end: 0.87, region: REGION.ACCENT, tint: [1, 1, 1] } };
     default: return base;
   }

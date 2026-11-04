@@ -1106,6 +1106,7 @@ export async function createClay(container) {
   const kilnFlue = new THREE.Vector3();
   studio.group.updateMatrixWorld(true);
   studio.kiln.group.localToWorld(kilnLook.set(0, 1.75, 0.4));
+  const kilnLookP = studio.kiln.group.localToWorld(new THREE.Vector3(-0.38, 1.7, 0.55));
   studio.kiln.group.localToWorld(kilnMouth.set(0, 0.63, 0.05));
   studio.kiln.group.localToWorld(kilnFlue.copy(studio.kiln.flue));
   const kilnFront = new THREE.Vector3();
@@ -1132,7 +1133,8 @@ export async function createClay(container) {
     } else if (ph === 'intro' || ph === 'throw' || (ph === 'fire' && state.t < FIRE.lift)) {
       frame(THROW_LOOK, DIR_THROW, 1.72, 1.3, P ? 0.94 : 0.6, P ? [0, 0.04] : [0.04, 0]);
     } else if (ph === 'fire' && state.t < FIRE.open) {
-      frame(kilnLook, DIR_KILN, P ? 1.25 : 2.2, 1.9, P ? 0.92 : 0.85);
+      // On a phone held upright, a little to the left: keramikern tends the door from there
+      frame(P ? kilnLookP : kilnLook, DIR_KILN, P ? 1.32 : 2.2, 1.9, P ? 0.92 : 0.85);
     } else if (ph === 'fire' || ph === 'judge') {
       REVEAL_LOOK.copy(studio.reveal);
       REVEAL_LOOK.x += 0.15;
@@ -1532,9 +1534,9 @@ export async function createClay(container) {
       fired.mesh.material.emissiveIntensity = 1.4 * Math.exp(-k * 4.5);
       setHeat(0.35 * (1 - k));
       if (rand() < dt * 7) sfx.ping();
-      if (rand() < dt * 18 * (1 - k)) {
+      if (rand() < dt * 14 * (1 - k) ** 2) {
         const a = rand() * Math.PI * 2;
-        fx.steam.emit(studio.reveal.x + Math.cos(a) * 0.2, studio.reveal.y + 0.3 + rand() * 0.6, studio.reveal.z + Math.sin(a) * 0.2, 0, 0.3, 0, 1.6, 0.25);
+        fx.steam.emit(studio.reveal.x + Math.cos(a) * 0.2, studio.reveal.y + 0.3 + rand() * 0.5, studio.reveal.z + Math.sin(a) * 0.2, 0, 0.3, 0, 1.3, 0.17);
       }
       if (k > 0.35 && rand() < dt * 9) emitGlint();
       if (ft >= FIRE.cool) {

@@ -1204,26 +1204,29 @@ export function buildHand() {
   tn.rotateX(-0.5);
   tn.translate(0.26, -0.165, -0.05);
   b.add(tn, nail);
-  // Wrist and forearm toward the elbow (lower right, toward the viewer)
+  // Wrist and forearm toward the elbow: down, a little right and mostly
+  // TOWARD the viewer, so the arm foreshortens and leaves the frame low
+  // instead of lying across the picture
   const wrist = V(0.62, -0.02, 0.0);
-  const elbow = V(1.32, -0.6, 0.72);
-  const shoulder = V(2.3, -1.2, 2.9);
+  const elbow = V(1.05, -0.62, 1.05);
+  const shoulder = V(1.75, -1.3, 3.4);
   b.add(limb(V(0.55, -0.01, 0.0), wrist, 0.108, 0.1, 14), skin);
   b.add(limb(wrist, elbow, 0.098, 0.135, 14), skin);
   const dir = elbow.clone().sub(wrist).normalize();
-  // The rolled sleeve: two fat turns of linen and the sleeve beyond them
-  const cuffAt = (k, rad, tube, col) => {
+  // The rolled sleeve: one fat, slightly lopsided roll of linen, the sleeve beyond it
+  const cuffAt = (k, rad, tube, col, squash, tilt) => {
     const tor = new THREE.TorusGeometry(rad, tube, 8, 22);
+    tor.scale(1, 1, squash);
+    tor.rotateX(tilt);
     tor.lookAt(dir);
     const c = wrist.clone().lerp(elbow, k);
     tor.translate(c.x, c.y, c.z);
     b.add(tor, col);
   };
-  cuffAt(0.66, 0.13, 0.034, linen);
-  cuffAt(0.73, 0.137, 0.036, linenShade);
-  cuffAt(0.8, 0.14, 0.032, linen);
-  b.add(limb(wrist.clone().lerp(elbow, 0.78), elbow.clone().addScaledVector(dir, 0.08), 0.15, 0.158, 14), linenShade);
-  b.add(limb(elbow, shoulder, 0.158, 0.18, 14), linen);
+  cuffAt(0.7, 0.132, 0.05, linen, 1.25, 0.12);
+  cuffAt(0.77, 0.14, 0.04, linenShade, 1.1, -0.1);
+  b.add(limb(wrist.clone().lerp(elbow, 0.76), elbow.clone().addScaledVector(dir, 0.1), 0.152, 0.162, 14), linenShade);
+  b.add(limb(elbow, shoulder, 0.162, 0.19, 14), linen);
   const mesh = b.mesh(new THREE.MeshPhysicalMaterial({
     vertexColors: true, roughness: 0.52, metalness: 0, sheen: 0.3, sheenRoughness: 0.5, sheenColor: new THREE.Color(0.7, 0.34, 0.26)
   }));
@@ -1246,7 +1249,7 @@ export function buildHand() {
   const mid = tips[1];
   mesh.geometry.translate(-mid.x, -mid.y, -mid.z * 0.5);
   // A real hand next to this wheel is bigger than the old cartoon one
-  mesh.geometry.scale(1.2, 1.2, 1.2);
+  mesh.geometry.scale(1.12, 1.12, 1.12);
   mesh.geometry.computeBoundingSphere();
   mesh.castShadow = true;
   return mesh;

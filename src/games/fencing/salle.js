@@ -825,6 +825,9 @@ const _cr = new THREE.Matrix4();
  * Named spectators are the rest of the 2023 field: whoever you are not
  * fencing as watches from the benches.
  */
+/** How fast each group of spectators follows the mood (per second). */
+const GROUP_RATE = [2.6, 3.4, 4.3, 5.4, 6.6, 8, 9.6, 12];
+
 class Spectators {
   constructor(high) {
     this.group = new THREE.Group();
@@ -835,6 +838,9 @@ class Spectators {
     this.mood = 'idle';
     this.moodT = 0;
     this.lean = 0;
+    // A crowd does not move as one: eight groups follow the mood at their
+    // own pace, so a gasp or a slump ripples along the benches
+    this.groups = new Float32Array(8);
     this.floor = new THREE.Vector3(0, -3, 1.5);
   }
 
@@ -890,10 +896,15 @@ class Spectators {
       lean = -0.05;
       if (mt > 2) this.mood = 'idle';
     } else if (m === 'clap' && mt > 3.4) this.mood = 'idle';
-    this.lean += (lean - this.lean) * (1 - Math.exp(-dt * 7));
+    this.lean = lean;
+    let any = false;
+    for (let g = 0; g < 8; g++) {
+      this.groups[g] += (lean - this.groups[g]) * (1 - Math.exp(-dt * GROUP_RATE[g]));
+      if (Math.abs(this.groups[g]) > 1e-3) any = true;
+    }
     this.crowd.lookAt(look || null);
     this.crowd.update(dt, t);
-    if (Math.abs(this.lean) > 1e-3) this.applyLean();
+    if (any) this.applyLean();
   }
 
   /** Lean every instance about its hips (seated) or its waist (standing). */
@@ -907,7 +918,8 @@ class Spectators {
         const el = _cm.elements;
         // Per-spectator amount from where they sit: some lean further
         const h = Math.abs(Math.sin(el[12] * 12.9898 + el[14] * 78.233) * 43758.5453) % 1;
-        const a = this.lean * (0.65 + 0.7 * h);
+        const h2 = Math.abs(Math.sin(el[12] * 39.346 + el[14] * 11.135) * 24634.6345) % 1;
+        const a = this.groups[Math.min(7, Math.floor(h2 * 8))] * (0.65 + 0.7 * h);
         _cl.makeTranslation(0, pivot, 0);
         _cr.makeRotationX(a);
         _cl.multiply(_cr);

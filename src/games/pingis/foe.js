@@ -117,6 +117,10 @@ const PADDLE_IN_HAND = new THREE.Quaternion().setFromRotationMatrix(
 const PADDLE_IN_HAND_POS = new THREE.Vector3(-0.0015, 0.004, 0);
 const BLADE_Y = 0.112; // blade centre above the grip (hall.js buildPaddle)
 const BLADE_R = 0.098;
+/* The shared hold('racket') grip is still being tuned tonight (it closed
+   two fingers along the backhand); until it lands, the bat sits in our own
+   shakehand frame above, with the pose's grip/point fingers. */
+const USE_SHARED_GRIP = false;
 
 /* The open, flat palm the rules ask for: palm (hand −X) up, the fingers
    forward and a little in, the thumb out to the side */
@@ -156,7 +160,7 @@ export class Foe {
     this.root = p.root;
     this.s = p.scale;
     this.paddle = paddle;
-    if (typeof p.hold === 'function') {
+    if (USE_SHARED_GRIP && typeof p.hold === 'function') {
       // The shared shakehand grip: the fingers are solved closed around
       // THIS handle and the index laid along THIS blade's back. Our bat
       // follows its conventions (origin at the grip, +Y up the handle into

@@ -479,7 +479,7 @@ export function buildRange(rand, { envMap, lite = false } = {}) {
   berm.closePath();
   const bermGeo = new THREE.ExtrudeGeometry(berm, { depth: 4.4, bevelEnabled: false, curveSegments: 6 });
   bermGeo.translate(0, 0, -2.2);
-  props.put(bermGeo, 0xccd07a, { at: [0, -0.02, -15.92], rot: [0, -Math.PI / 2, 0], darken: 0.15 });
+  props.put(bermGeo, 0xa9ae5e, { at: [0, -0.02, -15.92], rot: [0, -Math.PI / 2, 0], darken: 0.15 });
   props.put(box(0.04, 0.9, 0.7), 0x6a4a2c, { at: [1.83, 0.45, -17.6] });
   props.put(box(0.03, 0.06, 0.06), 0xb9bec4, { at: [1.86, 0.48, -17.35] });
   [-2.05, 2.05].forEach((x) => {

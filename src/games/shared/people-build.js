@@ -389,9 +389,12 @@ function torsoKeys(build) {
     [1.632, 0.004, 0.004, 0.004, 0.0, 2.0]
   ];
   const wb = build.w;
+  // A broad build carries its width in the chest and shoulders more than at
+  // the waist (a V), a slim one is straighter
+  const waistW = 1 + (wb - 1) * 0.55;
   return K.map(([y, a, f, bk, cz, n]) => {
     const neck = y > 1.49;
-    const sw = neck ? build.neck : wb;
+    const sw = neck ? build.neck : lerp(waistW, wb, sstep(1.0, 1.3, y)) * (y < 1.0 ? lerp(1, wb / waistW, sstep(1.0, 0.86, y)) : 1);
     const belly = build.belly * gauss(y - 1.06, 0.09);
     return [y, a * sw, f * (neck ? build.neck : build.d) + belly, bk * (neck ? build.neck : build.d), cz + belly * 0.3, n];
   });
@@ -429,7 +432,10 @@ export function buildTorso(b, ctx) {
   const bands = [];
   const { waist } = bot;
   const hemY = top.tucked ? waist : top.hem;
-  bands.push({ from: 0.785, to: Math.min(hemY, waist), region: REGION.BOTTOM, mat: bot.mat, off: bot.off, tint: bot.tint });
+  // Under an untucked top the waistband stays tighter than the shirt, so the
+  // shirt's hem is the one that folds over (no crossing surfaces at the hem)
+  const botOff = top.tucked ? bot.off : Math.min(bot.off, top.off - 0.001);
+  bands.push({ from: 0.785, to: Math.min(hemY, waist), region: REGION.BOTTOM, mat: bot.mat, off: botOff, tint: bot.tint });
   if (top.tucked && bot.belt) {
     bands[0].to = waist - 0.03;
     bands.push({ from: waist - 0.03, to: waist, region: REGION.FIXED, mat: MAT.SKIN, off: bot.off + 0.003, tint: [0.12, 0.075, 0.05], lip: false });
@@ -534,7 +540,8 @@ export function buildTorso(b, ctx) {
       const clothed = region !== REGION.SKIN;
       let off = roff + detail(y, th, clothed);
       if (top.neckRoll && region === REGION.TOP && y > 1.47) off += 0.004 + 0.006 * gauss(y - 1.545, 0.016);
-      if (region !== REGION.SKIN && region !== REGION.BOTTOM && !top.tucked && r.t < 1.2) off += 0.006 * sstep(top.hem + 0.12, top.hem, r.t);
+      // An untucked hem hangs free: wider over the hips, so it covers the tops of the thighs
+      if (region !== REGION.SKIN && region !== REGION.BOTTOM && !top.tucked && r.t < 1.2) off += (0.006 + 0.014 * s * s) * sstep(top.hem + 0.14, top.hem, r.t);
       // Cloth folds: a few soft horizontal creases at the waist and armpits
       if (clothed && res.high && r.lip === 0) {
         off += 0.0016 * Math.sin(y * 95 + th * 2) * gauss(y - 1.0, 0.07) * (region === REGION.TOP ? 1 : 0.4);
@@ -840,8 +847,8 @@ export function buildCuff(b, ctx, side, prof, J) {
   const cols = hi ? 12 : 6;
   // [d along the arm, gap off the skin]: outer face up to the rolled lip, then the inner face back down
   const rows = hi
-    ? [[0.566, 0.0035], [0.545, 0.004], [0.515, 0.0075], [0.485, 0.0125], [0.468, 0.0155], [0.462, 0.0158], [0.465, 0.011], [0.48, 0.0085], [0.52, 0.0035]]
-    : [[0.566, 0.0035], [0.5, 0.01], [0.465, 0.0155], [0.475, 0.008], [0.53, 0.0035]];
+    ? [[0.566, 0.0035], [0.548, 0.004], [0.522, 0.0062], [0.497, 0.0092], [0.482, 0.0112], [0.477, 0.0115], [0.48, 0.008], [0.494, 0.006], [0.53, 0.003]]
+    : [[0.566, 0.0035], [0.51, 0.008], [0.478, 0.0112], [0.486, 0.006], [0.53, 0.003]];
   const pts = [];
   rows.forEach(([d, gap], i) => {
     const [rr, fx, fz] = prof(d);
@@ -1306,8 +1313,10 @@ export function buildShoe(b, ctx, side) {
     const sec = section(hw * def.width, h);
     cols = sec.length;
     const z = z0 * scaleZ;
+    // The toe closes to a rounded point, not a vertical slit
+    const tipK = z0 >= 0.213 ? 0.15 : z0 >= 0.21 ? 0.62 : z0 >= 0.2 ? 0.86 : 1;
     for (const q of sec) {
-      const y = q.y + toeUp;
+      const y = 0.02 + (q.y - 0.02) * tipK + toeUp;
       const x = A.x + q.x + side * 0.08 * (z - 0.02);
       let tint = def.tint(z0, q, y);
       if (!q.sole) tint = mulTint(tint, 1 - 0.12 * gauss(y - 0.016, 0.006));

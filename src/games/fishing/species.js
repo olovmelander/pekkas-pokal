@@ -258,8 +258,8 @@ export const SPECIES = [
     dorsal: { at: -0.02, h: 0.4, w: 0.34 },
     eye: 0.16,
     iris: 0xd2452f,
-    metal: 0.4,
-    rough: 0.28
+    metal: 0.26,
+    rough: 0.32
   },
   {
     id: 'abborre',
@@ -309,8 +309,8 @@ export const SPECIES = [
     adipose: -0.42,
     eye: 0.15,
     iris: 0xc8d4e0,
-    metal: 0.5,
-    rough: 0.24
+    metal: 0.3,
+    rough: 0.3
   },
   {
     id: 'gadda',
@@ -359,8 +359,8 @@ export const SPECIES = [
     adipose: -0.44,
     eye: 0.16,
     iris: 0xb8c0d0,
-    metal: 0.55,
-    rough: 0.22
+    metal: 0.32,
+    rough: 0.3
   },
   {
     id: 'pekka',
@@ -497,11 +497,12 @@ function buildSpecies(sp) {
   const ey = profile.radius(0.15) * profile.height * 0.32;
   const ez = sideZ(eu);
   [1, -1].forEach((s) => {
-    const iris = new THREE.SphereGeometry(sp.eye, 7, 5);
-    iris.applyMatrix4(M(ex, ey, s * ez * 0.82));
+    // Flattened into the head, as a fish's eye sits — not a bead on top
+    const iris = new THREE.SphereGeometry(sp.eye * 0.82, 9, 6);
+    iris.applyMatrix4(M(ex, ey, s * ez * 0.86, 0, 1, 1, 0.42));
     parts.push({ geometry: iris, color: C(sp.iris) });
-    const pupil = new THREE.SphereGeometry(sp.eye * 0.6, 5, 3);
-    pupil.applyMatrix4(M(ex + 0.02, ey, s * ez * 0.96));
+    const pupil = new THREE.SphereGeometry(sp.eye * 0.5, 7, 4);
+    pupil.applyMatrix4(M(ex + 0.015, ey, s * (ez * 0.86 + sp.eye * 0.22), 0, 1, 1, 0.4));
     parts.push({ geometry: pupil, color: EYE_DARK });
   });
 

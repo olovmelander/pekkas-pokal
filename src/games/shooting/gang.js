@@ -204,6 +204,8 @@ export function buildGang({ rand }) {
   const wTarget = new THREE.Vector3();
   const wPole = new THREE.Vector3();
   const qHand = new THREE.Quaternion();
+  const qInv = new THREE.Quaternion();
+  const qObj = new THREE.Quaternion();
   const qRoot = new THREE.Quaternion();
   const basis = new THREE.Matrix4();
   const bx = new THREE.Vector3();
@@ -236,28 +238,35 @@ export function buildGang({ rand }) {
       chairParts(s, def.fabric).forEach((g) => chairs.push(g.applyMatrix4(m4)));
     }
     if (def.cup) {
-      m.cup = new THREE.Mesh(mugGeo, propMat);
-      m.cup.castShadow = true;
-      // Upright along the fist's thumb axis (+Z), the handle out past the
-      // knuckles (−Y): mug x → −Y, mug y → +Z, mug z → −X
-      basis.makeBasis(tmp.set(0, -1, 0), tmp2.set(0, 0, 1), bz.set(-1, 0, 0));
-      person.attach(m.cup, 'gripR', {
-        position: [0, -0.012, 0.012], quaternion: new THREE.Quaternion().setFromRotationMatrix(basis)
-      });
+      // hold('hook'): origin = the middle of the handle's grip bar, +Y the
+      // mug's up, +Z toward the mug body — fingers through the handle,
+      // thumb on top of it
+      m.cup = new THREE.Group();
+      const mug = new THREE.Mesh(mugGeo, propMat);
+      mug.castShadow = true;
+      mug.rotation.y = Math.PI / 2; // the handle (+x) turns to −Z
+      mug.position.z = 0.064; // the body sits in front of the bar
+      m.cup.add(mug);
+      person.hold(m.cup, 'R', 'hook', { bar: 0.012, handle: 0.036 });
     }
     if (!seated) {
-      m.board = new THREE.Mesh(clipGeo, propMat);
-      m.board.castShadow = true;
-      // Board face (+Y) up along the thumb (+Z); it reaches across the
-      // palm toward the body (−X) and away past the fingers (−Y): the hand
-      // holds its near corner, thumb on top, fingers underneath
-      basis.makeBasis(tmp.set(-1, 0, 0), tmp2.set(0, 0, 1), bz.set(0, 1, 0));
-      person.attach(m.board, 'gripL', {
-        position: [-0.06, -0.085, 0.006], quaternion: new THREE.Quaternion().setFromRotationMatrix(basis)
-      });
-      m.pencil = new THREE.Mesh(pencilGeo, propMat);
-      // Held like a pen: the top in the thumb's web, the point out past the fingers
-      person.attach(m.pencil, 'gripR', { position: [0, -0.02, 0], rotation: [1.04, 0, 0] });
+      // hold('flat'): origin = the middle of the held edge, +Y the top face
+      // (thumb on top), the board reaching out along +Z. He holds it by its
+      // left long edge; the clip ends up at the far end.
+      m.board = new THREE.Group();
+      const board = new THREE.Mesh(clipGeo, propMat);
+      board.castShadow = true;
+      board.rotation.y = -Math.PI / 2;
+      board.position.z = 0.085;
+      m.board.add(board);
+      person.hold(m.board, 'L', 'flat', { thickness: 0.012 });
+      // hold('pinch'): +Y toward the point, origin a few cm up from it
+      m.pencil = new THREE.Group();
+      const pencil = new THREE.Mesh(pencilGeo, propMat);
+      pencil.rotation.x = Math.PI;
+      pencil.position.y = -0.045;
+      m.pencil.add(pencil);
+      person.hold(m.pencil, 'R', 'pinch', { diameter: 0.009 });
     }
     members.push(m);
     return m;
@@ -371,13 +380,12 @@ export function buildGang({ rand }) {
   }
 
   /**
-   * Hand orientation for a fist whose thumb axis (+Z) points `zLocal` and
-   * whose forearm (+Y) runs back toward `yLocal`, both in the person's
-   * frame; orthonormalised, then taken to world space.
+   * World orientation for a held object whose +Y points `yLocal` and +Z
+   * (roughly) `zLocal`, both in the person's frame.
    */
-  function handQuat(m, zLocal, yLocal, out) {
-    bz.copy(zLocal).normalize();
-    by.copy(yLocal).addScaledVector(bz, -yLocal.dot(bz)).normalize();
+  function objectQuat(m, yLocal, zLocal, out) {
+    by.copy(yLocal).normalize();
+    bz.copy(zLocal).addScaledVector(by, -zLocal.dot(by)).normalize();
     bx.crossVectors(by, bz);
     basis.makeBasis(bx, by, bz);
     out.setFromRotationMatrix(basis);
@@ -386,17 +394,19 @@ export function buildGang({ rand }) {
   }
 
   /**
-   * Put the socket `grip` of hand `side` at person-local `local` with world
-   * orientation `qh`: the IK target is the wrist, so step back from the
-   * socket by its offset in the hand's frame.
+   * Put what hand `side` holds at person-local `local`, turned to `qObj`
+   * (world): the hand is the object's frame times the grip anchor's
+   * inverse, and the IK target is the wrist behind it.
    */
-  function placeHand(m, side, local, qh, poleLocal) {
-    const sock = m.person.sockets[side === 'L' ? 'gripL' : 'gripR'];
+  function placeHeld(m, side, local, qObj, poleLocal) {
+    const anchor = m.person.sockets[side === 'L' ? 'holdL' : 'holdR'];
+    if (!anchor) return;
+    qHand.copy(qObj).multiply(qInv.copy(anchor.quaternion).invert());
     toWorld(m, local, wTarget);
-    tmp.copy(sock.position).applyQuaternion(qh);
+    tmp.copy(anchor.position).applyQuaternion(qHand);
     wTarget.sub(tmp);
     toWorld(m, poleLocal, wPole);
-    m.person.ikArm(side, wTarget, wPole, qh);
+    m.person.ikArm(side, wTarget, wPole, qHand);
   }
 
   const vLap = new THREE.Vector3();
@@ -420,29 +430,34 @@ export function buildGang({ rand }) {
     const sip = smoothstep(0.15, 0.85, m.sip) * (m.sipT < -2.0 ? smoothstep(-2.6, -2.0, m.sipT) : 1);
     const cheer = mode === 'cheer' || mode === 'gold';
     const toast = mode === 'clap';
-    // Targets in the person's frame (x = their left; the right hand is −x)
+    // Targets for the handle in the person's frame (x = their left; the
+    // right hand is −x). vZ points from the handle to the mug's body.
     if (cheer) {
-      vLap.set(-0.3, 1.62 + Math.sin(t * 7) * 0.03, 0.12).multiplyScalar(s);
+      vLap.set(-0.32, 1.62 + Math.sin(t * 7) * 0.03, 0.12);
+      vZ.set(0.5, 0, 0.85);
     } else if (toast) {
-      vLap.set(-0.22, 1.0 + Math.abs(Math.sin(t * 4.2)) * 0.06, 0.42).multiplyScalar(s);
+      vLap.set(-0.25, 1.0 + Math.abs(Math.sin(t * 4.2)) * 0.06, 0.4);
+      vZ.set(0.55, 0, 0.85);
     } else {
-      // On the right thigh, near the knee: at rest, or up at the mouth
-      vLap.set(-0.13 + sip * 0.1, 0.63 + sip * 0.6, 0.27 - sip * 0.06).multiplyScalar(s);
+      // Resting on the right thigh, or up at the mouth for a sip
+      vLap.set(-0.17 + sip * 0.11, 0.66 + sip * 0.55, 0.26 - sip * 0.08);
+      vZ.set(0.6 + sip * 0.35, 0, 0.8 - sip * 0.5);
     }
+    vLap.multiplyScalar(s);
     if (!m.handInit) {
       m.hand.copy(vLap);
+      m.free.copy(vZ);
       m.handInit = true;
     }
     m.hand.lerp(vLap, ease);
+    m.free.lerp(vZ, ease);
     // At the mouth the mug tips toward the face
     const tipTo = !cheer && !toast ? sip * 0.95 : 0;
     m.tilt += (tipTo - m.tilt) * ease;
-    vZ.set(0, Math.cos(m.tilt), -Math.sin(m.tilt));
-    const up = m.hand.y / s;
-    vY.set(-0.35, -0.2 - Math.max(0, up - 0.8) * 0.9, -1);
-    handQuat(m, vZ, vY, qHand);
+    vY.set(0, Math.cos(m.tilt), -Math.sin(m.tilt));
+    objectQuat(m, vY, m.free, qObj);
     vPole.set(-0.5, 0.2, -0.4).multiplyScalar(s);
-    placeHand(m, 'R', m.hand, qHand, vPole);
+    placeHeld(m, 'R', m.hand, qObj, vPole);
   }
 
   /** Henrik: the board flat in the left hand, the pencil hand writing. */
@@ -457,35 +472,42 @@ export function buildGang({ rand }) {
       m.write = Math.max(0, m.write - dt * 2);
     }
     const cheer = mode === 'cheer' || mode === 'gold';
-    // The board: at the waist, tilted up toward him; raised high in a cheer
-    if (cheer) vLap.set(0.3, 1.75 + Math.sin(t * 6) * 0.04, 0.18).multiplyScalar(s);
-    else vLap.set(0.11, 1.08, 0.3).multiplyScalar(s);
+    // The board's held (left) edge: at the waist, raised high in a cheer
+    if (cheer) vLap.set(0.32, 1.78 + Math.sin(t * 6) * 0.04, 0.18).multiplyScalar(s);
+    else vLap.set(0.17, 1.07, 0.3).multiplyScalar(s);
     if (!m.handInit) {
       m.hand.copy(vLap);
       m.handInit = true;
     }
     m.hand.lerp(vLap, ease);
+    // Face up, tilted toward him to read; reaching across toward his right
     const tiltTo = cheer ? 0.2 : 0.38;
     m.tilt += (tiltTo - m.tilt) * ease;
-    // Thumb up and back toward him; forearm back toward the elbow, outward
-    vZ.set(0, Math.cos(m.tilt), -Math.sin(m.tilt));
-    vY.set(0.45, cheer ? -0.9 : -0.15, -1);
-    handQuat(m, vZ, vY, qHand);
+    vY.set(0, Math.cos(m.tilt), -Math.sin(m.tilt));
+    vZ.set(-1, 0, 0.22);
+    objectQuat(m, vY, vZ, qObj);
     vPole.set(0.6, 0.3, -0.5).multiplyScalar(s);
-    placeHand(m, 'L', m.hand, qHand, vPole);
+    placeHeld(m, 'L', m.hand, qObj, vPole);
     if (cheer) return; // the right arm punches the air with the pose
-    // The pencil: hovering over the sheet, scribbling when he writes,
-    // tapping the board in time when he claps
+    // The pencil: its point on the sheet, scribbling when he writes,
+    // lifting off and tapping in time when he claps
+    by.copy(vY).normalize();
+    bz.copy(vZ).addScaledVector(by, -vZ.dot(by)).normalize();
+    bx.crossVectors(by, bz); // toward the clip, away from him
     const w = m.write;
-    const scrib = Math.sin(t * 13) * 0.012 * w;
-    const tap = mode === 'clap' ? Math.abs(Math.sin(t * 6)) * 0.05 : 0;
-    m.free.set(0.02 + scrib, 1.14 - 0.03 * w + tap, 0.36 + Math.sin(t * 3.1) * 0.01 * w).multiplyScalar(s);
-    if (m.freeK === 0) m.freeK = 1;
-    vZ.set(-0.4, 0.5, 0.6);
-    vY.set(-0.5, -0.35, -1);
-    handQuat(m, vZ, vY, qHand);
+    const lift = mode === 'clap' ? Math.abs(Math.sin(t * 6)) * 0.05 : 0.035 * (1 - w);
+    tmp2.copy(m.hand)
+      .addScaledVector(bz, (0.085 + Math.sin(t * 13) * 0.012 * w) * s)
+      .addScaledVector(bx, (0.01 + Math.sin(t * 2.3) * 0.02 * w) * s)
+      .addScaledVector(by, (0.008 + lift) * s);
+    // Pencil +Y (toward the point): down onto the sheet, leaning back
+    // toward the hand on his right; the palm faces down
+    vY.copy(by).multiplyScalar(-0.8).addScaledVector(bz, -0.45).addScaledVector(bx, 0.2);
+    vZ.copy(by).negate();
+    objectQuat(m, vY, vZ, qObj);
+    m.free.copy(tmp2).addScaledVector(vY.normalize(), -0.035 * s);
     vPole.set(-0.6, 0.2, -0.5).multiplyScalar(s);
-    placeHand(m, 'R', m.free, qHand, vPole);
+    placeHeld(m, 'R', m.free, qObj, vPole);
   }
 
   function update(dt, t) {

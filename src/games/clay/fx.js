@@ -345,10 +345,11 @@ export function buildFx(scene) {
     drag: 0.8,
     alphaOf: (p) => {
       const k = p.life / p.max;
-      return Math.sin(k * Math.PI) * 0.22;
+      // wisps, not fog: they must never veil keramikern's face
+      return Math.sin(k * Math.PI) * 0.13;
     },
     step: (p, dt) => {
-      p.s += dt * 0.25;
+      p.s += dt * 0.2;
       p.vx += Math.sin(p.life * 2 + p.seed * 10) * 0.2 * dt;
     }
   });

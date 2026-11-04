@@ -1111,8 +1111,11 @@
   .fen[data-mode='final'] .fen-h { font-size: 1.5rem; margin-top: 2px; }
   .fen-recap { margin-top: 8px; gap: 3px; }
   .fen-recap div { padding: 4px 10px; font-size: 0.72rem; }
-  .fen-total { margin-top: 8px; }
-  .fen-total b { font-size: 1.7rem; }
+  .fen-total { margin-top: 6px; }
+  .fen-total b { font-size: 1.45rem; }
+  .fen[data-mode='final'] .fen-panel { padding-top: 10px; padding-bottom: 10px; }
+  .fen[data-mode='final'] .fen-medal-big { margin-bottom: 0; }
+  .fen[data-mode='final'] .fen-go { margin-top: 8px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

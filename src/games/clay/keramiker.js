@@ -188,7 +188,7 @@ function armUp(t, out) {
   return p;
 }
 
-/** Forearm out, fist forward; the thumb is raised after setPose (see THUMB_UP). */
+/** Forearm out, fist forward; the thumb goes up with the hand library's 'thumbsUp' grip. */
 function thumbsUp(t, out) {
   const p = POSES.handsOnHips(t, out);
   p.upperArmR = [-0.5, 0.3, -0.2];
@@ -236,8 +236,6 @@ const LAYERS = [
   ['crossed', POSES.armsCrossed], ['hips', POSES.handsOnHips], ['point', POSES.point], ['clap', POSES.clap],
   ['cheer', POSES.cheer], ['armUp', armUp], ['thumb', thumbsUp], ['shrug', shrug], ['lean', leanIn], ['explain', POSES.explain]
 ];
-const THUMB_UP = new THREE.Quaternion().setFromEuler(new THREE.Euler(-1.45, 0.1, 0.2));
-const IDENTITY = new THREE.Quaternion();
 
 /**
  * @param {object} o
@@ -285,6 +283,9 @@ export function createKeramiker({
     phase: 0, // walk cycle
     rim: 0, // IK weights: hand on the banding wheel, fist on the chin, hand on the kiln door
     door: 0,
+    doorGrip: false,
+    doorAnchor: null,
+    thumbGrip: false,
     backing: false,
     chin: 0,
     expr: '',
@@ -313,6 +314,8 @@ export function createKeramiker({
   const az = new THREE.Vector3();
   const v1 = new THREE.Vector3();
   const doorLook = new THREE.Vector3();
+  const handlePos = new THREE.Vector3();
+  const handleQ = new THREE.Quaternion();
   const v2 = new THREE.Vector3();
 
   /** World quaternion for a bone whose local X and Y should point along x and y (orthonormalised). */
@@ -535,9 +538,14 @@ export function createKeramiker({
     }
     POSES.idle(t, base);
     if (st.walkW > 1e-3) mixAll(base, POSES.walk(st.phase, walkP), st.walkW);
-    for (const [name, fn] of LAYERS) if (w[name] > 1e-3) mixUpper(base, fn(t, buf[name]), w[name]);
+    // Walking, he lets his arms swing: the resting layers give way to the stride
+    const free = 1 - 0.8 * st.walkW;
+    for (const [name, fn] of LAYERS) {
+      const wk = name === 'hips' || name === 'crossed' ? w[name] * free : w[name];
+      if (wk > 1e-3) mixUpper(base, fn(t, buf[name]), wk);
+    }
     // A hand on the kiln door closes round its handle
-    if (st.door > 1e-3) base.gripL += (0.92 - base.gripL) * ease(st.door);
+    if (st.door > 1e-3 && !st.doorGrip) base.gripL += (0.92 - base.gripL) * ease(st.door);
     person.setPose(base, 1);
   }
 
@@ -547,7 +555,7 @@ export function createKeramiker({
     st.rim += ((plan.lean ? 1 : 0) - st.rim) * k(5);
     st.chin += ((plan.lean ? 1 : 0) - st.chin) * k(3.5);
     const pointW = ctx.attention ? w.point : 0;
-    const foldW = w.crossed;
+    const foldW = w.crossed * (1 - 0.8 * st.walkW);
     st.door += (plan.door - st.door) * k(plan.door > st.door ? 7 : 5);
     if (st.rim < 0.004 && st.chin < 0.004 && pointW < 0.004 && foldW < 0.004 && st.door < 0.004) return;
     root.updateMatrixWorld(true);
@@ -567,13 +575,33 @@ export function createKeramiker({
       C(-0.6, -0.25, 0.3, pole);
       reachFor('R', target, handQ, pole, foldW);
     }
+    // The kiln door's bar: the shared grip library closes the fingers round it
+    // (people.js setGrip 'power'); the arm reaches by our own eased weight
+    const wantGrip = st.door > 0.15;
+    if (wantGrip !== st.doorGrip) {
+      st.doorGrip = wantGrip;
+      st.doorAnchor = person.setGrip('L', wantGrip ? 'power' : null, { diameter: 0.05, blend: 0.18 });
+    }
     if (st.door > 0.004) {
-      // Left hand round the door's vertical bar: thumb up, palm to the bar
+      // The bar's frame: +Y up its length, +Z the way the palm faces — square
+      // to the reach, to his right (a left hand, thumb up)
       kilnHinge.updateMatrixWorld(true);
-      target.copy(kilnHandle).applyMatrix4(kilnHinge.matrixWorld);
+      handlePos.copy(kilnHandle).applyMatrix4(kilnHinge.matrixWorld);
       bones.upperArmL.getWorldPosition(tmp2);
-      const back = tmp2.sub(target).setY(0).normalize();
-      basisQuat(v1.set(Math.cos(root.rotation.y), 0, -Math.sin(root.rotation.y)), back, handQ);
+      const reachDir = tmp2.subVectors(handlePos, tmp2).setY(0).normalize();
+      az.crossVectors(reachDir, ay.set(0, 1, 0)).normalize();
+      ax.crossVectors(ay, az);
+      mBasis.makeBasis(ax, ay, az);
+      handleQ.setFromRotationMatrix(mBasis);
+      const anchor = st.doorAnchor;
+      if (anchor) {
+        // hand = bar × anchor⁻¹ (the same sum holdWith does, but weighted)
+        handQ.copy(handleQ).multiply(qa.copy(anchor.quaternion).invert());
+        target.copy(handlePos).sub(tmp.copy(anchor.position).applyQuaternion(handQ));
+      } else {
+        basisQuat(v1.set(Math.cos(root.rotation.y), 0, -Math.sin(root.rotation.y)), reachDir.negate(), handQ);
+        target.copy(handlePos);
+      }
       bones.chest.localToWorld(pole.set(0.6 * s, -0.5 * s, -0.25 * s));
       reachFor('L', target, handQ, pole, st.door);
     }
@@ -652,11 +680,11 @@ export function createKeramiker({
     locomotion(dt);
     pose(dt, t);
     hands(dt, t, ctx);
-    // The thumbs-up thumb: straight out of the top of the fist
-    // (guarded: the shared hand rig may grow or rename finger bones)
-    if (w.thumb > 0.01 && bones.thumbR) {
-      bones.thumbR.quaternion.slerp(THUMB_UP, ease(w.thumb));
-      for (const n of ['thumbMidR', 'thumbTipR']) if (bones[n]) bones[n].quaternion.slerp(IDENTITY, ease(w.thumb));
+    // The thumbs-up: the shared hand library's own shape, eased in and out
+    const wantThumb = w.thumb > 0.35 && !st.doorGrip;
+    if (wantThumb !== st.thumbGrip) {
+      st.thumbGrip = wantThumb;
+      person.setGrip('R', wantThumb ? 'thumbsUp' : null, { blend: 0.22 });
     }
     // Nods, shakes and tilts on top (people.update keeps them and adds look-at)
     if (plan.nod) bones.head.rotation.x += plan.nod;

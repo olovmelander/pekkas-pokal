@@ -256,7 +256,7 @@ export async function createFencing(container) {
       hip.y += 0.12;
       hip.z -= 0.05;
       // Where it meets the piste, behind the fencer; a little slack swing
-      const land = cordB.set(hip.x - f.mx * 0.85, PISTE_TOP + 0.006, -0.32);
+      const land = cordB.set(hip.x - f.mx * 0.85, PISTE_TOP + 0.012, -0.32);
       const ctrl = cordC.set(hip.x - f.mx * 0.32, hip.y * 0.3, hip.z - 0.12);
       const arr = line.geometry.attributes.position.array;
       for (let i = 0; i < CORD_N; i++) {
@@ -927,6 +927,12 @@ export async function createFencing(container) {
     flashes.fire(at, new THREE.Color(2.4, 2.2, 1.8), 0.55, 0.22);
     logEvent('clink', at);
     salle.crowd.react('ooh');
+    // The benches gasp with the steel (not on every beat: a second one
+    // straight after would sound canned)
+    if (clock - (state.oohAt || -9) > 1.6) {
+      state.oohAt = clock;
+      sfx.ooh();
+    }
   }
 
   function resolveAiAttack() {
@@ -1380,8 +1386,9 @@ export async function createFencing(container) {
       goal.rate = state.phaseT < 0.05 ? 60 : 4;
     } else if (ph === 'ceremony') {
       me.j.torso.getWorldPosition(v3);
-      // A slow orbit, low, looking up at the cup held high
-      const a = 0.75 + state.phaseT * 0.12;
+      // A slow orbit, low, looking up at the cup held high — from the
+      // champion's own side, so the beaten finalist stays in the background
+      const a = -0.55 - state.phaseT * 0.1;
       goal.look.copy(v3).setY(1.62);
       const d = aspect < 0.9 ? 4.8 : 3.9;
       goal.pos.set(v3.x + Math.sin(a) * d, 1.15, v3.z + Math.cos(a) * d);

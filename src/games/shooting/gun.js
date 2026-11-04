@@ -236,19 +236,28 @@ export function buildShotgun({ envMap, glow, star }) {
     list.push(geo);
   };
   // Left hand under the forend (forend: centre y −0.042, radius ~0.052, z −0.58…−0.22)
-  blob(gloveParts, [0.1, 0.05, 0.16], [-0.012, -0.1, -0.4], [0, 0, 0.32]);
+  const leftGlove = [];
+  const leftSleeve = [];
+  blob(leftGlove, [0.1, 0.05, 0.16], [-0.012, -0.1, -0.4], [0, 0, 0.32]);
   [-0.462, -0.427, -0.392, -0.357].forEach((z, i) => {
     const r = i === 3 ? 0.0115 : 0.0135;
-    seg(gloveParts, [0.032, -0.108, z], [0.07, -0.062, z + 0.004], r);
-    seg(gloveParts, [0.07, -0.062, z + 0.004], [0.066, -0.016, z + 0.006], r * 0.95);
-    seg(gloveParts, [0.066, -0.016, z + 0.006], [0.046, 0.006, z + 0.006], r * 0.85);
+    seg(leftGlove, [0.032, -0.108, z], [0.07, -0.062, z + 0.004], r);
+    seg(leftGlove, [0.07, -0.062, z + 0.004], [0.066, -0.016, z + 0.006], r * 0.95);
+    seg(leftGlove, [0.066, -0.016, z + 0.006], [0.046, 0.006, z + 0.006], r * 0.85);
   });
-  seg(gloveParts, [-0.05, -0.098, -0.345], [-0.066, -0.06, -0.4], 0.016);
-  seg(gloveParts, [-0.066, -0.06, -0.4], [-0.062, -0.034, -0.452], 0.014);
+  seg(leftGlove, [-0.05, -0.098, -0.345], [-0.066, -0.06, -0.4], 0.016);
+  seg(leftGlove, [-0.066, -0.06, -0.4], [-0.062, -0.034, -0.452], 0.014);
   // Wrist and the left forearm, running back and down out of the frame
-  seg(gloveParts, [-0.02, -0.12, -0.33], [-0.04, -0.15, -0.27], 0.036, 0.038);
-  seg(sleeveParts, [-0.045, -0.155, -0.265], [-0.3, -0.5, 0.3], 0.05, 0.075, 10);
-  seg(sleeveParts, [-0.042, -0.152, -0.272], [-0.05, -0.164, -0.25], 0.056, 0.056, 10);
+  seg(leftGlove, [-0.02, -0.12, -0.33], [-0.04, -0.15, -0.27], 0.036, 0.038);
+  seg(leftSleeve, [-0.045, -0.155, -0.265], [-0.3, -0.5, 0.3], 0.05, 0.075, 10);
+  seg(leftSleeve, [-0.042, -0.152, -0.272], [-0.05, -0.164, -0.25], 0.056, 0.056, 10);
+  // Roll the whole left hand round the forend toward the shooter's side,
+  // so the heel of the hand and the thumb show along its near flank
+  const roll = new THREE.Matrix4().makeTranslation(0, -0.042, 0)
+    .multiply(new THREE.Matrix4().makeRotationZ(-0.55))
+    .multiply(new THREE.Matrix4().makeTranslation(0, 0.042, 0));
+  leftGlove.forEach((geo) => gloveParts.push(geo.applyMatrix4(roll)));
+  leftSleeve.forEach((geo) => sleeveParts.push(geo.applyMatrix4(roll)));
   // Right hand round the grip (pistol grip ~ z 0.1…0.2, y −0.09…−0.13)
   blob(gloveParts, [0.088, 0.1, 0.1], [0.0, -0.105, 0.145], [-0.5, 0, 0]);
   seg(gloveParts, [0.03, -0.075, 0.1], [0.032, -0.07, 0.035], 0.012);

@@ -175,8 +175,12 @@ export function buildGrass(rand, { count = 23000, inner = 0.3, outer = 30, sunDi
 
   let placed = 0;
   let guard = 0;
+  // The trap house's berm gets its own share: at 15 m the main scatter is
+  // too thin to read as turf on a slope that faces the camera
+  const BERM = Math.round(count * 0.04);
   while (placed < count && guard < count * 6) {
     guard++;
+    const bermPass = placed >= count - BERM;
     // Very heavily biased inward. Grass is deceptive: at 20 m you look at
     // it edge-on and blades stack into a mat, but at 4 m you look DOWN on
     // it and the same density reads as bald ground. Beating that needs
@@ -184,8 +188,8 @@ export function buildGrass(rand, { count = 23000, inner = 0.3, outer = 30, sunDi
     // lives inside the first few metres.
     const r = inner + (outer - inner) * (rand() ** 3.5);
     const a = rand() * Math.PI * 2;
-    const x = Math.cos(a) * r;
-    const z = Math.sin(a) * r;
+    const x = bermPass ? (rand() - 0.5) * 4.3 : Math.cos(a) * r;
+    const z = bermPass ? -15.7 + rand() * 2.4 : Math.sin(a) * r;
 
     // Keep the mat, the rail and the crowd's feet clear
     if (Math.abs(x) < 0.95 && Math.abs(z) < 1.2) continue;
@@ -209,7 +213,7 @@ export function buildGrass(rand, { count = 23000, inner = 0.3, outer = 30, sunDi
     const s = 0.72 + rand() * 0.6;
     // Trodden down around the station: a shooter stands on a worn pad, and
     // waist-high grass right under the muzzle would just block the view.
-    const mow = 0.34 + 0.66 * Math.min(1, Math.max(0, (r - 1.6) / 5.5));
+    const mow = bermPass ? 1 : 0.34 + 0.66 * Math.min(1, Math.max(0, (r - 1.6) / 5.5));
     scl.set(s, s * (0.75 + rand() * 0.45) * mow, s);
     m.compose(pos, q, scl);
     mesh.setMatrixAt(placed, m);

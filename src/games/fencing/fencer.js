@@ -31,7 +31,9 @@ import { createPerson, appearanceFor } from '../shared/people.js';
 
 export const ANKLE_H = 0.08; // ankle joint above the sole
 export const BLADE = 0.9;
-const BLADE_START = 0.075; // from the fist to where the blade leaves the bell
+const BLADE_START = 0.075; // from the foil's origin to where the blade leaves the bell
+/** The foil's origin sits this far up the handle from the grip centre (the bell clears the fingers). */
+const GRIP_OFF = 0.026;
 const PELVIS = 0.76; // hips height en garde: knees well bent
 const FRONT_FOOT = 0.38;
 const BACK_FOOT = -0.36;
@@ -250,9 +252,10 @@ function buildFoil(mats) {
     gp.setY(i, gp.getY(i) - 0.5 * x * x); // the curve, towards the palm
   }
   gripGeo.computeVertexNormals();
-  const pad = new THREE.CylinderGeometry(0.04, 0.04, 0.008, 14);
+  // The cushion sits inside the bell, against its inner face
+  const pad = new THREE.CylinderGeometry(0.05, 0.05, 0.008, 16);
   pad.rotateZ(Math.PI / 2);
-  pad.translate(0.012, 0, 0);
+  pad.translate(0.056, 0, 0);
   const grip = new THREE.Mesh(mergeGeometries([gripGeo, pad]), mats.grip);
   gripGeo.dispose();
   pad.dispose();
@@ -280,6 +283,98 @@ function buildFoil(mats) {
   const button = new THREE.Mesh(new THREE.SphereGeometry(0.009, 6, 4), mats.button);
   g.add(button);
   return { group: g, blade, rest, button };
+}
+
+/* ---- The glove -------------------------------------------------------- */
+
+const GLOVE_BONES = [
+  'hand', 'thumb', 'thumbMid', 'thumbTip', 'index', 'indexMid', 'indexTip', 'middle', 'middleMid', 'middleTip',
+  'palm', 'ring', 'ringMid', 'ringTip', 'pinky', 'pinkyMid', 'pinkyTip', 'fingers', 'fingersTip'
+];
+
+/**
+ * The fencing glove on the weapon hand: the person's own hand, copied out
+ * of their skinned mesh (every triangle weighted to the hand and finger
+ * bones), puffed out a few millimetres along its normals and skinned to
+ * the same skeleton. It follows every finger of the grip exactly — one
+ * draw call, and it fits whoever wears it.
+ */
+function buildGlove(person, S, mat) {
+  const { mesh } = person;
+  const skel = mesh.skeleton;
+  const g = mesh.geometry;
+  const pos = g.attributes.position;
+  const nor = g.attributes.normal;
+  const si = g.attributes.skinIndex;
+  const sw = g.attributes.skinWeight;
+  if (!pos || !nor || !si || !sw || !skel) return null;
+  const set = new Set();
+  GLOVE_BONES.forEach((n) => {
+    const b = person.bones[n + S];
+    const i = b ? skel.bones.indexOf(b) : -1;
+    if (i >= 0) set.add(i);
+  });
+  if (!set.size) return null;
+  const handW = new Float32Array(pos.count);
+  for (let v = 0; v < pos.count; v++) {
+    let w = 0;
+    for (let k = 0; k < 4; k++) if (set.has(si.getComponent(v, k))) w += sw.getComponent(v, k);
+    handW[v] = w;
+  }
+  const idx = g.index ? g.index.array : null;
+  const triCount = (idx ? idx.length : pos.count) / 3;
+  const remap = new Int32Array(pos.count).fill(-1);
+  const keep = [];
+  const order = [];
+  for (let t = 0; t < triCount; t++) {
+    const a = idx ? idx[t * 3] : t * 3;
+    const b = idx ? idx[t * 3 + 1] : t * 3 + 1;
+    const c = idx ? idx[t * 3 + 2] : t * 3 + 2;
+    if (Math.min(handW[a], handW[b], handW[c]) < 0.5) continue;
+    for (const v of [a, b, c]) {
+      if (remap[v] < 0) {
+        remap[v] = keep.length;
+        keep.push(v);
+      }
+      order.push(remap[v]);
+    }
+  }
+  if (!order.length) return null;
+  const n = keep.length;
+  const P = new Float32Array(n * 3);
+  const N = new Float32Array(n * 3);
+  const SI = new si.array.constructor(n * 4);
+  const SW = new Float32Array(n * 4);
+  const puff = 0.0032 * person.scale;
+  keep.forEach((v, i) => {
+    const nx = nor.getX(v);
+    const ny = nor.getY(v);
+    const nz = nor.getZ(v);
+    P[i * 3] = pos.getX(v) + nx * puff;
+    P[i * 3 + 1] = pos.getY(v) + ny * puff;
+    P[i * 3 + 2] = pos.getZ(v) + nz * puff;
+    N[i * 3] = nx;
+    N[i * 3 + 1] = ny;
+    N[i * 3 + 2] = nz;
+    for (let k = 0; k < 4; k++) {
+      SI[i * 4 + k] = si.getComponent(v, k);
+      SW[i * 4 + k] = sw.getComponent(v, k);
+    }
+  });
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(P, 3));
+  geo.setAttribute('normal', new THREE.BufferAttribute(N, 3));
+  geo.setAttribute('skinIndex', new THREE.BufferAttribute(SI, 4));
+  geo.setAttribute('skinWeight', new THREE.BufferAttribute(SW, 4));
+  geo.setIndex(order);
+  const glove = new THREE.SkinnedMesh(geo, mat);
+  glove.name = 'fencing-glove';
+  glove.castShadow = true;
+  glove.receiveShadow = true;
+  glove.frustumCulled = false;
+  mesh.add(glove);
+  glove.bind(skel, mesh.bindMatrix);
+  return glove;
 }
 
 /* ---- The fencer ------------------------------------------------------- */
@@ -354,6 +449,8 @@ export class Fencer {
       pad: new THREE.MeshStandardMaterial({ color: 0xf1efe8, roughness: 0.7 }),
       steel: new THREE.MeshStandardMaterial({ color: 0xdfe4ec, roughness: 0.3, metalness: 0.95 }),
       grip: new THREE.MeshStandardMaterial({ color: 0x2a2422, roughness: 0.7 }),
+      // Soft white leather with a little sheen
+      glove: new THREE.MeshStandardMaterial({ color: 0xf3f1ea, roughness: 0.62 }),
       // The point's button: a warm pin of light that bloom can catch
       button: new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 1.4, 1.0) })
     };
@@ -366,18 +463,20 @@ export class Fencer {
     this.blade = foil.blade;
     this.bladeRest = foil.rest;
     this.button = foil.button;
-    // The fencing glove on the sword hand: a padded white fist and a long
-    // gauntlet cuff over the sleeve
-    // (long enough up the back of the hand to cover the skin fist inside)
-    const gloveGeo = new THREE.SphereGeometry(1, 14, 10);
-    gloveGeo.scale(0.06, 0.08, 0.064).translate(0, 0.014, -0.004);
-    this.glove = new THREE.Mesh(gloveGeo, this.mats.pad);
-    this.glove.castShadow = true;
+    // The fencing glove's long gauntlet cuff over the sleeve (the glove
+    // itself is skinned to each person's hand in setPerson)
+    this.glove = null;
     const cuffGeo = new THREE.CylinderGeometry(0.056, 0.047, 0.1, 12, 1, true);
     this.cuff = new THREE.Mesh(cuffGeo, this.mats.pad);
     this.cuff.castShadow = true;
     // Foil space → fist space: +x along the blade, +y the way it bows
     this.foilQ = frameQuat(new THREE.Vector3(1, 0, 0), BLADE_L, new THREE.Vector3(0, 1, 0), BOW_L, new THREE.Quaternion());
+    this.foilHolder = new THREE.Group();
+    this.foilHolder.add(this.foil);
+    this.bladeL = new THREE.Vector3().copy(BLADE_L);
+    this.cosYB = COS_YB;
+    this.sinYB = SIN_YB;
+    this.gripOff = 0;
     this.person = null;
     this.setPerson(name, sock);
     this._setBend(0);
@@ -393,12 +492,17 @@ export class Fencer {
     const p = createPerson(appearanceFor(name, {
       outfit: { top: 'fencing', bottom: 'knickers', accent: sock, shoes: 'sneakers', shoeColor: 0xe9e7e2 }
     }));
+    if (this.glove) {
+      this.glove.geometry.dispose();
+      this.glove.removeFromParent();
+      this.glove = null;
+    }
     if (this.person) this.person.dispose();
     this.person = p;
     this.s = p.scale;
     this.group.add(p.root);
-    p.attach(this.foil, `grip${this.hand}`, { quaternion: this.foilQ });
-    p.attach(this.glove, `grip${this.hand}`, { position: [0, 0.008 * p.scale, 0], scale: p.scale });
+    this._grip();
+    this.glove = buildGlove(p, this.hand, this.mats.glove);
     p.attach(this.cuff, `forearm${this.hand}`, { position: [0, -0.215 * p.scale, 0.004 * p.scale], scale: p.scale });
     const { lame } = p.materials;
     if (lame) {
@@ -418,6 +522,38 @@ export class Fencer {
     this._measure();
     this.apply(this.pose);
     this.update(0, 0);
+  }
+
+  /**
+   * The foil in the French grip. With the people grip library the fingers
+   * really close on the handle: the index and thumb pinch it just behind
+   * the bell, the last three fingers wrap it, the pommel lies against the
+   * wrist. (Without it, the foil sits in the fist socket.)
+   */
+  _grip() {
+    const p = this.person;
+    const H = this.hand;
+    if (typeof p.hold === 'function') {
+      // Grip frame: +Y pommel → blade, +Z the flat under the thumb (the way the blade bows)
+      this.foil.quaternion.setFromRotationMatrix(_m.makeBasis(_v.set(0, 1, 0), _v2.set(0, 0, 1), _v3.set(1, 0, 0)));
+      this.foil.position.set(0, GRIP_OFF, 0);
+      this.foilHolder.position.set(0, 0, 0);
+      p.hold(this.foilHolder, H, 'foil', { handle: [0.016, 0.012], blend: 0 });
+      const anchor = p.sockets[`hold${H}`];
+      this.sock = anchor;
+      this.bladeL.set(0, 1, 0).applyQuaternion(anchor.quaternion).normalize();
+      this.gripOff = GRIP_OFF;
+    } else {
+      this.foil.quaternion.copy(this.foilQ);
+      this.foil.position.set(0, 0, 0);
+      p.attach(this.foilHolder, `grip${H}`);
+      this.sock = p.sockets[`grip${H}`];
+      this.bladeL.copy(BLADE_L);
+      this.gripOff = 0;
+    }
+    // Hand +Y (up the forearm) = cos · blade + sin · (the perpendicular towards the elbow)
+    this.cosYB = this.bladeL.y;
+    this.sinYB = Math.sqrt(Math.max(0, 1 - this.cosYB * this.cosYB));
   }
 
   /**
@@ -650,7 +786,7 @@ export class Fencer {
   _weapon(grip, dir, pole) {
     const { person } = this;
     const b = person.bones;
-    const sock = person.sockets[`grip${this.hand}`].position;
+    const sock = this.sock.position;
     const bladeW = this.V().copy(dir).normalize();
     const q = this.Q();
     const wrist = this.V();
@@ -663,8 +799,8 @@ export class Fencer {
       add(this._dir(-1, 0, 0, _v3), 0.08);
       if (u.lengthSq() < 1e-8) u.set(0, 0, 1).addScaledVector(bladeW, -bladeW.z);
       u.normalize();
-      const yW = this.V().copy(bladeW).multiplyScalar(COS_YB).addScaledVector(u, SIN_YB);
-      frameQuat(BLADE_L, bladeW, UP_L, yW, q);
+      const yW = this.V().copy(bladeW).multiplyScalar(this.cosYB).addScaledVector(u, this.sinYB);
+      frameQuat(this.bladeL, bladeW, UP_L, yW, q);
       wrist.copy(sock).applyQuaternion(q).negate().add(grip);
       person.ikArm(this.hand, wrist, pole, q);
     };
@@ -842,8 +978,12 @@ export class Fencer {
   }
 
   dispose() {
+    if (this.glove) {
+      this.glove.geometry.dispose();
+      this.glove.removeFromParent();
+    }
     this.person.dispose();
-    for (const o of [this.mask, this.foil, this.glove, this.cuff]) {
+    for (const o of [this.mask, this.foil, this.cuff]) {
       o.traverse((c) => {
         if (c.geometry) c.geometry.dispose();
       });
@@ -1218,8 +1358,9 @@ export class Animator {
    */
   contact(p, ctx, line) {
     const a2 = this.aim(p, ctx, line);
-    const bx = a2.handX + Math.cos(a2.a) * BLADE_START;
-    const by = a2.handY + Math.sin(a2.a) * BLADE_START;
+    const st = BLADE_START + this.f.gripOff;
+    const bx = a2.handX + Math.cos(a2.a) * st;
+    const by = a2.handY + Math.sin(a2.a) * st;
     const d = Math.hypot(a2.tx - bx, a2.ty - by);
     const kb = bendFor(d);
     p[P.bend] = kb;

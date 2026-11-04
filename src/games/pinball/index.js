@@ -2019,15 +2019,26 @@ export async function createPinball(container, opts = {}) {
       });
     } else {
       const saveLeft = state.ballSaveUntil - performance.now();
+      // An arrow is lit only when that shot counts for something right now:
+      // a gren lights the shots IT scores, not every ramp on the table
+      const mid = state.mode && !state.mode.wizard ? state.mode.def.id : '';
+      const laps = mid === 'gokart' || mid === 'femkamp';
+      const relight = state.multiball && !state.jackpotLit;
       const lit = {
         save: state.phase === 'play' && saveLeft > 0,
-        leftOrbit: state.modeStartLit || (state.multiball && !state.jackpotLit),
-        leftRamp: !!state.mode || state.multiball,
-        castle: state.lockLit || (state.multiball && state.jackpotLit) ||
-          (state.mode && (state.mode.wizard || state.mode.def.id === 'fiske')),
-        rightRamp: !!state.mode || state.multiball,
+        leftOrbit: state.modeStartLit || relight || laps,
+        leftRamp: relight || laps || (state.mode && state.mode.wizard),
+        castle: state.lockLit || (state.multiball && state.jackpotLit) || mid === 'fiske' ||
+          (state.mode && state.mode.wizard),
+        rightRamp: relight || laps || (state.mode && state.mode.wizard),
         trolls: state.trolls.some((tr) => tr.up)
       };
+      // Pingis is played on the bumpers: their rings pulse while it runs
+      refs.bumpers.forEach((bm, i) => {
+        bm.ring.material.emissiveIntensity = mid === 'pingis'
+          ? 1.1 + 1.9 * (0.5 + 0.5 * Math.sin(now / 110 + i * 2.1))
+          : state.bumperLit[i] ? 2.6 : 0.95;
+      });
       INSERT_ORDER.forEach((id) => {
         level[id] = lit[id] ? pulse : null;
       });

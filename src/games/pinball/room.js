@@ -283,7 +283,7 @@ function buildNeighbour(THREE, mergeGeometries, materials, theme, disposables) {
   // Set back a little from ours, as machines in a row never quite line up —
   // which also keeps their translites above the frame, away from the HUD
   g.position.set((CAB.x0 + CAB.x1) / 2 + theme.side * (w + GAP), 0, cz - 9);
-  return { group: g, translite: tl.material };
+  return { group: g, translite: tl.material, playfield: pf.material };
 }
 
 export function buildRoom(THREE, { mergeGeometries, materials }) {
@@ -311,6 +311,13 @@ export function buildRoom(THREE, { mergeGeometries, materials }) {
     update(t) {
       neighbours.forEach((n, i) => {
         n.translite.color.setScalar(0.6 + Math.sin(t * 1.3 + i * 2.1) * 0.12);
+        // Their own attract shows: the playfield GI swells and dips, now
+        // and then a quick double flash, as a machine idling in a row does
+        const ph = (t * 0.9 + i * 1.7) % 6;
+        const flashK = ph > 5.6 ? (Math.floor(ph * 20) % 2 ? 0.1 : 0) : 0;
+        // Linear values: 0.15 is the old fixed 0x6c6c6c
+        const v = 0.15 + Math.sin(t * 2.1 + i * 2.6) * 0.03 + flashK;
+        n.playfield.color.setRGB(v, v, v * 1.04);
       });
     },
     dispose() {

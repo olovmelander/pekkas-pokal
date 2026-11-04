@@ -548,14 +548,14 @@ export const GRIPS = {
     const tilt = (25 * Math.PI) / 180;
     const ax = n(0, -Math.cos(tilt), Math.sin(tilt));
     return {
-      pos: new THREE.Vector3(palmSurface(hs) - hw - 0.0035, -0.088 * hs, 0.022 * hs),
+      pos: new THREE.Vector3(palmSurface(hs) - hw - 0.0085, -0.08 * hs, 0.016 * hs),
       quat: frameYZ(ax, new THREE.Vector3(0.0, 0.25, 1)),
       shapes: [
         { type: 'box', pos: [0, -0.02, 0], half: [hw, 0.075, ht], round: 0.004 },
-        { type: 'cyl', pos: [0, 0.062, 0], r: 0.045, h: 0.012 }
+        { type: 'cyl', pos: [0, 0.068, 0], r: 0.032, h: 0.01 }
       ],
       fingers: {
-        index: { start: [-0.1, 0.55, 0.9, 0.35], rate: [0.6, 1.2, 0.7] },
+        index: { start: [-0.08, 0.3, 0.5, 0.25], rate: [0.7, 1.2, 0.8] },
         middle: { start: [0.0, 0.5, 0.75, 0.4] },
         ring: { start: [0.05, 0.6, 0.8, 0.4] },
         pinky: { start: [0.12, 0.7, 0.9, 0.45] }
