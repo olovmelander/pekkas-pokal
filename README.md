@@ -282,9 +282,10 @@ dig, röd för motståndaren. Poäng: tusch 100, ripost 175, fint-tusch 150,
 parad 25, +50 per tusch i rad, matchvinst 500 + 100 per tusch i marginal och
 vit match (5–0) +300.
 
-**Teknik.** Fäktarna är ledade lågpolyfigurer — mask med galler, jacka
-med blank lamé, knickers, florett — som poseras helt i kod: gardvinklar
-per linje, utfall, parader och vacklanden är interpolerade poser, inga
+**Teknik.** Fäktarna kommer ur spelens gemensamma personsystem (se nedan)
+— mask med galler, jacka med blank lamé, knickers, florett — och poseras
+helt i kod: gardvinklar per linje, utfall, parader och vacklanden är
+interpolerade poser som läggs på det delade skelettet, inga
 animationsfiler. Klingan drar ett additivt spår efter sig i utfallet.
 
 Interiörer står och faller med ljussättningen, och regeln är *hierarki* —
@@ -320,6 +321,22 @@ träffpunkten, lampan blommar, lamén lyser i skyttens färg och publiken
 reagerar; det avgörande tuschet i varje match visas i slow motion. På dator
 spelar du med piltangenterna, mellanslag och F; på telefon med knappar för
 tummarna, och i stående läge står kameran bakom din axel.
+
+**Andra uppgraderingen.** Fäktarna är nu riktiga personer ur spelens
+gemensamma personsystem: Mikael, Rickard och Per Vikman ser ut som de gör i
+alla årens spel, i fäktdräkt med lamé, knickers, strumpor i sin färg och en
+mask med galler som man anar ansiktet bakom. Masken sitter i handen vid
+saluten och sätts på inför »En garde«, och mellan matcherna står de med masken
+av – så att du ser vem du möter. Benen och båda armarna styrs med inverterad
+kinematik, florettens spets landar exakt på lamén i träffögonblicket, och
+motståndarna är vänsterhänta så att båda klingorna alltid syns. Domaren ropar
+ut varje fras med egna gester, och på bänkarna sitter resten av 2023 års fält
+och lutar sig fram, jublar, stönar och reser sig för mästaren. Grafiken skyddas
+nu mot svarta skärmar och flimmer på riktiga grafikkretsar: shaders kompileras
+i förväg, ljusstrålarnas och dammets shaders räknar säkert, ytor som ligger
+nära varandra flimrar inte längre, och en vakt förenklar grafiken om bilden
+skulle bli svart.
+
 
 **Pekkas Lerduvor (2022)**
 
@@ -780,7 +797,7 @@ stänger dem.
 | `src/games/pinball/` | Flipperspelet: `physics` (2D-kollision), `table` (layout + banans grafik), `meshes` (3D), `room` (arkadhallen), `dmd` (punktmatrisen), `fx` (gnistor, bollspår), `audio` (syntetiskt ljud), `hud` (paneler), `scores` (topplistan), `index` (spelloop) |
 | `src/games/fishing/` | Fiskespelet: `species` (procedurella fiskar), `world` (sjö, vattenshader), `boat` (klinkbyggda ekan), `angler` (Erik i ekan, IK mot spöet), `fx` (stänk, bubblor, glimtar), `hud` (paneler, fångstdagbok), `progress` (uppdrag och rekord), `audio` (syntetiskt ljud), `index` (spelloop) |
 | `src/games/clay/` | Drejspelet: `studio` (ateljé, ugn, drejskiva), `clay` (krukans nät och material), `keramiker` (keramikern och domen), `guide` (målets guider i 3D), `fx` (stänk, glöd, värmedaller), `hud` (paneler, dom, kvällens utställning), `audio` (syntetiskt ljud), `index` (lerfysik + spelloop) |
-| `src/games/fencing/` | Fäktspelet: `salle` (fäktsal, ljusvolymer, publik), `fencer` (IK-riggade fäktare), `fx` (gnistor, klingspår, konfetti), `hud` (paneler, slutspelsträd), `audio` (syntetiskt ljud), `index` (duell-AI + spelloop) |
+| `src/games/fencing/` | Fäktspelet: `salle` (fäktsal, ljusvolymer, publik), `fencer` (fäktarna, domaren och masken på personsystemet), `fx` (gnistor, klingspår, konfetti), `hud` (paneler, slutspelsträd), `audio` (syntetiskt ljud), `index` (duell-AI + spelloop) |
 | `src/games/shooting/` | Skyttespelet: `range` (fält, lerduvor), `gang` (2022 års gäng på fikastolarna), `sky` (himmelsshader och moln), `gun` (bockbössan i PBR), `grass` (instansierad äng med vind), `fx` (skärvor, damm, haglsvärm), `hud` (25-kortet, spökstapeln, slutkortet), `audio` (syntetiskt ljud), `index` (banor + spelloop) |
 | `src/games/pingis/` | Pingisspelet: `hall` (bygdegård, bord, figurer), `crowd` (instansierad publik), `scoreboard` (fällbara siffror), `fx` (bollspår, ringar, gnistor), `post` (bloom, gradering, spegelgolv), `hud` (paneler, scoutingkort), `audio` (syntetiskt ljud), `index` (fysik, AI och spelloop) |
 | `src/games/painting/` | Målerispelet: `artworks` (motiven + färgblandning i RYB och Lab), `canvasart` (penseldrag och dukens höjdkarta), `palette` (paletten i 3D), `garden` (trädgården, stafflier), `cast` (Hägglund och 2021 års målare), `hud` (paneler, dom, galleri), `audio` (syntetiskt ljud), `index` (spelloop och dom) |
