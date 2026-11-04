@@ -1,0 +1,181 @@
+/**
+ * The flipper's DOM layer.
+ *
+ * Two layouts from one tree. In landscape the machine stands in the middle of
+ * the room and the HUD takes the space either side of it — progress on the
+ * left, the topplista and the start card on the right — so nothing is ever
+ * painted over the playfield. In portrait the panels dissolve
+ * (`display: contents`) and their parts pin themselves to the edges of the
+ * phone around the table instead. The score itself lives on the DMD in the
+ * backbox, where a pinball player looks for it.
+ */
+
+import { fmtScore } from './dmd.js';
+import { BOARD_SHOWN } from './scores.js';
+
+const esc = (s) =>
+  String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+export function buildHud(root) {
+  root.insertAdjacentHTML(
+    'beforeend',
+    `
+    <div class="pbf-vignette"></div>
+    <div class="pb-ui pbf-ui">
+      <section class="pbf-left">
+        <header class="pbf-brand"><small>Pekkas Pokal</small><strong>Flipper</strong><em>2025</em></header>
+        <div class="pbf-status">
+          <div class="pbf-balls" id="pbf-balls"></div>
+          <div class="pbf-mult" id="pbf-mult"></div>
+        </div>
+        <div class="pbf-pokal" id="pbf-pokal" aria-label="P-O-K-A-L"></div>
+        <div class="pbf-gren-wrap">
+          <h4 class="pbf-h">Grenar</h4>
+          <ol class="pbf-grenar" id="pbf-grenar"></ol>
+        </div>
+        <div class="pbf-mode" id="pbf-mode" hidden>
+          <div class="pbf-mode-head"><b id="pbf-mode-name"></b><span id="pbf-mode-time"></span></div>
+          <p id="pbf-mode-task"></p>
+          <div class="pbf-mode-bar"><i id="pbf-mode-bar"></i></div>
+        </div>
+      </section>
+
+      <div class="pbf-goal" id="pbf-goal"><i></i><span id="pbf-goal-text"></span></div>
+
+      <section class="pbf-right">
+        <div class="pbf-sheet" id="pbf-sheet"></div>
+        <div class="pbf-board-card">
+          <h4 class="pbf-h">Topplista <span>på den här enheten</span></h4>
+          <ol class="pbf-board" id="pbf-board"></ol>
+        </div>
+        <dl class="pbf-keys">
+          <div><dt>← →</dt><dd>Flippers (även Shift, A/D)</dd></div>
+          <div><dt>Mellanslag</dt><dd>Håll &amp; släpp avfyraren</dd></div>
+          <div><dt>N</dt><dd>Nudga — men inte för ofta</dd></div>
+          <div><dt>?</dt><dd>Strategikort</dd></div>
+        </dl>
+      </section>
+
+      <div class="pbf-bottom">
+        <div class="pbf-plunger" id="pbf-plunger" hidden>
+          <div class="pbf-plunger-label">Håll för kraft — släpp i det turkosa för skill shot</div>
+          <div class="pbf-power"><i class="pbf-skill"></i><span id="pbf-power-fill"></span></div>
+        </div>
+        <button class="pbf-nudge" id="pbf-nudge" aria-label="Nudga bordet" hidden>Nudga</button>
+      </div>
+
+      <div class="pbf-pops" id="pbf-pops" aria-hidden="true"></div>
+      <div class="pbf-rotate">Vänd telefonen till stående — då blir bordet större.</div>
+
+      <button class="pbf-round pbf-info" id="pbf-info" aria-label="Strategikort">?</button>
+      <button class="pbf-round pbf-mute" id="pbf-mute" aria-label="Ljud på/av">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M11 5 6 9H2v6h4l5 4V5Z"/><path class="pbf-wave" d="M15.5 8.5a5 5 0 0 1 0 7"/>
+        </svg>
+      </button>
+
+      <div class="pbf-help" id="pbf-help" hidden>
+        <div class="pbf-help-card" role="dialog" aria-label="Strategikort">
+          <h3>Strategikort</h3>
+          <p class="pbf-help-sub">Pekkas Pokal Flipper</p>
+          <ul class="pbf-help-list">
+            <li><i style="--c:#f2c14e"></i><b>Ramper</b> Kungsvägen (vänster mynning) och Vallgraven (hårt skott i höger orbit) — kedjar kombos och räknas som varv.</li>
+            <li><i style="--c:#7c8cf8"></i><b>Vänster orbit</b> Snurran ger poäng per varv. Lyser pilen: starta nästa GREN här.</li>
+            <li><i style="--c:#f26d8d"></i><b>P-O-K-A-L</b> Fäll alla fem målen så tänds grenstart i vänster orbit.</li>
+            <li><i style="--c:#8b93ad"></i><b>Borgen</b> Tre smällar på porten fäller vindbryggan. Bumprarna laddar låset — lås två bollar i borgen för MULTIBALL med jackpot på pokalen.</li>
+            <li><i style="--c:#6f9b5a"></i><b>Trollen</b> Vaktar borgen under grenar och multiball. Slå ner dem — 3 000 styck.</li>
+            <li><i style="--c:#3ddc7b"></i><b>Ny boll &amp; kickback</b> Lampan vid avloppet lyser de första sekunderna: dräneras bollen då serveras den om, en gång per boll. Vänster utbana har kickback — tänds om via båda inbanorna.</li>
+            <li><i style="--c:#ffd166"></i><b>Finalen</b> Klara alla fem grenar → 60 sekunder multiball där allt räknas ×5.</li>
+          </ul>
+          <p class="pbf-help-tip">Skill shot: släpp avfyraren i det turkosa fältet — och skjut vänster orbit inom tre sekunder för SUPER (15 000).</p>
+          <div class="pbf-help-keys">Flippers: skärmhalvorna, ←/→ eller Shift · Avfyrare: håll &amp; släpp / mellanslag · Nudge: N · Fyra nudgar för snabbt ger TILT</div>
+          <button class="pbf-btn" id="pbf-help-close">Tillbaka till spelet</button>
+        </div>
+      </div>
+    </div>`
+  );
+  const $ = (id) => root.querySelector(`#${id}`);
+  return {
+    balls: $('pbf-balls'),
+    mult: $('pbf-mult'),
+    pokal: $('pbf-pokal'),
+    grenar: $('pbf-grenar'),
+    mode: $('pbf-mode'),
+    modeName: $('pbf-mode-name'),
+    modeTask: $('pbf-mode-task'),
+    modeTime: $('pbf-mode-time'),
+    modeBar: $('pbf-mode-bar'),
+    goal: $('pbf-goal'),
+    goalText: $('pbf-goal-text'),
+    sheet: $('pbf-sheet'),
+    board: $('pbf-board'),
+    plunger: $('pbf-plunger'),
+    powerFill: $('pbf-power-fill'),
+    nudge: $('pbf-nudge'),
+    pops: $('pbf-pops'),
+    mute: $('pbf-mute'),
+    info: $('pbf-info'),
+    help: $('pbf-help'),
+    helpClose: $('pbf-help-close')
+  };
+}
+
+/** The topplista rows; `hi` is the entry to highlight (the one just set). */
+export function boardHtml(board, hi = null) {
+  if (!board.length) {
+    return '<li class="pbf-board-empty">Inga rekord än — bli först på maskinen.</li>';
+  }
+  return board
+    .slice(0, BOARD_SHOWN)
+    .map(
+      (e, i) =>
+        `<li class="${e === hi ? 'hi' : ''}"><b>${i + 1}</b><span>${esc(e.n)}</span><em>${fmtScore(e.s)}</em></li>`
+    )
+    .join('');
+}
+
+export function startSheet({ touch, board }) {
+  const how = touch
+    ? 'Vänster och höger skärmhalva styr varsin flipper'
+    : 'Mellanslag startar · ← → flippar · N nudgar';
+  return `
+    <h2>Pekkas Pokal <span>Flipper</span></h2>
+    <p>Fäll P-O-K-A-L, storma borgen och klara grenarna. Tre bollar — gör dem långa.</p>
+    <button class="pbf-btn" data-act="start">Starta spelet</button>
+    <p class="pbf-sheet-hint">${how}</p>
+    <ol class="pbf-board pbf-sheet-board">${boardHtml(board)}</ol>`;
+}
+
+export function nameSheet({ score, rank, names, remembered }) {
+  const ordered = remembered && names.includes(remembered)
+    ? [remembered, ...names.filter((n) => n !== remembered)]
+    : names;
+  const chips = [...ordered, 'Gäst']
+    .map((n) => `<button class="pbf-name${n === remembered ? ' last' : ''}" data-name="${esc(n)}">${esc(n)}</button>`)
+    .join('');
+  return `
+    <h2>${rank === 1 ? 'Nytt rekord!' : `Plats ${rank} på topplistan`}</h2>
+    <div class="pbf-final">${fmtScore(score)}</div>
+    <p>Vem spelade? Ett tryck sparar.</p>
+    <div class="pbf-names">${chips}</div>
+    <form class="pbf-own" data-act="own">
+      <input type="text" maxlength="12" autocomplete="off" placeholder="…eller skriv ett namn" aria-label="Namn" />
+      <button type="submit">Spara</button>
+    </form>`;
+}
+
+export function overSheet({ score, rank, onBoard, need, board, hi }) {
+  const title = onBoard && rank === 1 ? 'Nytt rekord!' : 'Spelet slut';
+  const line = onBoard
+    ? `Plats ${rank} på topplistan`
+    : need
+      ? `${fmtScore(need - score + 1)} poäng från topplistan`
+      : 'Bollarna är slut — en gång till?';
+  return `
+    <h2>${title}</h2>
+    <div class="pbf-final">${fmtScore(score)}</div>
+    <p class="pbf-final-sub">${line}</p>
+    <button class="pbf-btn" data-act="start">Spela igen</button>
+    <ol class="pbf-board pbf-sheet-board">${boardHtml(board, hi)}</ol>`;
+}

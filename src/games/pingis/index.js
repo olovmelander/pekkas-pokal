@@ -17,23 +17,39 @@
  * by 2 — kvällens husregel). Three matches against the actual 2019 podium
  * — Henrik (brons), Rickard (silver) and Viktor Jones (mästaren) — make
  * the tournament.
+ *
+ * Module layout: hall.js builds the room and the figures, fx.js the juice
+ * (trails, rings, sparks, confetti), crowd.js the people watching,
+ * scoreboard.js the split-flap board, post.js the bloom and grade, hud.js
+ * the DOM. This file owns the rules, the ball, the bot and the flow — and
+ * the ball/bot code is the measured one: see the README before touching
+ * anything between "Ball flight" and "Physics tick".
  */
 
 import * as THREE from 'three';
 import { Sfx } from './audio.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { mulberry, glowTexture, buildHall, buildPlayer, buildPaddle, TABLE } from './hall.js';
+import {
+  mulberry, glowTexture, ballTexture, buildHall, buildPlayer, buildPaddle, buildTrophy, TABLE
+} from './hall.js';
+import { Trail, Swoosh, Rings, Sparks, Confetti, spinColor, spinCss } from './fx.js';
+import { buildCrowd } from './crowd.js';
+import { Scoreboard } from './scoreboard.js';
+import { createPost } from './post.js';
+import { buildHud, MEDAL_NAMES } from './hud.js';
+
+/** Fill the whole stage on desktop; the camera reframes per aspect. */
+export const layout = 'full';
 
 const HIGHSCORE_KEY = 'pp-pingis-highscore';
+const BEST_KEY = 'pp-pingis-best';
 const POINTS_TO_WIN = 7;
 
 const T = TABLE;
 const HITZ = T.length / 2 + 0.11; // the hit plane, just off each end
 const REACH = 0.62; // generous: quality falls off toward the edge, misses are rare
 const GRAV = 9.4;
+const FOE_SCALE = 1.14; // ~1.85 m against the 76 cm table
+const PADDLE_Y = T.height + 0.08; // the player's grip height at rest
 
 /*
  * The opponents.
@@ -56,6 +72,7 @@ const OPPONENTS = [
   {
     name: 'Henrik Lundqvist',
     title: 'Bronsracketen',
+    podium: 'Brons 2019',
     shirt: 0x3f7a46,
     hair: 0x6b4a24,
     shorts: 0x23283a,
@@ -72,6 +89,7 @@ const OPPONENTS = [
   {
     name: 'Rickard Nilsson',
     title: 'Silverloopen',
+    podium: 'Silver 2019',
     shirt: 0x2f5f96,
     hair: 0x2a1c10,
     shorts: 0x1b2130,
@@ -88,6 +106,7 @@ const OPPONENTS = [
   {
     name: 'Viktor Jones',
     title: 'Mästaren av 2019',
+    podium: 'Guld 2019 · mästaren',
     shirt: 0xa8202c,
     hair: 0x3d2b18,
     shorts: 0x2a1418,
@@ -103,6 +122,33 @@ const OPPONENTS = [
   }
 ];
 
+/** Medal for a won match, by margin: 3 balls for silver, 5 for gold. */
+function medalFor(my, ai) {
+  if (my <= ai) return 0;
+  const m = my - ai;
+  return m >= 5 ? 3 : m >= 3 ? 2 : 1;
+}
+const MEDAL_WHY = ['', 'Vunnen match', 'Vunnen med minst 3 bollars marginal', 'Vunnen med minst 5 bollars marginal'];
+
+/** The intro card's scouting report, read straight off the real knobs. */
+function scouting(o) {
+  const n = (v, a, b) => Math.max(1, Math.min(5, Math.round(1 + ((v - a) / (b - a)) * 4)));
+  return [
+    ['Fart', n(o.speed, 1.2, 2.0)],
+    ['Placering', n(o.place, 0.45, 0.8)],
+    ['Smash', n(o.smashP, 0, 0.3)],
+    ['Skruv', n(o.serveSpin, 0.15, 0.9)],
+    ['Säkerhet', n(0.24 - o.missP, 0, 0.09)]
+  ];
+}
+
+const RALLY_TIERS = [
+  { at: 6, word: 'Fin duell!' },
+  { at: 10, word: 'Maratonrally!' },
+  { at: 15, word: 'Episkt!' },
+  { at: 20, word: 'Legendariskt!' }
+];
+
 /**
  * Frame delta, clamped at BOTH ends. Only clamping the top looks harmless
  * until a queued rAF fires with a timestamp older than the one stashed on
@@ -113,122 +159,90 @@ function clampDt(ms) {
   return Math.max(0, Math.min(0.05, ms / 1000));
 }
 
-/* ------------------------------------------------------------------- HUD */
+const smooth = (a, b, x) => {
+  const k = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return k * k * (3 - 2 * k);
+};
 
-function buildHud(root) {
-  root.innerHTML = `
-    <div class="fg-vignette"></div>
-    <div class="pb-hud">
-      <div class="pb-top">
-        <div class="pb-score-wrap">
-          <div class="pb-score" id="pg-score">0</div>
-          <div class="pb-hi">REKORD <span id="pg-hi">0</span></div>
-        </div>
-        <div class="pb-meta">
-          <div class="fk-touches" id="pg-pts"></div>
-          <div class="fg-cast" id="pg-match"></div>
-        </div>
-      </div>
-      <div class="fk-opponent" id="pg-opponent"></div>
-      <div class="fg-zone" id="pg-callout"></div>
-      <div class="fg-phase" id="pg-phase"></div>
-      <div class="pb-toast" id="pg-toast"></div>
-      <div class="fg-pops" id="pg-pops"></div>
-    </div>
-
-    <div class="pb-overlay" id="pg-overlay">
-      <div class="pb-panel">
-        <h2 id="pg-title">Pekkas Pingis</h2>
-        <p id="pg-text">Bygdegården i Bredbyn, 2019. Tre motståndare står mellan dig och pokalen — först till 7 vinner varje match.</p>
-        <ul class="fg-steps" id="pg-steps">
-          <li><i style="--c:#7fd8e8"></i><b>Flytta</b> Dra med fingret — racketen följer dig längs bordet.</li>
-          <li><i style="--c:#f2c14e"></i><b>Skruva</b> Flicka UPPÅT i träffen för topspin-drive, NEDÅT för backspin.</li>
-          <li><i style="--c:#5eead4"></i><b>Placera</b> Flicka åt sidan för att styra bollen ut i hörnen.</li>
-        </ul>
-        <div class="pb-scoreline" id="pg-scoreline" hidden></div>
-        <div class="fg-catchlist" id="pg-verdict" hidden></div>
-        <button class="pb-btn" id="pg-start">Serva!</button>
-      </div>
-    </div>
-
-    <button class="pb-info" id="pg-info" aria-label="Så spelar du">?</button>
-
-    <div class="pb-help" id="pg-help" hidden>
-      <div class="pb-help-card">
-        <h3>Så spelar du pingis</h3>
-        <p class="pb-help-sub">Pekkas Pingis · Bredbyn 2019</p>
-        <ul class="pb-help-list">
-          <li><i style="--c:#7fd8e8"></i><b>Racketen</b> Följer fingret (eller ←/→). Möt bollen — träffar du inte är poängen borta.</li>
-          <li><i style="--c:#f2c14e"></i><b>Topspin</b> Flicka uppåt i träffögonblicket: hårdare boll som dyker och sparkar framåt i studsen.</li>
-          <li><i style="--c:#a78bfa"></i><b>Backspin</b> Flicka nedåt: långsam boll som bromsar i studsen och är svår att smasha.</li>
-          <li><i style="--c:#5eead4"></i><b>Placering</b> Sidledsflick styr bollen mot hörnen — bort från motståndarens racket.</li>
-          <li><i style="--c:#f26d8d"></i><b>Risken</b> Ju hårdare flick, desto större chans att bollen går i nät eller utanför.</li>
-          <li><i style="--c:#ffd166"></i><b>Serven</b> Din serve: dra och släpp. Bollen måste studsa på din sida först — precis som på riktigt.</li>
-        </ul>
-        <p class="pb-help-tip">Långa dueller lönar sig: varje slag i rallyt höjer poängen du får när du vinner det. Smash-avslut och serve-ess ger extra.</p>
-        <div class="pb-help-keys">←/→ flyttar · håll ↑ = topspin, ↓ = backspin · mellanslag servar</div>
-        <button class="pb-btn" id="pg-help-close">Tillbaka till bordet</button>
-      </div>
-    </div>
-
-    <button class="pb-mute" id="pg-mute" aria-label="Ljud på/av">
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M11 5 6 9H2v6h4l5 4V5Z"/><path class="pb-wave" d="M15.5 8.5a5 5 0 0 1 0 7"/>
-      </svg>
-    </button>
-  `;
-  const q = (s) => root.querySelector(s);
-  return {
-    score: q('#pg-score'), hi: q('#pg-hi'), pts: q('#pg-pts'), match: q('#pg-match'),
-    opponent: q('#pg-opponent'), callout: q('#pg-callout'), phase: q('#pg-phase'),
-    toast: q('#pg-toast'), pops: q('#pg-pops'),
-    overlay: q('#pg-overlay'), title: q('#pg-title'), text: q('#pg-text'), steps: q('#pg-steps'),
-    scoreline: q('#pg-scoreline'), verdict: q('#pg-verdict'), start: q('#pg-start'),
-    info: q('#pg-info'), help: q('#pg-help'), helpClose: q('#pg-help-close'), mute: q('#pg-mute')
-  };
+/**
+ * The play camera for an aspect ratio. A phone in portrait needs a wide
+ * lens close behind the bat to keep the whole table across the frame; a
+ * monitor gets a longer lens from a touch further back, so the table stays
+ * the subject while the hall — stage, curtain, crowd, the wall seating —
+ * fills the sides instead of the table being dwarfed in the middle.
+ */
+function framing(aspect, out) {
+  const k = smooth(0.56, 1.6, aspect);
+  out.fov = THREE.MathUtils.lerp(58, 41, k);
+  out.pos.set(0, THREE.MathUtils.lerp(2.5, 2.32, k), THREE.MathUtils.lerp(3.85, 4.35, k));
+  out.look.set(0, THREE.MathUtils.lerp(1.02, 1.08, k), THREE.MathUtils.lerp(-1.1, -1.5, k));
+  return out;
 }
 
 /* ------------------------------------------------------------------- game */
 
 export async function createPingis(container) {
+  const coarse = window.matchMedia?.('(pointer: coarse)').matches ?? false;
+  const lowTier = coarse || Math.min(window.innerWidth, window.innerHeight) < 560;
+  const tier = lowTier ? 'low' : 'high';
+  const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  const vrand = Math.random; // visuals only — the rules have their own seeded rng
+
+  // Canvas textures bake their lettering once, so give the site's display
+  // face a moment to arrive before the signs and the board are painted.
+  try {
+    await Promise.race([
+      document.fonts?.load('700 64px "Schibsted Grotesk"'),
+      new Promise((resolve) => setTimeout(resolve, 900))
+    ]);
+  } catch (e) {
+    /* offline or blocked: the fallback face will do */
+  }
+
   const canvasHost = document.createElement('div');
   canvasHost.className = 'pb-canvas';
   container.appendChild(canvasHost);
 
   const hudHost = document.createElement('div');
-  hudHost.className = 'pb-ui fg-ui';
+  hudHost.className = 'pb-ui fg-ui pg-ui';
   container.appendChild(hudHost);
-  const hud = buildHud(hudHost);
+  const hud = buildHud(hudHost, { mouse: !coarse });
 
   const sfx = new Sfx();
   const rand = mulberry(2019);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  // No MSAA on the canvas: the scene renders into the composer's own
+  // multisampled target and the canvas only ever receives the final pass.
+  const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+  const maxPR = lowTier ? 1.75 : 2;
+  let pixelRatio = Math.min(window.devicePixelRatio || 1, maxPR);
+  renderer.setPixelRatio(pixelRatio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.98;
+  renderer.toneMappingExposure = 1.0;
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   canvasHost.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x120f0a);
-  scene.fog = new THREE.Fog(0x151109, 9, 20);
+  scene.fog = new THREE.Fog(0x151109, 10, 24);
 
   const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 40);
-  camera.position.set(0, 2.5, 3.85);
-  const lookAt = new THREE.Vector3(0, 1.02, -1.1);
-  camera.lookAt(lookAt);
+  // The input camera: the play framing without parallax or shake, so the
+  // cursor-to-bat mapping never drifts while the view breathes.
+  const aimCam = new THREE.PerspectiveCamera(50, 1, 0.05, 40);
+  const base = { fov: 50, pos: new THREE.Vector3(), look: new THREE.Vector3() };
 
   /* Lights — hierarchy: hemisphere fill, one casting key, lamp accents */
-  scene.add(new THREE.HemisphereLight(0x9aa8c8, 0x241a10, 0.42));
+  const hemi = new THREE.HemisphereLight(0x9aa8c8, 0x241a10, 0.3);
+  scene.add(hemi);
 
   const key = new THREE.DirectionalLight(0xffe2b0, 1.55);
   key.position.set(1.6, 5.4, 2.4);
   key.target.position.set(0, 0.7, -0.4);
   key.castShadow = true;
-  key.shadow.mapSize.set(1024, 1024);
+  key.shadow.mapSize.set(lowTier ? 1024 : 2048, lowTier ? 1024 : 2048);
   key.shadow.camera.left = -3.4;
   key.shadow.camera.right = 3.4;
   key.shadow.camera.top = 4;
@@ -237,75 +251,117 @@ export async function createPingis(container) {
   key.shadow.camera.far = 14;
   key.shadow.bias = -0.0008;
   key.shadow.normalBias = 0.015;
+  // r187's PCF: hardware compare + a 5-tap Vogel disk this many texels wide
+  key.shadow.radius = 3;
   scene.add(key, key.target);
 
   // The pendants: warm pools over the table. At this scale (metres, lamps
   // ~1.9 m up) candela in single digits already reads — no LAMP multiplier.
-  [-1.05, 0, 1.05].forEach((z) => {
+  const pendants = [-1.05, 0, 1.05].map((z) => {
     const lamp = new THREE.PointLight(0xffc98e, 5, 7, 2);
     lamp.position.set(0, 2.9, z);
     scene.add(lamp);
+    return lamp;
   });
-
-  /* Post: a light bloom so the pendants, the house sign and the ball's
-     highlight glow the way a warm hall reads on camera. */
-  const composer = new EffectComposer(renderer);
-  composer.addPass(new RenderPass(scene, camera));
-  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.26, 0.5, 0.93);
-  composer.addPass(bloom);
-  composer.addPass(new OutputPass());
 
   // A low fill from the player's side so the opponent's face reads instead
   // of going to silhouette against his own hall.
-  const faceFill = new THREE.DirectionalLight(0xffe8d0, 0.5);
+  const faceFill = new THREE.DirectionalLight(0xffe8d0, 0.55);
   faceFill.position.set(0.5, 2.2, 6);
   scene.add(faceFill);
 
   /* World */
   const glow = glowTexture();
-  const hall = buildHall(glow);
+  const hall = buildHall(glow, { tier, pixelRatio });
   scene.add(hall.group);
+
+  /* The hall reflects itself: one cube capture from over the table, so the
+     lacquer, the ball and the cups shine with THIS room, not a studio. */
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  if (hall.refs.reflector) hall.refs.reflector.visible = false;
+  const envRT = pmrem.fromScene(scene, 0.04, 0.1, 30, { position: new THREE.Vector3(0, 1.4, 0.6) });
+  if (hall.refs.reflector) hall.refs.reflector.visible = true;
+  pmrem.dispose();
+  const envTex = envRT.texture;
+  const useEnv = (root) => root.traverse((o) => {
+    const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+    mats.forEach((m) => {
+      if (!m.isMeshStandardMaterial || m.envMap) return;
+      m.envMap = envTex;
+      m.envMapIntensity = m.metalness > 0.5 ? 1.2 : 0.45;
+    });
+  });
+  useEnv(scene);
+  hall.refs.floorMat.envMapIntensity = lowTier ? 0.9 : 0.3;
+  hall.refs.tableTopMat.envMapIntensity = 0.7;
 
   /* Opponent figure across the table */
   let foe = null;
-  const foeRefs = { current: null };
+  function disposeTree(root) {
+    root.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+      const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+      mats.forEach((m) => {
+        Object.values(m).forEach((v) => {
+          if (v && v.isTexture && v !== envTex && v !== glow) v.dispose();
+        });
+        if (m.uniforms) {
+          Object.values(m.uniforms).forEach((u) => {
+            if (u.value && u.value.isTexture && u.value !== envTex && u.value !== glow) u.value.dispose();
+          });
+        }
+        m.dispose();
+      });
+    });
+  }
   function spawnFoe(idx) {
-    if (foe) scene.remove(foe.group);
+    if (foe) {
+      scene.remove(foe.group);
+      disposeTree(foe.group);
+    }
     const look = OPPONENTS[idx];
     foe = buildPlayer(look.shirt, { hair: look.hair, shorts: look.shorts });
     foe.group.position.set(0, 0, -HITZ - 0.55);
     foe.group.rotation.y = Math.PI;
-    foe.group.scale.setScalar(1.3); // human-tall against the 76 cm table
-    foe.group.traverse((o) => {
-      if (o.isMesh) o.castShadow = true;
-    });
+    foe.group.scale.setScalar(FOE_SCALE);
+    useEnv(foe.group);
     scene.add(foe.group);
-    foeRefs.current = foe.refs;
+    foe.idx = idx;
   }
   spawnFoe(0);
 
   /* The player's paddle, floating at the bottom of the frame */
-  const myPaddle = buildPaddle();
-  myPaddle.position.set(0, T.height + 0.08, HITZ);
+  const myPaddle = buildPaddle({ mark: 'PEKKAS' });
+  myPaddle.position.set(0, PADDLE_Y, HITZ);
   myPaddle.rotation.x = -0.4;
   myPaddle.traverse((o) => {
     if (o.isMesh) o.castShadow = true;
   });
+  useEnv(myPaddle);
   scene.add(myPaddle);
+  const { rubber } = myPaddle.userData;
 
-  /* The ball, its contact shadow and its trail */
+  /* The ball, its halo, contact shadow and trail */
   const ball = new THREE.Mesh(
-    new THREE.SphereGeometry(0.023, 18, 12),
-    new THREE.MeshStandardMaterial({ color: 0xfff8ee, roughness: 0.35, metalness: 0, emissive: 0x554a33, emissiveIntensity: 0.35 })
+    new THREE.SphereGeometry(0.023, 24, 16),
+    new THREE.MeshStandardMaterial({
+      map: ballTexture(), roughness: 0.32, metalness: 0,
+      emissive: 0x554a33, emissiveIntensity: 0.4, envMap: envTex, envMapIntensity: 0.6
+    })
   );
   ball.castShadow = true;
   scene.add(ball);
+  // A faint halo so the ball reads against the cream wall and the lamps
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glow, color: 0xfff1d6, transparent: true, opacity: 0.32, depthWrite: false,
+    blending: THREE.AdditiveBlending, toneMapped: false
+  }));
+  halo.scale.setScalar(0.1);
+  scene.add(halo);
 
   const blob = new THREE.Mesh(
     new THREE.PlaneGeometry(1, 1),
-    new THREE.MeshBasicMaterial({
-      map: glow, color: 0x000000, transparent: true, opacity: 0.4, depthWrite: false
-    })
+    new THREE.MeshBasicMaterial({ map: glow, color: 0x000000, transparent: true, opacity: 0.4, depthWrite: false })
   );
   blob.rotation.x = -Math.PI / 2;
   blob.renderOrder = 2;
@@ -313,9 +369,10 @@ export async function createPingis(container) {
 
   /* Landing marker: a ring on the player's half showing where the incoming
      ball will first bounce. Every good table tennis game gives you this —
-     without it a fast serve is a coin flip rather than a read. */
+     without it a fast serve is a coin flip rather than a read. It wears the
+     spin colour, so it also tells you WHAT is coming. */
   const marker = new THREE.Mesh(
-    new THREE.RingGeometry(0.62, 0.9, 26),
+    new THREE.RingGeometry(0.62, 0.9, 32),
     new THREE.MeshBasicMaterial({
       color: 0xffd166, transparent: true, opacity: 0, depthWrite: false,
       side: THREE.DoubleSide, toneMapped: false
@@ -328,23 +385,39 @@ export async function createPingis(container) {
   marker.userData = { t: 0 };
   scene.add(marker);
 
-  const TRAIL_N = 10;
-  const trail = [];
-  for (let i = 0; i < TRAIL_N; i++) {
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: glow, color: 0xffe8c0, transparent: true, opacity: 0, depthWrite: false,
-      blending: THREE.AdditiveBlending
-    }));
-    s.scale.setScalar(0.05);
-    scene.add(s);
-    trail.push(s);
-  }
-  let trailIdx = 0;
+  const trail = new Trail();
+  const swooshMe = new Swoosh();
+  const swooshFoe = new Swoosh();
+  const rings = new Rings(14);
+  const sparks = new Sparks(glow);
+  const confetti = new Confetti(lowTier ? 200 : 360);
+  scene.add(trail.mesh, swooshMe.mesh, swooshFoe.mesh, rings.mesh, sparks.points, confetti.mesh);
+
+  const crowd = buildCrowd(hall.refs.seats);
+  scene.add(crowd.group);
+  const board = new Scoreboard(hall.refs.scoreboard);
+
+  /* The big cup, kept under the table until somebody beats Viktor */
+  const trophy = buildTrophy(0xf2c14e, 1.25, envTex);
+  trophy.visible = false;
+  scene.add(trophy);
+  const trophyShaft = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.12, 0.7, 3, 24, 1, true),
+    hall.refs.lampMats[0].mat.clone()
+  );
+  trophyShaft.material.uniforms.uIntensity.value = 0;
+  trophyShaft.position.set(0, T.height + 1.5, 0.45);
+  trophyShaft.renderOrder = 4;
+  trophyShaft.visible = false;
+  scene.add(trophyShaft);
+
+  const post = createPost(renderer, scene, camera, { samples: lowTier ? 0 : 4, bloomRes: lowTier ? 0.35 : 0.5 });
 
   /* ---- State ----------------------------------------------------------- */
 
   const state = {
-    phase: 'idle', // idle | serve | rally | point | matchend | over
+    phase: 'menu', // menu | intro | idle | serve | rally | point | replay | matchend | celebrate | over
+    mode: 'tour', // tour (the three matches) | single (one opponent)
     matchNo: 1,
     score: 0,
     myPts: 0,
@@ -356,7 +429,12 @@ export async function createPingis(container) {
     serveT: 0,
     lastCause: '',
     causes: {},
-    lastToast: 0
+    decided: false, // the match is over once this point's dust settles
+    replayWanted: false,
+    medals: [0, 0, 0], // this run
+    stats: { rally: 0, smashes: 0, aces: 0 },
+    rallyTier: 0,
+    champion: false
   };
 
   const b = {
@@ -376,7 +454,7 @@ export async function createPingis(container) {
   // bat straight onto the finger is what makes a touch game feel cheap; a
   // critically damped follow gives it weight without adding lag you can
   // feel. Fast enough to cover the table, slow enough to have momentum.
-  const me = { x: 0, aimX: 0, vx: 0, dragVX: 0, dragVY: 0, swing: 0 };
+  const me = { x: 0, aimX: 0, vx: 0, dragVX: 0, dragVY: 0, swing: 0, swingSpin: 0 };
   const ai = { x: 0, targetX: 0, swing: 0, serveTimer: 0, arriveT: 1, reading: false };
 
   let high = 0;
@@ -385,87 +463,101 @@ export async function createPingis(container) {
   } catch (e) {
     high = 0;
   }
-  const fmt = (n) => Math.round(n).toLocaleString('sv-SE');
-  hud.hi.textContent = fmt(high);
+  let best = { medals: [0, 0, 0], rally: 0, titles: 0 };
+  try {
+    const raw = JSON.parse(localStorage.getItem(BEST_KEY) || 'null');
+    if (raw && Array.isArray(raw.medals)) best = { ...best, ...raw };
+  } catch (e) {
+    /* corrupt or blocked storage: start fresh */
+  }
+  const saveBest = () => {
+    try {
+      localStorage.setItem(BEST_KEY, JSON.stringify(best));
+    } catch (e) {
+      /* private mode */
+    }
+  };
+  hud.setHigh(high);
 
   const opp = () => OPPONENTS[state.matchNo - 1];
+  const first = (o = opp()) => o.name.split(' ')[0];
   const myServe = () => Math.floor(state.serves / 2) % 2 === 0;
 
   let fovPunch = 0;
   let shakeT = 0;
+  let hitStop = 0;
+  let simT = 0; // simulation clock (stops for hit-stop, help and replays)
+  let pointSimT = 0; // simT when the last point was decided (replay anchor)
+  /* Balance runs play thousands of matches headless. The whole loop is
+     dt-driven, so the only thing standing between a match and running in
+     milliseconds is the frame we never look at. */
+  let renderOn = true;
+
+  /* Flow timers run on the simulation clock, not setTimeout: they pause
+     with the help card and the hidden tab, and a headless balance run on a
+     virtual clock gets them in the right order for free. */
+  const timers = [];
+  const after = (sec, fn) => timers.push({ t: sec, fn });
+  function runTimers(dt) {
+    const due = [];
+    for (let i = timers.length - 1; i >= 0; i--) {
+      timers[i].t -= dt;
+      if (timers[i].t <= 0) due.push(timers.splice(i, 1)[0].fn);
+    }
+    due.reverse().forEach((fn) => fn());
+  }
+
+  /* Sound events are recorded with the sim clock so a replay can play the
+     rally back slowed down. */
+  const events = [];
+  function snd(kind, a) {
+    if (kind === 'paddle') sfx.paddle(a);
+    else if (kind === 'bounce') sfx.bounce();
+    else if (kind === 'net') sfx.net();
+    else if (kind === 'floor') sfx.floor(a);
+    else if (kind === 'smash') sfx.smash();
+    if (renderOn) {
+      events.push({ t: simT, kind, a });
+      if (events.length > 80) events.shift();
+    }
+  }
 
   /* ---- HUD helpers ----------------------------------------------------- */
 
-  function toast(msg, big = false) {
-    hud.toast.textContent = msg;
-    hud.toast.className = `pb-toast show${big ? ' big' : ''}`;
-    clearTimeout(state.lastToast);
-    state.lastToast = setTimeout(() => {
-      hud.toast.className = 'pb-toast';
-    }, big ? 1700 : 1000);
-  }
-
-  function setPhaseLabel(txt) {
-    hud.phase.textContent = txt;
-    hud.phase.classList.toggle('show', !!txt);
-  }
-
-  function callout(txt) {
-    hud.callout.textContent = txt;
-    hud.callout.classList.remove('show');
-    void hud.callout.offsetWidth;
-    hud.callout.classList.add('show');
-  }
-
   const projected = new THREE.Vector3();
-  function popScore(text, world) {
+  function screenPct(world) {
     projected.copy(world).project(camera);
-    if (projected.z > 1) return;
-    const el = document.createElement('div');
-    el.className = 'fg-pop';
-    el.textContent = text;
-    el.style.left = `${(projected.x * 0.5 + 0.5) * 100}%`;
-    el.style.top = `${(-projected.y * 0.5 + 0.5) * 100}%`;
-    hud.pops.appendChild(el);
-    setTimeout(() => el.remove(), 1100);
+    if (projected.z > 1) return null;
+    return [(projected.x * 0.5 + 0.5) * 100, (-projected.y * 0.5 + 0.5) * 100];
+  }
+
+  function popScore(text, world, cls = '', color = '') {
+    if (!renderOn) return;
+    const p = screenPct(world);
+    if (p) hud.pop(text, p[0], p[1], cls, color);
   }
 
   function addScore(n, world, label) {
     state.score += n;
-    hud.score.textContent = fmt(state.score);
-    hud.score.classList.remove('bump');
-    void hud.score.offsetWidth;
-    hud.score.classList.add('bump');
-    if (world) popScore(label || `+${fmt(n)}`, world);
+    hud.setScore(state.score);
+    if (world) popScore(label || `+${hud.fmt(n)}`, world);
   }
 
   function renderPts() {
-    const serveMark = myServe() ? ['●', ''] : ['', '●'];
-    hud.pts.innerHTML =
-      `<span><b>${state.myPts}</b> DU ${serveMark[0]}</span>` +
-      `<span><i>${state.aiPts}</i> ${opp().name.split(' ')[0].toUpperCase()} ${serveMark[1]}</span>`;
-    hud.match.textContent = `MATCH ${state.matchNo}/3`;
-    paintScoreboard();
+    const mp = matchPointFor();
+    hud.setPoints(state.myPts, state.aiPts, first().toUpperCase(), myServe());
+    hud.setPips(state.matchNo, state.medals, state.mode);
+    const flipped = board.set(state.myPts, state.aiPts, first().toUpperCase(), state.matchNo, myServe(), mp);
+    if (flipped && renderOn) sfx.flap(0.05);
   }
 
-  function paintScoreboard() {
-    const { ctx, canvas, tex } = hall.refs.scoreboard;
-    ctx.fillStyle = '#171b14';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = 'rgba(242,193,78,0.6)';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
-    ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(235,240,250,0.8)';
-    ctx.font = '700 20px Inter, sans-serif';
-    ctx.fillText('PINGIS 2019', canvas.width / 2, 26);
-    ctx.font = '700 66px "Space Grotesk", Inter, sans-serif';
-    ctx.fillStyle = '#f2c14e';
-    ctx.fillText(`${state.myPts} – ${state.aiPts}`, canvas.width / 2, 78);
-    ctx.font = '700 19px Inter, sans-serif';
-    ctx.fillStyle = 'rgba(235,240,250,0.6)';
-    ctx.fillText(`DU · ${opp().name.split(' ')[0].toUpperCase()}`, canvas.width / 2, 112);
-    tex.needsUpdate = true;
+  /** +1 if the player is a point from the match, −1 if the opponent is. */
+  function matchPointFor() {
+    const lead = Math.max(state.myPts, state.aiPts);
+    const diff = Math.abs(state.myPts - state.aiPts);
+    if (lead < POINTS_TO_WIN - 1 || diff === 0) return 0;
+    if (lead >= POINTS_TO_WIN && diff >= 2) return 0; // already decided
+    return state.myPts > state.aiPts ? 1 : -1;
   }
 
   /* ---- Ball flight ------------------------------------------------------ */
@@ -533,10 +625,12 @@ export async function createPingis(container) {
         marker.position.set(r.bounceX, T.height + 0.026, r.bounceZ);
         marker.visible = true;
         marker.userData.t = 0;
+        spinColor(spin, side, marker.material.color);
       } else {
         marker.visible = false;
       }
     }
+    onStrike(hitter, from, spin, side, smash);
   }
 
   /**
@@ -607,98 +701,40 @@ export async function createPingis(container) {
     state.pointT = 0;
     b.live = false;
     state.serves++;
+    let smashWin = false;
     if (mine) {
       state.myPts++;
       const ace = !state.aiTouched && b.lastHitter === 'me' && state.rallyHits <= 1;
       let pts = 100 + Math.max(0, state.rallyHits - 1) * 40;
-      let label = `+${fmt(pts)}`;
+      let label = `+${hud.fmt(pts)}`;
       if (b.smash) {
         pts += 150;
-        label = `SMASH +${fmt(pts)}`;
+        label = `SMASH +${hud.fmt(pts)}`;
+        smashWin = true;
       }
       if (ace) {
         pts += 250;
-        label = `ESS! +${fmt(pts)}`;
+        label = `ESS! +${hud.fmt(pts)}`;
+        state.stats.aces++;
       }
       addScore(pts, ball.position, label);
       sfx.point();
-      callout(why || 'DIN POÄNG');
+      callout(why || (smashWin ? 'SMASH!' : ace ? 'SERVE-ESS!' : 'DIN POÄNG'), smashWin || ace ? 'gold' : 'win');
     } else {
       state.aiPts++;
       sfx.lost();
-      callout(why || `POÄNG ${opp().name.split(' ')[0].toUpperCase()}`);
+      callout(why || `POÄNG ${first().toUpperCase()}`, 'lose');
     }
     renderPts();
+    afterPoint(mine, smashWin);
 
     const lead = Math.max(state.myPts, state.aiPts);
     const diff = Math.abs(state.myPts - state.aiPts);
     if (lead >= POINTS_TO_WIN && diff >= 2) {
-      setTimeout(() => endMatch(state.myPts > state.aiPts), 900);
+      state.decided = true;
+      // A replay of the match-winning rally plays first, then the card
+      if (!state.replayWanted) after(0.9, () => endMatch(state.myPts > state.aiPts));
     }
-  }
-
-  function endMatch(won) {
-    if (state.phase === 'matchend' || state.phase === 'over') return;
-    state.phase = 'matchend';
-    if (won) {
-      const bonus = 1000 * state.matchNo + (POINTS_TO_WIN - state.aiPts) * 100;
-      addScore(bonus, null);
-      sfx.fanfare();
-      if (state.matchNo >= 3) {
-        addScore(3000, null);
-        gameOver(true);
-        return;
-      }
-      hud.title.textContent = `${state.myPts}–${state.aiPts} mot ${opp().name.split(' ')[0]}!`;
-      state.matchNo++;
-      hud.text.textContent = `+${fmt(bonus)} poäng. Nästa: ${opp().name} — ${opp().title}. ${opp().taunt}`;
-      spawnFoe(state.matchNo - 1);
-      hud.start.textContent = `Möt ${opp().name.split(' ')[0]}!`;
-    } else {
-      sfx.applause();
-      gameOver(false);
-      return;
-    }
-    state.myPts = 0;
-    state.aiPts = 0;
-    state.serves = 0;
-    renderPts();
-    hud.steps.hidden = true;
-    hud.scoreline.hidden = false;
-    hud.scoreline.innerHTML = `<span>${fmt(state.score)}</span><small>poäng hittills</small>`;
-    hud.verdict.hidden = true;
-    hud.overlay.classList.add('show');
-  }
-
-  function gameOver(champion) {
-    state.phase = 'over';
-    const isHigh = state.score > high;
-    if (isHigh) {
-      high = state.score;
-      try {
-        localStorage.setItem(HIGHSCORE_KEY, String(Math.round(high)));
-      } catch (e) {
-        /* private mode */
-      }
-      hud.hi.textContent = fmt(high);
-    }
-    hud.title.textContent = champion
-      ? 'MÄSTARE AV BREDBYN!'
-      : `${opp().name.split(' ')[0]} vann matchen`;
-    hud.text.textContent = champion
-      ? 'Du slog hela 2019 års pall. Pokalen — och sista kanelbullen — är din.'
-      : isHigh
-        ? 'Nytt rekord ändå! Fika, sen tar vi en match till?'
-        : 'Turneringen är slut. En match till? Kaffet är fortfarande varmt.';
-    hud.steps.hidden = true;
-    hud.scoreline.hidden = false;
-    hud.scoreline.innerHTML = `<span>${fmt(state.score)}</span><small>poäng · rekord ${fmt(high)}</small>`;
-    hud.verdict.hidden = false;
-    hud.verdict.innerHTML = champion
-      ? '<b>🏆 Alla tre matcher vunna</b><span>precis som Viktor 2019</span>'
-      : `<b>Föll i match ${state.matchNo}</b><span>mot ${opp().name}</span>`;
-    hud.start.textContent = 'Spela igen';
-    hud.overlay.classList.add('show');
   }
 
   /* ---- Serving ---------------------------------------------------------- */
@@ -711,7 +747,8 @@ export async function createPingis(container) {
     ai.serveTimer = 0.7 + rand() * 0.6;
     resetBallForServe();
     renderPts();
-    setPhaseLabel(myServe() ? 'DIN SERVE — dra och släpp' : `${opp().name.split(' ')[0]} servar…`);
+    hud.phase(myServe() ? `DIN SERVE — ${hud.serveHint}` : `${first()} servar…`);
+    onBeginPoint();
   }
 
   function playerServe() {
@@ -726,9 +763,10 @@ export async function createPingis(container) {
       0.34 - power * 0.06, spin * 0.7, side, false);
     b.serving = true;
     state.phase = 'rally';
-    setPhaseLabel('');
-    sfx.paddle(power);
+    hud.phase('');
+    snd('paddle', power);
     me.swing = 1;
+    me.swingSpin = spin;
   }
 
   function aiServe() {
@@ -741,8 +779,8 @@ export async function createPingis(container) {
       0.36 * o.pace, spin, side, false);
     b.serving = true;
     state.phase = 'rally';
-    setPhaseLabel('');
-    sfx.paddle(0.5);
+    hud.phase('');
+    snd('paddle', 0.5);
     ai.swing = 1;
   }
 
@@ -768,7 +806,6 @@ export async function createPingis(container) {
     const spin = THREE.MathUtils.clamp(flickY * 0.3, -1, 1);
     const side = THREE.MathUtils.clamp(flickX * 0.16, -1, 1);
 
-    // Risk: off-centre contact and violence both push the landing point
     // Off-centre contact and sheer violence both push the landing point.
     // Squared, so the middle two-thirds of the bat is forgiving and only
     // the very edge really punishes you.
@@ -794,9 +831,10 @@ export async function createPingis(container) {
       } else {
         strike('me', at, { x: (rand() < 0.5 ? -1 : 1) * T.width * 0.72, z: -T.length * 0.66 }, 0.5, -0.2, 0);
       }
-      sfx.paddle(0.3);
+      snd('paddle', 0.3);
       me.swing = 1;
-      toast('Kantträff!');
+      me.swingSpin = 0;
+      hud.toast('Kantträff!');
       return true;
     }
 
@@ -804,12 +842,14 @@ export async function createPingis(container) {
     strike('me', b.pos.clone(), { x: landX, z: landZ }, smash ? flightT * 0.72 : flightT,
       spin, side, smash);
     if (smash) {
-      sfx.smash();
+      snd('smash');
       fovPunch = 5;
     } else {
-      sfx.paddle(power);
+      snd('paddle', power);
     }
     me.swing = 1;
+    me.swingSpin = spin;
+    onPlayerShot(spin, side, power, smash);
     return true;
   }
 
@@ -842,7 +882,7 @@ export async function createPingis(container) {
         // Wide: past the sideline
         strike('ai', from, { x: (rand() < 0.5 ? -1 : 1) * T.width * 0.72, z: T.length * 0.3 }, 0.52, 0.2, 0);
       }
-      sfx.paddle(0.4);
+      snd('paddle', 0.4);
       ai.swing = 1;
       return true;
     }
@@ -871,10 +911,11 @@ export async function createPingis(container) {
     strike('ai', b.pos.clone(), { x: landX, z: landZ }, flightT, spin,
       (rand() - 0.5) * o.serveSpin * 0.6, smash);
     if (smash) {
-      sfx.smash();
+      snd('smash');
       shakeT = 0.3;
+      onSmash(false);
     } else {
-      sfx.paddle(loop ? 0.75 : 0.45);
+      snd('paddle', loop ? 0.75 : 0.45);
     }
     ai.swing = 1;
     return true;
@@ -903,14 +944,16 @@ export async function createPingis(container) {
           // Tape dribble: the ball crawls over
           b.vel.z *= 0.4;
           b.vel.y = Math.max(b.vel.y, 0.4);
-          sfx.net();
+          snd('net');
+          netHit(b.pos.x, 0.5);
         } else {
           b.pos.z = prevZ > 0 ? 0.02 : -0.02;
           b.vel.z *= -0.16;
           b.vel.x *= 0.5;
           b.st = 0;
           b.ss = 0;
-          sfx.net();
+          snd('net');
+          netHit(b.pos.x, 1);
         }
       }
     }
@@ -925,7 +968,8 @@ export async function createPingis(container) {
       b.vel.x += b.ss * Math.abs(b.vel.z) * 0.16 * Math.sign(-b.vel.z);
       b.st *= 0.5;
       b.ss *= 0.55;
-      sfx.bounce();
+      snd('bounce');
+      onBounce(b.pos, true);
 
       const onAiSide = b.pos.z < 0;
       const receiverSide = b.lastHitter === 'me' ? onAiSide : !onAiSide;
@@ -950,8 +994,9 @@ export async function createPingis(container) {
       b.vel.x *= 0.8;
       b.vel.z *= 0.8;
       b.floorBounces++;
-      sfx.floor(0.3 / b.floorBounces);
+      snd('floor', 0.3 / b.floorBounces);
       if (b.floorBounces === 1) {
+        onBounce(b.pos, false);
         // Rally over: table bounce first = winner, no table bounce = fault
         if (b.bounces >= 1) scorePoint(b.lastHitter === 'me', '', 'winner');
         else scorePoint(b.lastHitter !== 'me', b.lastHitter === 'me' ? 'UT!' : 'UT — din poäng', 'out');
@@ -977,6 +1022,419 @@ export async function createPingis(container) {
     }
   }
 
+  /* ---- Feedback hooks (visual and audio only — never touch the rules) -- */
+
+  const tmpC = new THREE.Color();
+  const tmpV = new THREE.Vector3();
+  const flatQ = new THREE.Quaternion();
+  const net = { x: 0, amp: 0, t: 0 };
+  /* After a point the ball is no longer the rules' business, but it should
+     not freeze in mid-air either: a visual-only copy carries on bouncing. */
+  const dead = { on: false, pos: new THREE.Vector3(), vel: new THREE.Vector3() };
+
+  function netHit(x, strength) {
+    if (!renderOn) return;
+    net.x = x;
+    net.amp = 0.03 * strength;
+    net.t = 0;
+  }
+
+  function onStrike(hitter, from, spin, side, smash) {
+    if (!renderOn) return;
+    spinColor(spin, side, tmpC);
+    sparks.burst(from, tmpC, smash ? 30 : 10, smash ? 2.6 : 1.5, vrand);
+    rings.spawn(from, tmpC, smash ? 0.4 : 0.16, 0.32, flatQ.copy(camera.quaternion));
+    (hitter === 'me' ? swooshMe : swooshFoe).fire(tmpC, smash ? 0.2 : 0.14);
+    if (smash && hitter === 'me') state.stats.smashes++;
+    rallyTick();
+  }
+
+  function onBounce(p, onTable) {
+    if (!renderOn) return;
+    spinColor(b.st * 2, b.ss * 1.8, tmpC);
+    if (onTable) {
+      const speed = b.vel.length();
+      rings.spawn(tmpV.set(p.x, T.height + 0.028, p.z), tmpC, 0.14 + speed * 0.012 + (b.smash ? 0.18 : 0), b.smash ? 0.6 : 0.45);
+      if (b.smash) sparks.burst(p, tmpC, 16, 1.4, vrand);
+    } else {
+      rings.spawn(tmpV.set(p.x, 0.012, p.z), tmpC.multiplyScalar(0.5), 0.2, 0.5);
+    }
+  }
+
+  function onPlayerShot(spin, side, power, smash) {
+    if (!renderOn) return;
+    // Say what you just played: the spin, in its colour, by the bat
+    const word = smash ? 'SMASH' : spin > 0.25 ? 'TOPSPIN' : spin < -0.25 ? 'BACKSPIN' : 'PLATT';
+    const arrow = side > 0.22 ? ' →' : side < -0.22 ? ' ←' : '';
+    const strength = Math.abs(spin) > 0.7 ? '+' : '';
+    popScore(`${word}${strength}${arrow}`, tmpV.set(me.x, PADDLE_Y + 0.25, HITZ), 'pg-spinpop', spinCss(spin, side));
+    if (power > 0.82 && !smash) sfx.swish(0.18);
+    if (smash) onSmash(true);
+  }
+
+  /** Hit-stop, flash and the camera kick: the smash has to LAND. */
+  function onSmash(mine) {
+    if (!renderOn) return;
+    hitStop = 0.085;
+    post.u.uFlash.value = reduceMotion ? 0.05 : 0.16;
+    post.u.uFringe.value = reduceMotion ? 0 : 0.006;
+    if (mine) {
+      crowd.react('ooh', 0.8);
+      sfx.ooh(0.8);
+    }
+  }
+
+  function rallyTick() {
+    const n = state.rallyHits;
+    let tierIdx = 0;
+    RALLY_TIERS.forEach((tr, i) => {
+      if (n >= tr.at) tierIdx = i + 1;
+    });
+    if (tierIdx > state.rallyTier) {
+      state.rallyTier = tierIdx;
+      const tr = RALLY_TIERS[tierIdx - 1];
+      hud.toast(tr.word, tierIdx >= 2);
+      sfx.tier(tierIdx);
+      sfx.ooh(0.6 + tierIdx * 0.2);
+      crowd.react('ooh', 0.8 + tierIdx * 0.2);
+    }
+    hud.setRally(n, tierIdx ? RALLY_TIERS[tierIdx - 1].word : '', tierIdx);
+  }
+
+  function onBeginPoint() {
+    state.rallyTier = 0;
+    dead.on = false;
+    if (!renderOn) return;
+    trail.clear();
+    hud.setRally(0, '', 0);
+    const mp = matchPointFor();
+    setDrama(mp);
+    hud.setMatchPoint(mp, first());
+    if (mp) sfx.heartbeat();
+  }
+
+  function afterPoint(mine, smashWin) {
+    const rally = state.rallyHits;
+    state.stats.rally = Math.max(state.stats.rally, rally);
+    if (rally > (best.rally || 0)) {
+      best.rally = rally;
+      saveBest();
+    }
+    // Replays are for the picture; a headless balance run never waits for one
+    state.replayWanted = renderOn && mine && (rally >= 6 || (smashWin && rally >= 3));
+    if (!renderOn) return;
+    pointSimT = simT;
+    dead.on = true;
+    dead.pos.copy(b.pos);
+    dead.vel.copy(b.vel);
+    marker.visible = false;
+    hud.setMatchPoint(0);
+    setDrama(0);
+    const power = Math.min(1, 0.3 + rally / 14);
+    if (mine) {
+      crowd.react('cheer', 0.8 + power);
+      sfx.cheer(power);
+    } else {
+      crowd.react('groan', 0.9);
+      if (rally >= 4) sfx.groan();
+    }
+  }
+
+  /* Match-point drama: the hall dims around the table, the grade leans
+     gold (your match point) or red (theirs), the crowd goes quiet. */
+  const drama = { v: 0, target: 0, mine: true };
+  function setDrama(mp) {
+    drama.target = mp ? 1 : 0;
+    if (mp) drama.mine = mp > 0;
+  }
+
+  /* ---- Flow ------------------------------------------------------------- */
+
+  let camMode = 'menu';
+  let celebT = 0;
+  let singleIdx = 0;
+
+  function clearRun() {
+    timers.length = 0;
+    state.decided = false;
+    state.replayWanted = false;
+    state.champion = false;
+    dead.on = false;
+    trail.clear();
+    swooshMe.clear();
+    swooshFoe.clear();
+    confetti.stop();
+    trophy.visible = false;
+    trophyShaft.visible = false;
+    setDrama(0);
+    hud.setMatchPoint(0);
+    hud.setRally(0, '', 0);
+    hud.phase('');
+    hud.hidePanel();
+    hud.hideIntro();
+    hud.replay(false);
+  }
+
+  function showMenu() {
+    clearRun();
+    state.phase = 'menu';
+    camMode = 'menu';
+    hud.showBug(false);
+    canvasHost.classList.remove('pg-playing');
+    const unlocked = [true, (best.medals[0] || 0) > 0, (best.medals[1] || 0) > 0];
+    hud.menu({
+      opps: OPPONENTS.map((o) => ({ name: o.name, place: o.podium })),
+      best, high, unlocked, mouse: !coarse
+    });
+  }
+
+  function startTournament() {
+    sfx.resume();
+    clearRun();
+    state.mode = 'tour';
+    state.matchNo = 1;
+    state.score = 0;
+    state.medals = [0, 0, 0];
+    state.stats = { rally: 0, smashes: 0, aces: 0 };
+    hud.setScore(0, false);
+    showIntro();
+  }
+
+  function startSingle(idx) {
+    sfx.resume();
+    clearRun();
+    singleIdx = idx;
+    state.mode = 'single';
+    state.matchNo = idx + 1;
+    state.medals = [0, 0, 0];
+    state.stats = { rally: 0, smashes: 0, aces: 0 };
+    showIntro();
+  }
+
+  /** Kept for the test hook and Space: continue after a won match, or start. */
+  function startGame() {
+    sfx.resume();
+    if (state.phase === 'matchend') {
+      clearRun();
+      state.stats = { rally: 0, smashes: 0, aces: 0 };
+      showIntro();
+      return;
+    }
+    startTournament();
+  }
+
+  function again() {
+    if (state.mode === 'single') startSingle(singleIdx);
+    else startTournament();
+  }
+
+  /** The opponent walks on: camera close on him, the scouting card. */
+  function showIntro() {
+    state.phase = 'intro';
+    state.myPts = 0;
+    state.aiPts = 0;
+    state.serves = 0;
+    if (!foe || foe.idx !== state.matchNo - 1) spawnFoe(state.matchNo - 1);
+    renderPts();
+    if (!renderOn) {
+      beginMatch();
+      return;
+    }
+    hud.showBug(false);
+    camMode = 'intro';
+    canvasHost.classList.remove('pg-playing');
+    sfx.sting();
+    hud.showIntro({
+      opp: opp(), matchNo: state.matchNo, mode: state.mode,
+      stats: scouting(opp()), medal2019: opp().podium.toUpperCase()
+    });
+  }
+
+  function beginMatch() {
+    if (state.phase !== 'intro') return;
+    hud.hideIntro();
+    state.phase = 'idle';
+    state.myPts = 0;
+    state.aiPts = 0;
+    state.serves = 0;
+    state.decided = false;
+    camMode = 'play';
+    hud.showBug(true);
+    canvasHost.classList.add('pg-playing');
+    renderPts();
+    if (renderOn) hud.toast(`${first()} — ${opp().title}`, true);
+    after(0.9, beginPoint);
+  }
+
+  function endMatch(won) {
+    if (state.phase === 'matchend' || state.phase === 'over' || state.phase === 'celebrate') return;
+    const o = opp();
+    const my = state.myPts;
+    const them = state.aiPts;
+    setDrama(0);
+    hud.setMatchPoint(0);
+    hud.phase('');
+    hud.setRally(0, '', 0);
+    canvasHost.classList.remove('pg-playing');
+    if (won) {
+      const level = medalFor(my, them);
+      const idx = state.matchNo - 1;
+      state.medals[idx] = level;
+      if (level > (best.medals[idx] || 0)) {
+        best.medals[idx] = level;
+        saveBest();
+      }
+      if (renderOn) {
+        crowd.react('cheer', 1.6);
+        setTimeoutSafe(() => sfx.medal(level), 650);
+      }
+      if (state.mode === 'single') {
+        state.phase = 'over';
+        sfx.fanfare();
+        hud.result({ won, my, ai: them, opp: o, level, why: MEDAL_WHY[level], stats: state.stats, score: state.score, mode: 'single' });
+        return;
+      }
+      const bonus = 1000 * state.matchNo + (POINTS_TO_WIN - state.aiPts) * 100;
+      addScore(bonus, null);
+      sfx.fanfare();
+      if (state.matchNo >= 3) {
+        addScore(3000, null);
+        champion();
+        return;
+      }
+      state.matchNo++;
+      state.phase = 'matchend';
+      hud.result({
+        won, my, ai: them, opp: o, level, why: MEDAL_WHY[level], stats: state.stats,
+        score: state.score, next: opp(), mode: 'tour'
+      });
+    } else {
+      sfx.applause();
+      if (state.mode === 'single') {
+        state.phase = 'over';
+        hud.result({ won, my, ai: them, opp: o, level: 0, why: `${o.title} tog den här gången.`, stats: state.stats, score: state.score, mode: 'single' });
+        return;
+      }
+      gameOver(false, my, them);
+    }
+  }
+
+  /* Viktor is beaten: confetti from the ceiling, the hall on its feet, the
+     cup rising out of the table under its own light, and a slow orbit. */
+  function champion() {
+    state.phase = 'celebrate';
+    state.champion = true;
+    if (!renderOn) {
+      gameOver(true);
+      return;
+    }
+    camMode = 'celebrate';
+    celebT = 0;
+    hud.showBug(false);
+    confetti.launch(vrand, 0, -0.6);
+    crowd.react('celebrate');
+    sfx.champion();
+    hud.callout('MÄSTARE!', 'gold big');
+    trophy.visible = true;
+    trophyShaft.visible = true;
+    after(4.2, () => gameOver(true));
+  }
+
+  function gameOver(isChamp, my = 0, them = 0) {
+    state.phase = 'over';
+    const isHigh = state.score > high;
+    if (isHigh) {
+      high = state.score;
+      try {
+        localStorage.setItem(HIGHSCORE_KEY, String(Math.round(high)));
+      } catch (e) {
+        /* private mode */
+      }
+      hud.setHigh(high);
+    }
+    if (isChamp) {
+      best.titles = (best.titles || 0) + 1;
+      saveBest();
+      hud.final({ medals: state.medals, opps: OPPONENTS, score: state.score, high, isHigh, rally: state.stats.rally });
+      return;
+    }
+    hud.result({
+      won: false, my, ai: them, opp: opp(), level: 0,
+      why: isHigh ? `Föll i match ${state.matchNo} — men nytt rekord! Fika, sen en match till?`
+        : `Föll i match ${state.matchNo}. Kaffet är fortfarande varmt — en match till?`,
+      stats: state.stats, score: state.score, mode: 'tour'
+    });
+  }
+
+  // The one real-time delay: a sound that should land with the medal's
+  // drop animation. Tracked so destroy() can cancel it.
+  const realTimers = new Set();
+  function setTimeoutSafe(fn, ms) {
+    const id = setTimeout(() => {
+      realTimers.delete(id);
+      fn();
+    }, ms);
+    realTimers.add(id);
+  }
+
+  function callout(txt, cls) {
+    if (renderOn) hud.callout(txt, cls);
+  }
+
+  /* ---- Replay ----------------------------------------------------------- */
+
+  /* Every rendered frame of play is recorded (ball, bats, the opponent's
+     stroke) into a short ring buffer. When a long rally ends in your
+     favour, the last second and a half plays back at 40 % from a low side
+     camera — the angle that shows what the spin actually did. */
+  const REC_MAX = 260;
+  const rec = [];
+  const replay = { t: 0, end: 0, start: 0, ev: 0 };
+
+  function startReplay() {
+    if (rec.length < 20) {
+      endReplay();
+      return;
+    }
+    state.phase = 'replay';
+    replay.end = Math.min(rec[rec.length - 1].t, pointSimT + 0.5);
+    replay.start = Math.max(rec[0].t, pointSimT - 1.7);
+    replay.t = replay.start;
+    replay.ev = events.findIndex((e) => e.t >= replay.start);
+    camMode = 'replay';
+    trail.clear();
+    hud.replay(true);
+    hud.phase('');
+    sfx.rewind();
+  }
+
+  function endReplay() {
+    if (state.phase !== 'replay' && state.phase !== 'point') return;
+    hud.replay(false);
+    state.replayWanted = false;
+    state.phase = 'point';
+    camMode = 'play';
+    trail.clear();
+    if (state.decided) endMatch(state.myPts > state.aiPts);
+    else beginPoint();
+  }
+
+  function stepReplay(dt) {
+    const prev = replay.t;
+    replay.t += dt * 0.4;
+    // Play the rally's own sounds back, slowed
+    while (replay.ev >= 0 && replay.ev < events.length && events[replay.ev].t <= replay.t) {
+      const e = events[replay.ev++];
+      if (e.t < prev) continue;
+      if (e.kind === 'paddle') sfx.paddle(e.a, 0.6);
+      else if (e.kind === 'bounce') sfx.bounce(0.6);
+      else if (e.kind === 'net') sfx.net(0.6);
+      else if (e.kind === 'floor') sfx.floor(e.a, 0.6);
+      else if (e.kind === 'smash') sfx.smash(0.6);
+    }
+    if (replay.t >= replay.end) endReplay();
+  }
+
   /* ---- Input ------------------------------------------------------------ */
 
   let dragging = false;
@@ -984,25 +1442,55 @@ export async function createPingis(container) {
   let lastPX = 0;
   let lastPY = 0;
   let lastPT = 0;
+  let mouseT = -1e9; // last time the mouse moved over the hall
   const keys = { left: false, right: false, up: false, down: false };
+  const pa = new THREE.Vector3();
+  const pb = new THREE.Vector3();
 
-  function pointerX(e) {
+  /**
+   * Where along the bat's line the pointer is, in table metres. The mouse
+   * maps 1:1 — the bat sits under the cursor, which is what makes a mouse
+   * feel direct. A finger maps with gain: it covers the bat it is steering,
+   * and a phone's width is all the travel it has.
+   */
+  function aimFrom(e) {
     const rect = canvasHost.getBoundingClientRect();
-    return ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    const ndc = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    pa.set(-1, PADDLE_Y + 0.1, HITZ).project(aimCam);
+    pb.set(1, PADDLE_Y + 0.1, HITZ).project(aimCam);
+    const x = -1 + (2 * (ndc - pa.x)) / Math.max(1e-4, pb.x - pa.x);
+    const gain = e.pointerType === 'mouse' ? 1 : 1.5;
+    return THREE.MathUtils.clamp(x * gain, -1.2, 1.2);
   }
+
+  const blocked = (e) => helpOpen || e.target.closest?.('button, .pb-overlay.show, .pb-help, .pg-intro.show .pg-intro-card');
 
   function onPointerDown(e) {
     sfx.resume();
-    if (helpOpen || e.target.closest('.pb-overlay, .pb-mute, .pb-info, .pb-help')) return;
+    if (blocked(e)) return;
+    if (state.phase === 'replay') {
+      endReplay();
+      return;
+    }
+    if (state.phase === 'intro') {
+      beginMatch();
+      return;
+    }
     dragging = true;
     lastPX = e.clientX;
     lastPY = e.clientY;
     lastPT = performance.now();
-    me.aimX = THREE.MathUtils.clamp(pointerX(e) * 1.25, -1.2, 1.2);
+    me.aimX = aimFrom(e);
   }
 
   function onPointerMove(e) {
-    if (!dragging) return;
+    const mouse = e.pointerType === 'mouse';
+    if (mouse) {
+      if (!container.contains(e.target) || blocked(e)) return;
+      mouseT = performance.now();
+    } else if (!dragging) {
+      return;
+    }
     const now = performance.now();
     const dt = Math.max(8, now - lastPT) / 1000;
     // Flick velocity in "screen heights per second", smoothed
@@ -1014,7 +1502,7 @@ export async function createPingis(container) {
     lastPX = e.clientX;
     lastPY = e.clientY;
     lastPT = now;
-    me.aimX = THREE.MathUtils.clamp(pointerX(e) * 1.25, -1.2, 1.2);
+    me.aimX = aimFrom(e);
   }
 
   function onPointerUp() {
@@ -1030,15 +1518,26 @@ export async function createPingis(container) {
     else if (e.key === ' ') {
       e.preventDefault();
       sfx.resume();
+      if (helpOpen) return;
       if (state.phase === 'serve' && myServe()) {
         me.dragVY = keys.up ? -3 : keys.down ? 3 : -1;
         me.dragVX = 0;
         playerServe();
-      } else if (state.phase === 'idle' || state.phase === 'matchend' || state.phase === 'over') {
+      } else if (state.phase === 'replay') {
+        endReplay();
+      } else if (state.phase === 'intro') {
+        beginMatch();
+      } else if (state.phase === 'menu') {
+        startTournament();
+      } else if (state.phase === 'matchend') {
         startGame();
+      } else if (state.phase === 'over') {
+        again();
       }
     } else if (e.key === '?' || (e.key === 'Escape' && helpOpen)) {
       setHelp(!helpOpen);
+    } else if (e.key === 'Escape' && state.phase === 'replay') {
+      endReplay();
     }
   }
 
@@ -1051,45 +1550,31 @@ export async function createPingis(container) {
 
   function setHelp(open) {
     helpOpen = open;
-    hud.help.hidden = !open;
+    hud.el.help.hidden = !open;
   }
 
-  /* ---- Flow ------------------------------------------------------------- */
-
-  function startGame() {
-    sfx.resume();
-    if (state.phase === 'matchend') {
-      hud.overlay.classList.remove('show');
-      state.phase = 'idle';
-      hud.opponent.textContent = `${opp().name} · ${opp().title}`;
-      toast(opp().taunt, true);
-      setTimeout(beginPoint, 700);
+  function onClick(e) {
+    const btn = e.target.closest('[data-action]');
+    if (btn) {
+      sfx.resume();
+      const act = btn.dataset.action;
+      if (act === 'tour') startTournament();
+      else if (act === 'single') startSingle(Number(btn.dataset.idx));
+      else if (act === 'play') beginMatch();
+      else if (act === 'next') startGame();
+      else if (act === 'again') again();
+      else if (act === 'menu') showMenu();
+      else if (act === 'help-close') setHelp(false);
       return;
     }
-    state.matchNo = 1;
-    state.score = 0;
-    state.myPts = 0;
-    state.aiPts = 0;
-    state.serves = 0;
-    hud.score.textContent = '0';
-    spawnFoe(0);
-    hud.overlay.classList.remove('show');
-    hud.steps.hidden = false;
-    hud.scoreline.hidden = true;
-    hud.verdict.hidden = true;
-    hud.opponent.textContent = `${opp().name} · ${opp().title}`;
-    toast(opp().taunt, true);
-    renderPts();
-    setTimeout(beginPoint, 700);
+    if (e.target.closest('#pg-info')) setHelp(true);
+    else if (e.target.closest('#pg-mute')) {
+      sfx.setMuted(!sfx.muted);
+      hud.el.mute.classList.toggle('off', sfx.muted);
+    }
   }
 
-  hud.start.addEventListener('click', startGame);
-  hud.info.addEventListener('click', () => setHelp(true));
-  hud.helpClose.addEventListener('click', () => setHelp(false));
-  hud.mute.addEventListener('click', () => {
-    sfx.muted = !sfx.muted;
-    hud.mute.classList.toggle('off', sfx.muted);
-  });
+  hudHost.addEventListener('click', onClick);
   canvasHost.addEventListener('pointerdown', onPointerDown);
   window.addEventListener('pointermove', onPointerMove);
   window.addEventListener('pointerup', onPointerUp);
@@ -1098,17 +1583,28 @@ export async function createPingis(container) {
 
   /* ---- Resize ----------------------------------------------------------- */
 
+  let viewW = 1;
+  let viewH = 1;
   function resize() {
     const rect = canvasHost.getBoundingClientRect();
-    const w = Math.max(1, Math.floor(rect.width));
-    const h = Math.max(1, Math.floor(rect.height));
-    renderer.setSize(w, h, false);
-    composer.setSize(w, h);
-    bloom.setSize(Math.min(320, w / 2), Math.min(560, h / 2));
-    camera.aspect = w / h;
-    // Narrow screens need a wider lens to keep the whole table in frame
-    camera.fov = camera.aspect < 0.62 ? 58 : 50;
-    camera.updateProjectionMatrix();
+    viewW = Math.max(1, Math.floor(rect.width));
+    viewH = Math.max(1, Math.floor(rect.height));
+    renderer.setPixelRatio(pixelRatio);
+    renderer.setSize(viewW, viewH, false);
+    post.setSize(viewW, viewH);
+    camera.aspect = viewW / viewH;
+    framing(camera.aspect, base);
+    aimCam.aspect = camera.aspect;
+    aimCam.fov = base.fov;
+    aimCam.position.copy(base.pos);
+    aimCam.lookAt(base.look);
+    aimCam.updateProjectionMatrix();
+    aimCam.updateMatrixWorld();
+    if (hall.refs.reflector) {
+      hall.refs.reflector.getRenderTarget().setSize(
+        Math.round(viewW * pixelRatio * 0.5), Math.round(viewH * pixelRatio * 0.5));
+    }
+    hall.refs.dust.material.uniforms.uPR.value = pixelRatio * (viewH / 900 + 0.4);
   }
   const ro = new ResizeObserver(resize);
   ro.observe(canvasHost);
@@ -1119,198 +1615,475 @@ export async function createPingis(container) {
   let raf = 0;
   let last = performance.now();
   let running = true;
-  /* Balance runs play thousands of matches headless. The whole loop is
-     dt-driven, so the only thing standing between a match and running in
-     milliseconds is the frame we never look at. */
-  let renderOn = true;
+  let frameT = 0; // the picture's clock: keeps running through hit-stop
+  let perfAcc = 0;
+  let perfN = 0;
+  let perfCool = 4;
+
+  /** One step of the rules, exactly as the balance runs measured it. */
+  function simStep(dt, tNow) {
+    runTimers(dt);
+    simT += dt;
+
+    /* Keyboard paddle */
+    if (keys.left) me.aimX = Math.max(-1.2, me.aimX - 3.2 * dt);
+    if (keys.right) me.aimX = Math.min(1.2, me.aimX + 3.2 * dt);
+
+    // Critically damped spring toward the finger: settles without
+    // overshoot, and carries the bat's own momentum into the shot.
+    const stiff = 190;
+    const damp = 2 * Math.sqrt(stiff);
+    me.vx += ((me.aimX - me.x) * stiff - me.vx * damp) * dt;
+    me.x = THREE.MathUtils.clamp(me.x + me.vx * dt, -1.25, 1.25);
+    // A mouse hovering over the hall steers like a finger held down
+    const tracking = dragging || performance.now() - mouseT < 400;
+    if (!tracking) {
+      // Keyboard spin: held arrows stand in for the flick
+      me.dragVY = keys.up ? -2.6 : keys.down ? 2.6 : me.dragVY * (1 - 6 * dt);
+      if (!keys.up && !keys.down) me.dragVX *= 1 - 6 * dt;
+    } else {
+      // Flick velocity decays so an old gesture does not spin a later shot
+      me.dragVX *= 1 - 2.4 * dt;
+      me.dragVY *= 1 - 2.4 * dt;
+    }
+
+    /* Serve timing */
+    if (state.phase === 'serve') {
+      state.serveT += dt;
+      if (!myServe()) {
+        ai.serveTimer -= dt;
+        if (ai.serveTimer <= 0) aiServe();
+      } else if (b.live === false) {
+        // The waiting ball hovers over the paddle
+        b.pos.x += (me.x - b.pos.x) * Math.min(1, dt * 14);
+        b.pos.y = T.height + 0.32 + Math.sin(tNow * 3) * 0.012;
+      }
+    }
+
+    if (state.phase === 'point') {
+      state.pointT += dt;
+      if (state.pointT > 0.95 && state.phase === 'point') {
+        if (state.replayWanted) startReplay();
+        else if (!state.decided) beginPoint();
+      }
+    }
+
+    /* AI movement.
+       The bot moves toward the point it READ, and — crucially — fast
+       enough to arrive before the ball does. A fixed top speed means a
+       wide, fast ball is unreturnable no matter how good the opponent
+       is supposed to be, which reads as the bot giving up. Instead the
+       required speed is derived from the distance and the time left,
+       and only capped by the opponent's own limit. */
+    const o = opp();
+    const incoming = b.live && b.vel.z < 0;
+    if (!incoming || !ai.reading) ai.targetX = ai.reading ? ai.targetX : 0;
+    const dxA = THREE.MathUtils.clamp(ai.targetX, -1.25, 1.25) - ai.x;
+    ai.arriveT = Math.max(0.05, ai.arriveT - dt);
+    const need = Math.abs(dxA) / ai.arriveT;
+    const speed = incoming ? Math.min(o.speed, Math.max(1.2, need)) : 1.6;
+    const maxStep = speed * dt;
+    ai.x += THREE.MathUtils.clamp(dxA, -maxStep, maxStep);
+
+    stepBall(dt);
+  }
 
   function tick(now) {
     raf = requestAnimationFrame(tick);
-    const dt = clampDt(now - last);
+    const rawDt = clampDt(now - last);
     last = now;
     if (!running) return;
-    const t = now / 1000;
+    frameT += rawDt;
 
+    // Hit-stop freezes the rules for a beat, never the picture
+    let dt = rawDt;
+    if (hitStop > 0) {
+      hitStop -= rawDt;
+      dt = 0;
+    }
     if (!helpOpen) {
-      /* Keyboard paddle */
-      if (keys.left) me.aimX = Math.max(-1.2, me.aimX - 3.2 * dt);
-      if (keys.right) me.aimX = Math.min(1.2, me.aimX + 3.2 * dt);
-
-      // Critically damped spring toward the finger: settles without
-      // overshoot, and carries the bat's own momentum into the shot.
-      const stiff = 190;
-      const damp = 2 * Math.sqrt(stiff);
-      me.vx += ((me.aimX - me.x) * stiff - me.vx * damp) * dt;
-      me.x = THREE.MathUtils.clamp(me.x + me.vx * dt, -1.25, 1.25);
-      if (!dragging) {
-        // Keyboard spin: held arrows stand in for the flick
-        me.dragVY = keys.up ? -2.6 : keys.down ? 2.6 : me.dragVY * (1 - 6 * dt);
-        if (!keys.up && !keys.down) me.dragVX *= 1 - 6 * dt;
-      } else {
-        // Flick velocity decays so an old gesture does not spin a later shot
-        me.dragVX *= 1 - 2.4 * dt;
-        me.dragVY *= 1 - 2.4 * dt;
-      }
-
-      /* Serve timing */
-      if (state.phase === 'serve') {
-        state.serveT += dt;
-        if (!myServe()) {
-          ai.serveTimer -= dt;
-          if (ai.serveTimer <= 0) aiServe();
-        } else if (b.live === false) {
-          // The waiting ball hovers over the paddle
-          b.pos.x += (me.x - b.pos.x) * Math.min(1, dt * 14);
-          b.pos.y = T.height + 0.32 + Math.sin(t * 3) * 0.012;
-        }
-      }
-
-      if (state.phase === 'point') {
-        state.pointT += dt;
-        if (state.pointT > 0.95 && state.phase === 'point') beginPoint();
-      }
-
-      /* AI movement.
-         The bot moves toward the point it READ, and — crucially — fast
-         enough to arrive before the ball does. A fixed top speed means a
-         wide, fast ball is unreturnable no matter how good the opponent
-         is supposed to be, which reads as the bot giving up. Instead the
-         required speed is derived from the distance and the time left,
-         and only capped by the opponent's own limit. */
-      const o = opp();
-      const incoming = b.live && b.vel.z < 0;
-      if (!incoming || !ai.reading) ai.targetX = ai.reading ? ai.targetX : 0;
-      const dxA = THREE.MathUtils.clamp(ai.targetX, -1.25, 1.25) - ai.x;
-      ai.arriveT = Math.max(0.05, ai.arriveT - dt);
-      const need = Math.abs(dxA) / ai.arriveT;
-      const speed = incoming ? Math.min(o.speed, Math.max(1.2, need)) : 1.6;
-      const maxStep = speed * dt;
-      ai.x += THREE.MathUtils.clamp(dxA, -maxStep, maxStep);
-
-      /* Landing marker fades after it has done its job */
-      if (marker.visible) {
-        marker.userData.t += dt;
-        marker.material.opacity = Math.max(0, 0.75 - marker.userData.t * 0.5);
-        marker.scale.setScalar(0.2 + Math.sin(marker.userData.t * 7) * 0.022);
-        if (marker.material.opacity <= 0) marker.visible = false;
-      }
-
-      stepBall(dt);
+      if (state.phase === 'replay') stepReplay(rawDt);
+      else simStep(dt, now / 1000);
     }
-
-    /* Meshes */
-    myPaddle.position.x = me.x;
-    myPaddle.rotation.y = THREE.MathUtils.clamp(me.vx * 0.06, -0.35, 0.35);
-    myPaddle.position.y = T.height + 0.08 + Math.sin(t * 2.1) * 0.008;
-    myPaddle.rotation.z = THREE.MathUtils.clamp(-me.vx * 0.09 - me.dragVX * 0.06, -0.6, 0.6);
-    if (me.swing > 0) {
-      me.swing = Math.max(0, me.swing - dt * 5);
-      myPaddle.rotation.x = -0.4 - Math.sin(me.swing * Math.PI) * 0.8;
-    } else {
-      myPaddle.rotation.x = -0.4;
-    }
-
-    if (foe) {
-      const fr = foeRefs.current;
-      const prevX = foe.group.position.x;
-      foe.group.position.x += (ai.x - prevX) * Math.min(1, dt * 10);
-      const moving = Math.abs(ai.x - prevX);
-      const stride = moving > 0.004 ? 1 : 0;
-
-      // Split-step: a table tennis player is never still, they bounce on
-      // the balls of their feet between shots. That idle is most of what
-      // makes a figure read as alive rather than as a prop.
-      const hop = Math.abs(Math.sin(t * 4.4)) * (0.012 + stride * 0.02);
-      foe.group.position.y = hop;
-      const crouch = 0.1 + hop * 1.6;
-      fr.legL.hip.rotation.x = crouch + Math.sin(t * 4.4) * 0.06 * stride;
-      fr.legR.hip.rotation.x = crouch - Math.sin(t * 4.4) * 0.06 * stride;
-      fr.legL.knee.rotation.x = -0.22 - hop * 2.4;
-      fr.legR.knee.rotation.x = -0.22 - hop * 2.4;
-      // Lean into the direction of travel
-      foe.group.rotation.z = THREE.MathUtils.clamp((ai.x - prevX) * -1.4, -0.16, 0.16);
-
-      // Paddle arm held out to the side so the racket reads in silhouette
-      fr.armR.shoulder.rotation.z = -0.42;
-      fr.armL.shoulder.rotation.z = 0.34;
-      if (ai.swing > 0) {
-        ai.swing = Math.max(0, ai.swing - dt * 4.5);
-        // Wind up behind, whip through, follow across the body
-        const k = 1 - ai.swing; // 0 → 1 across the stroke
-        const arc = Math.sin(k * Math.PI);
-        fr.armR.shoulder.rotation.x = 0.72 - (k - 0.5) * 1.6;
-        fr.armR.elbow.rotation.x = 0.5 + arc * 0.55;
-        fr.armR.shoulder.rotation.z = -0.42 - arc * 0.5;
-        fr.torso.rotation.y = (k - 0.5) * 0.5;
-      } else {
-        fr.armR.shoulder.rotation.x = 0.72 + Math.sin(t * 1.7) * 0.07;
-        fr.armR.elbow.rotation.x = 0.5;
-        fr.torso.rotation.y *= 1 - Math.min(1, dt * 5);
-      }
-      fr.armL.shoulder.rotation.x = 0.5 + Math.sin(t * 1.7 + 1) * 0.06;
-      fr.armL.elbow.rotation.x = 0.5;
-      // Eyes on the ball
-      fr.head.rotation.y = THREE.MathUtils.clamp((b.pos.x - ai.x) * -0.5, -0.6, 0.6);
-      fr.head.rotation.x = THREE.MathUtils.clamp((b.pos.z + HITZ) * 0.06, -0.25, 0.3);
-    }
-
-    /* The crowd breathes, and jumps when a point lands */
-    hall.refs.crowd.forEach((c) => {
-      const d = c.userData;
-      const cheer = state.phase === 'point' ? Math.max(0, 1 - state.pointT * 1.6) : 0;
-      c.position.y = 0.5 + Math.sin(t * 1.6 + d.phase) * 0.006
-        + Math.abs(Math.sin(t * 9 + d.phase)) * cheer * 0.09;
-    });
-
-    /* Ball visuals */
-    ball.position.copy(b.pos);
-    const overTable = Math.abs(b.pos.x) < T.width / 2 && Math.abs(b.pos.z) < T.length / 2;
-    const ground = overTable ? T.height + 0.024 : 0.012;
-    blob.position.set(b.pos.x, ground, b.pos.z);
-    const lift = Math.max(0, b.pos.y - ground);
-    blob.scale.setScalar(0.09 + lift * 0.18);
-    blob.material.opacity = Math.max(0, 0.42 - lift * 0.3);
-    blob.visible = state.phase === 'rally' || state.phase === 'serve' || state.phase === 'point';
-
-    const speed = b.vel.length();
-    if (b.live && speed > 7.5) {
-      const s = trail[trailIdx++ % TRAIL_N];
-      s.position.copy(b.pos);
-      s.material.opacity = 0.5;
-      s.scale.setScalar(0.05 + (speed - 7.5) * 0.004);
-    }
-    trail.forEach((s) => {
-      s.material.opacity = Math.max(0, s.material.opacity - dt * 2.2);
-    });
-
-    /* Camera: parallax toward the ball, punch on smashes */
-    const camX = THREE.MathUtils.clamp(b.live ? b.pos.x * 0.16 : me.x * 0.1, -0.34, 0.34);
-    camera.position.x += (camX - camera.position.x) * Math.min(1, dt * 3);
-    if (shakeT > 0) {
-      shakeT -= dt;
-      camera.position.y = 2.5 + (rand() - 0.5) * 0.04;
-    } else {
-      camera.position.y = 2.5;
-    }
-    if (fovPunch > 0) {
-      fovPunch = Math.max(0, fovPunch - dt * 26);
-    }
-    const baseFov = camera.aspect < 0.62 ? 58 : 50;
-    camera.fov = baseFov + fovPunch;
-    camera.updateProjectionMatrix();
-    lookAt.x = camX * 0.5;
-    camera.lookAt(lookAt);
-
-    if (renderOn) composer.render();
+    if (!renderOn) return;
+    renderFrame(rawDt, frameT);
+    adapt(rawDt);
   }
 
-  renderPts();
-  hud.overlay.classList.add('show');
+  /* Adaptive resolution: if the frame time stays high, step the pixel
+     ratio down (never up again — oscillating resolution is worse). */
+  function adapt(dt) {
+    perfCool -= dt;
+    perfAcc += dt;
+    perfN++;
+    if (perfN < 90) return;
+    const avg = perfAcc / perfN;
+    perfAcc = 0;
+    perfN = 0;
+    if (perfCool > 0 || document.hidden) return;
+    if (avg > 1 / 40 && pixelRatio > 1) {
+      pixelRatio = Math.max(1, pixelRatio - 0.25);
+      perfCool = 3;
+      resize();
+    }
+  }
+
+  /* ---- The picture ------------------------------------------------------- */
+
+  // The view: everything a frame needs, built from the live state or read
+  // back from the replay buffer.
+  const view = {
+    t: 0, bx: 0, by: 1, bz: HITZ, bvis: false, st: 0, ss: 0, vz: 0, live: false, smash: false,
+    meX: 0, meVx: 0, meDVX: 0, meDVY: 0, meSwing: 0, meSpin: 0, aiX: 0, foeX: 0, stroke: 0, fh: 1
+  };
+  const foeAnim = { x: 0, fh: 1, stroke: 0, prevX: 0 };
+
+  function liveView(dt) {
+    const src = dead.on ? dead.pos : b.pos;
+    view.t = simT;
+    view.bx = src.x;
+    view.by = src.y;
+    view.bz = src.z;
+    view.bvis = ['serve', 'rally', 'point'].includes(state.phase);
+    view.st = b.st;
+    view.ss = b.ss;
+    view.vz = dead.on ? dead.vel.z : b.vel.z;
+    view.live = b.live || dead.on;
+    view.smash = b.smash;
+    view.meX = me.x;
+    view.meVx = me.vx;
+    view.meDVX = me.dragVX;
+    view.meDVY = me.dragVY;
+    if (me.swing > 0) me.swing = Math.max(0, me.swing - dt * 5);
+    view.meSwing = me.swing;
+    view.meSpin = me.swingSpin;
+    view.aiX = ai.x;
+    // The opponent's stroke: wind up as the ball arrives, follow through
+    // after contact. Forehand unless it is coming well to his backhand.
+    const incoming = b.live && b.vel.z < 0 && ai.reading;
+    if (incoming) foeAnim.fh = ai.targetX > 0.35 ? -1 : 1;
+    if (ai.swing > 0) {
+      // After contact: follow-through, 1 → 2 (2 is the ready pose again)
+      ai.swing = Math.max(0, ai.swing - dt * 4.5);
+      foeAnim.stroke = ai.swing > 0 ? 2 - ai.swing : 0;
+    } else if (incoming && ai.arriveT < 0.26) {
+      // Wind-up, 0 → 1 as the ball arrives
+      foeAnim.stroke = Math.min(0.99, 1 - ai.arriveT / 0.26);
+    } else {
+      foeAnim.stroke = Math.max(0, Math.min(foeAnim.stroke, 0.99) - dt * 3);
+    }
+    view.stroke = foeAnim.stroke;
+    view.fh = foeAnim.fh;
+    // Stand so the BAT, not the belly button, is where the bot is: a
+    // forehand reaches out to his right (world −x), a backhand is played
+    // in front of the body.
+    const off = (foeAnim.fh > 0 ? 0.3 : -0.1) * FOE_SCALE;
+    foeAnim.x += (ai.x + off - foeAnim.x) * Math.min(1, dt * 10);
+    view.foeX = foeAnim.x;
+    return view;
+  }
+
+  function record(v) {
+    if (!['serve', 'rally', 'point'].includes(state.phase)) return;
+    let r;
+    if (rec.length >= REC_MAX) r = rec.shift();
+    else r = {};
+    Object.assign(r, v);
+    rec.push(r);
+  }
+
+  const rv = { ...view };
+  function replayView() {
+    let i = rec.findIndex((r) => r.t >= replay.t);
+    if (i <= 0) i = Math.max(1, i < 0 ? rec.length - 1 : 1);
+    const a = rec[i - 1];
+    const c = rec[i];
+    const k = THREE.MathUtils.clamp((replay.t - a.t) / Math.max(1e-5, c.t - a.t), 0, 1);
+    Object.assign(rv, c);
+    ['bx', 'by', 'bz', 'meX', 'meVx', 'aiX', 'foeX', 'stroke', 'meSwing'].forEach((f) => {
+      rv[f] = a[f] + (c[f] - a[f]) * k;
+    });
+    if (Math.abs(c.stroke - a.stroke) > 0.8) rv.stroke = c.stroke;
+    return rv;
+  }
+
+  /* Opponent pose keyframes: [shoulder pitch, shoulder roll, elbow, torso
+     yaw] at stroke phase 0 (ready), 0.7 (backswing), 1 (contact), 1.5
+     (follow-through), 2 (ready again). Positive pitch swings the arm
+     forward, positive roll takes it out to his right, positive yaw turns
+     his shoulders to his left. */
+  const FH = [[0.72, -0.42, 0.5, 0], [-0.25, 0.65, 0.4, -0.55], [0.9, 0.35, 0.45, -0.1], [2.05, -0.5, 1.25, 0.5], [0.72, -0.42, 0.5, 0]];
+  const BH = [[0.72, -0.42, 0.5, 0], [0.75, -1.05, 1.55, 0.4], [1.15, -0.65, 0.65, 0.05], [1.45, -0.05, 0.25, -0.3], [0.72, -0.42, 0.5, 0]];
+  const KEYS = [0, 0.7, 1, 1.5, 2];
+  const pose4 = [0, 0, 0, 0];
+  function strokePose(stroke, fh) {
+    const tab = fh > 0 ? FH : BH;
+    let i = 0;
+    while (i < 3 && stroke > KEYS[i + 1]) i++;
+    const k = smooth(0, 1, (stroke - KEYS[i]) / (KEYS[i + 1] - KEYS[i]));
+    for (let j = 0; j < 4; j++) pose4[j] = tab[i][j] + (tab[i + 1][j] - tab[i][j]) * k;
+    return pose4;
+  }
+
+  const camPos = new THREE.Vector3(0, 2.5, 3.85);
+  const camLook = new THREE.Vector3(0, 1.02, -1.1);
+  let camFov = 50;
+  const tPos = new THREE.Vector3();
+  const tLook = new THREE.Vector3();
+  const headW = new THREE.Vector3();
+  const bladeA = new THREE.Vector3();
+  const bladeB = new THREE.Vector3();
+  const halfUp = new THREE.Vector3();
+
+  function poseOpponent(v, t, dt) {
+    if (!foe) return;
+    const fr = foe.refs;
+    const prevX = foe.group.position.x;
+    const celebrating = state.phase === 'celebrate' || (state.phase === 'over' && state.champion);
+    foe.group.position.x = v.foeX;
+    const moving = Math.abs(v.foeX - prevX);
+    const stride = moving > 0.004 ? 1 : 0;
+
+    // Split-step: a table tennis player is never still, they bounce on
+    // the balls of their feet between shots. That idle is most of what
+    // makes a figure read as alive rather than as a prop.
+    const hop = Math.abs(Math.sin(t * 4.4)) * (0.012 + stride * 0.02);
+    foe.group.position.y = hop;
+    const crouch = 0.1 + hop * 1.6;
+    fr.legL.hip.rotation.x = crouch + Math.sin(t * 4.4) * 0.06 * stride;
+    fr.legR.hip.rotation.x = crouch - Math.sin(t * 4.4) * 0.06 * stride;
+    fr.legL.knee.rotation.x = -0.22 - hop * 2.4;
+    fr.legR.knee.rotation.x = -0.22 - hop * 2.4;
+    // Lean into the direction of travel
+    foe.group.rotation.z = THREE.MathUtils.clamp((v.foeX - prevX) * -1.4, -0.16, 0.16);
+
+    if (celebrating) {
+      // Beaten, he applauds the new champion
+      const clap = Math.sin(t * 12) * 0.18;
+      fr.armR.shoulder.rotation.set(1.25 + clap, 0, -0.55);
+      fr.armL.shoulder.rotation.set(1.25 + clap, 0, 0.55);
+      fr.armR.elbow.rotation.x = 0.7;
+      fr.armL.elbow.rotation.x = 0.7;
+      fr.torso.rotation.y = 0;
+    } else {
+      const p = strokePose(v.stroke, v.fh);
+      fr.armR.shoulder.rotation.x = p[0] + (v.stroke === 0 ? Math.sin(t * 1.7) * 0.07 : 0);
+      fr.armR.shoulder.rotation.z = p[1];
+      fr.armR.elbow.rotation.x = p[2];
+      fr.torso.rotation.y += (p[3] - fr.torso.rotation.y) * Math.min(1, dt * 18);
+      fr.armL.shoulder.rotation.x = 0.5 + Math.sin(t * 1.7 + 1) * 0.06;
+      fr.armL.shoulder.rotation.z = 0.34;
+      fr.armL.elbow.rotation.x = 0.5;
+    }
+    // Eyes on the ball: yaw toward it, pitch down to it
+    fr.head.getWorldPosition(headW);
+    const dx = v.bx - headW.x;
+    const dz = v.bz - headW.z;
+    const yaw = Math.atan2(dx, Math.max(0.2, dz)) - fr.torso.rotation.y;
+    fr.head.rotation.y = THREE.MathUtils.clamp(yaw, -0.9, 0.9);
+    const pitch = Math.atan2(v.by - headW.y - 0.12, Math.hypot(dx, dz));
+    fr.head.rotation.x = THREE.MathUtils.clamp(pitch, -0.5, 0.3);
+
+    // The swing trail rides the blade
+    fr.paddle.localToWorld(bladeA.set(0, 0.03, 0));
+    fr.paddle.localToWorld(bladeB.set(0, 0.2, 0));
+    swooshFoe.sample(bladeA, bladeB, dt);
+  }
+
+  function updateCamera(v, t, dt) {
+    let rate = 3;
+    let { fov } = base;
+    if (camMode === 'play') {
+      const camX = THREE.MathUtils.clamp(v.live ? v.bx * 0.16 : v.meX * 0.1, -0.34, 0.34);
+      tPos.copy(base.pos);
+      tPos.x = camX;
+      tLook.copy(base.look);
+      tLook.x = camX * 0.5;
+    } else if (camMode === 'menu') {
+      tPos.set(Math.sin(t * 0.07) * 1.6, 2.15 + Math.sin(t * 0.05) * 0.12, base.pos.z - 0.6);
+      tLook.set(Math.sin(t * 0.05) * 0.4, 1.3, -3.2);
+      fov = base.fov + 3;
+      rate = 1.2;
+    } else if (camMode === 'intro') {
+      // Close on the opponent; on a wide screen he stands right of centre
+      // so the card can take the left, on a phone he stands above it
+      const wide = camera.aspect > 1.05;
+      const fx = foe ? foe.group.position.x : 0;
+      tPos.set(fx + (wide ? 0.25 : 0.12), wide ? 1.72 : 1.5, -0.25);
+      tLook.set(fx - (wide ? 0.55 : 0), wide ? 1.48 : 1.12, -2.1);
+      fov = wide ? 38 : 50;
+      rate = 2.2;
+    } else if (camMode === 'replay') {
+      tPos.set(2.35, 1.22, THREE.MathUtils.clamp(v.bz * 0.45, -1.1, 1.2) + 0.25);
+      tLook.set(v.bx * 0.3, 0.95, v.bz * 0.75);
+      fov = camera.aspect < 0.8 ? 52 : 38;
+      rate = 4;
+    } else if (camMode === 'celebrate') {
+      celebT += dt;
+      const a = celebT * 0.28;
+      const r = camera.aspect < 0.8 ? 3.4 : 2.9;
+      tPos.set(Math.sin(a) * r, 1.75 + Math.sin(celebT * 0.4) * 0.15, 0.45 + Math.cos(a) * r);
+      tLook.set(0, T.height + 0.55, 0.45);
+      fov = camera.aspect < 0.8 ? 56 : 44;
+      rate = celebT < 1.5 ? 1.5 : 3;
+    }
+    const k = 1 - Math.exp(-dt * rate);
+    camPos.lerp(tPos, k);
+    camLook.lerp(tLook, k);
+    camFov += (fov - camFov) * k;
+    camera.position.copy(camPos);
+    if (shakeT > 0) {
+      shakeT -= dt;
+      if (!reduceMotion) {
+        camera.position.x += (vrand() - 0.5) * 0.03;
+        camera.position.y += (vrand() - 0.5) * 0.04;
+      }
+    }
+    if (fovPunch > 0) fovPunch = Math.max(0, fovPunch - dt * 26);
+    camera.fov = camFov + (reduceMotion ? 0 : fovPunch);
+    camera.updateProjectionMatrix();
+    camera.lookAt(camLook);
+  }
+
+  function renderFrame(dt, t) {
+    const replaying = state.phase === 'replay';
+    const v = replaying ? replayView() : liveView(dt);
+    if (!replaying) record(v);
+
+    /* The dead ball carries on bouncing for the picture */
+    if (dead.on && !replaying) {
+      dead.vel.y -= GRAV * dt;
+      dead.vel.multiplyScalar(1 - 0.3 * dt);
+      dead.pos.addScaledVector(dead.vel, dt);
+      const onTable = Math.abs(dead.pos.x) < T.width / 2 && Math.abs(dead.pos.z) < T.length / 2;
+      const floorY = onTable && dead.pos.y > T.height - 0.05 ? T.height + 0.023 : 0.023;
+      if (dead.pos.y < floorY && dead.vel.y < 0) {
+        dead.pos.y = floorY;
+        dead.vel.y *= -0.55;
+        dead.vel.x *= 0.85;
+        dead.vel.z *= 0.85;
+      }
+    }
+
+    /* My paddle. Its face pre-tilts with the gesture — closed for topspin,
+       open for backspin — and the rubber glows the spin colour, so you can
+       SEE what you would play if the ball arrived now. */
+    const preSpin = THREE.MathUtils.clamp(-v.meDVY * 0.3, -1, 1);
+    const preSide = THREE.MathUtils.clamp(v.meDVX * 0.16, -1, 1);
+    myPaddle.position.x = v.meX;
+    myPaddle.rotation.y = THREE.MathUtils.clamp(v.meVx * 0.06, -0.35, 0.35);
+    myPaddle.rotation.z = THREE.MathUtils.clamp(-v.meVx * 0.09 - v.meDVX * 0.06, -0.6, 0.6);
+    const sw = Math.sin(v.meSwing * Math.PI);
+    const dir = v.meSpin < -0.25 ? -1 : 1;
+    myPaddle.position.y = PADDLE_Y + Math.sin(t * 2.1) * 0.008 + sw * 0.07 * dir;
+    myPaddle.rotation.x = -0.4 - preSpin * 0.22 - sw * 0.8 * dir;
+    const flick = Math.min(1, Math.hypot(preSpin, preSide) * 1.3);
+    spinColor(preSpin, preSide, rubber.emissive);
+    rubber.emissiveIntensity = flick * 0.55;
+    myPaddle.localToWorld(bladeA.set(0, 0.03, 0));
+    myPaddle.localToWorld(bladeB.set(0, 0.21, 0));
+    swooshMe.sample(bladeA, bladeB, dt);
+
+    poseOpponent(v, t, dt);
+
+    /* Ball, spin made visible: the print turns with the spin */
+    ball.visible = v.bvis;
+    halo.visible = v.bvis;
+    ball.position.set(v.bx, v.by, v.bz);
+    halo.position.copy(ball.position);
+    const dirZ = Math.sign(v.vz) || 1;
+    ball.rotation.x += v.st * 55 * dt * dirZ * (replaying ? 0.4 : 1);
+    ball.rotation.y += v.ss * 40 * dt;
+    const overTable = Math.abs(v.bx) < T.width / 2 && Math.abs(v.bz) < T.length / 2;
+    const ground = overTable && v.by > T.height - 0.05 ? T.height + 0.024 : 0.012;
+    blob.position.set(v.bx, ground, v.bz);
+    const lift = Math.max(0, v.by - ground);
+    blob.scale.setScalar(0.09 + lift * 0.18);
+    blob.material.opacity = Math.max(0, 0.42 - lift * 0.3);
+    blob.visible = v.bvis;
+    if (v.bvis && v.live) {
+      spinColor(v.st, v.ss, tmpC);
+      trail.push(ball.position, tmpC, v.smash ? 1.6 : 1);
+    }
+    trail.update(dt * (replaying ? 0.4 : 1), camera.position);
+
+    /* Landing marker fades after it has done its job */
+    if (marker.visible) {
+      marker.userData.t += dt;
+      marker.material.opacity = Math.max(0, 0.8 - marker.userData.t * 0.5);
+      marker.scale.setScalar(0.2 + Math.sin(marker.userData.t * 7) * 0.022);
+      if (marker.material.opacity <= 0) marker.visible = false;
+    }
+
+    /* Net shiver after a net ball */
+    if (net.amp > 0) {
+      net.t += dt;
+      const amp = net.amp * Math.exp(-net.t * 5);
+      const pos = hall.refs.net.geometry.attributes.position;
+      const baseArr = hall.refs.netBase;
+      for (let i = 0; i < pos.count; i++) {
+        const x = baseArr[i * 3];
+        const yk = (baseArr[i * 3 + 1] / T.netH + 0.5); // 0 at the table, 1 at the tape
+        pos.setZ(i, Math.sin(net.t * 38) * amp * Math.exp(-(((x - net.x) / 0.35) ** 2)) * (0.3 + yk));
+      }
+      pos.needsUpdate = true;
+      if (amp < 0.0005) net.amp = 0;
+    }
+
+    rings.update(dt);
+    sparks.update(dt);
+
+    /* Crowd: excitement from the rally, silence for match point */
+    const excite = state.phase === 'rally' || state.phase === 'point' ? smooth(3, 14, state.rallyHits) : 0;
+    crowd.update(t, dt, v.bvis ? halfUp.set(v.bx, v.by, v.bz) : null, { excite, hush: drama.v });
+    sfx.crowdLevel(state.phase === 'celebrate' ? 1 : Math.max(0, excite * 0.8 + 0.15 - drama.v * 0.15));
+    board.update(dt);
+
+    /* Match-point drama */
+    drama.v += (drama.target - drama.v) * Math.min(1, dt * 2.5);
+    hemi.intensity = 0.3 * (1 - 0.5 * drama.v);
+    key.intensity = 1.55 * (1 + 0.28 * drama.v);
+    pendants[2].intensity = 5 * (1 - 0.55 * drama.v);
+    hall.refs.lampMats.forEach((l, i) => {
+      l.mat.uniforms.uIntensity.value = l.base * (i < 2 ? 1 + 0.9 * drama.v : 1 - 0.7 * drama.v);
+    });
+    hall.refs.dust.material.uniforms.uTime.value = t;
+    hall.refs.dust.material.uniforms.uIntensity.value = 1 + drama.v * 0.8;
+    post.u.uVignette.value = 0.3 + drama.v * 0.6 + (replaying ? 0.25 : 0);
+    if (drama.mine) post.u.uTint.value.setRGB(1.1, 1.0, 0.82);
+    else post.u.uTint.value.setRGB(1.12, 0.86, 0.84);
+    post.u.uTintAmt.value = drama.v * 0.45;
+    post.u.uFlash.value *= Math.exp(-dt * 14);
+    post.u.uFringe.value *= Math.exp(-dt * 10);
+    post.u.uTime.value = t % 100;
+    post.bloom.strength = 0.34 + excite * 0.12 + (state.phase === 'celebrate' ? 0.15 : 0);
+
+    /* The cup rises for the champion */
+    if (trophy.visible) {
+      const rise = smooth(0.3, 2.0, celebT);
+      trophy.position.set(0, T.height - 0.75 + rise * 0.83, 0.45);
+      trophy.rotation.y = t * 0.6;
+      trophyShaft.material.uniforms.uIntensity.value = 0.12 * rise;
+      if (rise > 0.5 && vrand() < dt * 14) {
+        sparks.burst(tmpV.set((vrand() - 0.5) * 0.4, T.height + 0.2 + vrand() * 0.5, 0.45 + (vrand() - 0.5) * 0.4), tmpC.setHex(0xffd166), 3, 0.6, vrand);
+      }
+    }
+    confetti.update(dt, t, (x, z) => (Math.abs(x) < T.width / 2 && Math.abs(z) < T.length / 2 ? T.height + 0.003 : 0.004));
+
+    updateCamera(v, t, dt);
+    post.render();
+  }
+
+  showMenu();
   raf = requestAnimationFrame(tick);
 
   const onVisibility = () => {
     running = !document.hidden;
     last = performance.now();
+    if (sfx.ctx) {
+      if (document.hidden) sfx.ctx.suspend();
+      else sfx.ctx.resume();
+    }
   };
   document.addEventListener('visibilitychange', onVisibility);
 
@@ -1325,8 +2098,12 @@ export async function createPingis(container) {
     camera,
     foe: () => foe,
     startGame,
+    startTournament,
+    startSingle,
+    beginMatch,
     beginPoint,
     playerServe,
+    showMenu,
     setPaddle(x) {
       me.x = x;
       me.aimX = x;
@@ -1343,9 +2120,16 @@ export async function createPingis(container) {
         scorePoint(mine);
       }
     },
+    /** Test helper: set the score mid-match (e.g. to see match point). */
+    setPoints(my, them) {
+      state.myPts = my;
+      state.aiPts = them;
+      renderPts();
+    },
     winMatch() {
       // Test helper: skip the rally race entirely and settle the match
       if (state.phase === 'matchend' || state.phase === 'over') return;
+      if (state.phase === 'intro') beginMatch();
       state.myPts = POINTS_TO_WIN;
       state.aiPts = 0;
       b.live = false;
@@ -1353,10 +2137,12 @@ export async function createPingis(container) {
       endMatch(true);
     },
     info() {
-      return {
-        drawCalls: renderer.info.render.calls,
-        triangles: renderer.info.render.triangles
-      };
+      renderer.info.autoReset = false;
+      renderer.info.reset();
+      post.render();
+      const r = { drawCalls: renderer.info.render.calls, triangles: renderer.info.render.triangles, pixelRatio, tier };
+      renderer.info.autoReset = true;
+      return r;
     }
   };
 
@@ -1367,27 +2153,27 @@ export async function createPingis(container) {
     running = false;
     ro.disconnect();
     document.removeEventListener('visibilitychange', onVisibility);
+    hudHost.removeEventListener('click', onClick);
     canvasHost.removeEventListener('pointerdown', onPointerDown);
     window.removeEventListener('pointermove', onPointerMove);
     window.removeEventListener('pointerup', onPointerUp);
     window.removeEventListener('keydown', onKeyDown);
     window.removeEventListener('keyup', onKeyUp);
-    clearTimeout(state.lastToast);
+    realTimers.forEach((id) => clearTimeout(id));
+    timers.length = 0;
+    hud.dispose();
     delete window.__ppPingis;
 
-    scene.traverse((o) => {
-      if (o.geometry) o.geometry.dispose();
-      if (o.material) {
-        const mats = Array.isArray(o.material) ? o.material : [o.material];
-        mats.forEach((m) => {
-          if (m.map) m.map.dispose();
-          m.dispose();
-        });
-      }
-    });
+    disposeTree(scene);
+    glow.dispose();
+    envRT.dispose();
+    board.dispose();
+    if (hall.refs.reflector) hall.refs.reflector.dispose();
+    post.dispose();
     renderer.dispose();
     renderer.forceContextLoss?.();
     if (sfx.ctx) sfx.ctx.close();
+    canvasHost.classList.remove('pg-playing');
     container.innerHTML = '';
   }
 
@@ -1395,4 +2181,4 @@ export async function createPingis(container) {
 }
 
 export default createPingis;
-export { OPPONENTS };
+export { OPPONENTS, MEDAL_NAMES };

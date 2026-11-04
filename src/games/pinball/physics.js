@@ -212,7 +212,7 @@ export class Flipper {
       ball.vx -= tx * vt * 0.05;
       ball.vy -= ty * vt * 0.05;
 
-      if (this.onHit) this.onHit(Math.abs(vn));
+      if (this.onHit) this.onHit(Math.abs(vn), ball);
     }
     return true;
   }

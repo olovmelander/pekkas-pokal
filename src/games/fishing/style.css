@@ -1,1 +1,1021 @@
-/* Spelspecifika stilar — laddas när spelet öppnas, efter src/styles/game-hud.css. */
+/* ==========================================================================
+   Pekkas Fiske (2024) — spelspecifika stilar.
+   Laddas när spelet öppnas, efter src/styles/game-hud.css. Allt är scopat
+   under .fiske-ui så att inget läcker till de andra spelen som delar
+   pb-/fg-klasserna. Nya delar har prefixet fi-.
+   ========================================================================== */
+
+.fiske-ui {
+  --fi-cyan: #8fe3f2;
+  --fi-teal: #5eead4;
+  --fi-gold: #f2c14e;
+  --fi-ink: rgba(4, 14, 24, 0.82);
+  --deep: 0;
+  --top: max(10px, env(safe-area-inset-top));
+}
+
+/* ---- Tryckvinjett: sluter sig ju djupare kameran kommer ---- */
+
+.fiske-ui .fi-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 75% 70% at 50% 45%, rgba(0, 0, 0, 0) 45%, rgba(1, 6, 14, 0.7) 100%),
+    linear-gradient(to bottom, rgba(2, 10, 20, 0.3), rgba(0, 0, 0, 0) 22%);
+  opacity: calc(0.45 + var(--deep) * 0.55);
+  transition: opacity 0.4s ease;
+}
+
+.fiske-ui.fi-slow .fi-vignette {
+  opacity: 1;
+}
+
+/* Biobandet i slow motion: två svarta band glider in */
+.fiske-ui::before,
+.fiske-ui::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 7vh;
+  background: #02060c;
+  pointer-events: none;
+  z-index: 5;
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.fiske-ui::before {
+  top: 0;
+  transform: translateY(-100%);
+}
+
+.fiske-ui::after {
+  bottom: 0;
+  transform: translateY(100%);
+}
+
+.fiske-ui.fi-slow::before,
+.fiske-ui.fi-slow::after {
+  transform: none;
+}
+
+/* Kroken sitter: en snabb ljusblixt */
+.fiske-ui .fi-flash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 40%, var(--fc, rgba(190, 240, 255, 0.5)), transparent 70%);
+  opacity: 0;
+}
+
+.fiske-ui .fi-flash.show {
+  animation: fi-flash 0.42s ease-out;
+}
+
+@keyframes fi-flash {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ---- Toppen ---- */
+
+.fiske-ui .pb-hud {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+}
+
+.fiske-ui .pb-score {
+  text-shadow: 0 0 22px rgba(242, 193, 78, 0.5), 0 2px 10px rgba(2, 10, 20, 0.6);
+}
+
+.fiske-ui .pb-score.bump {
+  animation: fg-bump 0.28s ease-out;
+}
+
+.fiske-ui .fg-depth {
+  font-size: 1.35rem;
+  text-shadow: 0 0 18px rgba(127, 216, 232, 0.6), 0 2px 8px rgba(2, 10, 20, 0.6);
+}
+
+.fiske-ui .fi-casts {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.fiske-ui .fi-casts span {
+  margin-right: 3px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: rgba(205, 225, 240, 0.7);
+}
+
+.fiske-ui .fi-casts i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+.fiske-ui .fi-casts i.done {
+  background: var(--fi-cyan);
+  box-shadow: 0 0 8px rgba(143, 227, 242, 0.7);
+}
+
+.fiske-ui .fi-casts i.now {
+  background: var(--fi-gold);
+  box-shadow: 0 0 10px rgba(242, 193, 78, 0.8);
+}
+
+/* ---- Uppdraget ---- */
+
+.fiske-ui .fi-mission {
+  position: absolute;
+  left: 12px;
+  top: calc(var(--top) + 60px);
+  max-width: min(64vw, 340px);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px 5px 8px;
+  border-radius: 999px;
+  background: rgba(6, 18, 30, 0.62);
+  border: 1px solid rgba(255, 184, 107, 0.36);
+  backdrop-filter: blur(8px);
+  font-size: 0.66rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: rgba(240, 232, 220, 0.92);
+  pointer-events: none;
+  transition: border-color 0.3s, background 0.3s;
+}
+
+.fiske-ui .fi-mission[hidden] {
+  display: none;
+}
+
+.fiske-ui .fi-mission svg {
+  flex: none;
+  color: #ffb86b;
+}
+
+.fiske-ui .fi-mission b {
+  flex: none;
+  margin-left: 2px;
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  color: #ffd08a;
+  font-variant-numeric: tabular-nums;
+}
+
+.fiske-ui .fi-mission.done {
+  border-color: rgba(242, 193, 78, 0.8);
+  background: linear-gradient(90deg, rgba(90, 64, 10, 0.75), rgba(40, 30, 8, 0.7));
+}
+
+.fiske-ui .fi-mission.done svg,
+.fiske-ui .fi-mission.done b {
+  color: var(--fi-gold);
+}
+
+.fiske-ui .fi-mission.win {
+  animation: fi-win 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes fi-win {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.12); box-shadow: 0 0 28px rgba(242, 193, 78, 0.8); }
+  100% { transform: scale(1); }
+}
+
+/* Multiplikatorn — under uppdraget */
+.fiske-ui .fg-mult {
+  top: calc(var(--top) + 94px);
+  font-size: 1.55rem;
+  text-shadow: 0 0 18px rgba(94, 234, 212, 0.55), 0 2px 8px rgba(2, 10, 20, 0.6);
+}
+
+.fiske-ui .fg-mult.pulse {
+  animation: fi-pulse 0.3s ease-out;
+}
+
+@keyframes fi-pulse {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.22); }
+  100% { transform: scale(1); }
+}
+
+/* ---- Djupmätaren ---- */
+
+.fiske-ui .fi-gauge {
+  position: absolute;
+  right: 14px;
+  top: calc(var(--top) + 96px);
+  bottom: calc(14% + env(safe-area-inset-bottom));
+  width: 40px;
+  opacity: 0;
+  transform: translateX(10px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
+}
+
+.fiske-ui .fi-gauge.show {
+  opacity: 1;
+  transform: none;
+}
+
+.fiske-ui .fi-gauge-rail {
+  position: absolute;
+  right: 6px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(to bottom, rgba(170, 236, 236, 0.55), rgba(70, 120, 170, 0.35));
+  border-radius: 2px;
+}
+
+/* Var arterna simmar: tunna färgade band till höger om skenan */
+.fiske-ui .fi-gauge-rail > i {
+  position: absolute;
+  left: 4px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--c);
+  opacity: 0.75;
+}
+
+.fiske-ui .fi-gauge-rail > i:nth-child(2) { left: 7px; }
+.fiske-ui .fi-gauge-rail > i:nth-child(3) { left: 10px; }
+.fiske-ui .fi-gauge-rail > i:nth-child(4) { left: 13px; }
+.fiske-ui .fi-gauge-rail > i:nth-child(5) { left: 16px; }
+.fiske-ui .fi-gauge-rail > i:nth-child(6) { left: 19px; box-shadow: 0 0 6px var(--c); }
+
+.fiske-ui .fi-gauge ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.fiske-ui .fi-gauge li {
+  position: absolute;
+  right: -3px;
+  width: 8px;
+  height: 1px;
+  background: rgba(200, 240, 245, 0.6);
+}
+
+.fiske-ui .fi-gauge li span {
+  position: absolute;
+  right: 12px;
+  top: -6px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: rgba(200, 236, 244, 0.6);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.fiske-ui .fi-gauge-deep {
+  position: absolute;
+  left: -1px;
+  top: 0;
+  width: 4px;
+  height: 0;
+  border-radius: 3px;
+  background: linear-gradient(to bottom, rgba(143, 227, 242, 0.1), rgba(143, 227, 242, 0.55));
+}
+
+.fiske-ui .fi-gauge-lure {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fff, #ffd98a 45%, #d8394d 100%);
+  box-shadow: 0 0 12px rgba(255, 217, 138, 0.9);
+}
+
+/* ---- Zonbannern ---- */
+
+.fiske-ui .fi-zone {
+  position: absolute;
+  left: 50%;
+  top: 30%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  transform: translateX(-50%);
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.fiske-ui .fi-zone small {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  color: rgba(160, 236, 240, 0.8);
+}
+
+.fiske-ui .fi-zone b {
+  position: relative;
+  font-family: var(--font-display);
+  font-size: clamp(1.4rem, 7vw, 2.6rem);
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: rgba(226, 248, 252, 0.97);
+  text-shadow: 0 0 34px rgba(10, 40, 60, 0.95), 0 0 2px rgba(10, 40, 60, 0.9);
+}
+
+/* Den tunna linjen som sveper genom zonnamnet */
+.fiske-ui .fi-zone b::after {
+  content: '';
+  position: absolute;
+  left: -20%;
+  right: -20%;
+  top: 50%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(180, 245, 245, 0.8), transparent);
+  transform: scaleX(0);
+}
+
+.fiske-ui .fi-zone span {
+  font-size: 0.78rem;
+  font-style: italic;
+  color: rgba(205, 236, 244, 0.85);
+  text-shadow: 0 1px 10px rgba(2, 12, 22, 0.9);
+}
+
+.fiske-ui .fi-zone.show {
+  animation: fi-zone 2.2s ease-out forwards;
+}
+
+.fiske-ui .fi-zone.show b {
+  animation: fi-zone-name 2.2s ease-out forwards;
+}
+
+.fiske-ui .fi-zone.show b::after {
+  animation: fi-sweep 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fi-zone {
+  0% { opacity: 0; transform: translate(-50%, 8px); }
+  14% { opacity: 1; transform: translate(-50%, 0); }
+  75% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -6px); }
+}
+
+@keyframes fi-zone-name {
+  0% { letter-spacing: 0.55em; }
+  20% { letter-spacing: 0.2em; }
+  100% { letter-spacing: 0.17em; }
+}
+
+@keyframes fi-sweep {
+  0% { transform: scaleX(0); opacity: 1; }
+  100% { transform: scaleX(1); opacity: 0; }
+}
+
+/* ---- Utroparen ---- */
+
+.fiske-ui .fi-announce {
+  position: absolute;
+  left: 50%;
+  top: 44%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  opacity: 0;
+  white-space: nowrap;
+  z-index: 3;
+}
+
+.fiske-ui .fi-announce b {
+  font-family: var(--font-display);
+  font-size: clamp(1.7rem, 8.5vw, 3.4rem);
+  font-weight: 800;
+  font-style: italic;
+  letter-spacing: 0.03em;
+  color: #eafcff;
+  -webkit-text-stroke: 1px rgba(4, 30, 44, 0.55);
+  text-shadow: 0 0 24px rgba(94, 234, 212, 0.75), 0 4px 0 rgba(4, 24, 36, 0.55);
+}
+
+.fiske-ui .fi-announce span {
+  margin-top: 2px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(4, 18, 28, 0.6);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: rgba(214, 246, 250, 0.92);
+}
+
+.fiske-ui .fi-announce span:empty {
+  display: none;
+}
+
+.fiske-ui .fi-announce.gold b {
+  color: #fff3cf;
+  text-shadow: 0 0 28px rgba(242, 193, 78, 0.9), 0 4px 0 rgba(60, 36, 4, 0.6);
+}
+
+.fiske-ui .fi-announce.gold span {
+  color: #ffe2a0;
+}
+
+.fiske-ui .fi-announce.bad b {
+  color: #d9d2c4;
+  text-shadow: 0 0 20px rgba(120, 90, 70, 0.8), 0 4px 0 rgba(20, 14, 8, 0.6);
+}
+
+.fiske-ui .fi-announce.show {
+  animation: fi-announce 1.15s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
+}
+
+@keyframes fi-announce {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.55) rotate(-4deg); }
+  14% { opacity: 1; transform: translate(-50%, -50%) scale(1.12) rotate(1deg); }
+  26% { transform: translate(-50%, -50%) scale(1) rotate(0deg); }
+  78% { opacity: 1; transform: translate(-50%, -54%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -64%) scale(0.96); }
+}
+
+/* ---- Poängsiffror ---- */
+
+.fiske-ui .fg-pop {
+  font-size: 1rem;
+}
+
+.fiske-ui .fg-pop.near {
+  color: #9ff3ff;
+  font-size: 0.9rem;
+  letter-spacing: 0.12em;
+}
+
+.fiske-ui .fg-pop.chain,
+.fiske-ui .fg-pop.gold {
+  color: #ffe08a;
+  font-size: 1.2rem;
+  text-shadow: 0 0 16px rgba(242, 193, 78, 0.7), 0 2px 10px rgba(4, 12, 22, 0.9);
+}
+
+.fiske-ui .fg-pop.miss {
+  color: rgba(214, 230, 240, 0.75);
+  font-size: 0.8rem;
+  letter-spacing: 0.2em;
+}
+
+/* ---- Styrtipset: ett finger som drar fram och tillbaka ---- */
+
+.fiske-ui .fi-hint {
+  position: absolute;
+  left: 50%;
+  bottom: calc(16% + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px 8px 12px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: rgba(4, 16, 26, 0.72);
+  border: 1px solid rgba(143, 227, 242, 0.35);
+  backdrop-filter: blur(8px);
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: rgba(220, 244, 250, 0.92);
+  white-space: nowrap;
+  pointer-events: none;
+  animation: fi-fade-in 0.4s ease-out;
+}
+
+.fiske-ui .fi-hint[hidden] {
+  display: none;
+}
+
+.fiske-ui .fi-hint-hand {
+  position: relative;
+  width: 44px;
+  height: 18px;
+}
+
+.fiske-ui .fi-hint-hand::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 8px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, rgba(143, 227, 242, 0.6), transparent);
+}
+
+.fiske-ui .fi-hint-hand::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 14px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #eafcff;
+  box-shadow: 0 0 12px rgba(143, 227, 242, 0.9);
+  animation: fi-swipe 1.4s ease-in-out infinite;
+}
+
+@keyframes fi-swipe {
+  0%, 100% { transform: translateX(-14px); }
+  50% { transform: translateX(14px); }
+}
+
+@keyframes fi-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ---- Tunnräknaren i luften ---- */
+
+.fiske-ui .fi-tunna {
+  position: absolute;
+  left: 50%;
+  bottom: calc(12% + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(40, 24, 10, 0.66);
+  border: 1px solid rgba(242, 193, 78, 0.45);
+  backdrop-filter: blur(6px);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: rgba(255, 236, 200, 0.85);
+  pointer-events: none;
+  z-index: 6;
+}
+
+.fiske-ui .fi-tunna[hidden] {
+  display: none;
+}
+
+.fiske-ui .fi-tunna b {
+  margin-left: 6px;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  letter-spacing: 0;
+  color: var(--fi-gold);
+}
+
+.fiske-ui .fi-tunna.bump {
+  animation: fi-pulse 0.3s ease-out;
+}
+
+/* ---- Rundkortet ---- */
+
+.fiske-ui .fg-round {
+  padding-top: 30%;
+  z-index: 7;
+}
+
+.fiske-ui .fi-round-mission {
+  margin-top: 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: rgba(205, 225, 236, 0.75);
+}
+
+.fiske-ui .fi-round-mission.ok {
+  color: #ffd98a;
+}
+
+.fiske-ui .fi-round-next {
+  margin-top: 0.35rem;
+  padding: 0.45rem 0.8rem;
+  border-radius: 12px;
+  background: rgba(255, 184, 107, 0.1);
+  border: 1px solid rgba(255, 184, 107, 0.3);
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: rgba(250, 238, 220, 0.95);
+}
+
+.fiske-ui .fi-round-next:empty {
+  display: none;
+}
+
+.fiske-ui .fi-round-next small {
+  display: block;
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #ffb86b;
+}
+
+.fiske-ui .fi-round-next b {
+  color: #ffd08a;
+}
+
+/* ---- Start- och slutpanelen ---- */
+
+.fiske-ui .pb-overlay {
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 50%, rgba(3, 10, 18, 0.62), rgba(3, 10, 18, 0.3) 70%, rgba(3, 10, 18, 0.15)),
+    linear-gradient(180deg, rgba(4, 12, 22, 0.25), rgba(3, 8, 16, 0.65));
+  backdrop-filter: blur(2px);
+}
+
+.fiske-ui .fi-panel {
+  width: min(400px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 22px 22px 18px;
+  border-radius: 22px;
+  background: linear-gradient(170deg, rgba(10, 30, 44, 0.78), rgba(4, 14, 24, 0.86));
+  border: 1px solid rgba(143, 227, 242, 0.22);
+  box-shadow: 0 30px 80px rgba(0, 4, 10, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
+}
+
+.fiske-ui .fi-kicker {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(255, 196, 140, 0.85);
+}
+
+.fiske-ui .fi-panel h2 {
+  font-family: var(--ff-serif, var(--font-display));
+  font-size: clamp(1.9rem, 7.5vw, 2.7rem);
+  line-height: 1.05;
+}
+
+.fiske-ui .fi-panel .fg-steps {
+  margin-top: 14px;
+}
+
+.fiske-ui .fi-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.fiske-ui .fi-actions .pb-btn {
+  margin-top: 0;
+}
+
+.fiske-ui .fi-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0.7rem 1.05rem;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: rgba(220, 240, 248, 0.92);
+  background: rgba(143, 227, 242, 0.08);
+  border: 1px solid rgba(143, 227, 242, 0.3);
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, transform 0.15s;
+}
+
+.fiske-ui .fi-btn-ghost:hover {
+  background: rgba(143, 227, 242, 0.16);
+  border-color: rgba(143, 227, 242, 0.55);
+}
+
+.fiske-ui .fi-btn-ghost:active {
+  transform: scale(0.97);
+}
+
+.fiske-ui .fi-btn-ghost b {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(143, 227, 242, 0.16);
+  font-size: 0.7rem;
+  color: var(--fi-cyan);
+  font-variant-numeric: tabular-nums;
+}
+
+.fiske-ui .fi-stars {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 6px 0 4px;
+}
+
+.fiske-ui .fi-stars[hidden] {
+  display: none;
+}
+
+.fiske-ui .fi-stars i {
+  font-style: normal;
+  font-size: 1.9rem;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.14);
+}
+
+.fiske-ui .fi-stars i.on {
+  color: var(--fi-gold);
+  text-shadow: 0 0 18px rgba(242, 193, 78, 0.8);
+  animation: fi-star 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation-delay: var(--d);
+}
+
+@keyframes fi-star {
+  0% { transform: scale(0) rotate(-40deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+
+.fiske-ui .fi-haul {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 6px;
+  margin: 10px 0 12px;
+}
+
+.fiske-ui .fi-haul[hidden] {
+  display: none;
+}
+
+.fiske-ui .fi-haul > span {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 6px 7px;
+  border-radius: 12px;
+  background: rgba(143, 227, 242, 0.06);
+  border: 1px solid rgba(143, 227, 242, 0.14);
+}
+
+.fiske-ui .fi-haul svg {
+  width: 74px;
+  height: 36px;
+}
+
+.fiske-ui .fi-haul b {
+  font-size: 0.72rem;
+  color: #fff;
+}
+
+.fiske-ui .fi-haul small {
+  font-size: 0.64rem;
+  color: rgba(205, 236, 244, 0.65);
+}
+
+/* På bred skärm: panelen till vänster, båten och midnattssolen syns */
+.fiske-ui.fi-wide .pb-overlay {
+  justify-content: flex-start;
+  padding-left: max(6vw, 36px);
+  background:
+    linear-gradient(90deg, rgba(3, 10, 18, 0.72) 0%, rgba(3, 10, 18, 0.42) 38%, rgba(3, 10, 18, 0) 66%),
+    linear-gradient(180deg, rgba(4, 12, 22, 0.2), rgba(3, 8, 16, 0.35));
+  backdrop-filter: none;
+}
+
+.fiske-ui.fi-wide .fi-panel {
+  width: 420px;
+}
+
+/* ---- Fångstdagboken ---- */
+
+.fiske-ui .fi-book {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(3, 9, 16, 0.78);
+  backdrop-filter: blur(10px);
+  pointer-events: auto;
+}
+
+.fiske-ui .fi-book[hidden] {
+  display: none;
+}
+
+.fiske-ui .fi-book-card {
+  width: min(520px, 100%);
+  max-height: min(88vh, 760px);
+  overflow-y: auto;
+  padding: 22px 20px 18px;
+  border-radius: 20px;
+  background:
+    linear-gradient(170deg, rgba(36, 30, 20, 0.97), rgba(18, 16, 12, 0.98));
+  border: 1px solid rgba(242, 193, 78, 0.32);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
+  color: #efe6d4;
+}
+
+.fiske-ui .fi-book-card h3 {
+  margin: 0;
+  font-family: var(--ff-serif, var(--font-display));
+  font-size: 1.6rem;
+  font-weight: 600;
+  color: var(--fi-gold);
+}
+
+.fiske-ui .fi-book-sub {
+  margin: 2px 0 14px;
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(239, 230, 212, 0.55);
+}
+
+.fiske-ui .fi-book-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.fiske-ui .fi-book-list li {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px 8px 8px;
+  border-radius: 14px;
+  background: rgba(255, 240, 210, 0.05);
+  border: 1px solid rgba(255, 240, 210, 0.1);
+}
+
+.fiske-ui .fi-book-list li.rare {
+  background: linear-gradient(90deg, rgba(242, 193, 78, 0.16), rgba(242, 193, 78, 0.04));
+  border-color: rgba(242, 193, 78, 0.45);
+}
+
+.fiske-ui .fi-book-list svg {
+  width: 96px;
+  height: 48px;
+}
+
+.fiske-ui .fi-book-list li.unknown svg {
+  opacity: 0.9;
+  filter: drop-shadow(0 0 1px rgba(143, 227, 242, 0.5));
+}
+
+.fiske-ui .fi-book-list b {
+  display: block;
+  font-size: 0.86rem;
+  letter-spacing: 0.04em;
+  color: #fff6e4;
+}
+
+.fiske-ui .fi-book-list li.unknown b {
+  color: rgba(239, 230, 212, 0.5);
+}
+
+.fiske-ui .fi-book-list span {
+  display: block;
+  margin-top: 1px;
+  font-size: 0.74rem;
+  line-height: 1.4;
+  color: rgba(239, 230, 212, 0.72);
+}
+
+.fiske-ui .fi-book-list em {
+  display: block;
+  margin-top: 3px;
+  font-style: normal;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #ffd98a;
+  font-variant-numeric: tabular-nums;
+}
+
+.fiske-ui .fi-book-records {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin: 14px 0 4px;
+}
+
+.fiske-ui .fi-book-records span {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 7px 4px;
+  border-radius: 10px;
+  background: rgba(255, 240, 210, 0.05);
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #fff6e4;
+  font-variant-numeric: tabular-nums;
+}
+
+.fiske-ui .fi-book-records small {
+  font-family: var(--font-body);
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(239, 230, 212, 0.5);
+}
+
+.fiske-ui .fi-book-find {
+  grid-column: 1 / -1;
+  margin: 6px 0 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(242, 193, 78, 0.1);
+  border: 1px solid rgba(242, 193, 78, 0.3);
+  font-size: 0.74rem;
+  font-style: italic;
+  color: #ffe2a0;
+}
+
+.fiske-ui .fi-book-card .pb-btn {
+  width: 100%;
+}
+
+/* ---- Bred skärm: lite större HUD ---- */
+
+@media (min-width: 900px) {
+  .fiske-ui .pb-score {
+    font-size: 2.8rem;
+  }
+
+  .fiske-ui .fg-depth {
+    font-size: 1.6rem;
+  }
+
+  .fiske-ui .fi-mission {
+    top: calc(var(--top) + 66px);
+    font-size: 0.76rem;
+  }
+
+  .fiske-ui .fg-mult {
+    top: calc(var(--top) + 104px);
+    font-size: 1.9rem;
+  }
+
+  .fiske-ui .fi-gauge {
+    right: 22px;
+    top: 22%;
+    bottom: 18%;
+  }
+
+  .fiske-ui .fg-phase {
+    font-size: 0.74rem;
+  }
+}
+
+@media (max-width: 380px) {
+  .fiske-ui .fi-book-list li {
+    grid-template-columns: 72px 1fr;
+  }
+
+  .fiske-ui .fi-book-list svg {
+    width: 72px;
+    height: 36px;
+  }
+
+  .fiske-ui .fi-book-records {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fiske-ui .fi-announce.show,
+  .fiske-ui .fi-zone.show,
+  .fiske-ui .fi-zone.show b {
+    animation-name: fi-fade-only;
+  }
+
+  .fiske-ui .fi-hint-hand::after,
+  .fiske-ui .fi-flash.show {
+    animation: none;
+  }
+}
+
+@keyframes fi-fade-only {
+  0% { opacity: 0; }
+  15% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}

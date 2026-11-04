@@ -11,37 +11,68 @@
  *    touch (right of way), and every phrase starts from the referee's
  *    "En garde — klara — kör!".
  *
- * A bout goes to 5 touches. Three bouts against the actual 2023 podium —
- * Mikael (brons), Rickard (silver) and Per Vikman (mästaren) — make the
- * tournament. Green lamp and buzzer on your touches, red on theirs,
- * exactly like the scoring apparatus in a real salle.
+ * A bout goes to 5 touches. The tournament is the real 2023 field in a
+ * bracket: you fence as one of the five who missed the podium, and the
+ * podium waits on your side of the draw in rising difficulty — Mikael
+ * (brons) in the quarter-final, Rickard (silver) in the semi and the
+ * champion Per Vikman in the final. Green lamp and buzzer on your
+ * touches, red on theirs. Medals follow real fencing: both losing
+ * semi-finalists get bronze.
+ *
+ * Feel: every touch freezes the world for a few frames (hit-stop), the
+ * camera punches in on the point of contact, the lamé flashes, the box
+ * blooms and the crowd reacts. The deciding touch of each bout is
+ * replayed in slow motion from recorded poses.
  */
 
 import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { Sfx } from './audio.js';
-import { mulberry, glowTexture, buildSalle, buildFencer } from './salle.js';
+import { Fencer, Animator, P, POSE_LEN, LINE_Y } from './fencer.js';
+import { mulberry, glowTexture, buildSalle, buildEnvScene } from './salle.js';
+import { Sparks, Trail, Flashes, Confetti, starTexture, ringTexture } from './fx.js';
+import {
+  buildHud, titleScreen, bracketScreen, resultScreen, finalScreen, makeBracket, PICKABLE, ROUNDS
+} from './hud.js';
 
-const HIGHSCORE_KEY = 'pp-fakt-highscore';
+/* The duel is wide: fill the whole stage on desktop */
+export const layout = 'full';
+
+const KEY_HIGH = 'pp-fakt-highscore';
+const KEY_FENCER = 'pp-fakt-fencer';
+const KEY_MEDALS = 'pp-fakt-medals';
+const KEY_TUTOR = 'pp-fakt-tutorial';
 const TOUCHES = 5;
-const LINE_ANGLE = [0.52, 0.1, -0.34]; // front-arm pitch per line
-const LINE_Y = [1.75, 1.35, 0.95]; // world height of each line at the target
+const HOME = 1.3; // each fencer's en garde position from the centre line
+const LINE_NAME = ['HÖG', 'MITT', 'LÅG'];
 
+/*
+ * Balance measured in the first version and kept: how often each
+ * opponent attacks, how long the telegraph reads, how fast the attack
+ * lands, and the odds that they parry, feint-switch and riposte.
+ */
 const OPPONENTS = [
   {
     name: 'Mikael Hägglund',
     title: 'Bronsfäktaren',
-    sock: 0x6f9e6a,
+    place: 3,
+    sock: 0x5d9a58,
     attackEvery: [2.2, 3.4],
     telegraph: 0.95,
     attackDur: 0.34,
     parryP: 0.28,
     feintP: 0,
     riposteP: 0.25,
-    taunt: 'Mikael värmer upp med långsamma, tydliga anfall.'
+    taunt: 'Mikael värmer upp med långsamma, tydliga anfall.',
+    style: 'Långsamma, ärliga anfall och sällan någon ripost. Läs linjen, parera, stöt.'
   },
   {
     name: 'Rickard Nilsson',
     title: 'Silverklingan',
+    place: 2,
     sock: 0x3e6e9e,
     attackEvery: [1.7, 2.8],
     telegraph: 0.72,
@@ -49,11 +80,13 @@ const OPPONENTS = [
     parryP: 0.48,
     feintP: 0.3,
     riposteP: 0.45,
-    taunt: 'Rickard är snabbare — och han börjar finta.'
+    taunt: 'Rickard är snabbare — och han börjar finta.',
+    style: 'Snabbare, och ibland byter han linje i sista stund. Han parerar varannan rak stöt.'
   },
   {
     name: 'Per Vikman',
     title: 'Mästaren av 2023',
+    place: 1,
     sock: 0xc9982e,
     attackEvery: [1.3, 2.2],
     telegraph: 0.55,
@@ -61,104 +94,35 @@ const OPPONENTS = [
     parryP: 0.66,
     feintP: 0.45,
     riposteP: 0.65,
-    taunt: 'Per Vikman. Regerande mästare. Lycka till.'
+    taunt: 'Per Vikman. Regerande mästare. Lycka till.',
+    style: 'Regerande mästare. Kort förvarning, sena linjebyten och riposter som sitter. Finta honom.'
   }
 ];
+OPPONENTS[0].next = OPPONENTS[1].taunt;
+OPPONENTS[1].next = OPPONENTS[2].taunt;
 
-/**
- * Frame delta, clamped at BOTH ends. Only clamping the top looks harmless
- * until a queued rAF fires with a timestamp older than the one stashed on
- * visibilitychange: dt goes negative, and every `x -= rate * dt` in the
- * loop starts running backwards — fades brighten, scales invert.
- */
-function clampDt(ms) {
-  return Math.max(0, Math.min(0.05, ms / 1000));
+const clampDt = (ms) => Math.max(0, Math.min(0.05, ms / 1000));
+const lerp = (a, b, k) => a + (b - a) * k;
+const smoothstep = (a, b, x) => {
+  const k = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return k * k * (3 - 2 * k);
+};
+
+function load(key, fallback) {
+  try {
+    const v = localStorage.getItem(key);
+    return v === null ? fallback : JSON.parse(v);
+  } catch (e) {
+    return fallback;
+  }
 }
 
-/* ------------------------------------------------------------------- HUD */
-
-function buildHud(root) {
-  root.innerHTML = `
-    <div class="fg-vignette"></div>
-    <div class="pb-hud">
-      <div class="pb-top">
-        <div class="pb-score-wrap">
-          <div class="pb-score" id="fk-score">0</div>
-          <div class="pb-hi">REKORD <span id="fk-hi">0</span></div>
-        </div>
-        <div class="pb-meta">
-          <div class="fk-touches" id="fk-touches"></div>
-          <div class="fg-cast" id="fk-bout"></div>
-        </div>
-      </div>
-      <div class="fk-opponent" id="fk-opponent"></div>
-      <div class="fk-lines" id="fk-lines">
-        <button class="fk-line" data-line="0">HÖG</button>
-        <button class="fk-line" data-line="1">MITT</button>
-        <button class="fk-line" data-line="2">LÅG</button>
-      </div>
-      <div class="fg-zone" id="fk-callout"></div>
-      <div class="fg-phase" id="fk-phase"></div>
-      <div class="pb-toast" id="fk-toast"></div>
-      <div class="fg-pops" id="fk-pops"></div>
-      <div class="cl-tools show" id="fk-tools" hidden>
-        <button class="cl-tool" id="fk-feint">FINT</button>
-        <button class="cl-tool primary" id="fk-lunge">STÖT!</button>
-      </div>
-    </div>
-
-    <div class="pb-overlay" id="fk-overlay">
-      <div class="pb-panel">
-        <h2 id="fk-title">Pekkas Fäktning</h2>
-        <p id="fk-text">Stockholm 2023. Tre motståndare står mellan dig och pokalen — först till fem tusch vinner varje match.</p>
-        <ul class="fg-steps" id="fk-steps">
-          <li><i style="--c:#7fd8e8"></i><b>Gardera</b> Tryck HÖG, MITT eller LÅG — samma linje som anfallet parerar det automatiskt.</li>
-          <li><i style="--c:#f2c14e"></i><b>Ripostera</b> Efter en parad vacklar motståndaren — STÖT direkt!</li>
-          <li><i style="--c:#5eead4"></i><b>Finta</b> FINT lockar fram paraden, sen är en annan linje öppen.</li>
-        </ul>
-        <div class="pb-scoreline" id="fk-scoreline" hidden></div>
-        <div class="fg-catchlist" id="fk-verdict" hidden></div>
-        <button class="pb-btn" id="fk-start">En garde!</button>
-      </div>
-    </div>
-
-    <button class="pb-info" id="fk-info" aria-label="Så spelar du">?</button>
-
-    <div class="pb-help" id="fk-help" hidden>
-      <div class="pb-help-card">
-        <h3>Så fäktas du</h3>
-        <p class="pb-help-sub">Pekkas Fäktning</p>
-        <ul class="pb-help-list">
-          <li><i style="--c:#7fd8e8"></i><b>Tre linjer</b> HÖG, MITT och LÅG. Din gard i samma linje som motståndarens anfall parerar det automatiskt — som i Nidhogg.</li>
-          <li><i style="--c:#f2c14e"></i><b>Parad → Ripost</b> En parad får motståndaren att vackla. STÖT i det läget är nästan alltid tusch — och ger extra poäng.</li>
-          <li><i style="--c:#5eead4"></i><b>Finten</b> FINT är ett anfall som inte menas. Går motståndaren på den binds klingan — stöt i öppen linje!</li>
-          <li><i style="--c:#ff7a6b"></i><b>Rätten till anfall</b> Att stöta rakt in i ett påbörjat anfall slutar illa — den som började har vägrätt. Parera först.</li>
-          <li><i style="--c:#d9a05b"></i><b>Läs glimten</b> Klingan blänker i den linje anfallet kommer i. De bättre fäktarna byter linje i sista stund.</li>
-          <li><i style="--c:#6f9b5a"></i><b>Turneringen</b> Först till 5 tusch per match. Mikael, Rickard och mästaren Per Vikman — i den ordningen.</li>
-        </ul>
-        <p class="pb-help-tip">Poäng: tusch 100 · ripost 175 · fint-tusch 150 · parad 25 · matchvinst 500 + 100 per tusch i marginal.</p>
-        <div class="pb-help-keys">Gard: knapparna eller ↑/↓ · Stöt: STÖT eller mellanslag · Fint: FINT eller F · Kortet: ? eller Esc</div>
-        <button class="pb-btn" id="fk-help-close">Tillbaka till pisten</button>
-      </div>
-    </div>
-
-    <button class="pb-mute" id="fk-mute" aria-label="Ljud på/av">
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M11 5 6 9H2v6h4l5 4V5Z"/><path class="pb-wave" d="M15.5 8.5a5 5 0 0 1 0 7"/>
-      </svg>
-    </button>
-  `;
-  const q = (s) => root.querySelector(s);
-  return {
-    score: q('#fk-score'), hi: q('#fk-hi'), touches: q('#fk-touches'), bout: q('#fk-bout'),
-    opponent: q('#fk-opponent'), lines: q('#fk-lines'),
-    lineBtns: Array.from(root.querySelectorAll('.fk-line')),
-    callout: q('#fk-callout'), phase: q('#fk-phase'), toast: q('#fk-toast'), pops: q('#fk-pops'),
-    tools: q('#fk-tools'), feint: q('#fk-feint'), lunge: q('#fk-lunge'),
-    overlay: q('#fk-overlay'), title: q('#fk-title'), text: q('#fk-text'), steps: q('#fk-steps'),
-    scoreline: q('#fk-scoreline'), verdict: q('#fk-verdict'), start: q('#fk-start'),
-    info: q('#fk-info'), help: q('#fk-help'), helpClose: q('#fk-help-close'), mute: q('#fk-mute')
-  };
+function save(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (e) {
+    /* private mode */
+  }
 }
 
 /* ------------------------------------------------------------------- game */
@@ -167,470 +131,642 @@ export async function createFencing(container) {
   const canvasHost = document.createElement('div');
   canvasHost.className = 'pb-canvas';
   container.appendChild(canvasHost);
-
   const hudHost = document.createElement('div');
-  hudHost.className = 'pb-ui fg-ui';
+  hudHost.className = 'pb-ui fen';
   container.appendChild(hudHost);
   const hud = buildHud(hudHost);
+  const { el } = hud;
+
+  /* Quality tier: phones get a smaller shadow map and fewer motes; the
+     frame-time watchdog below can drop bloom and resolution further. */
+  const coarse = matchMedia('(pointer: coarse)').matches;
+  const hiQ = !(coarse && Math.min(screen.width, screen.height) < 700);
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const adaptive = !navigator.webdriver; // stable output under automated tests
 
   const sfx = new Sfx();
   const rand = mulberry(77);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+  let pixelRatio = Math.min(window.devicePixelRatio || 1, hiQ ? 2 : 1.75);
+  renderer.setPixelRatio(pixelRatio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.16;
+  renderer.toneMappingExposure = 1.08;
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   canvasHost.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x11170f);
-  scene.fog = new THREE.Fog(0x151b13, 14, 34);
+  scene.background = new THREE.Color(0x0e0b09);
+  scene.fog = new THREE.Fog(0x1b140e, 16, 40);
 
-  const camera = new THREE.PerspectiveCamera(46, 1, 0.1, 60);
-  camera.position.set(0, 2.4, 8.6);
+  const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 80);
 
-  // FILL: a cool overhead wash so nothing in shadow goes to pure black
-  const hemi = new THREE.HemisphereLight(0x9fb8d8, 0x201a12, 0.62);
-  scene.add(hemi);
-
-  // DOMINANT: the low sun coming through the arched windows. It is the
-  // only light that casts, which keeps one clean shadow direction instead
-  // of the mush you get from several casters.
-  const key = new THREE.DirectionalLight(0xffcf92, 2.1);
-  key.position.set(-6, 9, -16);
-  key.target.position.set(2, 0.6, 2);
-  key.castShadow = true;
-  key.shadow.mapSize.set(1024, 1024);
-  key.shadow.camera.left = -13;
-  key.shadow.camera.right = 13;
-  key.shadow.camera.top = 11;
-  key.shadow.camera.bottom = -8;
-  key.shadow.camera.near = 1;
-  key.shadow.camera.far = 46;
-  key.shadow.bias = -0.0009;
-  key.shadow.normalBias = 0.022;
-  scene.add(key);
-  scene.add(key.target);
-
-  // FILL 2: from the camera side, so the fencers are not backlit into
-  // silhouettes against their own salle
-  const front = new THREE.DirectionalLight(0xffe8cf, 0.95);
-  front.position.set(2, 5, 14);
-  scene.add(front);
-
-  // FILL 3: warm bounce up off the parquet
-  const bounce = new THREE.DirectionalLight(0xc98f4e, 0.3);
-  bounce.position.set(3, -4, 7);
-  scene.add(bounce);
-
-  // ACCENTS: the two chandeliers, warm and local
-  [-5, 5].forEach((x) => {
-    const lamp = new THREE.PointLight(0xffb066, 26, 15, 2);
-    lamp.position.set(x, 5.6, -1.5);
-    scene.add(lamp);
+  // Reflections: a pre-filtered stand-in of this very room
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const envScene = buildEnvScene();
+  const envRT = pmrem.fromScene(envScene, 0.04);
+  scene.environment = envRT.texture;
+  scene.environmentIntensity = 0.6;
+  envScene.traverse((o) => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) o.material.dispose();
   });
+  pmrem.dispose();
 
-  /* World */
+  /* ---- World ---- */
   const glow = glowTexture();
-  const salle = buildSalle(glow);
+  const salle = buildSalle({ glow, high: hiQ });
   scene.add(salle.group);
 
-  const player = buildFencer(0xf4f2ea, 0xc9982e);
-  player.position.set(-1.9, 0, 0);
-  scene.add(player);
-  const foe = buildFencer(0xf4f2ea, 0x6f9e6a);
-  foe.position.set(1.9, 0, 0);
-  foe.rotation.y = Math.PI;
-  scene.add(foe);
-  [player, foe].forEach((f) => f.traverse((o) => {
-    if (o.isMesh) o.castShadow = true;
+  const me = new Fencer({ sock: 0xd9a531 });
+  const foe = new Fencer({ sock: OPPONENTS[0].sock, mirror: true });
+  me.group.position.x = -HOME;
+  foe.group.position.x = HOME;
+  scene.add(me.group, foe.group);
+  [me, foe].forEach((f) => f.group.traverse((o) => {
+    if (o.isMesh) o.receiveShadow = true;
   }));
+  const animMe = new Animator(me, 0);
+  const animAi = new Animator(foe, 1.7);
+  me.setFlashColor(0xff4d3c); // your lamé flashes red: their lamp
+  foe.setFlashColor(0x3dff86);
 
-  /* Blade glint sprite shows which line the AI attack is coming in */
+  /* ---- Effects ---- */
+  const sparks = new Sparks(240);
+  scene.add(sparks.mesh);
+  const trailMe = new Trail(new THREE.Color(0.75, 0.9, 1.4));
+  const trailAi = new Trail(new THREE.Color(1.4, 1.0, 0.75));
+  scene.add(trailMe.mesh, trailAi.mesh);
+  const star = starTexture();
+  const ring = ringTexture();
+  const flashes = new Flashes(glow, ring);
+  scene.add(flashes.group);
+  const confetti = new Confetti(hiQ ? 280 : 160);
+  scene.add(confetti.mesh);
+  // The glint on the attacking blade, and the marker where it will land
   const glintMat = new THREE.SpriteMaterial({
-    map: glow,
-    color: 0xfff2c8,
-    transparent: true,
-    opacity: 0,
-    depthWrite: false,
+    map: star, color: 0xfff2d0, transparent: true, opacity: 0, depthWrite: false, depthTest: false,
     blending: THREE.AdditiveBlending
   });
   const glint = new THREE.Sprite(glintMat);
-  glint.scale.setScalar(0.8);
+  glint.renderOrder = 12;
   scene.add(glint);
-
-  /* Spark burst for parries and touches */
-  const sparkCount = 120;
-  const sparkGeo = new THREE.BufferGeometry();
-  const sparkPos = new Float32Array(sparkCount * 3);
-  for (let i = 0; i < sparkCount; i++) sparkPos[i * 3 + 1] = -99;
-  sparkGeo.setAttribute('position', new THREE.BufferAttribute(sparkPos, 3));
-  const sparks = new THREE.Points(sparkGeo, new THREE.PointsMaterial({
-    map: glow,
-    color: 0xffe9b8,
-    size: 0.14,
-    transparent: true,
-    opacity: 0.95,
-    depthWrite: false,
+  const threatMat = new THREE.SpriteMaterial({
+    map: ring, color: 0xff5a46, transparent: true, opacity: 0, depthWrite: false, depthTest: false,
     blending: THREE.AdditiveBlending
+  });
+  const threat = new THREE.Sprite(threatMat);
+  threat.renderOrder = 12;
+  scene.add(threat);
+
+  /* ---- Post: bloom on the lamps, windows, flames and sparks ---- */
+  const rtSize = new THREE.Vector2();
+  const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, {
+    type: THREE.HalfFloatType, samples: hiQ ? 4 : 0
   }));
-  sparks.frustumCulled = false;
-  scene.add(sparks);
-  const sparkVel = [];
-  for (let i = 0; i < sparkCount; i++) sparkVel.push({ life: 0, vx: 0, vy: 0, vz: 0 });
-  let sparkNext = 0;
+  composer.addPass(new RenderPass(scene, camera));
+  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.5, 0.55, 0.92);
+  composer.addPass(bloom);
+  composer.addPass(new OutputPass());
 
-  function burst(x, y, z, n, speed) {
-    for (let i = 0; i < n; i++) {
-      const idx = sparkNext % sparkCount;
-      sparkNext++;
-      const s = sparkVel[idx];
-      s.life = 0.3 + rand() * 0.4;
-      const a = rand() * Math.PI * 2;
-      const e = rand() * Math.PI - Math.PI / 2;
-      s.vx = Math.cos(a) * Math.cos(e) * speed;
-      s.vy = Math.sin(e) * speed + 1.2;
-      s.vz = Math.sin(a) * Math.cos(e) * speed * 0.5;
-      sparkPos[idx * 3] = x;
-      sparkPos[idx * 3 + 1] = y;
-      sparkPos[idx * 3 + 2] = z;
-    }
-    sparkGeo.attributes.position.needsUpdate = true;
-  }
-
-  /* ---- State ----------------------------------------------------------- */
+  /* ---- State ---------------------------------------------------------- */
 
   const state = {
-    phase: 'idle', // idle | ready | live | touchpause | boutend | over
-    boutNo: 1,
+    phase: 'title', // title | bracket | intro | ready | live | touch | replay | result | ceremony | final
+    round: 0,
     score: 0,
     myTouches: 0,
     foeTouches: 0,
+    phaseT: 0,
     readyStep: 0,
-    readyT: 0,
-    pauseT: 0,
-    celebration: 0
+    streak: 0,
+    stats: null,
+    results: [],
+    bracket: null,
+    lastTouch: null,
+    tutorial: !load(KEY_TUTOR, false),
+    coached: {},
+    firstAttack: true
   };
-
-  const me = { line: 1, pose: 'guard', t: 0, lungeLine: 1, isFeint: false };
-  const ai = { pose: 'guard', t: 0, line: 1, shownLine: 1, timer: 2.5, willFeint: false, willParry: false };
-
-  let high = 0;
-  try {
-    high = parseInt(localStorage.getItem(HIGHSCORE_KEY) || '0', 10) || 0;
-  } catch (e) {
-    high = 0;
-  }
-  const fmt = (n) => Math.round(n).toLocaleString('sv-SE');
-  hud.hi.textContent = fmt(high);
+  const meS = { line: 1, pose: 'guard', t: 0, lungeLine: 1, isFeint: false, resolved: false };
+  const ai = { pose: 'guard', t: 0, line: 1, shownLine: 1, timer: 2.5, willFeint: false, pendingRiposte: false };
+  let fencerName = load(KEY_FENCER, 'Olov Melander');
+  if (!PICKABLE.includes(fencerName)) fencerName = 'Olov Melander';
+  let medals = load(KEY_MEDALS, {});
+  let best = load(KEY_HIGH, 0);
+  if (typeof best !== 'number') best = parseInt(best, 10) || 0;
+  let played = false;
+  hud.setBest(best);
 
   let hitStop = 0;
+  let camCut = ''; // a hard cut the camera should take this frame
   const shake = { power: 0 };
   let helpOpen = false;
+  let gameTime = 0;
 
-  function opp() {
-    return OPPONENTS[state.boutNo - 1];
+  const opp = () => OPPONENTS[state.round];
+
+  /* ---- Replay recording ----------------------------------------------- */
+  // Every duel frame: both pose vectors and the lamps. Effects are logged
+  // as events with a time, so the replay can fire them again.
+  const REC = 360;
+  const rec = {
+    t: new Float64Array(REC),
+    a: new Float32Array(REC * POSE_LEN),
+    b: new Float32Array(REC * POSE_LEN),
+    n: 0,
+    head: 0,
+    events: []
+  };
+  function record() {
+    const i = rec.head;
+    rec.t[i] = gameTime;
+    rec.a.set(me.pose, i * POSE_LEN);
+    rec.b.set(foe.pose, i * POSE_LEN);
+    rec.head = (i + 1) % REC;
+    rec.n = Math.min(REC, rec.n + 1);
   }
+  function logEvent(type, pos, extra = {}) {
+    rec.events.push({ t: gameTime, type, pos: pos.clone(), ...extra });
+    if (rec.events.length > 40) rec.events.shift();
+  }
+
+  /* ---- Feedback helpers ---------------------------------------------- */
+
+  const v3 = new THREE.Vector3();
+  const v3b = new THREE.Vector3();
+  const tipMe = new THREE.Vector3();
+  const tipAi = new THREE.Vector3();
 
   function kick(power, stopMs) {
-    shake.power = Math.max(shake.power, power);
+    if (!reduced) shake.power = Math.max(shake.power, power);
     hitStop = Math.max(hitStop, stopMs / 1000);
-    if (navigator.vibrate) navigator.vibrate(Math.min(40, power * 24));
+    if (coarse && navigator.vibrate) navigator.vibrate(Math.min(40, Math.round(power * 22)));
   }
 
-  function toast(msg, big = false) {
-    hud.toast.textContent = msg;
-    hud.toast.className = `pb-toast show${big ? ' big' : ''}`;
-    clearTimeout(state.lastToast);
-    state.lastToast = setTimeout(() => {
-      hud.toast.className = 'pb-toast';
-    }, big ? 1600 : 1000);
+  function project(world) {
+    v3b.copy(world).project(camera);
+    return [v3b.x * 0.5 + 0.5, -v3b.y * 0.5 + 0.5, v3b.z];
   }
 
-  function callout(txt) {
-    hud.callout.textContent = txt;
-    hud.callout.classList.remove('show');
-    void hud.callout.offsetWidth;
-    hud.callout.classList.add('show');
+  function popAt(text, world, cls = '') {
+    const [x, y, z] = project(world);
+    if (z > 1) return;
+    hud.pop(text, x, y, cls);
   }
 
-  const projected = new THREE.Vector3();
-
-  function popScore(text, world, cls = '') {
-    projected.copy(world).project(camera);
-    if (projected.z > 1) return;
-    const el = document.createElement('div');
-    el.className = `fg-pop ${cls}`;
-    el.textContent = text;
-    el.style.left = `${(projected.x * 0.5 + 0.5) * 100}%`;
-    el.style.top = `${(-projected.y * 0.5 + 0.5) * 100}%`;
-    hud.pops.appendChild(el);
-    setTimeout(() => el.remove(), 1100);
-  }
-
-  function addScore(n, world, label) {
+  function addScore(n, world, label, cls = '') {
+    if (!n) return;
     state.score += n;
-    hud.score.textContent = fmt(state.score);
-    hud.score.classList.remove('bump');
-    void hud.score.offsetWidth;
-    hud.score.classList.add('bump');
-    if (world) popScore(label || `+${fmt(n)}`, world);
+    hud.setScore(state.score, true);
+    if (world) popAt(label || `+${n}`, world, cls);
   }
 
-  function renderTouches() {
-    const mine = '●'.repeat(state.myTouches) + '○'.repeat(TOUCHES - state.myTouches);
-    const theirs = '●'.repeat(state.foeTouches) + '○'.repeat(TOUCHES - state.foeTouches);
-    hud.touches.innerHTML = `<b>${mine}</b><i>${theirs}</i>`;
+  function renderBoard() {
+    hud.setBoard({
+      round: `${ROUNDS[state.round].toUpperCase()} · MATCH ${state.round + 1}/3`,
+      me: fencerName,
+      foe: opp().name,
+      mine: state.myTouches,
+      theirs: state.foeTouches,
+      to: TOUCHES
+    });
+    salle.score.setScore(state.myTouches, state.foeTouches);
   }
 
-  function renderBout() {
-    hud.bout.textContent = `MATCH ${Math.min(state.boutNo, 3)}/3`;
+  function coach(key, html, ms = 3200) {
+    if (!state.tutorial || state.coached[key]) return;
+    state.coached[key] = true;
+    hud.coach(html);
+    clearTimeout(state.coachTimer);
+    state.coachTimer = hud.later(() => hud.coach(''), ms);
   }
 
-  function renderLine() {
-    hud.lineBtns.forEach((b, i) => b.classList.toggle('on', i === me.line));
+  /* ---- Screens and flow ----------------------------------------------- */
+
+  function showTitle() {
+    state.phase = 'title';
+    state.phaseT = 0;
+    hud.setMode('title');
+    hud.screen(titleScreen({ fencer: fencerName, best, medals, played }));
+    animMe.play('guard');
+    animAi.play('guard');
+    salle.crowd.react('idle');
+    salle.referee.signal('idle');
   }
 
-  function showOpponent() {
-    hud.opponent.innerHTML = `<b>${opp().name}</b><span>${opp().title}</span>`;
-    hud.opponent.classList.add('show');
+  function startTournament() {
+    sfx.resume();
+    played = true;
+    state.score = 0;
+    state.round = 0;
+    state.results = [];
+    state.bracket = makeBracket(fencerName, rand);
+    hud.setScore(0);
+    showBracket();
   }
 
-  /* ---- Flow ------------------------------------------------------------ */
+  function showBracket() {
+    state.phase = 'bracket';
+    state.phaseT = 0;
+    hud.setMode('bracket');
+    foe.setSock(opp().sock);
+    hud.screen(bracketScreen({
+      bracket: state.bracket, round: state.round, results: state.results, opp: opp(), place: opp().place
+    }));
+    animMe.play('guard');
+    animAi.play('guard');
+  }
+
+  function startBout() {
+    sfx.resume();
+    hud.screen('');
+    hud.setMode('duel');
+    state.myTouches = 0;
+    state.foeTouches = 0;
+    state.streak = 0;
+    state.stats = { parries: 0, ripostes: 0, feints: 0, bestStreak: 0 };
+    state.lastTouch = null;
+    rec.n = 0;
+    rec.events.length = 0;
+    meS.line = 1;
+    hud.setLine(1);
+    renderBoard();
+    salle.score.clear();
+    // Intro: the salute, while the camera comes round from the opponent's mask
+    state.phase = 'intro';
+    state.phaseT = 0;
+    animMe.play('salute', 1.6);
+    animAi.play('salute', 1.6);
+    animAi.ox = 0;
+    animMe.ox = 0;
+    hud.call(opp().name.toUpperCase(), 'name');
+    hud.sub(`${ROUNDS[state.round]} · ${opp().title}`);
+    salle.crowd.react('clap');
+    sfx.applause(1.6, 0.6);
+    camCut = 'intro';
+  }
 
   function startReady() {
     state.phase = 'ready';
+    state.phaseT = 0;
     state.readyStep = 0;
-    state.readyT = 0;
-    me.pose = 'guard';
-    me.t = 0;
+    meS.pose = 'guard';
+    meS.t = 0;
+    meS.resolved = false;
     ai.pose = 'guard';
     ai.t = 0;
+    ai.pendingRiposte = false;
     ai.timer = opp().attackEvery[0] + rand() * (opp().attackEvery[1] - opp().attackEvery[0]);
-    glintMat.opacity = 0;
-    callout('EN GARDE');
+    if (state.tutorial && state.round === 0 && state.firstAttack) ai.timer = 1.4;
+    hud.call('EN GARDE');
     sfx.ready(0);
+    salle.referee.signal('engarde');
+    salle.crowd.react('idle');
+    if (state.myTouches === TOUCHES - 1 || state.foeTouches === TOUCHES - 1) {
+      sfx.heartbeat();
+      hud.sub(state.myTouches === TOUCHES - 1 && state.foeTouches === TOUCHES - 1 ? 'AVGÖRANDE TUSCH' : 'MATCHTUSCH', 'gold');
+    }
   }
 
   function goLive() {
     state.phase = 'live';
-    callout('KÖR!');
+    state.phaseT = 0;
+    hud.call('KÖR!', 'go');
     sfx.ready(2);
+    salle.referee.signal('allez');
   }
 
-  function scoreTouch(mineIs, points, label) {
-    state.phase = 'touchpause';
-    state.pauseT = 0;
+  function scoreTouch(mine, points, label, at) {
+    state.phase = 'touch';
+    state.phaseT = 0;
+    const hitAt = at || (mine ? foe : me).j.torso.getWorldPosition(new THREE.Vector3()).setY(1.2);
+    state.lastTouch = { t: gameTime, mine, at: hitAt.clone() };
+    logEvent('touch', hitAt, { mine });
+    sfx.hit();
     sfx.buzzer();
-    sfx.crowd(mineIs ? 0.8 : 0.4);
-    kick(mineIs ? 1.4 : 1.8, 110);
-    if (mineIs) {
+    kick(mine ? 1.3 : 1.6, 130);
+    salle.score.flash(mine ? 0 : 1);
+    salle.referee.signal('point', mine ? -1 : 1);
+    flashes.fire(hitAt, mine ? new THREE.Color(1.4, 3, 1.8) : new THREE.Color(3, 1.2, 0.9), 1.1, 0.4);
+    sparks.burst(hitAt, { n: 26, speed: 3.2, color: new THREE.Color(3, 2.6, 1.8), life: 0.55 });
+    (mine ? animAi : animMe).flash = 1;
+    (mine ? animAi : animMe).impulse(P.lean, -2.4);
+    (mine ? animAi : animMe).impulse(P.nod, -3);
+    if (mine) {
       state.myTouches++;
-      salle.lampL.color.set(0x3ddc7b);
-      addScore(points, foe.position.clone().add(new THREE.Vector3(0, 1.6, 0)), label);
-      callout('TUSCH!');
+      state.streak++;
+      state.stats.bestStreak = Math.max(state.stats.bestStreak, state.streak);
+      const streakBonus = state.streak >= 2 ? 50 * (state.streak - 1) : 0;
+      addScore(points, v3.copy(hitAt).setY(hitAt.y + 0.5), label, label.startsWith('RIPOST') ? 'gold' : '');
+      if (streakBonus) {
+        hud.combo(`${state.streak} I RAD +${streakBonus}`);
+        state.score += streakBonus;
+        hud.setScore(state.score, true);
+      }
+      hud.call('TUSCH!', 'me');
+      hud.flash('rgba(61,220,123,0.55)');
+      salle.crowd.react('cheer');
+      sfx.cheer();
     } else {
       state.foeTouches++;
-      salle.lampR.color.set(0xff4d3c);
-      callout('TUSCH EMOT');
+      state.streak = 0;
+      hud.call('TUSCH EMOT', 'them');
+      hud.flash('rgba(255,77,60,0.5)');
+      salle.crowd.react('groan');
+      sfx.groan();
     }
-    renderTouches();
-    state.celebration = mineIs ? 1 : 0;
+    renderBoard();
   }
 
   function endTouchPause() {
-    salle.lampL.color.set(0x1c3324);
-    salle.lampR.color.set(0x33201c);
+    salle.score.clear();
     if (state.myTouches >= TOUCHES || state.foeTouches >= TOUCHES) {
+      startReplay();
+      return;
+    }
+    startReady();
+  }
+
+  /* ---- Replay of the deciding touch ----------------------------------- */
+
+  const replay = { t: 0, t0: 0, t1: 0, at: null, last: 0, angle: 0 };
+
+  function startReplay() {
+    const lt = state.lastTouch;
+    if (!lt || rec.n < 10) {
       endBout();
       return;
     }
-    startReady();
+    const oldest = rec.t[(rec.head - rec.n + REC) % REC];
+    replay.t0 = Math.max(oldest, lt.t - 1.5);
+    replay.t1 = Math.min(gameTime, lt.t + 0.7);
+    replay.t = replay.t0;
+    replay.last = replay.t0;
+    replay.hit = lt.t;
+    replay.at = lt.at.clone();
+    replay.angle = lt.mine ? 0.5 : -0.5;
+    state.phase = 'replay';
+    state.phaseT = 0;
+    hud.setMode('replay');
+    hud.bars(true);
+    hud.showReplay(true);
+    sfx.slowmo();
+    trailMe.reset();
+    trailAi.reset();
   }
+
+  /** Pose at time t, interpolated from the ring buffer. */
+  function sampleRec(t, arr, out) {
+    let lo = -1;
+    for (let k = 0; k < rec.n; k++) {
+      const i = (rec.head - 1 - k + REC * 2) % REC;
+      if (rec.t[i] <= t) {
+        lo = i;
+        break;
+      }
+    }
+    if (lo < 0) return;
+    const hi = (lo + 1) % REC;
+    const span = rec.t[hi] - rec.t[lo];
+    const k = hi !== rec.head && span > 0 ? Math.min(1, (t - rec.t[lo]) / span) : 0;
+    for (let c = 0; c < POSE_LEN; c++) {
+      const a = arr[lo * POSE_LEN + c];
+      out[c] = a + ((hi !== rec.head ? arr[hi * POSE_LEN + c] : a) - a) * k;
+    }
+  }
+
+  function updateReplay(dt) {
+    // Normal-ish speed into the touch, very slow through it, then ease out
+    const d = replay.t - replay.hit;
+    const speed = d < -0.35 ? 0.55 : d < 0.18 ? 0.13 : 0.4;
+    const prev = replay.t;
+    replay.t = Math.min(replay.t1, replay.t + dt * speed);
+    sampleRec(replay.t, rec.a, me.pose);
+    sampleRec(replay.t, rec.b, foe.pose);
+    me.apply(me.pose);
+    foe.apply(foe.pose);
+    rec.events.forEach((e) => {
+      if (e.t > prev && e.t <= replay.t) {
+        if (e.type === 'touch') {
+          flashes.fire(e.pos, e.mine ? new THREE.Color(1.4, 3, 1.8) : new THREE.Color(3, 1.2, 0.9), 1.3, 1.2);
+          sparks.burst(e.pos, { n: 30, speed: 1.4, color: new THREE.Color(3, 2.6, 1.8), life: 1.6, gravity: 2 });
+          salle.score.flash(e.mine ? 0 : 1);
+          sfx.buzzer(0.5);
+          sfx.hit();
+        } else if (e.type === 'clink') {
+          sparks.burst(e.pos, { n: 18, speed: 1.2, color: new THREE.Color(3, 2.4, 1.4), life: 1.2, gravity: 2 });
+          flashes.fire(e.pos, new THREE.Color(2.4, 2.2, 1.8), 0.6, 0.8);
+          sfx.clink(0.6);
+        }
+      }
+    });
+    replay.angle += dt * 0.22 * (replay.angle >= 0 ? 1 : -1);
+    if (replay.t >= replay.t1) endReplay();
+    return replay.t - prev;
+  }
+
+  function endReplay() {
+    hud.bars(false);
+    hud.showReplay(false);
+    salle.score.clear();
+    endBout();
+  }
+
+  /* ---- Bout and tournament end ---------------------------------------- */
 
   function endBout() {
     const won = state.myTouches >= TOUCHES;
-    state.phase = 'boutend';
-    hud.tools.hidden = true;
-    hud.lines.classList.remove('show');
-    hud.opponent.classList.remove('show');
+    const o = opp();
+    const margin = state.myTouches - state.foeTouches;
+    const shutout = won && state.foeTouches === 0;
+    const bonus = won ? 500 + margin * 100 + (shutout ? 300 : 0) : 0;
+    if (won) addScore(bonus);
+    state.results.push({ won, opp: o.name, s: [state.myTouches, state.foeTouches] });
+    state.phase = 'result';
+    state.phaseT = 0;
+    hud.setMode('result');
+    animMe.play(won ? 'win' : 'lose', 1);
+    animAi.play(won ? 'lose' : 'win', 1);
+    salle.referee.signal('point', won ? -1 : 1);
+    salle.crowd.react(won ? 'clap' : 'groan');
     if (won) {
-      const margin = state.myTouches - state.foeTouches;
-      const bonus = 500 + margin * 100;
-      addScore(bonus);
       sfx.verdictWin();
-      hud.title.textContent = `Du slog ${opp().name}!`;
-      hud.text.textContent = state.boutNo >= 3
-        ? 'Mästaren är besegrad — pokalen är din. Salut!'
-        : `${TOUCHES}–${state.foeTouches}. ${OPPONENTS[state.boutNo].taunt}`;
-      hud.scoreline.hidden = false;
-      hud.scoreline.innerHTML = `<span>+${fmt(bonus)}</span><small>matchvinst · marginal ${margin}</small>`;
-      hud.start.textContent = state.boutNo >= 3 ? 'Se resultatet' : 'Nästa match';
-    } else {
-      sfx.verdictLose();
-      hud.title.textContent = `${opp().name} vann matchen`;
-      hud.text.textContent = `${state.myTouches}–${TOUCHES}. Turneringen är över — men poängen räknas.`;
-      hud.scoreline.hidden = true;
-      hud.start.textContent = 'Se resultatet';
+      sfx.applause(2.4);
+    } else sfx.verdictLose();
+    if (state.tutorial) {
+      state.tutorial = false;
+      save(KEY_TUTOR, true);
     }
-    hud.steps.hidden = true;
-    hud.verdict.hidden = true;
-    hud.overlay.classList.add('show');
-    state.wonBout = won;
+    hud.screen(resultScreen({
+      won, opp: o, mine: state.myTouches, theirs: state.foeTouches, bonus, margin, shutout,
+      stats: state.stats, last: state.round >= 2
+    }));
   }
 
-  function nextStage() {
-    if (state.phase === 'boutend' && state.wonBout && state.boutNo < 3) {
-      state.boutNo++;
-      startBout();
+  function next() {
+    const last = state.results[state.results.length - 1];
+    if (last && last.won && state.round < 2) {
+      state.round++;
+      showBracket();
       return;
     }
-    if (state.phase === 'boutend') {
-      gameOver();
+    if (last && last.won) {
+      startCeremony();
       return;
     }
-    startGame();
+    showFinal();
   }
 
-  function startBout() {
-    state.myTouches = 0;
-    state.foeTouches = 0;
-    hud.overlay.classList.remove('show');
-    hud.tools.hidden = false;
-    hud.lines.classList.add('show');
-    renderTouches();
-    renderBout();
-    renderLine();
-    showOpponent();
-    // New socks for the new opponent
-    foe.userData.socks.forEach((sock) => sock.material.color.set(opp().sock));
-    toast(opp().taunt, true);
-    startReady();
+  function medalFor() {
+    const last = state.results[state.results.length - 1];
+    if (last.won) return 1;
+    return [0, 3, 2][state.round];
   }
 
-  function gameOver() {
-    state.phase = 'over';
-    const isHigh = state.score > high;
-    if (isHigh) {
-      high = state.score;
-      try {
-        localStorage.setItem(HIGHSCORE_KEY, String(Math.round(high)));
-      } catch (e) {
-        /* private mode */
-      }
-      hud.hi.textContent = fmt(high);
+  function startCeremony() {
+    state.phase = 'ceremony';
+    state.phaseT = 0;
+    hud.screen('');
+    hud.setMode('ceremony');
+    hud.bars(true);
+    hud.call('MÄSTARE!', 'gold big');
+    hud.sub(`${fencerName} · Stockholm 2023`, 'gold');
+    animMe.play('champion', 1);
+    animAi.play('lose', 1);
+    salle.crowd.react('stand');
+    salle.referee.signal('point', -1);
+    confetti.start(-HOME, 0);
+    sfx.fanfare();
+    camCut = 'ceremony';
+  }
+
+  function showFinal() {
+    hud.bars(false);
+    confetti.stop();
+    const medal = medalFor();
+    const isBest = state.score > best;
+    if (isBest) {
+      best = state.score;
+      save(KEY_HIGH, best);
+      hud.setBest(best);
     }
-    if (state.wonBout && state.boutNo >= 3) sfx.fanfare();
-    hud.title.textContent = isHigh ? 'Nytt rekord!' : state.wonBout && state.boutNo >= 3 ? 'Pokalen är din!' : 'Turneringen är slut';
-    hud.text.textContent = isHigh
-      ? 'Salens bästa klinga hittills. Salut!'
-      : 'Masken av, handskarna i väskan. En match till?';
-    hud.steps.hidden = true;
-    hud.scoreline.hidden = false;
-    hud.scoreline.innerHTML = `<span>${fmt(state.score)}</span><small>poäng · rekord ${fmt(high)}</small>`;
-    hud.start.textContent = 'Fäktas igen';
-    hud.overlay.classList.add('show');
+    const prev = medals[fencerName] || 0;
+    if (medal && (!prev || medal < prev)) {
+      medals = { ...medals, [fencerName]: medal };
+      save(KEY_MEDALS, medals);
+    }
+    if (medal && medal > 1) sfx.medal(medal);
+    state.phase = 'final';
+    state.phaseT = 0;
+    hud.setMode('final');
+    hud.screen(finalScreen({
+      medal, score: state.score, best, isBest, fencer: fencerName, results: state.results
+    }));
   }
 
-  function startGame() {
-    sfx.resume();
-    state.score = 0;
-    state.boutNo = 1;
-    hud.score.textContent = '0';
-    hud.scoreline.hidden = true;
-    hud.steps.hidden = false;
-    startBout();
-  }
-
-  /* ---- Combat resolution ----------------------------------------------- */
-
-  function tipOf(fencer) {
-    const v = new THREE.Vector3();
-    fencer.userData.foilTip.getWorldPosition(v);
-    return v;
-  }
+  /* ---- Combat resolution (timings as measured in v1) ------------------ */
 
   function playerLunge(isFeint) {
-    if (state.phase !== 'live' || me.pose === 'lunge' || me.pose === 'stagger') return;
-    me.pose = isFeint ? 'feint' : 'lunge';
-    me.t = 0;
-    me.lungeLine = me.line;
-    me.isFeint = isFeint;
+    if (state.phase !== 'live' || meS.pose === 'lunge' || meS.pose === 'stagger') return;
+    meS.pose = isFeint ? 'feint' : 'lunge';
+    meS.t = 0;
+    meS.resolved = false;
+    meS.lungeLine = meS.line;
+    meS.isFeint = isFeint;
+    hud.press(isFeint ? el.feint : el.lunge);
     if (isFeint) sfx.feint();
     else sfx.swish();
   }
 
   function resolvePlayerAttack() {
-    const tip = tipOf(player);
-    if (me.isFeint) {
-      // A feint commits to nothing — but a napping AI may bite
+    me.tipWorld(tipMe);
+    if (meS.isFeint) {
+      // A feint commits to nothing — but a napping opponent may bite
       if ((ai.pose === 'guard' || ai.pose === 'telegraph') && rand() < opp().parryP * 1.15) {
         ai.pose = 'bitten';
         ai.t = 0;
-        glintMat.opacity = 0;
-        callout('DEN GICK PÅ FINTEN!');
-        sfx.clink();
-        burst(tip.x, tip.y, tip.z, 8, 2.2);
+        hud.call('DEN GICK PÅ FINTEN!', 'teal');
+        hud.sub('STÖT NU!', 'teal');
+        sfx.scrape();
+        sfx.clink(0.5);
+        sparks.burst(tipMe, { n: 10, speed: 2, color: new THREE.Color(2.6, 2.4, 2), life: 0.35 });
+        kick(0.3, 50);
+        salle.crowd.react('ooh');
+        coach('bitten', '<b>Öppen linje!</b> Stöt direkt — fint-tusch ger 150.');
       }
       return;
     }
     if (ai.pose === 'stagger' || ai.pose === 'bitten' || ai.pose === 'recover') {
-      // Open target: riposte after a parry, punished recovery, or a bitten feint
+      // Open target: riposte after a parry, a bitten feint, or a punished recovery
       const riposte = ai.pose === 'stagger';
       const feintHit = ai.pose === 'bitten';
-      burst(tip.x, tip.y, tip.z, 22, 3.4);
+      if (riposte) state.stats.ripostes++;
+      if (feintHit) state.stats.feints++;
+      if (riposte) hud.sub('PARAD — RIPOST!', 'gold');
       scoreTouch(true, riposte ? 175 : feintHit ? 150 : 100,
-        riposte ? 'RIPOST +175' : feintHit ? 'FINT-TUSCH +150' : '+100');
+        riposte ? 'RIPOST +175' : feintHit ? 'FINT-TUSCH +150' : '+100', tipMe.clone());
       return;
     }
     if (ai.pose === 'telegraph' || ai.pose === 'attack') {
       // Attacking into an attack: right of way belongs to them
-      burst(tip.x, tip.y, tip.z, 10, 2);
-      scoreTouch(false, 0);
+      sparks.burst(tipMe, { n: 8, speed: 1.6, color: new THREE.Color(2.4, 2, 1.6), life: 0.3 });
+      hud.sub('VÄGRÄTT TILL MOTSTÅNDAREN', 'red');
+      coach('row', '<b>Rätten till anfall:</b> stöt inte in i deras anfall — parera först.', 3600);
+      scoreTouch(false, 0, '', me.j.torso.getWorldPosition(new THREE.Vector3()).setY(1.25));
       return;
     }
-    // AI on guard: it may read and parry
+    // Opponent on guard: they may read it and parry
     if (rand() < opp().parryP) {
       ai.pose = 'parry';
-      ai.line = me.lungeLine;
+      ai.line = meS.lungeLine;
       ai.t = 0;
-      me.pose = 'stagger';
-      me.t = 0;
-      sfx.clink();
+      meS.pose = 'stagger';
+      meS.t = 0;
+      clash(tipMe, 0.9);
       sfx.stagger();
-      kick(0.7, 50);
-      burst(tip.x, tip.y, tip.z, 14, 3);
+      hud.sub('PARERAD', 'red');
       // …and the better ones riposte
-      if (rand() < opp().riposteP) {
-        ai.pendingRiposte = true;
-      }
+      if (rand() < opp().riposteP) ai.pendingRiposte = true;
     } else {
-      burst(tip.x, tip.y, tip.z, 22, 3.4);
-      scoreTouch(true, 100, '+100');
+      scoreTouch(true, 100, '+100', tipMe.clone());
     }
+  }
+
+  /** Blade on blade: sparks where the steel meets, a ring and a beat of hit-stop. */
+  function clash(at, power) {
+    sfx.clink(power);
+    kick(0.55 * power, 70);
+    sparks.burst(at, { n: Math.round(22 * power), speed: 3.4, color: new THREE.Color(3.2, 2.5, 1.5), life: 0.45, width: 0.014 });
+    flashes.fire(at, new THREE.Color(2.4, 2.2, 1.8), 0.55, 0.22);
+    logEvent('clink', at);
+    salle.crowd.react('ooh');
   }
 
   function resolveAiAttack() {
-    const tip = tipOf(foe);
-    if (me.pose !== 'lunge' && me.pose !== 'stagger' && me.line === ai.line) {
+    foe.tipWorld(tipAi);
+    if (meS.pose !== 'lunge' && meS.pose !== 'stagger' && meS.line === ai.line) {
       // Parried! The Nidhogg rule: same line blocks
       ai.pose = 'stagger';
       ai.t = 0;
-      sfx.clink();
-      kick(0.6, 60);
-      addScore(25, tip, 'PARAD +25');
-      callout('PARAD — RIPOSTERA!');
-      burst(tip.x, tip.y, tip.z, 16, 3.2);
+      meS.pose = 'parry';
+      meS.t = 0;
+      state.stats.parries++;
+      // Sparks where the blades actually meet: a little short of the tip
+      me.midWorld(v3).lerp(tipAi, 0.5);
+      clash(v3, 1);
+      addScore(25, v3.clone().setY(v3.y + 0.3), 'PARAD +25', 'teal');
+      hud.call('PARAD!', 'teal');
+      hud.sub('RIPOSTERA — STÖT!', 'gold');
+      coach('parried', '<b>Nu!</b> Motståndaren vacklar — tryck <b>STÖT</b> för ripost.', 2600);
     } else {
-      burst(tip.x, tip.y, tip.z, 18, 3);
-      scoreTouch(false, 0);
+      scoreTouch(false, 0, '', tipAi.clone());
     }
   }
 
-  /* ---- AI -------------------------------------------------------------- */
+  /* ---- AI (logic unchanged from v1; telegraph made easier to read) ---- */
 
   function updateAi(dt) {
     ai.t += dt;
@@ -640,26 +776,37 @@ export async function createFencing(container) {
         ai.timer -= dt;
         // Drift the guard line around so the player has something to read
         if (rand() < dt * 0.7) ai.line = Math.floor(rand() * 3);
+        // Footwork: small advances and retreats, keeping the distance alive
+        if (rand() < dt * 0.6) animAi.stepBy(animAi.ox > 0.05 ? -0.12 : animAi.ox < -0.05 ? 0.12 : (rand() < 0.5 ? -0.1 : 0.1));
         if (ai.timer <= 0 && state.phase === 'live') {
           ai.pose = 'telegraph';
           ai.t = 0;
           ai.line = Math.floor(rand() * 3);
           ai.shownLine = ai.line;
           ai.willFeint = rand() < o.feintP;
+          // The very first attack you ever face is slower and honest
+          ai.tele = state.tutorial && state.firstAttack ? o.telegraph * 1.7 : o.telegraph;
+          if (state.firstAttack && state.tutorial) ai.willFeint = false;
+          state.firstAttack = false;
+          salle.crowd.react('tense');
+          coach('read', `<b>Anfall i ${LINE_NAME[ai.line]}!</b> Välj samma linje för att parera.`, 2200);
         }
-        if (ai.pendingRiposte && me.pose !== 'stagger') ai.pendingRiposte = false;
+        if (ai.pendingRiposte && meS.pose !== 'stagger') ai.pendingRiposte = false;
         break;
       }
       case 'telegraph': {
-        if (ai.willFeint && ai.t > o.telegraph * 0.62 && ai.shownLine === ai.line) {
-          // The switch: real attack moves to another line late
+        const tele = ai.tele || o.telegraph;
+        if (ai.willFeint && ai.t > tele * 0.62 && ai.shownLine === ai.line) {
+          // The switch: the real attack moves to another line late
           let other = Math.floor(rand() * 3);
           while (other === ai.line) other = Math.floor(rand() * 3);
           ai.line = other;
           ai.shownLine = other;
+          ai.switchT = 0.25;
           sfx.feint();
+          hud.sub(`BYTER TILL ${LINE_NAME[other]}!`, 'red');
         }
-        if (ai.t >= o.telegraph) {
+        if (ai.t >= tele) {
           ai.pose = 'attack';
           ai.t = 0;
           ai.resolved = false;
@@ -692,6 +839,7 @@ export async function createFencing(container) {
           ai.t = 0;
           ai.resolved = false;
           ai.line = Math.floor(rand() * 3);
+          ai.shownLine = ai.line;
           sfx.swish();
           break;
         }
@@ -720,86 +868,81 @@ export async function createFencing(container) {
     }
   }
 
-  /* ---- Posing ---------------------------------------------------------- */
-
-  const easeOut = (k) => 1 - (1 - k) ** 3;
-
-  function poseFencer(fencer, who, t) {
-    const u = fencer.userData;
-    const facing = who === me ? 1 : -1;
-    const baseX = who === me ? -1.9 : 1.9;
-    const bounce = Math.sin(t * 3.2 + (who === me ? 0 : 2.1)) * 0.02;
-
-    let lean = 0;
-    let advance = 0;
-    let armAngle = LINE_ANGLE[who.line ?? 1];
-    let armReach = 0;
-
-    const { pose } = who;
-    const pt = who.t;
-
-    if (pose === 'lunge' || pose === 'attack') {
-      const k = easeOut(Math.min(1, pt / (who === me ? 0.24 : opp().attackDur)));
-      advance = k * 1.35;
-      lean = -k * 0.3;
-      armAngle = LINE_ANGLE[who === me ? who.lungeLine : who.line];
-      armReach = k * 0.34;
-    } else if (pose === 'feint') {
-      const k = Math.sin(Math.min(1, pt / 0.18) * Math.PI);
-      advance = k * 0.4;
-      armReach = k * 0.2;
-      armAngle = LINE_ANGLE[who === me ? who.lungeLine : who.line];
-    } else if (pose === 'recover') {
-      const k = 1 - Math.min(1, pt / 0.5);
-      advance = k * 0.5;
-      lean = -k * 0.1;
-    } else if (pose === 'stagger') {
-      const k = Math.sin(Math.min(1, pt / 0.85) * Math.PI);
-      advance = -k * 0.42;
-      lean = k * 0.34;
-      armAngle += k * 0.7;
-    } else if (pose === 'parry') {
-      const k = Math.sin(Math.min(1, pt / 0.3) * Math.PI);
-      armAngle = LINE_ANGLE[who.line] + k * 0.25;
-      advance = -k * 0.1;
-    } else if (pose === 'bitten') {
-      const k = Math.sin(Math.min(1, pt / 0.7) * Math.PI);
-      armAngle = LINE_ANGLE[who.line] - k * 0.5;
-      lean = k * 0.12;
-    } else if (pose === 'telegraph') {
-      const k = Math.min(1, pt / opp().telegraph);
-      advance = k * 0.14;
-      armAngle = LINE_ANGLE[who.shownLine ?? who.line] + Math.sin(k * Math.PI) * 0.12;
+  function updatePlayer(dt) {
+    meS.t += dt;
+    if (meS.pose === 'lunge' && meS.t >= 0.24 && !meS.resolved) {
+      meS.resolved = true;
+      resolvePlayerAttack();
     }
-
-    fencer.position.x = baseX + advance * facing;
-    fencer.position.y = bounce * (pose === 'guard' ? 1 : 0.3);
-    u.torso.rotation.z = (lean - 0.08) * facing;
-    u.armF.rotation.z = armAngle * facing * (who === me ? 1 : 1);
-    u.armF.position.x = 0.12 + armReach;
-    u.headG.rotation.z = -lean * 0.4 * facing;
-
-    // Legs mirror the lunge
-    u.legF.rotation.z = (-0.35 - advance * 0.35) * facing;
-    u.legB.rotation.z = (0.42 + advance * 0.28) * facing;
+    if (meS.pose === 'lunge' && meS.t >= 0.44) meS.pose = 'guard';
+    if (meS.pose === 'feint' && meS.t >= 0.18 && !meS.resolved) {
+      meS.resolved = true;
+      resolvePlayerAttack();
+    }
+    if (meS.pose === 'feint' && meS.t >= 0.3) meS.pose = 'guard';
+    if (meS.pose === 'stagger' && meS.t >= 0.7) meS.pose = 'guard';
+    if (meS.pose === 'parry' && meS.t >= 0.22) meS.pose = 'guard';
   }
 
-  /* ---- Input ----------------------------------------------------------- */
+  /** Mirror the logic poses onto the animators. */
+  function syncAnims() {
+    const o = opp();
+    const durs = { lunge: 0.44, feint: 0.3, stagger: 0.7, parry: 0.22 };
+    animMe.act = meS.pose;
+    animMe.t = meS.t;
+    animMe.dur = durs[meS.pose] || 0.3;
+    animMe.opts = { hitAt: 0.24 };
+    animMe.line = meS.pose === 'lunge' || meS.pose === 'feint' ? meS.lungeLine : meS.line;
+    const aiDur = {
+      telegraph: ai.tele || o.telegraph, attack: o.attackDur + 0.12, recover: 0.55, parry: 0.5, stagger: 0.85, bitten: 0.7
+    };
+    animAi.act = ai.pose;
+    animAi.t = ai.t;
+    animAi.dur = aiDur[ai.pose] || 0.3;
+    animAi.opts = { hitAt: o.attackDur * 0.7 };
+    animAi.line = ai.pose === 'telegraph' ? ai.shownLine : ai.line;
+  }
+
+  /* ---- Input ---------------------------------------------------------- */
 
   function setLine(i) {
-    if (state.phase !== 'live' && state.phase !== 'ready') return;
-    me.line = i;
-    renderLine();
+    if (state.phase !== 'live' && state.phase !== 'ready' && state.phase !== 'intro') return;
+    if (i === meS.line) return;
+    meS.line = i;
+    hud.setLine(i);
     sfx.step();
   }
 
-  function onPointerDown(e) {
+  function primary() {
+    const btn = el.panel.querySelector('[data-act]');
+    if (btn && el.screen.classList.contains('show')) act(btn.dataset.act);
+  }
+
+  function act(name) {
     sfx.resume();
-    if (helpOpen || e.target.closest('.pb-overlay, .pb-mute, .pb-info, .pb-help, .cl-tool, .fk-line')) return;
-    // Tapping the left screen edge thirds also sets the guard
-    const rect = canvasHost.getBoundingClientRect();
-    const fy = (e.clientY - rect.top) / rect.height;
-    setLine(fy < 0.38 ? 0 : fy < 0.66 ? 1 : 2);
+    if (name === 'start') startTournament();
+    else if (name === 'fight') startBout();
+    else if (name === 'next') next();
+    else if (name === 'again') showTitle();
+  }
+
+  function onPanelClick(e) {
+    const chip = e.target.closest('[data-fencer]');
+    if (chip) {
+      fencerName = chip.dataset.fencer;
+      save(KEY_FENCER, fencerName);
+      el.panel.querySelectorAll('[data-fencer]').forEach((c) => c.classList.toggle('on', c === chip));
+      sfx.resume();
+      sfx.step();
+      return;
+    }
+    const btn = e.target.closest('[data-act]');
+    if (btn) act(btn.dataset.act);
+  }
+
+  function skipReplay() {
+    if (state.phase === 'replay' && state.phaseT > 0.3) endReplay();
+    else if (state.phase === 'ceremony' && state.phaseT > 1) showFinal();
   }
 
   function onKeyDown(e) {
@@ -808,214 +951,402 @@ export async function createFencing(container) {
       setHelp(k === '?' ? !helpOpen : false);
       return;
     }
-    if (helpOpen) return;
-    if (k === 'ArrowUp') setLine(Math.max(0, me.line - 1));
-    else if (k === 'ArrowDown') setLine(Math.min(2, me.line + 1));
-    else if (k === '1' || k === '2' || k === '3') setLine(Number(k) - 1);
-    else if (k === ' ') {
+    if (helpOpen || e.repeat) return;
+    if (state.phase === 'replay' || state.phase === 'ceremony') {
+      skipReplay();
+      return;
+    }
+    if (k === ' ' || k === 'Enter') {
       e.preventDefault();
-      if (state.phase === 'idle' || state.phase === 'over') startGame();
-      else playerLunge(false);
-    } else if (k.toLowerCase() === 'f') playerLunge(true);
+      if (el.screen.classList.contains('show')) primary();
+      else if (k === ' ') playerLunge(false);
+      return;
+    }
+    if (k === 'ArrowUp' || k === 'w' || k === 'W') {
+      e.preventDefault();
+      setLine(Math.max(0, meS.line - 1));
+    } else if (k === 'ArrowDown' || k === 's' || k === 'S') {
+      e.preventDefault();
+      setLine(Math.min(2, meS.line + 1));
+    } else if (k === '1' || k === '2' || k === '3') setLine(Number(k) - 1);
+    else if (k === 'f' || k === 'F' || k === 'k' || k === 'K') playerLunge(true);
+    else if (k === 'j' || k === 'J') playerLunge(false);
+  }
+
+  // Vertical swipes anywhere on the piste also move the guard
+  let swipe = null;
+  function onPointerDown(e) {
+    sfx.resume();
+    if (state.phase === 'replay' || state.phase === 'ceremony') {
+      skipReplay();
+      return;
+    }
+    swipe = { y: e.clientY, line: meS.line };
+  }
+  function onPointerMove(e) {
+    if (!swipe) return;
+    const dy = e.clientY - swipe.y;
+    if (Math.abs(dy) > 36) {
+      setLine(Math.max(0, Math.min(2, meS.line + (dy < 0 ? -1 : 1))));
+      swipe.y = e.clientY;
+    }
+  }
+  function onPointerUp() {
+    swipe = null;
   }
 
   function setHelp(open) {
     helpOpen = open;
-    hud.help.hidden = !open;
+    el.help.hidden = !open;
   }
 
+  const lineDown = (e) => {
+    e.preventDefault();
+    sfx.resume();
+    setLine(Number(e.currentTarget.dataset.line));
+  };
+  const lungeDown = (e) => {
+    e.preventDefault();
+    sfx.resume();
+    playerLunge(false);
+  };
+  const feintDown = (e) => {
+    e.preventDefault();
+    sfx.resume();
+    playerLunge(true);
+  };
+  const muteClick = () => {
+    sfx.resume();
+    sfx.setMuted(!sfx.muted);
+    el.mute.classList.toggle('off', sfx.muted);
+  };
+  const infoClick = () => setHelp(!helpOpen);
+  const helpCloseClick = () => setHelp(false);
+
   canvasHost.addEventListener('pointerdown', onPointerDown);
+  window.addEventListener('pointermove', onPointerMove);
+  window.addEventListener('pointerup', onPointerUp);
   window.addEventListener('keydown', onKeyDown);
-  hud.start.addEventListener('click', nextStage);
-  hud.lunge.addEventListener('click', () => playerLunge(false));
-  hud.feint.addEventListener('click', () => playerLunge(true));
-  hud.lineBtns.forEach((b) => b.addEventListener('click', () => setLine(Number(b.dataset.line))));
-  hud.info.addEventListener('click', () => setHelp(!helpOpen));
-  hud.helpClose.addEventListener('click', () => setHelp(false));
-  hud.mute.addEventListener('click', () => {
-    sfx.muted = !sfx.muted;
-    hud.mute.classList.toggle('off', sfx.muted);
-  });
+  el.panel.addEventListener('click', onPanelClick);
+  el.lineBtns.forEach((b) => b.addEventListener('pointerdown', lineDown));
+  el.lunge.addEventListener('pointerdown', lungeDown);
+  el.feint.addEventListener('pointerdown', feintDown);
+  el.mute.addEventListener('click', muteClick);
+  el.info.addEventListener('click', infoClick);
+  el.helpClose.addEventListener('click', helpCloseClick);
+  el.replay.addEventListener('pointerdown', skipReplay);
 
-  /* ---- Sizing ---------------------------------------------------------- */
+  /* ---- Camera --------------------------------------------------------- */
 
-  let baseFov = 46;
-  let camDist = 8.2;
+  let aspect = 1.6;
+  const cam = { pos: new THREE.Vector3(0, 2.4, 10), look: new THREE.Vector3(0, 2, 0), fov: 36, roll: 0 };
+  const goal = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 36, roll: 0, rate: 3 };
+
+  /**
+   * The duel framing by aspect. Landscape is the hero: side-on, a little
+   * low, both fencers, the three windows and their shafts, the
+   * chandeliers at the top corners. Portrait swings round behind your
+   * shoulder so the opponent faces the camera and their blade's line
+   * reads vertically — the tall axis is the one a phone has to spare.
+   */
+  function duelFrame(out) {
+    const k = smoothstep(0.62, 1.25, aspect);
+    out.pos.set(lerp(-4.15, 0, k), lerp(1.72, 1.45, k), lerp(3.7, 7.6, k));
+    out.look.set(lerp(0.75, 0, k), lerp(1.22, 1.9, k), lerp(-0.25, 0, k));
+    out.fov = lerp(52, 36, k);
+    // Wide screens: hold the same width of piste
+    if (aspect > 1.9) out.fov *= 1.9 / aspect * 0.35 + 0.65;
+    out.roll = 0;
+  }
+
+  function cameraGoal(t) {
+    duelFrame(goal);
+    goal.rate = 3;
+    const ph = state.phase;
+    if (ph === 'title' || ph === 'bracket' || ph === 'final' || ph === 'result') {
+      // Slow drift, pulled back, the salle as the backdrop for the panels
+      const k = smoothstep(0.62, 1.25, aspect);
+      goal.pos.x += Math.sin(t * 0.08) * 1.1 + (ph === 'title' ? lerp(0, 2.2, k) : 0);
+      goal.pos.y += 0.35;
+      goal.pos.z += 1.2;
+      goal.look.y += 0.35;
+      goal.look.x += ph === 'title' ? lerp(0, 1.6, k) : 0;
+      goal.rate = 1.2;
+      if (ph === 'result') {
+        const winner = state.results.length && state.results[state.results.length - 1].won ? me : foe;
+        winner.j.torso.getWorldPosition(v3);
+        goal.look.lerp(v3, 0.35);
+        goal.fov *= 0.86;
+      }
+    } else if (ph === 'touch' && state.lastTouch) {
+      // Punch in on the point of contact, a slight Dutch angle
+      const { at } = state.lastTouch;
+      const push = reduced ? 0.25 : 0.5;
+      goal.pos.lerp(v3.copy(at).add(v3b.set(0, 0.25, 0).add(goal.pos).sub(at).setLength(2.6)), push);
+      goal.look.lerp(at, 0.6);
+      goal.fov *= reduced ? 0.95 : 0.84;
+      goal.roll = reduced ? 0 : (state.lastTouch.mine ? -0.035 : 0.035);
+      goal.rate = state.phaseT < 0.4 ? 9 : 2.5;
+    } else if (ph === 'replay') {
+      const { at } = replay;
+      const a = replay.angle;
+      goal.look.copy(at);
+      goal.pos.set(at.x + Math.sin(a) * 2.5, at.y - 0.15, at.z + Math.cos(a) * 2.5);
+      goal.fov = aspect < 0.9 ? 46 : 32;
+      goal.roll = 0;
+      goal.rate = state.phaseT < 0.05 ? 60 : 4;
+    } else if (ph === 'ceremony') {
+      me.j.torso.getWorldPosition(v3);
+      const a = 0.25 + state.phaseT * 0.16;
+      goal.look.copy(v3).setY(1.45);
+      const d = aspect < 0.9 ? 4.2 : 3.4;
+      goal.pos.set(v3.x + Math.sin(a) * d, 1.2, v3.z + Math.cos(a) * d);
+      goal.fov = aspect < 0.9 ? 50 : 38;
+      goal.rate = 2;
+    } else {
+      // Live: follow the centre of the action a little; lean in on telegraphs
+      const mid = (me.group.position.x + me.pose[P.px] + foe.group.position.x - foe.pose[P.px]) / 2;
+      goal.look.x += mid * 0.4;
+      goal.pos.x += mid * 0.25;
+      if (ai.pose === 'telegraph' && ph === 'live') goal.fov *= 0.97;
+      goal.pos.y += Math.sin(t * 0.5) * 0.02;
+      if (ph === 'intro') goal.rate = 1.5;
+    }
+  }
+
+  function updateCamera(dt, t) {
+    if (camCut === 'intro') {
+      // Start on the opponent's mask, then let the rate carry us out
+      foe.j.head.getWorldPosition(v3);
+      const portrait = aspect < 0.9;
+      cam.pos.set(v3.x - 1.3, v3.y + 0.05, v3.z + (portrait ? 1.9 : 1.5));
+      cam.look.copy(v3);
+      cam.fov = portrait ? 44 : 30;
+      camCut = '';
+    } else if (camCut === 'ceremony') {
+      camCut = '';
+    }
+    cameraGoal(t);
+    const k = 1 - Math.exp(-goal.rate * dt);
+    cam.pos.lerp(goal.pos, k);
+    cam.look.lerp(goal.look, k);
+    cam.fov += (goal.fov - cam.fov) * k;
+    cam.roll += (goal.roll - cam.roll) * k;
+    camera.position.copy(cam.pos);
+    if (shake.power > 0.001) {
+      shake.power = Math.max(0, shake.power - dt * 4);
+      const s = shake.power * 0.05;
+      camera.position.x += (Math.random() - 0.5) * s;
+      camera.position.y += (Math.random() - 0.5) * s;
+    }
+    camera.lookAt(cam.look);
+    camera.rotateZ(cam.roll);
+    if (Math.abs(camera.fov - cam.fov) > 0.01) {
+      camera.fov = cam.fov;
+      camera.updateProjectionMatrix();
+    }
+  }
+
+  /* ---- Sizing --------------------------------------------------------- */
 
   function resize() {
     const rect = canvasHost.getBoundingClientRect();
     const w = Math.max(1, Math.floor(rect.width));
     const h = Math.max(1, Math.floor(rect.height));
     renderer.setSize(w, h, false);
-    camera.aspect = w / h;
-    const portrait = camera.aspect < 0.7;
-    baseFov = portrait ? 58 : 46;
-    // In portrait the horizontal field is what frames the duel — back off
-    camDist = portrait ? 12.5 : 8.2;
-    camera.fov = baseFov;
+    composer.setPixelRatio(pixelRatio);
+    composer.setSize(w, h);
+    renderer.getDrawingBufferSize(rtSize);
+    bloom.setSize(Math.round(rtSize.x / 2), Math.round(rtSize.y / 2));
+    aspect = w / h;
+    camera.aspect = aspect;
     camera.updateProjectionMatrix();
+    salle.setMoteScale(rtSize.y * 0.05);
+    hudHost.dataset.orient = aspect < 0.9 ? 'portrait' : 'landscape';
   }
   const ro = new ResizeObserver(resize);
   ro.observe(canvasHost);
   resize();
 
-  /* ---- Loop ------------------------------------------------------------ */
+  /* ---- Frame-time watchdog: drop bloom, then resolution --------------- */
+  const perf = { acc: 0, n: 0, level: 0 };
+  function watchPerf(realDt) {
+    if (!adaptive || perf.level >= 2) return;
+    perf.acc += realDt;
+    perf.n++;
+    if (perf.acc < 2.5) return;
+    const avg = perf.acc / perf.n;
+    perf.acc = 0;
+    perf.n = 0;
+    if (avg > 0.028) {
+      perf.level++;
+      if (perf.level === 1) bloom.enabled = false;
+      else {
+        pixelRatio = Math.max(1, pixelRatio * 0.7);
+        renderer.setPixelRatio(pixelRatio);
+        resize();
+      }
+    }
+  }
+
+  /* ---- Loop ----------------------------------------------------------- */
 
   let raf = 0;
   let last = performance.now();
   let running = true;
-  const camGoal = new THREE.Vector3(0, 2.4, 8.6);
-  const lookAt = new THREE.Vector3(0, 1.4, 0);
-  const lookGoal = new THREE.Vector3(0, 1.4, 0);
+
+  function stepDuel(dt) {
+    state.phaseT += dt;
+    const ph = state.phase;
+    if (ph === 'intro') {
+      if (state.phaseT >= 1.7) startReady();
+    } else if (ph === 'ready') {
+      const step = Math.floor(state.phaseT / 0.7);
+      if (step > state.readyStep && step < 3) {
+        state.readyStep = step;
+        hud.call(['EN GARDE', 'KLARA', 'KÖR!'][step], step === 2 ? 'go' : '');
+        sfx.ready(step);
+      }
+      if (state.phaseT >= 1.5) goLive();
+    } else if (ph === 'live') {
+      updateAi(dt);
+      updatePlayer(dt);
+    } else if (ph === 'touch') {
+      meS.t += dt;
+      ai.t += dt;
+      // Hold the tableau a moment, then both come back to guard
+      if (state.phaseT > 0.62 && (meS.pose !== 'guard' || ai.pose !== 'guard')) {
+        meS.pose = 'guard';
+        ai.pose = 'guard';
+      }
+      if (state.phaseT >= 1.35) endTouchPause();
+    }
+    if (ph === 'intro') return;
+    if (state.phase === 'ready' || state.phase === 'live' || state.phase === 'touch') syncAnims();
+  }
+
+  function updateTelegraph(dt, t) {
+    const live = state.phase === 'live';
+    // Glint on the attacking blade
+    if (ai.pose === 'telegraph' && live) {
+      const k = ai.t / (ai.tele || opp().telegraph);
+      foe.tipWorld(tipAi);
+      glint.position.copy(tipAi);
+      const flick = ai.switchT > 0 ? 1.5 : 1;
+      glintMat.opacity = Math.min(1, (0.35 + Math.sin(k * Math.PI) * 0.55 + Math.sin(t * 22) * 0.1) * flick);
+      glint.scale.setScalar((0.35 + k * 0.35) * flick);
+      glint.material.rotation = t * 1.5;
+      // Where it is going to land, on you
+      const covered = meS.line === ai.shownLine;
+      me.j.torso.getWorldPosition(v3);
+      threat.position.set(v3.x + 0.24, LINE_Y[ai.shownLine], v3.z + 0.25);
+      threatMat.color.set(covered ? 0x7fe8ff : 0xff5a46);
+      threatMat.opacity = 0.55 + Math.sin(t * 18) * 0.25;
+      threat.scale.setScalar(0.3 + Math.sin(k * Math.PI) * 0.08);
+      hud.setThreat(ai.shownLine, covered);
+      if (ai.switchT > 0) ai.switchT -= dt;
+    } else {
+      glintMat.opacity = Math.max(0, glintMat.opacity - dt * 6);
+      threatMat.opacity = Math.max(0, threatMat.opacity - dt * 6);
+      hud.setThreat(-1, false);
+    }
+  }
+
+  let clock = 0;
+  let frozen = false; // test hook: hold the simulation, keep rendering
+  let camOverride = null; // test hook: a fixed camera for close-ups
+
+  /** One step of the world. Kept apart from rendering so tests can step it. */
+  function simulate(realDt) {
+    clock += realDt;
+    const t = clock;
+    // Hit-stop: the world nearly freezes for a few frames on impact
+    let dt = realDt;
+    if (hitStop > 0) {
+      hitStop -= realDt;
+      dt *= 0.04;
+    }
+
+    const ph = state.phase;
+    const ctxMe = { dist: HOME * 2, oppPx: foe.pose[P.px] };
+    const ctxAi = { dist: HOME * 2, oppPx: me.pose[P.px] };
+    let trailDt = dt;
+
+    if (ph === 'replay') {
+      state.phaseT += realDt;
+      trailDt = updateReplay(realDt);
+    } else {
+      if (!helpOpen) {
+        if (ph === 'intro' || ph === 'ready' || ph === 'live' || ph === 'touch') stepDuel(dt);
+        else state.phaseT += dt;
+        if (ph === 'ceremony' && state.phaseT > 5.2) showFinal();
+      }
+      gameTime += dt;
+      animMe.update(dt, ctxMe);
+      animAi.update(dt, ctxAi);
+      me.apply(me.pose);
+      foe.apply(foe.pose);
+      if (state.phase === 'ready' || state.phase === 'live' || state.phase === 'touch') record();
+    }
+
+    me.group.updateMatrixWorld(true);
+    foe.group.updateMatrixWorld(true);
+    trailMe.push(me.tipWorld(tipMe), me.midWorld(v3), trailDt);
+    trailAi.push(foe.tipWorld(tipAi), foe.midWorld(v3), trailDt);
+
+    updateTelegraph(dt, t);
+    const fxDt = ph === 'replay' ? realDt * 0.35 : dt;
+    sparks.update(fxDt);
+    flashes.update(fxDt);
+    confetti.update(dt);
+    salle.update(t, ph === 'replay' ? realDt * 0.3 : dt);
+    if (ph === 'ceremony' && Math.floor(state.phaseT * 3) % 2 === 0) salle.score.flash(0);
+    else if (ph === 'ceremony') salle.score.clear();
+
+    updateCamera(realDt, t);
+  }
 
   function tick(now) {
     raf = requestAnimationFrame(tick);
-    let dt = clampDt(now - last);
+    const realDt = clampDt(now - last);
     last = now;
     if (!running) return;
-    const t = now / 1000;
-
-    if (hitStop > 0) {
-      hitStop -= dt;
-      dt *= 0.1;
+    watchPerf(realDt);
+    if (!frozen) simulate(realDt);
+    if (camOverride) {
+      camera.position.copy(camOverride.pos);
+      camera.lookAt(camOverride.look);
+      camera.fov = camOverride.fov;
+      camera.updateProjectionMatrix();
     }
-
-    if (!helpOpen) {
-      if (state.phase === 'ready') {
-        state.readyT += dt;
-        const steps = ['EN GARDE', 'KLARA', 'KÖR!'];
-        const stepAt = Math.floor(state.readyT / 0.7);
-        if (stepAt > state.readyStep && stepAt < steps.length) {
-          state.readyStep = stepAt;
-          callout(steps[stepAt]);
-          sfx.ready(stepAt);
-        }
-        if (state.readyT >= 2.1 - 0.7) {
-          if (state.readyT >= 1.5) goLive();
-        }
-      } else if (state.phase === 'live') {
-        updateAi(dt);
-        // Player pose progression
-        me.t += dt;
-        if (me.pose === 'lunge' && me.t >= 0.24 && !me.resolved) {
-          me.resolved = true;
-          resolvePlayerAttack();
-        }
-        if (me.pose === 'lunge' && me.t >= 0.44) {
-          me.pose = 'guard';
-          me.resolved = false;
-        }
-        if (me.pose === 'feint' && me.t >= 0.18 && !me.resolved) {
-          me.resolved = true;
-          resolvePlayerAttack();
-        }
-        if (me.pose === 'feint' && me.t >= 0.3) {
-          me.pose = 'guard';
-          me.resolved = false;
-        }
-        if (me.pose === 'stagger' && me.t >= 0.7) {
-          me.pose = 'guard';
-        }
-      } else if (state.phase === 'touchpause') {
-        state.pauseT += dt;
-        me.t += dt;
-        ai.t += dt;
-        if (state.pauseT >= 1.35) endTouchPause();
-      }
-    }
-
-    /* Telegraph glint follows the AI blade */
-    if (ai.pose === 'telegraph' && state.phase === 'live') {
-      const k = ai.t / opp().telegraph;
-      glintMat.opacity = 0.25 + Math.sin(k * Math.PI) * 0.55 + Math.sin(t * 22) * 0.1;
-      glint.position.set(foe.position.x - 1.1, LINE_Y[ai.shownLine], 0.25);
-      glint.scale.setScalar(0.5 + k * 0.5);
-    } else {
-      glintMat.opacity = Math.max(0, glintMat.opacity - dt * 6);
-    }
-
-    poseFencer(player, me, t);
-    poseFencer(foe, ai, t);
-
-    // Blade streaks: brightest at the middle of the drive, gone at rest
-    const streak = (fencer, who, dur) => {
-      const driving = who.pose === 'lunge' || who.pose === 'attack' || who.pose === 'feint';
-      const k = driving ? Math.sin(Math.min(1, who.t / dur) * Math.PI) : 0;
-      const m = fencer.userData.trailMat;
-      m.opacity += (k * 0.65 - m.opacity) * Math.min(1, dt * 18);
-    };
-    streak(player, me, me.pose === 'feint' ? 0.18 : 0.24);
-    streak(foe, ai, opp().attackDur);
-
-    /* Crowd: idle sway, arms up while celebrating */
-    salle.crowd.forEach((p, i) => {
-      const cheer = state.celebration > 0 && state.phase === 'touchpause';
-      const { arms } = p.userData;
-      const target = cheer ? -2.2 : 2.4;
-      arms.children[0].rotation.z += (-target - arms.children[0].rotation.z) * Math.min(1, dt * 8);
-      arms.children[1].rotation.z += (target - arms.children[1].rotation.z) * Math.min(1, dt * 8);
-      p.position.y = cheer ? Math.abs(Math.sin(t * 8 + i)) * 0.12 : 0;
-      p.rotation.z = Math.sin(t * 1.1 + p.userData.phase) * 0.03;
-    });
-
-    /* Sparks */
-    let alive = false;
-    for (let i = 0; i < sparkCount; i++) {
-      const s = sparkVel[i];
-      if (s.life <= 0) continue;
-      alive = true;
-      s.life -= dt;
-      s.vy -= 6 * dt;
-      sparkPos[i * 3] += s.vx * dt;
-      sparkPos[i * 3 + 1] += s.vy * dt;
-      sparkPos[i * 3 + 2] += s.vz * dt;
-      if (s.life <= 0) sparkPos[i * 3 + 1] = -99;
-    }
-    if (alive) sparkGeo.attributes.position.needsUpdate = true;
-
-    /* Camera */
-    if (state.phase === 'idle' || state.phase === 'over' || state.phase === 'boutend') {
-      camGoal.set(Math.sin(t * 0.09) * 1.2, 2.6, camDist * 1.15);
-      lookGoal.set(0, 1.8, 0);
-    } else if (state.phase === 'touchpause') {
-      camGoal.set((player.position.x + foe.position.x) / 2, 1.75, camDist * 0.82);
-      lookGoal.set((player.position.x + foe.position.x) / 2, 1.45, 0);
-    } else {
-      camGoal.set((player.position.x + foe.position.x) / 2 * 0.6, 2.1, camDist);
-      lookGoal.set(0, 1.65, 0);
-    }
-    camera.position.lerp(camGoal, Math.min(1, dt * 3));
-    lookAt.lerp(lookGoal, Math.min(1, dt * 4));
-    if (shake.power > 0.001) {
-      shake.power = Math.max(0, shake.power - dt * 4);
-      camera.position.x += (rand() - 0.5) * shake.power * 0.2;
-      camera.position.y += (rand() - 0.5) * shake.power * 0.2;
-    }
-    camera.lookAt(lookAt);
-
-    renderer.render(scene, camera);
+    composer.render();
   }
-
   raf = requestAnimationFrame(tick);
 
   const onVisibility = () => {
     running = !document.hidden;
     last = performance.now();
+    if (sfx.ctx) {
+      if (document.hidden) sfx.ctx.suspend();
+      else sfx.ctx.resume();
+    }
   };
   document.addEventListener('visibilitychange', onVisibility);
 
-  renderTouches();
-  renderBout();
-  renderLine();
-  hud.overlay.classList.add('show');
+  showTitle();
 
   /* Deterministic hooks for automated tests */
   window.__ppFakt = {
     state,
-    me,
+    me: meS,
     ai,
-    startGame,
-    nextStage,
+    startGame() {
+      startTournament();
+      startBout();
+    },
+    nextStage() {
+      primary();
+    },
     setLine,
     playerLunge,
     forceTouch(mine = true) {
@@ -1024,28 +1355,53 @@ export async function createFencing(container) {
     aiAttackNow(line = 1) {
       if (state.phase === 'live' && ai.pose === 'guard') {
         ai.pose = 'telegraph';
-        ai.t = opp().telegraph - 0.01;
+        ai.tele = opp().telegraph;
+        ai.t = ai.tele - 0.01;
         ai.line = line;
         ai.shownLine = line;
         ai.willFeint = false;
       }
+    },
+    telegraphNow(line = 0) {
+      if (state.phase === 'live' && ai.pose === 'guard') ai.timer = 0;
+      ai.line = line;
     },
     openAi() {
       ai.pose = 'stagger';
       ai.t = 0;
     },
     goLive() {
+      if (state.phase === 'intro') startReady();
       if (state.phase === 'ready') goLive();
+    },
+    skip() {
+      skipReplay();
+    },
+    /** Run the world forward by `sec` seconds in 60 Hz steps, without rendering. */
+    advance(sec) {
+      for (let i = 0; i < Math.round(sec * 60); i++) simulate(1 / 60);
+    },
+    freeze(on = true) {
+      frozen = on;
+    },
+    view(pos, look, fov = 30) {
+      camOverride = pos ? { pos: new THREE.Vector3(...pos), look: new THREE.Vector3(...look), fov } : null;
+    },
+    pickFencer(name) {
+      if (PICKABLE.includes(name)) fencerName = name;
     },
     info() {
       return {
+        phase: state.phase,
         drawCalls: renderer.info.render.calls,
-        triangles: renderer.info.render.triangles
+        triangles: renderer.info.render.triangles,
+        bloom: bloom.enabled,
+        pixelRatio
       };
     }
   };
 
-  /* ---- Teardown -------------------------------------------------------- */
+  /* ---- Teardown ------------------------------------------------------- */
 
   function destroy() {
     cancelAnimationFrame(raf);
@@ -1053,10 +1409,20 @@ export async function createFencing(container) {
     ro.disconnect();
     document.removeEventListener('visibilitychange', onVisibility);
     canvasHost.removeEventListener('pointerdown', onPointerDown);
+    window.removeEventListener('pointermove', onPointerMove);
+    window.removeEventListener('pointerup', onPointerUp);
     window.removeEventListener('keydown', onKeyDown);
-    clearTimeout(state.lastToast);
-    delete window.__ppFakt;
+    hud.dispose();
+    if (window.__ppFakt) delete window.__ppFakt;
 
+    me.dispose();
+    foe.dispose();
+    sparks.dispose();
+    trailMe.dispose();
+    trailAi.dispose();
+    flashes.dispose();
+    confetti.dispose();
+    salle.dispose();
     scene.traverse((o) => {
       if (o.geometry) o.geometry.dispose();
       if (o.material) {
@@ -1067,6 +1433,11 @@ export async function createFencing(container) {
         });
       }
     });
+    [glow, star, ring].forEach((tx) => tx.dispose());
+    envRT.dispose();
+    composer.renderTarget1.dispose();
+    composer.renderTarget2.dispose();
+    composer.passes.forEach((p) => p.dispose && p.dispose());
     renderer.dispose();
     renderer.forceContextLoss?.();
     if (sfx.ctx) sfx.ctx.close();

@@ -14,25 +14,62 @@
  *    of 25, like a real scorecard.
  *  - Swing-through controls: touch, track the bird, RELEASE to fire.
  *    The whole phone is the gun.
+ *  - The shot has a time of flight (~0.1 s out to the clay) and carries
+ *    the swing with it: follow the bird and release on it, and the pattern
+ *    arrives where the bird has got to; stop the gun and it goes behind.
+ *    That is swing-through, and every miss shows you where it went.
  *
- * Hits break the clay into actual 3D shards with a streak multiplier;
- * misses cost nothing but the streak. The gang watches from folding
- * chairs. Ludvig won this in real life — his ghost score is the target.
+ * Hits break the clay into actual 3D shards with hit-stop and a streak
+ * multiplier; misses cost nothing but the streak. The gang watches from
+ * folding chairs — you see them in the establishing shot the round opens
+ * and closes on. Ludvig won this in real life — his ghost score is the
+ * target, and beating it is the gold medal.
  */
 
 import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { Sfx } from './audio.js';
-import { mulberry, glowTexture, buildSky, buildRange, buildShotgun, buildClay, HAZE } from './range.js';
+import { HAZE, SUN_DIR, LIGHT_DIR, SUN_COLOR, buildSky, bakeEnvironment, buildHaze, buildHills } from './sky.js';
+import { mulberry, glowTexture, starTexture, buildRange, buildClay } from './range.js';
+import { buildShotgun } from './gun.js';
 import { buildGrass } from './grass.js';
+import { Particles, Shards, ShotCloud, buildAmbient } from './fx.js';
+import { buildHud, cardHtml, startPanelHtml, endPanelHtml, fmt } from './hud.js';
+
+/** Fill the whole stage: a wide evening vista is this game's hero shot. */
+export const layout = 'full';
 
 const HIGHSCORE_KEY = 'pp-skytte-highscore';
+const BEST_KEY = 'pp-skytte-best';
 const LUDVIG = 3400; // mästarens ghost score
+
+/** Medal lines. Gold is defined by Ludvig: beat his 2022 round. */
+const MEDALS = [
+  { id: 'brons', name: 'Brons', min: 1800 },
+  { id: 'silver', name: 'Silver', min: 2800 },
+  { id: 'guld', name: 'Guld', min: LUDVIG + 1 }
+];
 
 const SERIES = [
   { name: 'Serie 1 — Uppvärmningen', singles: 8, doubles: 0, speed: 0.85, brief: 'Åtta lugna duvor från graven. Hitta svingen.' },
   { name: 'Serie 2 — Korsarna', singles: 8, doubles: 0, speed: 1.1, crossers: true, brief: 'Snabbare nu, och från sidorna. Sving igenom duvan!' },
   { name: 'Serie 3 — Finalen', singles: 4, doubles: 2, speed: 1.25, crossers: true, brief: 'Fyra singlar och två dubbléer. Ett skott per duva i dubbléerna.' }
 ];
+
+/* Ballistics, tuned to feel like a 12-bore at 25–45 m */
+const SHOT_SPEED = 380; // m/s — pellet average over the first 40 m
+const PATTERN = 0.03; // rad — the pattern's killing radius (~1.7°)
+const PATTERN_GOLD = 0.021; // tighter for the little golden dove
+const CLAY_R = 0.37;
+const MAX_SWING = 1.4; // rad/s — clamp on how much lead a flick can carry
+const GRAVITY = 9.8;
+const WIND = new THREE.Vector3(1.3, 0.05, 0.25); // a westerly breeze, m/s
+
+const ORANGE = new THREE.Color(0xff6a1c);
+const GOLD = new THREE.Color(0xf2c14e);
 
 /**
  * Frame delta, clamped at BOTH ends. Only clamping the top looks harmless
@@ -44,262 +81,338 @@ function clampDt(ms) {
   return Math.max(0, Math.min(0.05, ms / 1000));
 }
 
-/* ------------------------------------------------------------------- HUD */
+const ease = (x) => (x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2);
+const smooth = (a, b, x) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
 
-function buildHud(root) {
-  root.innerHTML = `
-    <div class="fg-vignette"></div>
-    <div class="pb-hud">
-      <div class="pb-top">
-        <div class="pb-score-wrap">
-          <div class="pb-score" id="sk-score">0</div>
-          <div class="pb-hi">REKORD <span id="sk-hi">0</span></div>
-        </div>
-        <div class="pb-meta">
-          <div class="sk-streak" id="sk-streak"></div>
-          <div class="fg-cast" id="sk-serie"></div>
-        </div>
-      </div>
-      <div class="sk-card" id="sk-card"></div>
-      <div class="sk-shells" id="sk-shells"><i></i><i></i></div>
-      <div class="sk-cross" id="sk-cross"><i></i></div>
-      <div class="fg-zone" id="sk-callout"></div>
-      <div class="fg-phase" id="sk-phase"></div>
-      <div class="pb-toast" id="sk-toast"></div>
-      <div class="fg-pops" id="sk-pops"></div>
-      <div class="cl-tools show" id="sk-tools" hidden>
-        <button class="cl-tool primary" id="sk-pull">PULL!</button>
-      </div>
-    </div>
+function medalTier(score) {
+  let tier = 0;
+  MEDALS.forEach((m, i) => {
+    if (score >= m.min) tier = i + 1;
+  });
+  return tier;
+}
 
-    <div class="pb-overlay" id="sk-overlay">
-      <div class="pb-panel">
-        <h2 id="sk-title">Pekkas Lerduvor</h2>
-        <p id="sk-text">Arnäsvall 2022. Tre serier, 24 duvor — och till sist guldduvan. En hel runda om 25.</p>
-        <ul class="fg-steps" id="sk-steps">
-          <li><i style="--c:#f2c14e"></i><b>Pull!</b> Tryck PULL — duvan kommer efter en slumpad paus, som i olympisk skeet.</li>
-          <li><i style="--c:#7fd8e8"></i><b>Sving</b> Håll fingret på skärmen och följ duvan — hagelsvärmen sitter där du pekar.</li>
-          <li><i style="--c:#5eead4"></i><b>Släpp = skott</b> Släpp för att skjuta. Två patroner per singel, en per duva i dubbléer.</li>
-        </ul>
-        <div class="pb-scoreline" id="sk-scoreline" hidden></div>
-        <div class="fg-catchlist" id="sk-verdict" hidden></div>
-        <button class="pb-btn" id="sk-start">Ladda och klart!</button>
-      </div>
-    </div>
+function readBest() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(BEST_KEY) || 'null');
+    const legacy = parseInt(localStorage.getItem(HIGHSCORE_KEY) || '0', 10) || 0;
+    const best = raw && typeof raw === 'object' ? raw : { score: 0, hits: 0, tier: 0 };
+    if (legacy > best.score) best.score = legacy;
+    return best;
+  } catch (e) {
+    return { score: 0, hits: 0, tier: 0 };
+  }
+}
 
-    <button class="pb-info" id="sk-info" aria-label="Så spelar du">?</button>
-
-    <div class="pb-help" id="sk-help" hidden>
-      <div class="pb-help-card">
-        <h3>Så skjuter du</h3>
-        <p class="pb-help-sub">Pekkas Lerduvor</p>
-        <ul class="pb-help-list">
-          <li><i style="--c:#f2c14e"></i><b>PULL!</b> Duvan släpps efter en slumpad fördröjning på upp till ett par sekunder — precis som i olympisk skeet. Var redo.</li>
-          <li><i style="--c:#7fd8e8"></i><b>Svinga igenom</b> Håll fingret nere och följ duvan. Släpp när kornet ligger på — hagelsvärmen träffar där du pekar. På dator: sikta med musen, klicka för skott.</li>
-          <li><i style="--c:#5eead4"></i><b>Två patroner</b> Singlar ger två skott — bom på första? Andra chansen finns. Dubbléer: två duvor i luften, ett skott var.</li>
-          <li><i style="--c:#ff7a6b"></i><b>Streaken</b> Varje kross i rad höjer bonusen. En bom nollar den.</li>
-          <li><i style="--c:#d9a05b"></i><b>Serierna</b> Uppvärmning rakt från graven, sen korsare från sidorna, sen finalen med dubbléer. 24 duvor totalt.</li>
-          <li><i style="--c:#ffd166"></i><b>GULDDUVAN</b> Den 25:e. Liten, snabb, guld — 500 poäng, en enda patron.</li>
-        </ul>
-        <p class="pb-help-tip">Poäng: kross 100 + 25 per streak · dubblé-par +200 · felfri serie +500 · guldduvan 500. Ludvig sköt ${'3 400'.replace(' ', ' ')} — slå det.</p>
-        <div class="pb-help-keys">Sikta: dra · Skjut: släpp / klick · PULL: knappen eller mellanslag · Kortet: ? eller Esc</div>
-        <button class="pb-btn" id="sk-help-close">Tillbaka till banan</button>
-      </div>
-    </div>
-
-    <button class="pb-mute" id="sk-mute" aria-label="Ljud på/av">
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M11 5 6 9H2v6h4l5 4V5Z"/><path class="pb-wave" d="M15.5 8.5a5 5 0 0 1 0 7"/>
-      </svg>
-    </button>
-  `;
-  const q = (s) => root.querySelector(s);
-  return {
-    score: q('#sk-score'), hi: q('#sk-hi'), streak: q('#sk-streak'), serie: q('#sk-serie'),
-    card: q('#sk-card'), shells: q('#sk-shells'), cross: q('#sk-cross'),
-    callout: q('#sk-callout'), phase: q('#sk-phase'), toast: q('#sk-toast'), pops: q('#sk-pops'),
-    tools: q('#sk-tools'), pull: q('#sk-pull'),
-    overlay: q('#sk-overlay'), title: q('#sk-title'), text: q('#sk-text'), steps: q('#sk-steps'),
-    scoreline: q('#sk-scoreline'), verdict: q('#sk-verdict'), start: q('#sk-start'),
-    info: q('#sk-info'), help: q('#sk-help'), helpClose: q('#sk-help-close'), mute: q('#sk-mute')
-  };
+function writeBest(best) {
+  try {
+    localStorage.setItem(BEST_KEY, JSON.stringify(best));
+    localStorage.setItem(HIGHSCORE_KEY, String(Math.round(best.score)));
+  } catch (e) {
+    /* private mode */
+  }
 }
 
 /* ------------------------------------------------------------------- game */
 
 export async function createShooting(container) {
   const canvasHost = document.createElement('div');
-  canvasHost.className = 'pb-canvas';
+  canvasHost.className = 'pb-canvas sk-canvas';
   container.appendChild(canvasHost);
 
   const hudHost = document.createElement('div');
-  hudHost.className = 'pb-ui fg-ui';
+  hudHost.className = 'pb-ui fg-ui sk-ui';
   container.appendChild(hudHost);
-  const hud = buildHud(hudHost);
+  const hud = buildHud(hudHost, { ludvig: LUDVIG });
+
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const touch = window.matchMedia('(pointer: coarse)').matches;
+  // Quality tier: phones and small screens skip bloom and get a smaller
+  // shadow map; the meadow itself stays the same one draw call everywhere.
+  const lowTier = touch || Math.min(window.innerWidth, window.innerHeight) < 560;
+  const quality = { bloom: !lowTier, dprCap: lowTier ? 1.75 : 2, dpr: 1 };
+  // Automated runs (screenshots, tests) get a fixed quality so the result
+  // is deterministic; real players get adaptive resolution.
+  const adaptive = !navigator.webdriver;
+  hud.pullKey.textContent = touch ? 'eller håll fingret på skärmen' : 'mellanslag';
 
   const sfx = new Sfx();
   const rand = mulberry(2022);
+  const fxRand = mulberry(99);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  quality.dpr = Math.min(window.devicePixelRatio || 1, quality.dprCap);
+  renderer.setPixelRatio(quality.dpr);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.06;
+  renderer.toneMappingExposure = 0.96;
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // r187: PCFSoftShadowMap is gone; PCF now does hardware comparison over
+  // a 5-tap Vogel disk whose spread is light.shadow.radius (in texels).
+  renderer.shadowMap.type = THREE.PCFShadowMap;
+  // Count every pass of a frame (bloom included), not just the last one
+  renderer.info.autoReset = false;
   canvasHost.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(HAZE, 45, 230);
+  scene.fog = new THREE.Fog(HAZE, 50, 300);
 
-  const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 400);
+  const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 420);
   camera.position.set(0, 1.7, 0);
   scene.add(camera);
 
-  const hemi = new THREE.HemisphereLight(0xcfe2ff, 0x55632c, 0.85);
+  /* Lighting hierarchy: one warm low sun (the only shadow caster), a sky
+     hemisphere, and a cool fill from behind the shooter — the scene is
+     backlit, so without it every face toward the camera would go dead. */
+  const hemi = new THREE.HemisphereLight(0xbfd3ec, 0x5d6431, 0.95);
   scene.add(hemi);
-  const sun = new THREE.DirectionalLight(0xffdda2, 2.0);
-  sun.position.set(-28, 26, -56);
+  const sun = new THREE.DirectionalLight(0xffd1a0, 2.5);
+  sun.target.position.set(0, 0, -8);
+  sun.position.copy(sun.target.position).addScaledVector(LIGHT_DIR, 80);
   sun.castShadow = true;
   // A tight orthographic frustum around the station is what keeps a single
-  // 1024 map crisp — a wide one would smear every contact shadow away.
-  sun.shadow.mapSize.set(1024, 1024);
-  sun.shadow.camera.left = -26;
-  sun.shadow.camera.right = 26;
-  sun.shadow.camera.top = 26;
-  sun.shadow.camera.bottom = -26;
-  sun.shadow.camera.near = 1;
-  sun.shadow.camera.far = 150;
-  sun.shadow.bias = -0.0012;
+  // map crisp — a wide one would smear every contact shadow away.
+  sun.shadow.mapSize.setScalar(lowTier ? 1024 : 2048);
+  Object.assign(sun.shadow.camera, { left: -26, right: 26, top: 26, bottom: -26, near: 1, far: 170 });
+  sun.shadow.bias = -0.0008;
   sun.shadow.normalBias = 0.03;
-  sun.target.position.set(0, 0, -8);
+  sun.shadow.radius = 3;
   scene.add(sun);
   scene.add(sun.target);
-  // Cool fill from the opposite side so shadowed faces are not dead black
-  const fill = new THREE.DirectionalLight(0x9fc0e8, 0.4);
-  fill.position.set(30, 12, 24);
+  const fill = new THREE.DirectionalLight(0xa4bde2, 0.42);
+  fill.position.set(30, 14, 26);
   scene.add(fill);
 
-  /* World */
+  /* ---- World ---------------------------------------------------------- */
+
   const glow = glowTexture();
+  const star = starTexture();
   const sky = buildSky();
   scene.add(sky.dome);
-  const range = buildRange(mulberry(2022));
+  const envRT = bakeEnvironment(renderer, sky);
+  const envMap = envRT.texture;
+  const haze = buildHaze();
+  scene.add(haze.group);
+  scene.add(buildHills());
+  const range = buildRange(mulberry(2022), { envMap });
   scene.add(range.group);
-  const grass = buildGrass(mulberry(8123));
+  const grass = buildGrass(mulberry(8123), { sunDir: SUN_DIR, sunColor: SUN_COLOR });
   scene.add(grass.mesh);
 
-  const gun = buildShotgun(glow);
+  const gun = buildShotgun({ envMap, glow, star });
   gun.group.scale.setScalar(0.55);
-  gun.group.position.set(0.17, -0.31, -0.62);
   camera.add(gun.group);
 
   /* Clay pool: at most two airborne (the double) */
   const clays = [buildClay(), buildClay()].map((mesh) => {
     scene.add(mesh);
-    mesh.visible = false;
-    return { mesh, active: false, vel: new THREE.Vector3(), spin: 0, gold: false, shardT: 0, shardVel: [] };
+    return {
+      mesh, active: false, vel: new THREE.Vector3(), spin: 0, gold: false,
+      box: -1, seen: false, offT: 0, shotAt: false
+    };
   });
+  // The golden dove's glint: a star that rides on it so it reads at 40 m
+  const glintMat = new THREE.SpriteMaterial({
+    map: star, color: 0xffe7a0, transparent: true, opacity: 0,
+    depthWrite: false, blending: THREE.AdditiveBlending, fog: false
+  });
+  const glint = new THREE.Sprite(glintMat);
+  glint.scale.setScalar(1.6);
+  scene.add(glint);
 
-  /* Dust puff on a break */
-  const puffMat = new THREE.SpriteMaterial({
-    map: glow,
-    color: 0xff9a50,
-    transparent: true,
-    opacity: 0,
-    depthWrite: false
-  });
-  const puff = new THREE.Sprite(puffMat);
-  scene.add(puff);
+  const fogInfo = { color: scene.fog.color, near: scene.fog.near, far: scene.fog.far };
+  const soft = new Particles(420, { fog: fogInfo });
+  const bright = new Particles(260, { additive: true, fog: fogInfo });
+  scene.add(soft.points, bright.points);
+  const shards = new Shards(44);
+  scene.add(shards.mesh);
+  const shot = new ShotCloud(72);
+  scene.add(shot.lines);
+  const ambient = buildAmbient(mulberry(5), { sunDir: SUN_DIR, sunColor: SUN_COLOR });
+  scene.add(ambient.points);
+
+  /* ---- Post: bloom on the sun, the flash and the gold --------------- */
+
+  let composer = null;
+  let bloom = null;
+  function buildComposer() {
+    const rt = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: 4 });
+    composer = new EffectComposer(renderer, rt);
+    composer.addPass(new RenderPass(scene, camera));
+    bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.32, 0.5, 1.25);
+    composer.addPass(bloom);
+    composer.addPass(new OutputPass());
+  }
+  function disposeComposer() {
+    if (!composer) return;
+    composer.passes.forEach((p) => {
+      if (p.dispose) p.dispose();
+    });
+    composer.dispose();
+    composer = null;
+    bloom = null;
+  }
+  if (quality.bloom) buildComposer();
 
   /* ---- State ----------------------------------------------------------- */
 
   const state = {
-    phase: 'idle', // idle | armed | delay | flight | over
+    phase: 'intro', // intro | armed | delay | flight | between | over
     serieNo: 1,
-    duvaNo: 0, // index within the series
+    throwNo: 0, // index of the throw within the series
     score: 0,
     streak: 0,
+    bestStreak: 0,
     shells: 2,
     delayT: 0,
     resolveT: 0,
-    serieHits: 0,
     isDouble: false,
     isGold: false,
-    card: [], // per series: array of true/false
-    goldDone: false,
-    lastToast: 0
+    card: SERIES.map(() => new Array(8).fill(null)),
+    gold: null,
+    thrown: 0, // birds resolved so far — Ludvig's pace runs on this
+    passedLudvig: false,
+    stats: { hits: 0, base: 0, bonus: 0, pairs: 0, clean: 0, goldPts: 0 },
+    hintsShown: {},
+    missKinds: {},
+    firstPull: true
   };
 
-  let high = 0;
-  try {
-    high = parseInt(localStorage.getItem(HIGHSCORE_KEY) || '0', 10) || 0;
-  } catch (e) {
-    high = 0;
-  }
-  const fmt = (n) => Math.round(n).toLocaleString('sv-SE');
-  hud.hi.textContent = fmt(high);
-
+  let best = readBest();
   let helpOpen = false;
-  let hitStop = 0;
-  const shake = { power: 0 };
+  let hitStopT = 0;
+  let slowT = 0;
+  let timeScale = 1;
+  let shakeP = 0;
   let recoil = 0;
-
-  const aim = { x: 0, y: 0.25 }; // NDC
+  let kick = 0;
+  let kickV = 0;
+  let camBlend = 0; // 0 = establishing shot, 1 = at the gun
+  let camTarget = 0;
+  let camSpeed = 0.6;
+  let countUp = null;
+  const pending = []; // shots in flight: { t, records, shotDir, gold }
+  const timers = new Set();
+  const aim = { x: 0, y: 0.12 }; // NDC
+  const swingLog = []; // { t, dir } — the last ~150 ms of aim directions
   let tracking = false;
+  const lead = { t: 0, center: new THREE.Vector3(), clay: new THREE.Vector3(), dots: [], radius: 0 };
+  const follow = { yaw: 0, pitch: 0 };
+  const perf = { ema: 16, slowFor: 0 };
+
+  const tmpV = new THREE.Vector3();
+  const tmpV2 = new THREE.Vector3();
+  const projected = new THREE.Vector3();
+  const raycaster = new THREE.Raycaster();
+  const ndcV = new THREE.Vector2();
+  const view = { w: 1, h: 1, aspect: 1 };
+
+  /* ---- Small helpers --------------------------------------------------- */
+
+  function later(fn, ms) {
+    const id = setTimeout(() => {
+      timers.delete(id);
+      fn();
+    }, ms);
+    timers.add(id);
+    return id;
+  }
 
   function serie() {
     return SERIES[state.serieNo - 1];
   }
 
-  function kick(power, stopMs) {
-    shake.power = Math.max(shake.power, power);
-    hitStop = Math.max(hitStop, stopMs / 1000);
-    if (navigator.vibrate) navigator.vibrate(Math.min(40, power * 22));
-  }
-
   function toast(msg, big = false) {
     hud.toast.textContent = msg;
     hud.toast.className = `pb-toast show${big ? ' big' : ''}`;
-    clearTimeout(state.lastToast);
-    state.lastToast = setTimeout(() => {
+    clearTimeout(state.toastId);
+    state.toastId = later(() => {
       hud.toast.className = 'pb-toast';
-    }, big ? 1600 : 1000);
+    }, big ? 1700 : 1100);
   }
 
-  function callout(txt) {
+  function retrigger(el, cls) {
+    el.classList.remove(cls);
+    void el.offsetWidth;
+    el.classList.add(cls);
+  }
+
+  function callout(txt, cls = '') {
     hud.callout.textContent = txt;
-    hud.callout.classList.remove('show');
-    void hud.callout.offsetWidth;
-    hud.callout.classList.add('show');
+    hud.callout.className = `fg-zone sk-callout ${cls}`;
+    retrigger(hud.callout, 'show');
   }
 
-  const projected = new THREE.Vector3();
+  function setPhase(txt, ms = 2800) {
+    hud.phase.textContent = txt;
+    hud.phase.classList.toggle('show', !!txt);
+    clearTimeout(state.phaseId);
+    if (txt) {
+      state.phaseId = later(() => hud.phase.classList.remove('show'), ms);
+    }
+  }
+
+  function hint(key, txt) {
+    if (state.hintsShown[key]) return;
+    state.hintsShown[key] = true;
+    hud.hint.textContent = txt;
+    retrigger(hud.hint, 'show');
+    clearTimeout(state.hintId);
+    state.hintId = later(() => hud.hint.classList.remove('show'), 4200);
+  }
+
+  function flashScreen(cls) {
+    if (reduceMotion) return;
+    hud.flash.className = `sk-flash ${cls}`;
+    retrigger(hud.flash, 'go');
+  }
+
+  function screenOf(world) {
+    projected.copy(world).project(camera);
+    return {
+      x: (projected.x * 0.5 + 0.5) * view.w,
+      y: (-projected.y * 0.5 + 0.5) * view.h,
+      z: projected.z
+    };
+  }
 
   function popScore(text, world, cls = '') {
-    projected.copy(world).project(camera);
-    if (projected.z > 1) return;
+    const s = screenOf(world);
+    if (s.z > 1) return;
     const el = document.createElement('div');
-    el.className = `fg-pop ${cls}`;
+    el.className = `fg-pop sk-pop ${cls}`;
     el.textContent = text;
-    el.style.left = `${(projected.x * 0.5 + 0.5) * 100}%`;
-    el.style.top = `${(-projected.y * 0.5 + 0.5) * 100}%`;
+    el.style.left = `${Math.min(view.w - 70, Math.max(70, s.x))}px`;
+    el.style.top = `${Math.min(view.h - 40, Math.max(90, s.y - 16))}px`;
     hud.pops.appendChild(el);
-    setTimeout(() => el.remove(), 1100);
+    later(() => el.remove(), 1300);
   }
 
-  function addScore(n, world, label) {
-    state.score += n;
+  /* ---- HUD rendering ---------------------------------------------------- */
+
+  function renderScore() {
     hud.score.textContent = fmt(state.score);
-    hud.score.classList.remove('bump');
-    void hud.score.offsetWidth;
-    hud.score.classList.add('bump');
-    if (world) popScore(label || `+${fmt(n)}`, world);
+    retrigger(hud.score, 'bump');
+    renderGhost();
+  }
+
+  /** Your score against Ludvig's pace: his 3 400 spread over 25 birds. */
+  function renderGhost() {
+    const pace = (state.thrown / 25) * LUDVIG;
+    hud.ghostFill.style.width = `${Math.min(100, (state.score / LUDVIG) * 100)}%`;
+    hud.ghostMark.style.left = `${Math.min(100, (pace / LUDVIG) * 100)}%`;
+    hud.ghost.classList.toggle('ahead', state.score >= pace && state.thrown > 0);
+    hud.ghost.classList.toggle('passed', state.passedLudvig);
+    hud.ghostText.textContent = state.passedLudvig ? 'FÖRBI LUDVIG!' : `LUDVIG ${fmt(LUDVIG)}`;
   }
 
   function renderStreak() {
     hud.streak.textContent = state.streak >= 2 ? `×${state.streak}` : '';
     hud.streak.classList.toggle('hot', state.streak >= 5);
+    if (state.streak >= 2) retrigger(hud.streak, 'bump');
   }
 
   function renderSerie() {
@@ -307,217 +420,304 @@ export async function createShooting(container) {
   }
 
   function renderCard() {
-    let html = '';
-    state.card.forEach((row, si) => {
-      html += `<div class="sk-row${si === state.serieNo - 1 && !state.isGold ? ' now' : ''}">`;
-      row.forEach((v) => {
-        html += `<i class="${v === true ? 'hit' : v === false ? 'miss' : ''}"></i>`;
-      });
-      html += '</div>';
-    });
-    hud.card.innerHTML = html;
+    hud.card.innerHTML = cardHtml(state.card, state.gold, { current: state.isGold ? 3 : state.serieNo - 1 });
   }
 
   function renderShells() {
     const dots = hud.shells.querySelectorAll('i');
+    dots[1].style.display = state.isGold ? 'none' : '';
     dots.forEach((d, i) => d.classList.toggle('spent', i >= state.shells));
+  }
+
+  function renderPull() {
+    hud.pull.classList.toggle('ready', state.phase === 'armed');
+    hud.pull.classList.toggle('wait', state.phase === 'delay');
+    hud.pull.disabled = state.phase !== 'armed';
+  }
+
+  function showStartPanel() {
+    hud.panel.innerHTML = startPanelHtml({ best, ludvig: LUDVIG, medals: MEDALS, touch });
+    hud.panel.className = 'pb-panel sk-panel start';
+    hud.overlay.classList.add('show');
+  }
+
+  /* ---- Aim -------------------------------------------------------------- */
+
+  /** World-space direction of the aim ray through the current camera. */
+  function aimDir(out) {
+    raycaster.setFromCamera(ndcV.set(aim.x, aim.y), camera);
+    return out.copy(raycaster.ray.direction);
+  }
+
+  function resetSwing() {
+    swingLog.length = 0;
+  }
+
+  /**
+   * Angular velocity of the swing (axis × rad/s), from the aim direction
+   * ~70 ms ago to now. Measured on the aim, not the finger, so it is the
+   * gun's swing whatever the screen size.
+   */
+  function swingVelocity(now, out) {
+    out.set(0, 0, 0);
+    if (swingLog.length < 2) return out;
+    const head = swingLog[swingLog.length - 1];
+    let old = null;
+    for (let i = swingLog.length - 2; i >= 0; i--) {
+      if (head.t - swingLog[i].t >= 0.07) {
+        old = swingLog[i];
+        break;
+      }
+      old = swingLog[i];
+    }
+    const dt = head.t - old.t;
+    if (dt < 0.025 || now - head.t > 0.1) return out;
+    const ang = old.dir.angleTo(head.dir);
+    if (ang < 1e-5) return out;
+    out.crossVectors(old.dir, head.dir).normalize().multiplyScalar(Math.min(MAX_SWING, ang / dt));
+    return out;
   }
 
   /* ---- Flow ------------------------------------------------------------ */
 
-  function totalDuvorIn(s) {
-    return s.singles + s.doubles;
-  }
-
   function startGame() {
     sfx.resume();
-    state.score = 0;
-    state.serieNo = 1;
-    state.duvaNo = 0;
-    state.streak = 0;
-    state.goldDone = false;
-    state.isGold = false;
-    state.card = SERIES.map((s) => new Array(totalDuvorIn(s)).fill(null));
+    Object.assign(state, {
+      phase: 'between', serieNo: 1, throwNo: 0, score: 0, streak: 0, bestStreak: 0,
+      isGold: false, isDouble: false, gold: null, thrown: 0, passedLudvig: false,
+      card: SERIES.map(() => new Array(8).fill(null)),
+      stats: { hits: 0, base: 0, bonus: 0, pairs: 0, clean: 0, goldPts: 0 },
+      hintsShown: {}, missKinds: {}
+    });
+    clays.forEach((c) => {
+      c.active = false;
+      c.mesh.visible = false;
+    });
+    pending.length = 0;
+    countUp = null;
     hud.score.textContent = '0';
-    hud.scoreline.hidden = true;
-    hud.verdict.hidden = true;
-    hud.steps.hidden = false;
+    renderGhost();
+    renderStreak();
     hud.overlay.classList.remove('show');
-    hud.tools.hidden = false;
-    hud.card.classList.add('show');
-    startSerie();
+    // Into the gun: the camera flies from the vista to the shoulder
+    camTarget = 1;
+    camSpeed = 0.62;
+    later(() => sfx.reload(), 900);
+    later(startSerie, 1500);
   }
 
   function startSerie() {
-    state.duvaNo = 0;
-    state.serieHits = 0;
+    state.throwNo = 0;
+    state.isGold = false;
     renderSerie();
     renderCard();
-    setPhase(serie().brief);
+    callout(`SERIE ${state.serieNo}`);
+    setPhase(serie().brief, 3200);
     armPull();
-  }
-
-  function setPhase(txt) {
-    hud.phase.textContent = txt;
-    hud.phase.classList.toggle('show', !!txt);
-    if (txt) setTimeout(() => hud.phase.classList.remove('show'), 2800);
   }
 
   function armPull() {
     state.phase = 'armed';
-    hud.pull.disabled = false;
+    state.shells = state.isGold ? 1 : 2;
+    renderShells();
+    renderPull();
+    if (state.firstPull) hint('pull', touch ? 'Tryck PULL — eller håll fingret på skärmen' : 'Klicka eller tryck mellanslag för PULL');
   }
 
   function callPull() {
     if (state.phase !== 'armed' || helpOpen) return;
     state.phase = 'delay';
-    hud.pull.disabled = true;
     state.delayT = 0.2 + rand() * 1.6; // the Olympic skeet random delay
     sfx.pull();
+    renderPull();
+  }
+
+  /** Visible half-width (m) of the FIRST-PERSON frame at a given depth. */
+  function halfWidthAt(depth) {
+    return Math.tan(THREE.MathUtils.degToRad(fpFov() / 2)) * view.aspect * depth;
+  }
+
+  function launchOne(clay, side, box) {
+    const s = serie();
+    clay.active = true;
+    clay.gold = state.isGold;
+    clay.box = box;
+    clay.seen = false;
+    clay.offT = 0;
+    clay.shotAt = false;
+    const m = clay.mesh;
+    m.visible = true;
+    m.scale.setScalar(state.isGold ? 0.62 : 1);
+    m.rotation.set(0, 0, 0);
+    m.material.color.copy(state.isGold ? GOLD : ORANGE);
+    m.material.emissive.set(state.isGold ? 0x5a3c00 : 0x6b2400);
+
+    const speed = s.speed * (state.isGold ? 1.5 : 1) * (0.92 + rand() * 0.16);
+    if (s.crossers && (side !== 0 || rand() < 0.6)) {
+      // Crosser from the field edge. Launch it from just outside the
+      // frame and scale its pace to the frame, so a phone in portrait
+      // sees the same crossing a desktop does — not a clay that lands
+      // before it ever comes into view.
+      const dir = side !== 0 ? side : rand() < 0.5 ? -1 : 1;
+      const depth = 30 + rand() * 12;
+      const halfW = halfWidthAt(depth);
+      m.position.set(-dir * (halfW + 1.5), 2 + rand() * 3, -depth);
+      clay.vel.set(dir * halfW * (0.42 + rand() * 0.14) * speed, (7.5 + rand() * 2.5) * speed, -2 * speed);
+    } else {
+      // Away and rising, straight from the trap house
+      const k = Math.min(1, Math.max(0.45, halfWidthAt(30) / 22));
+      m.position.set(0, 1.1, -16.3);
+      clay.vel.set((rand() - 0.5) * 9 * speed * k, (9 + rand() * 3) * speed, (-11 - rand() * 4) * speed);
+      // Dust kicked out of the trap house slot
+      for (let i = 0; i < 8; i++) {
+        soft.spawn({
+          pos: tmpV.set((rand() - 0.5) * 1.6, 0.8, -15.6),
+          vel: tmpV2.set((rand() - 0.5) * 1.5, 0.4 + rand(), 1 + rand()),
+          life: 1.2 + rand(), size: 0.4, size1: 1.3, color: new THREE.Color(0x7d6a4c),
+          alpha: 0.28, drag: 1.6, wind: 0.6
+        });
+      }
+    }
+    clay.spin = 5 + rand() * 4;
   }
 
   function launch() {
     const s = serie();
-    state.isDouble = !state.isGold && state.duvaNo >= s.singles;
-    state.shells = state.isGold ? 1 : 2;
-    renderShells();
+    state.isDouble = !state.isGold && state.throwNo >= s.singles;
     state.phase = 'flight';
+    state.resolveT = 0;
+    renderPull();
     sfx.thwock();
-
-    const launchOne = (clay, side) => {
-      clay.active = true;
-      clay.gold = state.isGold;
-      const m = clay.mesh;
-      m.visible = true;
-      m.scale.setScalar(state.isGold ? 0.62 : 1);
-      m.rotation.set(0, 0, 0);
-      m.children.forEach((c) => {
-        // A previous KROSS hid the dome and rim — bring the body back,
-        // park the shards. Without this every clay after a hit flew
-        // invisible and the round silently died.
-        if (m.userData.shards.includes(c)) {
-          c.visible = false;
-          return;
-        }
-        c.visible = true;
-        if (c.material && c.material.color) {
-          c.material.color.set(state.isGold ? 0xf2c14e : 0xff6a1c);
-          c.material.emissive.set(state.isGold ? 0x4a3200 : 0x511a00);
-        }
-      });
-      clay.shardT = 0;
-
-      const speed = s.speed * (state.isGold ? 1.5 : 1) * (0.92 + rand() * 0.16);
-      if (s.crossers && (side !== 0 || rand() < 0.6)) {
-        // Crosser from the field edge
-        const dir = side !== 0 ? side : rand() < 0.5 ? -1 : 1;
-        m.position.set(-dir * 26, 2 + rand() * 3, -30 - rand() * 12);
-        clay.vel.set(dir * (10 + rand() * 4) * speed, (7.5 + rand() * 2.5) * speed, -2 * speed);
-      } else {
-        // Away and rising, straight from the trap house
-        m.position.set(0, 1.1, -16.5);
-        clay.vel.set((rand() - 0.5) * 9 * speed, (9 + rand() * 3) * speed, (-11 - rand() * 4) * speed);
-      }
-      clay.spin = 5 + rand() * 4;
-    };
-
-    launchOne(clays[0], state.isDouble ? -1 : 0);
-    if (state.isDouble) launchOne(clays[1], 1);
+    const box = state.isDouble ? s.singles + (state.throwNo - s.singles) * 2 : state.throwNo;
+    launchOne(clays[0], state.isDouble ? -1 : 0, box);
+    if (state.isDouble) launchOne(clays[1], 1, box + 1);
     else clays[1].active = false;
+    if (state.firstPull) {
+      state.firstPull = false;
+      hint('aim', touch ? 'Följ duvan med fingret — släpp för att skjuta' : 'Följ duvan med musen — klicka för att skjuta');
+    }
   }
 
   function airborne() {
     return clays.filter((c) => c.active);
   }
 
-  function resolveDuva() {
-    // Called when no clays remain airborne (all smashed or escaped)
-    const s = serie();
-    if (state.isGold) {
-      state.goldDone = true;
-      gameOver();
-      return;
-    }
-    state.duvaNo++;
-    renderCard();
-    if (state.duvaNo >= totalDuvorIn(s)) {
-      if (state.serieHits === totalDuvorIn(s) + s.doubles) {
-        // (doubles count two birds — a clean card is handled below instead)
-      }
-      const clean = state.card[state.serieNo - 1].every((v) => v === true);
-      if (clean) {
-        addScore(500);
-        toast('FELFRI SERIE! +500', true);
-        sfx.cheer();
-      }
-      if (state.serieNo >= 3) {
-        startGold();
-        return;
-      }
-      state.serieNo++;
-      startSerie();
-      return;
-    }
-    armPull();
-  }
-
-  function startGold() {
-    state.isGold = true;
-    renderSerie();
-    setPhase('GULDDUVAN — liten, snabb, 500 poäng. En patron.');
-    callout('GULDDUVAN');
-    sfx.goldFanfare();
-    armPull();
-  }
-
-  function markCard(hit) {
-    const row = state.card[state.serieNo - 1];
-    if (!state.isGold && row && state.duvaNo < row.length) {
-      // For doubles the duva is marked hit only if BOTH birds broke;
-      // we mark optimistically on first break and clear on any escape.
-      if (row[state.duvaNo] === null) row[state.duvaNo] = hit;
-      else if (hit === false) row[state.duvaNo] = false;
-      else row[state.duvaNo] = row[state.duvaNo] && hit;
-    }
+  function markBox(clay, hit) {
+    if (clay.gold) state.gold = hit;
+    else state.card[state.serieNo - 1][clay.box] = hit;
     renderCard();
   }
 
-  function smash(clay, world) {
-    clay.active = false;
+  /** Scoring for one broken bird — shared by real hits and the test sim. */
+  function scoreBird(gold) {
     state.streak++;
-    state.serieHits++;
-    const base = clay.gold ? 500 : 100;
+    state.bestStreak = Math.max(state.bestStreak, state.streak);
+    state.stats.hits++;
+    const base = gold ? 500 : 100;
     const bonus = Math.min(12, state.streak - 1) * 25;
-    addScore(base + bonus, world, clay.gold ? 'GULDDUVAN +500' : `KROSS +${fmt(base + bonus)}`);
-    sfx.shatter(true);
-    sfx.streak(state.streak);
-    renderStreak();
-    kick(clay.gold ? 1.8 : 1.0, clay.gold ? 110 : 60);
-    markCard(true);
+    state.stats.base += gold ? 0 : base;
+    state.stats.bonus += bonus;
+    if (gold) state.stats.goldPts = base;
+    state.score += base + bonus;
+    return base + bonus;
+  }
 
-    /* The break: hide the dome, fling the shards */
+  function checkLudvig() {
+    if (state.passedLudvig || state.score <= LUDVIG) return;
+    state.passedLudvig = true;
+    later(() => {
+      toast('Förbi Ludvigs 3 400!', true);
+      sfx.ludvig();
+    }, 450);
+  }
+
+  function smash(clay) {
+    clay.active = false;
     const m = clay.mesh;
-    m.children.forEach((c) => {
-      if (!m.userData.shards.includes(c)) c.visible = false;
-    });
-    clay.shardT = 0.9;
-    clay.shardVel = m.userData.shards.map(() => new THREE.Vector3(
-      (rand() - 0.5) * 7, 2 + rand() * 5, (rand() - 0.5) * 7
-    ));
-    m.userData.shards.forEach((sh) => {
-      sh.visible = true;
-      sh.position.set(0, 0, 0);
-      sh.rotation.set(rand() * 3, rand() * 3, rand() * 3);
-    });
-    puff.position.copy(world);
-    puffMat.opacity = 0.85;
-    puff.scale.setScalar(1.2);
+    m.visible = false;
+    const at = m.position.clone();
+    const pts = scoreBird(clay.gold);
+    markBox(clay, true);
+    renderScore();
+    renderStreak();
+    popScore(clay.gold ? `GULDDUVAN +${fmt(pts)}` : `KROSS +${fmt(pts)}`, at, clay.gold ? 'gold' : '');
+    sfx.shatter(clay.gold);
+    sfx.streak(state.streak);
+    // Hit-stop: a few frames of near-freeze sell the impact more than any
+    // particle count. Longer for the gold.
+    hitStopT = Math.max(hitStopT, clay.gold ? 0.12 : 0.065);
+    shakeP = Math.max(shakeP, clay.gold ? 1.2 : 0.55);
+    if (navigator.vibrate) navigator.vibrate(clay.gold ? 60 : 25);
+    breakFx(clay, at);
+    if (clay.gold) {
+      flashScreen('gold');
+      callout('GULDDUVAN!', 'gold');
+      range.crowd.forEach((p) => {
+        p.userData.cheer = 3;
+      });
+      later(() => sfx.cheer(1.4), 250);
+    }
+
+    if (state.streak > 0 && state.streak % 5 === 0) {
+      later(() => {
+        callout(`${state.streak} I RAD!`, 'streak');
+        sfx.milestone(state.streak);
+        range.crowd.forEach((p) => {
+          p.userData.cheer = 2;
+        });
+        flashScreen('streak');
+      }, 260);
+    }
 
     if (state.isDouble && airborne().length === 0) {
-      const bothHit = state.card[state.serieNo - 1][state.duvaNo] === true;
-      if (bothHit) {
-        addScore(200, world, 'DUBBLÉ +200');
-        sfx.cheer();
+      const row = state.card[state.serieNo - 1];
+      const a = clay.box - ((clay.box - serie().singles) % 2);
+      if (row[a] === true && row[a + 1] === true) {
+        state.score += 200;
+        state.stats.pairs++;
+        renderScore();
+        later(() => popScore('DUBBLÉ +200', at, 'pair'), 380);
+        later(() => sfx.cheer(0.7), 300);
+      }
+    }
+    checkLudvig();
+  }
+
+  /** Dust, chips, the 3D shards and a hot core — the money shot. */
+  function breakFx(clay, at) {
+    const color = clay.gold ? GOLD : ORANGE;
+    shards.burst(at, clay.vel, color, clay.gold ? 16 : 13, fxRand, clay.gold ? 1.3 : 1);
+    const dust = clay.gold ? new THREE.Color(0xe8c46a) : new THREE.Color(0xd9773a);
+    for (let i = 0; i < 26; i++) {
+      const a = fxRand() * Math.PI * 2;
+      const e = (fxRand() - 0.3) * 1.6;
+      const sp = 1.5 + fxRand() * 4.5;
+      soft.spawn({
+        pos: at,
+        vel: tmpV.set(Math.cos(a) * sp, e * sp * 0.6, Math.sin(a) * sp).addScaledVector(clay.vel, 0.35),
+        life: 1.1 + fxRand() * 1.3, size: 0.35, size1: 1.6 + fxRand() * 1.4,
+        color: dust.clone().offsetHSL(0, -0.1, (fxRand() - 0.5) * 0.15), alpha: 0.62, drag: 2.4, grav: -0.15, wind: 1
+      });
+    }
+    // Fine grit: small, fast, falls
+    for (let i = 0; i < 26; i++) {
+      soft.spawn({
+        pos: at,
+        vel: tmpV.set(fxRand() - 0.5, fxRand() * 0.8, fxRand() - 0.5).multiplyScalar(14).addScaledVector(clay.vel, 0.5),
+        life: 0.8 + fxRand() * 0.6, size: 0.09, size1: 0.07, color: new THREE.Color(0x3a2418),
+        alpha: 0.9, drag: 1.2, grav: 9.8
+      });
+    }
+    // The hot core — a bloom-bright pop for a frame or two
+    bright.spawn({ pos: at, life: 0.16, size: 2.6, size1: 4.2, color: new THREE.Color(3.2, 2.2, 1.3), alpha: 1 });
+    if (clay.gold) {
+      for (let i = 0; i < 70; i++) {
+        bright.spawn({
+          pos: at,
+          vel: tmpV.set(fxRand() - 0.5, fxRand() - 0.2, fxRand() - 0.5).normalize().multiplyScalar(2 + fxRand() * 9),
+          life: 1.6 + fxRand() * 1.6, size: 0.22, size1: 0.08,
+          color: new THREE.Color(2.4, 1.7, 0.6), alpha: 1, drag: 1.4, grav: 1.6, wind: 0.6
+        });
       }
     }
   }
@@ -525,19 +725,94 @@ export async function createShooting(container) {
   function escape(clay) {
     clay.active = false;
     clay.mesh.visible = false;
-    markCard(false);
+    markBox(clay, false);
+    if (clay.gold) toast('Guldduvan flög vidare …');
+    else if (!clay.shotAt) toast('Den kom undan');
+    if (state.streak >= 2) later(() => toast('Streaken bruten'), 600);
     state.streak = 0;
     renderStreak();
   }
 
-  function missShot() {
+  /** A shot that broke nothing: reset the streak and teach the lead. */
+  function missShot(rec) {
     sfx.miss();
     if (state.streak >= 2) toast('Bom — streaken bruten');
     state.streak = 0;
     renderStreak();
+    if (rec) showLead(rec);
+  }
+
+  function endSeries() {
+    const row = state.card[state.serieNo - 1];
+    const hits = row.filter((v) => v === true).length;
+    const clean = hits === row.length;
+    if (clean) {
+      state.score += 500;
+      state.stats.clean++;
+      renderScore();
+      checkLudvig();
+      sfx.cheer(1);
+      range.crowd.forEach((p) => {
+        p.userData.cheer = 2.5;
+      });
+    }
+    hud.serieCard.innerHTML = `
+      <small>Serie ${state.serieNo} klar</small>
+      <b>${hits} <span>av ${row.length}</span></b>
+      ${cardHtml([row], null, { singles: [serie().singles], noGold: true })}
+      ${clean ? '<em>Felfri serie +500</em>' : `<em class="dim">${hits >= 6 ? 'Fint skjutet' : 'Nästa serie, ny chans'}</em>`}`;
+    retrigger(hud.serieCard, 'show');
+    later(() => hud.serieCard.classList.remove('show'), 2400);
+  }
+
+  function resolveThrow() {
+    // Called when no clays remain airborne (all smashed or escaped)
+    state.thrown += state.isDouble ? 2 : 1;
+    renderGhost();
+    if (state.isGold) {
+      gameOver();
+      return;
+    }
+    state.throwNo++;
+    const s = serie();
+    if (state.throwNo >= s.singles + s.doubles) {
+      state.phase = 'between';
+      renderPull();
+      endSeries();
+      if (state.serieNo >= 3) {
+        later(startGold, 2700);
+      } else {
+        later(() => {
+          state.serieNo++;
+          startSerie();
+        }, 2700);
+      }
+      return;
+    }
+    later(() => sfx.reload(), 120);
+    armPull();
+  }
+
+  function startGold() {
+    state.isGold = true;
+    renderSerie();
+    renderCard();
+    callout('GULDDUVAN', 'gold');
+    setPhase('Liten, snabb, 500 poäng. En enda patron.', 3200);
+    sfx.goldFanfare();
+    later(armPull, 900);
   }
 
   /* ---- Shooting -------------------------------------------------------- */
+
+  const swingTmp = new THREE.Vector3();
+  const swingAxis = new THREE.Vector3();
+
+  function predictClay(clay, t, out) {
+    out.copy(clay.mesh.position).addScaledVector(clay.vel, t);
+    out.y -= 0.5 * GRAVITY * t * t;
+    return out;
+  }
 
   function fire() {
     if (state.phase !== 'flight' || state.shells <= 0 || helpOpen) return;
@@ -545,29 +820,167 @@ export async function createShooting(container) {
     renderShells();
     sfx.boom();
     recoil = 1;
-    kick(0.7, 0);
+    kickV += reduceMotion ? 0.12 : 0.6;
+    shakeP = Math.max(shakeP, 0.35);
     gun.flashMat.opacity = 1;
-    gun.smokeMat.opacity = 0.5;
-    gun.smoke.scale.setScalar(0.25);
+    gun.starMat.opacity = 1;
+    gun.starMat.rotation = rand() * Math.PI;
+    gun.light.intensity = 26;
+    if (navigator.vibrate) navigator.vibrate(18);
 
-    // Screen-space pattern test against every airborne clay
-    let hitAny = false;
-    airborne().forEach((clay) => {
-      projected.copy(clay.mesh.position).project(camera);
-      const dist = Math.hypot(projected.x - aim.x, (projected.y - aim.y) * 1.4);
-      const radius = 0.085 + (clay.gold ? -0.012 : 0.015);
-      if (projected.z < 1 && dist < radius) {
-        hitAny = true;
-        smash(clay, clay.mesh.position.clone());
-      }
+    const origin = camera.getWorldPosition(new THREE.Vector3());
+    const dir = aimDir(new THREE.Vector3());
+    const swing = swingVelocity(performance.now() / 1000, swingTmp);
+    const rate = swing.length();
+    if (rate > 0) swingAxis.copy(swing).divideScalar(rate);
+
+    // Evaluate every airborne clay at the moment the pattern reaches it
+    const records = airborne().map((clay) => {
+      clay.shotAt = true;
+      const at = new THREE.Vector3();
+      let tof = clay.mesh.position.distanceTo(origin) / SHOT_SPEED;
+      for (let k = 0; k < 2; k++) tof = predictClay(clay, tof, at).distanceTo(origin) / SHOT_SPEED;
+      const shotDir = dir.clone();
+      if (rate > 0) shotDir.applyAxisAngle(swingAxis, rate * tof);
+      const dist = at.distanceTo(origin);
+      const ang = shotDir.angleTo(tmpV.copy(at).sub(origin));
+      const r = (clay.gold ? PATTERN_GOLD : PATTERN) + Math.atan((CLAY_R * clay.mesh.scale.x) / dist);
+      return { clay, at, tof, shotDir, dist, ang, r, origin, hit: ang < r };
     });
-    if (!hitAny) missShot();
+    const nearest = records.slice().sort((a, b) => a.ang / a.r - b.ang / b.r)[0];
+    const shotDir = nearest ? nearest.shotDir : dir;
+    const tof = nearest ? nearest.tof : 0.09;
+    const muzzle = gun.muzzle.getWorldPosition(new THREE.Vector3());
+    shot.fire(muzzle, shotDir, PATTERN * 0.55, nearest ? nearest.dist : 40, fxRand);
+    pending.push({ t: tof, records });
 
-    if (state.shells <= 0) {
-      // Any birds still flying will escape on their own; nothing to do here
-    } else {
-      setTimeout(() => sfx.reload(), 260);
+    // Smoke from the muzzle, drifting off on the breeze
+    for (let i = 0; i < 9; i++) {
+      soft.spawn({
+        pos: muzzle,
+        vel: tmpV.copy(shotDir).multiplyScalar(2 + fxRand() * 5).add(tmpV2.set(fxRand() - 0.5, fxRand() * 0.6, fxRand() - 0.5)),
+        life: 1.4 + fxRand() * 1.4, size: 0.12, size1: 0.9 + fxRand() * 0.8,
+        color: new THREE.Color(0xd9d4ca), alpha: 0.26, drag: 2.6, grav: -0.25, wind: 1
+      });
     }
+
+    // The golden dove gets bullet time: the world slows while the shot flies
+    if (records.some((r) => r.clay.gold)) {
+      slowT = 1.25;
+      sfx.slowmo();
+      flashScreen('slow');
+    }
+    if (state.shells > 0) later(() => sfx.reload(), 300);
+  }
+
+  /** Shots land once their time of flight has elapsed (in game time). */
+  function resolveShots(dt) {
+    for (let i = pending.length - 1; i >= 0; i--) {
+      const p = pending[i];
+      p.t -= dt;
+      if (p.t > 0) continue;
+      pending.splice(i, 1);
+      const live = p.records.filter((r) => r.clay.active);
+      const hits = live.filter((r) => r.hit);
+      if (hits.length) {
+        hits.forEach((r) => smash(r.clay));
+      } else if (live.length) {
+        missShot(live.slice().sort((a, b) => a.ang / a.r - b.ang / b.r)[0]);
+      }
+      // (a shot into an empty sky, or after the bird already broke, costs nothing)
+    }
+  }
+
+  /* ---- Lead feedback ---------------------------------------------------- */
+
+  /**
+   * Where the pattern went vs where the bird was when it got there, drawn
+   * in the HUD at the bird's range: a dashed ring of pellet dots, the
+   * ghost of the clay, a line between, and a word a coach would use.
+   */
+  function showLead(rec) {
+    lead.center.copy(rec.origin).addScaledVector(rec.shotDir, rec.dist);
+    lead.clay.copy(rec.at);
+    lead.radius = Math.tan(rec.clay.gold ? PATTERN_GOLD : PATTERN) * rec.dist;
+    lead.t = 1.9;
+    const side = new THREE.Vector3().crossVectors(rec.shotDir, THREE.Object3D.DEFAULT_UP).normalize();
+    const up = new THREE.Vector3().crossVectors(side, rec.shotDir).normalize();
+    lead.dots = [];
+    let svg = '';
+    for (let i = 0; i < 26; i++) {
+      const r = Math.min(1.25, Math.sqrt(-2 * Math.log(Math.max(1e-6, fxRand()))) * 0.5) * lead.radius;
+      const a = fxRand() * Math.PI * 2;
+      lead.dots.push(lead.center.clone().addScaledVector(side, Math.cos(a) * r).addScaledVector(up, Math.sin(a) * r));
+      svg += '<circle r="1.8"></circle>';
+    }
+    hud.leadDots.innerHTML = svg;
+
+    // Classify against the bird's own direction of travel ON SCREEN
+    const sc = screenOf(rec.at);
+    const sp = screenOf(lead.center);
+    const vel = predictClay(rec.clay, rec.tof + 0.15, tmpV2);
+    const sv = screenOf(vel);
+    let vx = sv.x - sc.x;
+    let vy = sv.y - sc.y;
+    const vl = Math.hypot(vx, vy) || 1;
+    vx /= vl;
+    vy /= vl;
+    const dx = sp.x - sc.x;
+    const dy = sp.y - sc.y;
+    const along = dx * vx + dy * vy;
+    const across = Math.abs(-dx * vy + dy * vx);
+    let kind;
+    if (Math.abs(along) >= across) kind = along < 0 ? 'BAKOM' : 'FÖRE';
+    else kind = dy < 0 ? 'ÖVER' : 'UNDER';
+    const miss = Math.max(0, lead.center.distanceTo(rec.at) - lead.radius * 0.5);
+    const meters = miss.toLocaleString('sv-SE', { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+    hud.leadLabel.innerHTML = `<b>${kind}</b> ${meters} m`;
+    hud.lead.classList.add('show');
+    hud.leadLabel.classList.add('show');
+    updateLead();
+
+    state.missKinds[kind] = (state.missKinds[kind] || 0) + 1;
+    if (state.missKinds[kind] >= 2) {
+      const tips = {
+        BAKOM: 'Bakom igen — duvan hinner flytta sig medan haglen flyger. Håll svingen igång när du skjuter.',
+        FÖRE: 'Lite för långt före — lugnare sving, släpp när kornet ligger på duvan.',
+        ÖVER: 'Över — duvan faller när den tappar fart. Sikta på den, inte på banan den hade.',
+        UNDER: 'Under — en stigande duva drar ifrån uppåt. Följ med i stigningen.'
+      };
+      hint(`lead-${kind}`, tips[kind]);
+    }
+  }
+
+  function updateLead() {
+    if (lead.t <= 0) return;
+    const c = screenOf(lead.center);
+    const k = screenOf(lead.clay);
+    const edge = screenOf(tmpV.copy(lead.center).addScaledVector(camera.up, lead.radius));
+    const r = Math.max(6, Math.hypot(edge.x - c.x, edge.y - c.y));
+    hud.leadRing.setAttribute('cx', c.x);
+    hud.leadRing.setAttribute('cy', c.y);
+    hud.leadRing.setAttribute('r', r);
+    hud.leadClay.setAttribute('cx', k.x);
+    hud.leadClay.setAttribute('cy', k.y);
+    hud.leadClay.setAttribute('r', Math.max(5, r * 0.32));
+    hud.leadLine.setAttribute('x1', c.x);
+    hud.leadLine.setAttribute('y1', c.y);
+    hud.leadLine.setAttribute('x2', k.x);
+    hud.leadLine.setAttribute('y2', k.y);
+    const dots = hud.leadDots.children;
+    lead.dots.forEach((d, i) => {
+      const s = screenOf(d);
+      dots[i].setAttribute('cx', s.x);
+      dots[i].setAttribute('cy', s.y);
+    });
+    hud.leadLabel.style.left = `${Math.min(view.w - 80, Math.max(80, k.x))}px`;
+    hud.leadLabel.style.top = `${Math.max(70, Math.min(k.y, c.y) - r - 26)}px`;
+  }
+
+  function hideLead() {
+    lead.t = 0;
+    hud.lead.classList.remove('show');
+    hud.leadLabel.classList.remove('show');
   }
 
   /* ---- Input ----------------------------------------------------------- */
@@ -580,13 +993,20 @@ export async function createShooting(container) {
     };
   }
 
+  const UI = '.pb-overlay, .pb-mute, .pb-info, .pb-help, .sk-pull';
+
   function onPointerDown(e) {
     sfx.resume();
-    if (helpOpen || e.target.closest('.pb-overlay, .pb-mute, .pb-info, .pb-help, .cl-tool')) return;
+    if (helpOpen || e.target.closest(UI) || camBlend < 0.9) return;
     const p = pointerNdc(e);
+    // A touch teleports the aim; its jump must not count as swing speed
+    if (e.pointerType !== 'mouse' || Math.hypot(p.x - aim.x, p.y - aim.y) > 0.05) resetSwing();
     aim.x = p.x;
     aim.y = p.y;
     tracking = true;
+    // Tap-to-pull: press, keep the finger down, track, release to fire —
+    // the whole call-and-shoot in one gesture.
+    if (state.phase === 'armed') callPull();
   }
 
   function onPointerMove(e) {
@@ -599,8 +1019,12 @@ export async function createShooting(container) {
   function onPointerUp(e) {
     if (!tracking) return;
     tracking = false;
-    if (e.target.closest('.pb-overlay, .pb-mute, .pb-info, .pb-help, .cl-tool')) return;
+    if (e.target.closest && e.target.closest(UI)) return;
     fire();
+  }
+
+  function onPointerCancel() {
+    tracking = false;
   }
 
   function onKeyDown(e) {
@@ -609,10 +1033,13 @@ export async function createShooting(container) {
       return;
     }
     if (helpOpen) return;
-    if (e.key === ' ') {
+    if (e.key === ' ' || e.key === 'Enter') {
       e.preventDefault();
-      if (state.phase === 'idle' || state.phase === 'over') startGame();
-      else if (state.phase === 'armed') callPull();
+      if (hud.overlay.classList.contains('show') && (state.phase === 'intro' || state.phase === 'over')) {
+        if (!countUp || countUp.done) startGame();
+      } else if (state.phase === 'armed') {
+        callPull();
+      }
     }
   }
 
@@ -622,65 +1049,196 @@ export async function createShooting(container) {
     if (open) tracking = false;
   }
 
+  function onOverlayClick(e) {
+    const btn = e.target.closest('[data-act="start"]');
+    if (btn) startGame();
+  }
+
+  function onMute() {
+    sfx.muted = !sfx.muted;
+    hud.mute.classList.toggle('off', sfx.muted);
+  }
+
+  function onInfo() {
+    setHelp(!helpOpen);
+  }
+
+  function onHelpClose() {
+    setHelp(false);
+  }
+
   canvasHost.addEventListener('pointerdown', onPointerDown);
   canvasHost.addEventListener('pointermove', onPointerMove);
   window.addEventListener('pointerup', onPointerUp);
+  window.addEventListener('pointercancel', onPointerCancel);
   window.addEventListener('keydown', onKeyDown);
-  hud.start.addEventListener('click', startGame);
+  hud.overlay.addEventListener('click', onOverlayClick);
   hud.pull.addEventListener('click', callPull);
-  hud.info.addEventListener('click', () => setHelp(!helpOpen));
-  hud.helpClose.addEventListener('click', () => setHelp(false));
-  hud.mute.addEventListener('click', () => {
-    sfx.muted = !sfx.muted;
-    hud.mute.classList.toggle('off', sfx.muted);
-  });
+  hud.info.addEventListener('click', onInfo);
+  hud.helpClose.addEventListener('click', onHelpClose);
+  hud.mute.addEventListener('click', onMute);
 
   /* ---- Game over ------------------------------------------------------- */
 
   function gameOver() {
     state.phase = 'over';
-    hud.tools.hidden = true;
-    hud.card.classList.remove('show');
-    const isHigh = state.score > high;
-    if (isHigh) {
-      high = state.score;
-      try {
-        localStorage.setItem(HIGHSCORE_KEY, String(Math.round(high)));
-      } catch (e) {
-        /* private mode */
-      }
-      hud.hi.textContent = fmt(high);
+    renderPull();
+    const tier = medalTier(state.score);
+    const isRecord = state.score > best.score;
+    if (isRecord || tier > best.tier || state.stats.hits > best.hits) {
+      best = {
+        score: Math.max(best.score, state.score),
+        hits: Math.max(best.hits || 0, state.stats.hits),
+        tier: Math.max(best.tier || 0, tier)
+      };
+      writeBest(best);
     }
-    const hits = state.card.flat().filter((v) => v === true).length + (state.goldDone && state.streak > 0 ? 1 : 0);
-    sfx.fanfare();
-    const beatLudvig = state.score > LUDVIG;
-    hud.title.textContent = isHigh ? 'Nytt rekord!' : beatLudvig ? 'Du slog mästaren!' : 'Rundan är slut';
-    hud.text.textContent = beatLudvig
-      ? 'Bättre än Ludvigs guldrunda från 2022. Kaffet smakar segrare.'
-      : `Ludvig sköt ${fmt(LUDVIG)} när det begav sig. Revansch?`;
-    hud.steps.hidden = true;
-    hud.scoreline.hidden = false;
-    hud.scoreline.innerHTML = `<span>${fmt(state.score)}</span><small>poäng · rekord ${fmt(high)}</small>`;
-    hud.verdict.hidden = false;
-    hud.verdict.innerHTML = `<b>Träffade duvor</b><span>${hits} av 25</span>`;
-    hud.start.textContent = 'Ny runda';
-    hud.overlay.classList.add('show');
+    const beat = state.score > LUDVIG;
+    const titles = [
+      'Rundan är slut',
+      'Brons på Arnäsvall',
+      'Silver — nära nu!',
+      'Guld — du slog mästaren!'
+    ];
+    let title = titles[tier];
+    if (state.stats.hits === 25) title = '25 rakt. Perfekt runda!';
+    const result = {
+      tier, title, score: state.score, record: best.score, isRecord,
+      hits: state.stats.hits, base: state.stats.base, bonus: state.stats.bonus,
+      pairs: state.stats.pairs, clean: state.stats.clean,
+      gold: state.gold === true, goldPts: state.stats.goldPts, goldHit: state.gold,
+      bestStreak: state.bestStreak, card: state.card, ludvig: LUDVIG
+    };
+    // Let the last shards fall, then pull back out to the gang
+    later(() => {
+      camTarget = 0;
+      camSpeed = 0.45;
+      range.crowd.forEach((p) => {
+        p.userData.cheer = tier >= 2 || beat ? 6 : tier === 1 ? 3 : 0;
+      });
+      if (tier >= 1) later(() => sfx.cheer(tier >= 3 ? 1.6 : 1), 600);
+    }, 1300);
+    later(() => {
+      hud.panel.innerHTML = endPanelHtml(result);
+      hud.panel.className = `pb-panel sk-panel end tier-${tier}`;
+      hud.overlay.classList.add('show');
+      countUp = { el: hud.panel.querySelector('#sk-total'), from: 0, to: state.score, t: 0, dur: 1.3, done: false };
+      sfx.fanfare(tier);
+    }, 2500);
   }
 
   /* ---- Sizing ---------------------------------------------------------- */
 
+  /**
+   * First-person FOV per aspect. Aim for a ~72° horizontal view (a wide
+   * landscape vista on desktop), but never squeeze the vertical below 46°
+   * on ultra-wide or stretch it past 70° on a tall phone.
+   */
+  function fpFov() {
+    const h = THREE.MathUtils.degToRad(72);
+    const v = 2 * Math.atan(Math.tan(h / 2) / view.aspect);
+    return THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(v), 46, 70);
+  }
+
   function resize() {
     const rect = canvasHost.getBoundingClientRect();
-    const w = Math.max(1, Math.floor(rect.width));
-    const h = Math.max(1, Math.floor(rect.height));
-    renderer.setSize(w, h, false);
-    camera.aspect = w / h;
-    camera.fov = camera.aspect < 0.7 ? 66 : 58;
+    view.w = Math.max(1, Math.floor(rect.width));
+    view.h = Math.max(1, Math.floor(rect.height));
+    view.aspect = view.w / view.h;
+    renderer.setPixelRatio(quality.dpr);
+    renderer.setSize(view.w, view.h, false);
+    if (composer) {
+      composer.setPixelRatio(quality.dpr);
+      composer.setSize(view.w, view.h);
+    }
+    hud.lead.setAttribute('viewBox', `0 0 ${view.w} ${view.h}`);
+    camera.aspect = view.aspect;
     camera.updateProjectionMatrix();
   }
   const ro = new ResizeObserver(resize);
   ro.observe(canvasHost);
   resize();
+
+  /* ---- Camera rig ------------------------------------------------------ */
+
+  const vista = { pos: new THREE.Vector3(), q: new THREE.Quaternion(), fov: 50, ox: 0, oy: 0 };
+  const fp = { pos: new THREE.Vector3(), q: new THREE.Quaternion(), fov: 50 };
+  const lookM = new THREE.Matrix4();
+  const lookAt = new THREE.Vector3();
+  const euler = new THREE.Euler(0, 0, 0, 'YXZ');
+  const applied = { fov: 0, ox: -1, oy: -1, w: 0, h: 0 };
+
+  /**
+   * The establishing shot: behind the gang, up and to the right — their
+   * backs, the station, the trap house, the barn and the low sun in one
+   * frame. On desktop the panel sits right, so the scene is shifted left
+   * with a view offset; on a phone the panel is a bottom sheet, so the
+   * horizon is lifted into the top of the frame instead.
+   */
+  function vistaPose(t) {
+    const portrait = view.aspect < 0.9;
+    const drift = reduceMotion ? 0 : 1;
+    if (portrait) {
+      vista.pos.set(1.6 + Math.sin(t * 0.07) * 0.4 * drift, 2.9, 9.2 + Math.cos(t * 0.05) * 0.3 * drift);
+      lookAt.set(-4.5, 2.0, -40);
+      vista.fov = 64;
+      vista.ox = 0;
+      vista.oy = view.h * 0.2;
+    } else {
+      vista.pos.set(5.6 + Math.sin(t * 0.07) * 0.6 * drift, 3.4 + Math.sin(t * 0.11) * 0.06 * drift,
+        10.6 + Math.cos(t * 0.05) * 0.3 * drift);
+      lookAt.set(-6.5, 2.2, -40);
+      vista.fov = 44;
+      vista.ox = Math.min(view.w * 0.16, 240);
+      vista.oy = 0;
+    }
+    lookM.lookAt(vista.pos, lookAt, THREE.Object3D.DEFAULT_UP);
+    vista.q.setFromRotationMatrix(lookM);
+  }
+
+  function fpPose(t, dt) {
+    // The head follows the gun a little — a few degrees toward the aim —
+    // so swinging feels like swinging, not like moving a cursor.
+    const k = reduceMotion ? 0 : 1;
+    const ky = Math.min(1, dt * 3);
+    follow.yaw += (-aim.x * 0.045 * k - follow.yaw) * ky;
+    follow.pitch += (aim.y * 0.022 * k - follow.pitch) * ky;
+    // Recoil kick: a damped spring on pitch
+    kickV += (-kick * 90 - kickV * 14) * dt;
+    kick += kickV * dt;
+    euler.set(0.035 + follow.pitch + kick * 0.05, follow.yaw, Math.sin(t * 0.4) * 0.004);
+    fp.q.setFromEuler(euler);
+    fp.pos.set(0, 1.7 + Math.sin(t * 1.1) * 0.01, 0);
+    fp.fov = fpFov();
+  }
+
+  function applyCamera(t, dt) {
+    vistaPose(t);
+    fpPose(t, dt);
+    if (camBlend !== camTarget) {
+      const step = dt * camSpeed;
+      camBlend = camTarget > camBlend ? Math.min(camTarget, camBlend + step) : Math.max(camTarget, camBlend - step);
+    }
+    const e = ease(camBlend);
+    camera.position.lerpVectors(vista.pos, fp.pos, e);
+    // Arc over the gang's heads on the way in and out
+    camera.position.y += Math.sin(Math.PI * e) * 1.3;
+    camera.quaternion.slerpQuaternions(vista.q, fp.q, e);
+    if (shakeP > 0.001 && !reduceMotion) {
+      camera.position.x += (rand() - 0.5) * shakeP * 0.03;
+      camera.position.y += (rand() - 0.5) * shakeP * 0.03;
+    }
+    const fov = vista.fov + (fp.fov - vista.fov) * e;
+    const ox = Math.round(vista.ox * (1 - e) * 4) / 4;
+    const oy = Math.round(vista.oy * (1 - e) * 4) / 4;
+    if (fov !== applied.fov || ox !== applied.ox || oy !== applied.oy || view.w !== applied.w || view.h !== applied.h) {
+      Object.assign(applied, { fov, ox, oy, w: view.w, h: view.h });
+      camera.fov = fov;
+      if (ox > 0 || oy > 0) camera.setViewOffset(view.w, view.h, ox, oy, view.w, view.h);
+      else camera.clearViewOffset();
+      camera.updateProjectionMatrix();
+    }
+  }
 
   /* ---- Loop ------------------------------------------------------------ */
 
@@ -688,117 +1246,205 @@ export async function createShooting(container) {
   let last = performance.now();
   let running = true;
   const gunTarget = new THREE.Vector3();
+  const gunBase = new THREE.Vector3();
+  const pointScale = () => (renderer.domElement.height / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)));
+
+  function updateTimeScale(realDt) {
+    let target = 1;
+    if (slowT > 0) {
+      slowT -= realDt;
+      target = 0.2;
+    }
+    if (helpOpen) target = 0;
+    timeScale += (target - timeScale) * Math.min(1, realDt * (target < timeScale ? 16 : 2.4));
+    if (hitStopT > 0) {
+      hitStopT -= realDt;
+      return 0.04;
+    }
+    return timeScale;
+  }
+
+  function updateClays(dt, t) {
+    let anyActive = false;
+    clays.forEach((clay) => {
+      if (!clay.active) return;
+      anyActive = true;
+      const m = clay.mesh;
+      clay.vel.y -= GRAVITY * dt;
+      m.position.addScaledVector(clay.vel, dt);
+      m.rotation.y += clay.spin * dt;
+      m.rotation.z = Math.sin(t * 2) * 0.2;
+      // Off the side of a narrow frame for good: let it go, don't make
+      // the player wait for a bird they can no longer see
+      const s = screenOf(m.position);
+      const inFrame = s.z < 1 && s.x > -20 && s.x < view.w + 20 && s.y > -20 && s.y < view.h + 20;
+      if (inFrame) {
+        clay.seen = true;
+        clay.offT = 0;
+      } else if (clay.seen) {
+        clay.offT += dt;
+      }
+      if (m.position.y < 0.2 || m.position.z < -140 || clay.offT > 0.6) {
+        escape(clay);
+        sfx.miss();
+      }
+    });
+    if (!anyActive && pending.length === 0) {
+      state.resolveT += dt;
+      if (state.resolveT > 0.55) {
+        state.resolveT = 0;
+        resolveThrow();
+      }
+    } else {
+      state.resolveT = 0;
+    }
+  }
+
+  function updateGun(realDt) {
+    recoil = Math.max(0, recoil - realDt * 5.5);
+    gun.flashMat.opacity = Math.max(0, gun.flashMat.opacity - realDt * 16);
+    gun.starMat.opacity = Math.max(0, gun.starMat.opacity - realDt * 22);
+    gun.light.intensity = Math.max(0, gun.light.intensity - realDt * 260);
+    gun.starSprite.scale.setScalar(0.7 + (1 - gun.starMat.opacity) * 0.6);
+    // Placement tracks the frame so the gun sits in the same corner on any aspect
+    const tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+    const raise = smooth(0.55, 1, camBlend);
+    gun.group.visible = raise > 0.01;
+    const portrait = view.aspect < 1;
+    gunBase.set(0.66 * tanV * view.aspect * (portrait ? 0.62 : 0.6), -0.66 * tanV * (portrait ? 0.86 : 0.98), -0.66);
+    gunBase.y -= (1 - raise) * 0.45;
+    gun.group.position.copy(gunBase);
+    gun.group.position.z += recoil * 0.08;
+    // Barrels converge on the aim point 30 m out
+    tmpV.set(aim.x, aim.y, 0.5).unproject(camera).sub(camera.position).normalize();
+    gunTarget.copy(camera.position).addScaledVector(tmpV, 30);
+    gun.group.lookAt(gunTarget);
+    gun.group.rotateY(Math.PI); // barrels run along -z; lookAt aims +z
+    gun.group.rotateX(-recoil * 0.16); // muzzle flips up
+  }
+
+  function updateHud(realDt) {
+    const live = camBlend > 0.97 && state.phase !== 'intro' && state.phase !== 'over';
+    hud.hud.classList.toggle('live', live);
+    canvasHost.classList.toggle('aiming', live && !touch);
+    hud.cross.style.left = `${(aim.x * 0.5 + 0.5) * 100}%`;
+    hud.cross.style.top = `${(-aim.y * 0.5 + 0.5) * 100}%`;
+    hud.cross.classList.toggle('show', live && (state.phase === 'flight' || state.phase === 'delay' || !touch));
+    hud.cross.classList.toggle('hold', tracking);
+    // Arrows at the frame edge for a clay that's coming but not yet in view
+    let left = null;
+    let right = null;
+    clays.forEach((c) => {
+      if (!c.active || c.seen) return;
+      const s = screenOf(c.mesh.position);
+      if (s.x < 0) left = s.y;
+      else if (s.x > view.w) right = s.y;
+    });
+    hud.edgeL.classList.toggle('show', live && left !== null);
+    hud.edgeR.classList.toggle('show', live && right !== null);
+    if (left !== null) hud.edgeL.style.top = `${Math.min(view.h - 60, Math.max(80, left))}px`;
+    if (right !== null) hud.edgeR.style.top = `${Math.min(view.h - 60, Math.max(80, right))}px`;
+    if (lead.t > 0) {
+      lead.t -= realDt;
+      if (lead.t <= 0) hideLead();
+      else updateLead();
+    }
+    if (countUp && !countUp.done && countUp.el) {
+      countUp.t += realDt;
+      const k = Math.min(1, countUp.t / countUp.dur);
+      countUp.el.textContent = fmt(countUp.from + (countUp.to - countUp.from) * (1 - (1 - k) ** 3));
+      if (k >= 1) countUp.done = true;
+    }
+  }
+
+  function updateCrowd(dt, t) {
+    range.crowd.forEach((p) => {
+      const u = p.userData;
+      if (u.cheer > 0) u.cheer -= dt;
+      const up = u.cheer > 0;
+      const geo = up ? u.poses.up : u.poses.down;
+      if (u.arms.geometry !== geo) u.arms.geometry = geo;
+      p.position.y = up ? Math.abs(Math.sin(t * 9 + u.phase)) * 0.12 : 0;
+      p.rotation.z = Math.sin(t * 1.2 + u.phase) * (up ? 0.06 : 0.02);
+    });
+  }
+
+  function updateGlint(t) {
+    const g = clays.find((c) => c.active && c.gold);
+    glintMat.opacity = g ? 0.75 + Math.sin(t * 22) * 0.25 : 0;
+    if (g) {
+      glint.position.copy(g.mesh.position);
+      glintMat.rotation = t * 1.5;
+    }
+  }
+
+  /** Adaptive resolution: if frames run long for a while, shed bloom, then pixels. */
+  function adapt(realDt) {
+    if (!adaptive) return;
+    perf.ema += (realDt * 1000 - perf.ema) * 0.05;
+    if (perf.ema > 30) perf.slowFor += realDt;
+    else perf.slowFor = Math.max(0, perf.slowFor - realDt);
+    if (perf.slowFor < 2.5) return;
+    perf.slowFor = 0;
+    if (composer) {
+      disposeComposer();
+    } else if (quality.dpr > 1) {
+      quality.dpr = Math.max(1, quality.dpr - 0.25);
+      resize();
+    }
+  }
 
   function tick(now) {
     raf = requestAnimationFrame(tick);
-    let dt = clampDt(now - last);
+    const realDt = clampDt(now - last);
     last = now;
     if (!running) return;
     const t = now / 1000;
+    const dt = realDt * updateTimeScale(realDt);
 
-    if (hitStop > 0) {
-      hitStop -= dt;
-      dt *= 0.12;
+    if (state.phase === 'delay' && !helpOpen) {
+      state.delayT -= dt;
+      if (state.delayT <= 0) launch();
+    } else if (state.phase === 'flight') {
+      resolveShots(dt);
+      updateClays(dt, t);
     }
 
-    if (!helpOpen) {
-      if (state.phase === 'delay') {
-        state.delayT -= dt;
-        if (state.delayT <= 0) launch();
-      } else if (state.phase === 'flight') {
-        let anyActive = false;
-        clays.forEach((clay) => {
-          if (!clay.active) return;
-          anyActive = true;
-          const m = clay.mesh;
-          clay.vel.y -= 9.8 * dt;
-          m.position.addScaledVector(clay.vel, dt);
-          m.rotation.y += clay.spin * dt;
-          m.rotation.z = Math.sin(t * 2) * 0.2;
-          if (m.position.y < 0.2 || Math.abs(m.position.x) > 60 || m.position.z < -120) {
-            if (state.streak >= 2) toast('Den kom undan');
-            escape(clay);
-            sfx.miss();
-          }
-        });
-        if (!anyActive) {
-          state.resolveT += dt;
-          if (state.resolveT > 0.5) {
-            state.resolveT = 0;
-            resolveDuva();
-          }
-        } else {
-          state.resolveT = 0;
-        }
-      }
-    }
+    // Swing log in real time: the player's hand doesn't slow down in bullet time
+    const dir = aimDir(new THREE.Vector3());
+    swingLog.push({ t, dir });
+    while (swingLog.length > 2 && t - swingLog[0].t > 0.2) swingLog.shift();
 
-    grass.uniforms.uTime.value = t;
+    applyCamera(t, realDt);
+    shakeP = Math.max(0, shakeP - realDt * 3.5);
 
-    /* Shards tumble on after a break */
-    clays.forEach((clay) => {
-      if (clay.shardT <= 0) return;
-      clay.shardT -= dt;
-      const m = clay.mesh;
-      m.userData.shards.forEach((sh, i) => {
-        if (!sh.visible) return;
-        const v = clay.shardVel[i];
-        v.y -= 12 * dt;
-        sh.position.addScaledVector(v, dt);
-        sh.rotation.x += dt * 9;
-        sh.rotation.z += dt * 7;
-      });
-      if (clay.shardT <= 0) m.visible = false;
-    });
+    grass.uniforms.uTime.value += dt;
+    sky.uniforms.uTime.value = t;
+    haze.uniforms.uTime.value = t;
+    range.flagUniforms.uTime.value += dt;
+    ambient.uniforms.uTime.value += dt;
+    range.swallows.update(dt, ambient.uniforms.uTime.value);
+    sky.dome.position.copy(camera.position);
 
-    puffMat.opacity = Math.max(0, puffMat.opacity - dt * 2.2);
-    puff.scale.addScalar(dt * 6);
+    shards.update(dt);
+    soft.update(dt, WIND);
+    bright.update(dt, WIND);
+    shot.update(dt, SHOT_SPEED);
+    const ps = pointScale();
+    soft.material.uniforms.uScale.value = ps;
+    bright.material.uniforms.uScale.value = ps;
+    ambient.uniforms.uScale.value = ps;
 
-    /* Gun follows the aim; recoil pushes it back into the shoulder */
-    recoil = Math.max(0, recoil - dt * 6);
-    gun.flashMat.opacity = Math.max(0, gun.flashMat.opacity - dt * 14);
-    gun.smokeMat.opacity = Math.max(0, gun.smokeMat.opacity - dt * 1.4);
-    gun.smoke.scale.addScalar(dt * 0.8);
-    gun.smoke.position.y = 0.05 + (0.5 - gun.smokeMat.opacity) * 0.3;
-    gunTarget.set(aim.x * 0.9, aim.y * 0.7 - 0.28, -1.6);
-    gun.group.position.z = -0.62 + recoil * 0.07;
-    gun.group.lookAt(camera.localToWorld(gunTarget.clone()));
-    gun.group.rotateY(Math.PI); // barrels run along -z; lookAt aims +z
+    updateGun(realDt);
+    updateGlint(t);
+    updateCrowd(realDt, t);
+    updateHud(realDt);
+    if (rand() < realDt * 0.15) sfx.bird();
 
-    /* Crosshair HUD element follows the aim */
-    hud.cross.style.left = `${(aim.x * 0.5 + 0.5) * 100}%`;
-    hud.cross.style.top = `${(-aim.y * 0.5 + 0.5) * 100}%`;
-    hud.cross.classList.toggle('show', state.phase === 'flight' || state.phase === 'delay');
-
-    /* Camera sway + shake; a breath of life while waiting */
-    camera.rotation.z = Math.sin(t * 0.4) * 0.004;
-    camera.position.y = 1.7 + Math.sin(t * 1.1) * 0.012;
-    if (shake.power > 0.001) {
-      shake.power = Math.max(0, shake.power - dt * 4);
-      camera.position.x = (rand() - 0.5) * shake.power * 0.06;
-      camera.position.y += (rand() - 0.5) * shake.power * 0.06;
-    } else {
-      camera.position.x = 0;
-    }
-
-    /* Crowd + birds */
-    range.crowd.forEach((p) => {
-      const cheer = state.streak >= 3 || (hitStop > 0 && state.phase === 'flight');
-      const { arms } = p.userData;
-      const target = cheer ? -2.2 : 2.4;
-      arms.children[0].rotation.z += (-target - arms.children[0].rotation.z) * Math.min(1, dt * 6);
-      arms.children[1].rotation.z += (target - arms.children[1].rotation.z) * Math.min(1, dt * 6);
-      p.rotation.z = Math.sin(t * 1.2 + p.userData.phase) * 0.02;
-    });
-    range.birds.forEach((b) => {
-      b.position.x += b.userData.speed * dt;
-      if (b.position.x > 90) b.position.x = -90;
-      b.children[0].rotation.z = Math.sin(t * 7 + b.userData.phase) * 0.5;
-      b.children[1].rotation.z = -Math.sin(t * 7 + b.userData.phase) * 0.5;
-    });
-    if (rand() < dt * 0.12) sfx.bird();
-
-    renderer.render(scene, camera);
+    renderer.info.reset();
+    if (composer) composer.render(realDt);
+    else renderer.render(scene, camera);
+    adapt(realDt);
   }
 
   raf = requestAnimationFrame(tick);
@@ -809,8 +1455,9 @@ export async function createShooting(container) {
   };
   document.addEventListener('visibilitychange', onVisibility);
 
-  hud.overlay.classList.add('show');
+  showStartPanel();
   renderSerie();
+  renderGhost();
 
   /* Deterministic hooks for automated tests */
   window.__ppSkytte = {
@@ -821,32 +1468,98 @@ export async function createShooting(container) {
     aimAt(x, y) {
       aim.x = x;
       aim.y = y;
+      resetSwing();
     },
     launchNow() {
-      if (state.phase === 'delay') {
-        state.delayT = 0;
-      }
+      if (state.phase === 'delay') state.delayT = 0;
     },
-    aimAtClay() {
+    /** Aim at the first airborne clay as it is now, optionally offset (NDC). */
+    aimAtClay(dx = 0, dy = 0) {
       const c = airborne()[0];
       if (!c) return false;
       projected.copy(c.mesh.position).project(camera);
+      aim.x = projected.x + dx;
+      aim.y = projected.y + dy;
+      resetSwing();
+      return true;
+    },
+    /** Aim where the clay WILL be when a still-held shot arrives. */
+    aimAtClayLead() {
+      const c = airborne()[0];
+      if (!c) return false;
+      const tof = c.mesh.position.distanceTo(camera.position) / SHOT_SPEED;
+      projected.copy(predictClay(c, tof, tmpV)).project(camera);
       aim.x = projected.x;
       aim.y = projected.y;
+      resetSwing();
       return true;
     },
     smashFirst() {
       const c = airborne()[0];
-      if (c) smash(c, c.mesh.position.clone());
+      if (c) smash(c);
     },
     escapeAll() {
       airborne().forEach((c) => escape(c));
+    },
+    /** Skip the camera's flight from the vista to the gun. */
+    skipIntro() {
+      camBlend = camTarget;
+    },
+    /** Jump straight to the golden dove with a plausible card. */
+    skipToGold() {
+      state.card = SERIES.map(() => new Array(8).fill(true));
+      state.card[1][3] = false;
+      state.thrown = 24;
+      state.serieNo = 3;
+      state.score = 3100;
+      state.phase = 'between';
+      camTarget = 1;
+      camBlend = 1;
+      hud.overlay.classList.remove('show');
+      renderScore();
+      startGold();
+    },
+    /** Fill in the rest of the round at a hit rate and show the end screen. */
+    finishRound(rate = 0.8) {
+      const sim = mulberry(7);
+      camBlend = 1;
+      camTarget = 1;
+      hud.overlay.classList.remove('show');
+      for (let si = state.serieNo - 1; si < 3; si++) {
+        state.serieNo = si + 1;
+        state.card[si] = state.card[si].map((v) => {
+          if (v !== null) return v;
+          const hit = sim() < rate;
+          if (hit) scoreBird(false);
+          else state.streak = 0;
+          return hit;
+        });
+        if (state.card[si].every((v) => v === true)) {
+          state.score += 500;
+          state.stats.clean++;
+        }
+        const row = state.card[si];
+        if (si === 2 && row[4] && row[5]) {
+          state.score += 200;
+          state.stats.pairs++;
+        }
+      }
+      state.gold = sim() < rate;
+      if (state.gold) scoreBird(true);
+      state.thrown = 25;
+      state.isGold = true;
+      renderScore();
+      gameOver();
     },
     clays,
     info() {
       return {
         drawCalls: renderer.info.render.calls,
-        triangles: renderer.info.render.triangles
+        triangles: renderer.info.render.triangles,
+        bloom: !!composer,
+        dpr: quality.dpr,
+        camBlend,
+        phase: state.phase
       };
     }
   };
@@ -857,24 +1570,42 @@ export async function createShooting(container) {
     cancelAnimationFrame(raf);
     running = false;
     ro.disconnect();
+    timers.forEach((id) => clearTimeout(id));
+    timers.clear();
     document.removeEventListener('visibilitychange', onVisibility);
     canvasHost.removeEventListener('pointerdown', onPointerDown);
     canvasHost.removeEventListener('pointermove', onPointerMove);
     window.removeEventListener('pointerup', onPointerUp);
+    window.removeEventListener('pointercancel', onPointerCancel);
     window.removeEventListener('keydown', onKeyDown);
-    clearTimeout(state.lastToast);
+    hud.overlay.removeEventListener('click', onOverlayClick);
+    hud.pull.removeEventListener('click', callPull);
+    hud.info.removeEventListener('click', onInfo);
+    hud.helpClose.removeEventListener('click', onHelpClose);
+    hud.mute.removeEventListener('click', onMute);
     delete window.__ppSkytte;
 
+    const textures = new Set([glow, star, envMap, ...gun.textures]);
+    const geometries = new Set();
+    const materials = new Set();
     scene.traverse((o) => {
-      if (o.geometry) o.geometry.dispose();
-      if (o.material) {
-        const mats = Array.isArray(o.material) ? o.material : [o.material];
-        mats.forEach((m) => {
-          if (m.map) m.map.dispose();
-          m.dispose();
-        });
-      }
+      if (o.geometry) geometries.add(o.geometry);
+      if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => materials.add(m));
     });
+    range.crowd.forEach((p) => {
+      geometries.add(p.userData.poses.up);
+      geometries.add(p.userData.poses.down);
+    });
+    materials.forEach((m) => {
+      Object.values(m).forEach((v) => {
+        if (v && v.isTexture) textures.add(v);
+      });
+      m.dispose();
+    });
+    geometries.forEach((g) => g.dispose());
+    textures.forEach((tx) => tx.dispose());
+    envRT.dispose();
+    disposeComposer();
     renderer.dispose();
     renderer.forceContextLoss?.();
     if (sfx.ctx) sfx.ctx.close();

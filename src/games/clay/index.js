@@ -6,31 +6,45 @@
  * a keramiker set the task and judged the results. So:
  *
  *   1. The keramikern shows a form — its ghost silhouette hangs over the
- *      wheel.
+ *      wheel, and a coloured band shows the live difference to your wall.
  *   2. You THROW: the wheel spins, and dragging against the clay pushes
  *      it in or pulls it out at that height, like a palm and a rib tool.
- *      A likeness meter answers the only question that matters — "is
- *      this starting to look like it?"
- *   3. The piece is FIRED in the kiln, glazed, judged in points and in
- *      words, and set on the bench. Three pieces make an evening.
+ *      Yank too hard and the clay goes off-centre. A likeness meter with
+ *      star marks answers the only question that matters — "is this
+ *      starting to look like it?"
+ *   3. The piece is cut off the wheel and FIRED: the kiln door slams, the
+ *      controller climbs to 1 240 °C, embers pour from the flue — and the
+ *      piece comes out glowing, cools into its glaze and is judged in
+ *      points, stars and words. It ends up in the window. Three pieces make
+ *      an evening; six stars earn a fourth — the Pokal itself, in gold.
  *
- * The clay is a radial height field wrapped as an indexed lathe mesh and
- * shaded with a generated matcap — the same trick sculpting packages use
- * for their clay preview. Everything is procedural; the only download is
- * Three.js itself.
+ * Rendering: a PBR studio lit by the evening sun THROUGH its window (the
+ * wall is a real shadow caster), a procedural environment map, wet clay as
+ * a physical material with per-band wetness and throwing rings, glossy PBR
+ * glazes, bloom and a heat-haze pass while the kiln fires. Everything is
+ * procedural; the only download is Three.js itself.
  */
 
 import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { Sfx } from './audio.js';
-import { mulberry, clayMatcap, buildStudio, buildWheel } from './studio.js';
+import { N, H, R_MIN, R_MAX, ClayBody, ringMaps, clayMaterial, glazeMaterial } from './clay.js';
+import { mulberry, buildStudio, buildWheel, buildHand, buildSponge, buildEnvScene, disposeScene } from './studio.js';
+import { buildFx, HeatHazeShader } from './fx.js';
+import { buildGuide } from './guide.js';
+import { buildHud, drawDiff, silhouetteSvg, starsHtml } from './hud.js';
+
+export const layout = 'full';
 
 const HIGHSCORE_KEY = 'pp-lera-highscore';
-const N = 64; // profile samples along the height
-const K = 48; // radial segments
-const H = 2.05; // clay column height
-const R_MIN = 0.14;
-const R_MAX = 1.5;
+const BEST_KEY = 'pp-lera-best';
 const PIECE_TIME = 75;
+const STAR_AT = [0.6, 0.78, 0.9];
+const BONUS_STARS = 6;
 
 /* ------------------------------------------------------------- the tasks */
 
@@ -56,7 +70,8 @@ const PIECES = [
     id: 'skal',
     name: 'Skålen',
     brief: 'En öppen skål — bred mun, mjuk buk, stadig fot.',
-    glaze: 0xc9982e,
+    glaze: { color: 0xc07a22, rim: 0x6e3414, metal: false },
+    css: '#d4952f',
     glazeName: 'honungsglasyr',
     profile: profileOf([[0, 0.62], [0.14, 0.5], [0.35, 0.62], [0.7, 0.95], [1, 1.18]])
   },
@@ -64,7 +79,8 @@ const PIECES = [
     id: 'vas',
     name: 'Vasen',
     brief: 'En klassisk vas — fyllig buk, smal hals, liten läpp.',
-    glaze: 0x3e6e9e,
+    glaze: { color: 0x1d4d98, rim: 0x8a6a52, metal: false },
+    css: '#3d6fc0',
     glazeName: 'koboltglasyr',
     profile: profileOf([[0, 0.58], [0.16, 0.82], [0.38, 1.02], [0.62, 0.62], [0.82, 0.34], [0.93, 0.36], [1, 0.5]])
   },
@@ -72,11 +88,23 @@ const PIECES = [
     id: 'amfora',
     name: 'Amforan',
     brief: 'En amfora som på museet — hög buk, lång smal hals, utsvängd mynning.',
-    glaze: 0x6f9e6a,
+    glaze: { color: 0x86b496, rim: 0xd9e4cf, metal: false },
+    css: '#8fc4a0',
     glazeName: 'seladonglasyr',
     profile: profileOf([[0, 0.4], [0.1, 0.62], [0.3, 1.08], [0.52, 0.92], [0.74, 0.3], [0.9, 0.26], [1, 0.56]])
   }
 ];
+
+/** Earned with six stars: Pekkas Pokal itself, thrown and lustred in gold. */
+const BONUS = {
+  id: 'pokal',
+  name: 'Pokalen',
+  brief: 'Pekkas Pokal i lera — bred fot, smal stjälk, en bägare som öppnar sig.',
+  glaze: { color: 0xe0ac3c, rim: 0xf6d98a, metal: true },
+  css: '#f2c14e',
+  glazeName: 'guldlyster',
+  profile: profileOf([[0, 0.7], [0.1, 0.56], [0.24, 0.26], [0.42, 0.26], [0.62, 0.66], [0.84, 1.02], [1, 1.16]])
+};
 
 const VERDICTS = [
   [0.93, 10, 'Perfekte! Den här ställer vi i fönstret.'],
@@ -88,6 +116,18 @@ const VERDICTS = [
   [0, 1, 'Picasso var också missförstådd i början.']
 ];
 
+const TITLES = [
+  [11, 'Keramikerns favorit', 'Pokalen i guld och tre alster i fönstret. Barcelona har en ny mästare.'],
+  [9, 'Mästardrejare', 'Keramikern tar fram kameran. Sånt händer inte varje kväll.'],
+  [7, 'Drejare', 'Händerna har förstått leran. Formen följer med.'],
+  [5, 'Gesäll', 'Stadiga alster med några rustika undantag.'],
+  [3, 'Lärling', 'Det börjar likna något. En vända till?'],
+  [0, 'Lerkladdare', 'Tre alster i fönstret och lera överallt. En vända till?']
+];
+
+/* Firing timeline, seconds from KLAR */
+const FIRE = { lift: 0.35, fly: 1.25, close: 1.65, heat: 3.95, open: 4.35, slide: 5.05, cool: 6.55 };
+
 /**
  * Frame delta, clamped at BOTH ends. Only clamping the top looks harmless
  * until a queued rAF fires with a timestamp older than the one stashed on
@@ -98,88 +138,51 @@ function clampDt(ms) {
   return Math.max(0, Math.min(0.05, ms / 1000));
 }
 
-/* ------------------------------------------------------------------- HUD */
+const ease = (k) => (k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2);
+const clamp01 = (k) => Math.max(0, Math.min(1, k));
+const smooth = (a, b, x) => {
+  const t = clamp01((x - a) / (b - a));
+  return t * t * (3 - 2 * t);
+};
 
-function buildHud(root) {
-  root.innerHTML = `
-    <div class="fg-vignette"></div>
-    <div class="pb-hud">
-      <div class="pb-top">
-        <div class="pb-score-wrap">
-          <div class="pb-score" id="cl-score">0</div>
-          <div class="pb-hi">REKORD <span id="cl-hi">0</span></div>
-        </div>
-        <div class="pb-meta">
-          <div class="cl-timer" id="cl-timer"></div>
-          <div class="fg-cast" id="cl-round"></div>
-        </div>
-      </div>
-      <div class="cl-task" id="cl-task">
-        <canvas id="cl-thumb" width="52" height="66"></canvas>
-        <div class="cl-task-name" id="cl-piecename"></div>
-      </div>
-      <div class="cl-sim" id="cl-sim"><i id="cl-simbar"></i><b id="cl-simval">0%</b></div>
-      <div class="fg-phase" id="cl-phase"></div>
-      <div class="pb-toast" id="cl-toast"></div>
-      <div class="fg-pops" id="cl-pops"></div>
-      <div class="cl-tools" id="cl-tools">
-        <button class="cl-tool" id="cl-smooth">GLÄTTA</button>
-        <button class="cl-tool primary" id="cl-done">KLAR — BRÄNN!</button>
-      </div>
-    </div>
+function starsFor(match) {
+  return STAR_AT.filter((s) => match >= s).length;
+}
 
-    <div class="pb-overlay" id="cl-overlay">
-      <div class="pb-panel">
-        <h2 id="cl-title">Pekkas Lerskulptur</h2>
-        <p id="cl-text">Keramikern visar formen — dreja så likt du kan. Dra mot leran för att trycka in, dra utåt för att dra ut.</p>
-        <ul class="fg-steps" id="cl-steps">
-          <li><i style="--c:#7fd8e8"></i><b>Forma</b> Dra i leran vid rätt höjd — spöket visar målet.</li>
-          <li><i style="--c:#f2c14e"></i><b>Glätta</b> Håll GLÄTTA för att jämna ut kurvorna.</li>
-          <li><i style="--c:#5eead4"></i><b>Bränn</b> Tryck KLAR när du är nöjd — keramikern dömer likheten.</li>
-        </ul>
-        <div class="pb-scoreline" id="cl-scoreline" hidden></div>
-        <div class="fg-catchlist" id="cl-verdict" hidden></div>
-        <button class="pb-btn" id="cl-start">Sätt igång drejskivan</button>
-      </div>
-    </div>
+function verdictFor(match) {
+  for (const [minMatch, points, words] of VERDICTS) {
+    if (match >= minMatch) return { grade: points, words };
+  }
+  return { grade: 1, words: '' };
+}
 
-    <button class="pb-info" id="cl-info" aria-label="Så spelar du">?</button>
+function readJson(key, fallback) {
+  try {
+    return JSON.parse(localStorage.getItem(key) || 'null') || fallback;
+  } catch (e) {
+    return fallback;
+  }
+}
 
-    <div class="pb-help" id="cl-help" hidden>
-      <div class="pb-help-card">
-        <h3>Så drejar du</h3>
-        <p class="pb-help-sub">Pekkas Lerskulptur</p>
-        <ul class="pb-help-list">
-          <li><i style="--c:#7fd8e8"></i><b>Uppdraget</b> Keramikern visar en form — dess silhuett hänger som streckat spöke över drejskivan. Likhetsmätaren visar hur nära du är.</li>
-          <li><i style="--c:#d9a05b"></i><b>Forma</b> Dra mot leran för att trycka in, dra utåt för att dra ut — vid precis den höjd du rör.</li>
-          <li><i style="--c:#f2c14e"></i><b>Glätta</b> Håll GLÄTTA-knappen så jämnar handflatan ut kurvorna.</li>
-          <li><i style="--c:#ff7a6b"></i><b>Tiden</b> 75 sekunder per alster. Går tiden ut åker det in i ugnen som det är.</li>
-          <li><i style="--c:#5eead4"></i><b>Bränn</b> Tryck KLAR när du är nöjd. Glasyr, betyg 1–10 och keramikerns dom — sen ställs alstret på bänken.</li>
-          <li><i style="--c:#6f9b5a"></i><b>Poängen</b> Likhet i kvadrat × 1 000, plus tidsbonus om likheten når 60 %. Tre alster per kväll.</li>
-        </ul>
-        <p class="pb-help-tip">Snabb och lik vinner: en tidig 90-procentare slår en sen perfektionist.</p>
-        <div class="pb-help-keys">Forma: dra på skivan · Bränn: KLAR eller Enter · Kortet: ? eller Esc</div>
-        <button class="pb-btn" id="cl-help-close">Tillbaka till ateljén</button>
-      </div>
-    </div>
+function writeJson(key, value) {
+  try {
+    localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+  } catch (e) {
+    /* private mode */
+  }
+}
 
-    <button class="pb-mute" id="cl-mute" aria-label="Ljud på/av">
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M11 5 6 9H2v6h4l5 4V5Z"/><path class="pb-wave" d="M15.5 8.5a5 5 0 0 1 0 7"/>
-      </svg>
-    </button>
-  `;
-  const q = (s) => root.querySelector(s);
-  return {
-    score: q('#cl-score'), hi: q('#cl-hi'), timer: q('#cl-timer'), round: q('#cl-round'),
-    task: q('#cl-task'), thumb: q('#cl-thumb'), piecename: q('#cl-piecename'),
-    sim: q('#cl-sim'), simbar: q('#cl-simbar'), simval: q('#cl-simval'),
-    phase: q('#cl-phase'), toast: q('#cl-toast'), pops: q('#cl-pops'), tools: q('#cl-tools'),
-    smooth: q('#cl-smooth'), done: q('#cl-done'),
-    overlay: q('#cl-overlay'), title: q('#cl-title'), text: q('#cl-text'), steps: q('#cl-steps'),
-    scoreline: q('#cl-scoreline'), verdict: q('#cl-verdict'), start: q('#cl-start'), mute: q('#cl-mute'),
-    info: q('#cl-info'), help: q('#cl-help'), helpClose: q('#cl-help-close')
-  };
+/** Dispose every texture a material holds, including shader uniforms. */
+function disposeMaterial(m) {
+  Object.values(m).forEach((v) => {
+    if (v && v.isTexture) v.dispose();
+  });
+  if (m.uniforms) {
+    Object.values(m.uniforms).forEach((u) => {
+      if (u.value && u.value.isTexture) u.value.dispose();
+    });
+  }
+  m.dispose();
 }
 
 /* ------------------------------------------------------------------- game */
@@ -190,150 +193,118 @@ export async function createClay(container) {
   container.appendChild(canvasHost);
 
   const hudHost = document.createElement('div');
-  hudHost.className = 'pb-ui fg-ui';
+  hudHost.className = 'pb-ui lr-ui';
   container.appendChild(hudHost);
   const hud = buildHud(hudHost);
 
   const sfx = new Sfx();
+  const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  /* Quality tier: phones get a lighter pixel ratio, no MSAA, smaller shadows */
+  const coarse = window.matchMedia?.('(pointer: coarse)').matches;
+  const smallScreen = Math.min(window.screen?.width || 1e4, window.screen?.height || 1e4) < 820;
+  const lowTier = (coarse && smallScreen) || (navigator.deviceMemory && navigator.deviceMemory <= 4);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, lowTier ? 1.5 : 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.08;
+  renderer.toneMappingExposure = 1.05;
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   canvasHost.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x2a1c14);
-  scene.fog = new THREE.Fog(0x2a1c14, 9, 20);
+  scene.background = new THREE.Color(0x160e09);
 
-  const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 60);
-  camera.position.set(0, 2.4, 7.6);
+  const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 80);
+  camera.position.set(0, 2.6, 8);
 
-  /* Warm studio light */
-  // FILL: cool from above so nothing in shadow goes to pure black
-  const hemi = new THREE.HemisphereLight(0xbcd2ee, 0x3a2418, 0.6);
-  scene.add(hemi);
+  /* ---- World ------------------------------------------------------------ */
 
-  // DOMINANT: the evening sun through the arched window — the only caster,
-  // aimed down the same line the visible shaft travels
-  const sunlight = new THREE.DirectionalLight(0xffd39a, 2.0);
-  sunlight.position.set(-6.5, 6.4, -5.2);
-  sunlight.target.position.set(0.6, 0.4, 1.4);
-  sunlight.castShadow = true;
-  sunlight.shadow.mapSize.set(1024, 1024);
-  sunlight.shadow.camera.left = -8;
-  sunlight.shadow.camera.right = 8;
-  sunlight.shadow.camera.top = 7;
-  sunlight.shadow.camera.bottom = -5;
-  sunlight.shadow.camera.near = 0.5;
-  sunlight.shadow.camera.far = 30;
-  sunlight.shadow.bias = -0.0009;
-  sunlight.shadow.normalBias = 0.02;
-  scene.add(sunlight);
-  scene.add(sunlight.target);
-
-  // FILL 2: warm bounce off the terracotta floor, and a front fill so the
-  // potter and the wheel are not silhouettes against their own window
-  const bounce = new THREE.DirectionalLight(0xd9975a, 0.35);
-  bounce.position.set(2, -3, 4);
-  scene.add(bounce);
-  const front = new THREE.DirectionalLight(0xfff0dc, 0.55);
-  front.position.set(1.5, 3.5, 9);
-  scene.add(front);
-  const kilnLight = new THREE.PointLight(0xff7a20, 0, 9, 2);
-  kilnLight.position.set(3.4, 1.4, -2.6);
-  scene.add(kilnLight);
-
-  /* Matcaps: raw clay, cream tool, fired glaze (white matcap × tint) */
-  const rawMatcap = clayMatcap('#b06a40', '#5c3020', 0.9);
-  const firedMatcap = clayMatcap('#d8d4cf', '#5a5650', 0.95);
-
-  /* World */
-  const studio = buildStudio(firedMatcap);
+  const studio = buildStudio();
   scene.add(studio.group);
   const wheel = buildWheel();
-  wheel.group.traverse((o) => {
-    if (o.isMesh) {
-      o.castShadow = true;
-      o.receiveShadow = true;
-    }
-  });
   scene.add(wheel.group);
 
-  /* The display bench where finished pieces end up */
-  const bench = new THREE.Group();
-  const benchTop = new THREE.Mesh(
-    new THREE.BoxGeometry(2.6, 0.1, 0.8),
-    new THREE.MeshLambertMaterial({ color: 0x6b4526 })
-  );
-  benchTop.position.y = 0.85;
-  benchTop.castShadow = true;
-  benchTop.receiveShadow = true;
-  bench.add(benchTop);
-  [-1.1, 1.1].forEach((x) => {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.85, 0.7), benchTop.material);
-    leg.position.set(x, 0.42, 0);
-    bench.add(leg);
-  });
-  bench.position.set(-3.1, 0, -0.4);
-  bench.rotation.y = 0.5;
-  scene.add(bench);
+  /* Environment: the studio's own light, baked once through PMREM */
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const envScene = buildEnvScene(studio.window);
+  const envRT = pmrem.fromScene(envScene, 0.035);
+  scene.environment = envRT.texture;
+  scene.environmentIntensity = 0.6;
+  disposeScene(envScene);
+  pmrem.dispose();
 
-  /* ---- The clay itself -------------------------------------------------- */
+  /* ---- Lights: one dominant, a couple of fills, accents ---------------- */
 
-  const clayGroup = new THREE.Group();
+  // DOMINANT: the evening sun, entering only through the window
+  const sun = new THREE.DirectionalLight(0xffc185, 3.4);
+  const sunTarget = new THREE.Vector3(0, 1.2, 0);
+  sun.position.copy(sunTarget).addScaledVector(studio.sunDir, -24);
+  sun.target.position.copy(sunTarget);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(lowTier ? 1024 : 2048, lowTier ? 1024 : 2048);
+  sun.shadow.camera.left = -10;
+  sun.shadow.camera.right = 10;
+  sun.shadow.camera.top = 8;
+  sun.shadow.camera.bottom = -8;
+  sun.shadow.camera.near = 4;
+  sun.shadow.camera.far = 44;
+  sun.shadow.bias = -0.0006;
+  sun.shadow.normalBias = 0.025;
+  sun.shadow.radius = 3;
+  scene.add(sun, sun.target);
+
+  // FILLS: cool sky from above, warm front fill from the potter's side
+  const hemi = new THREE.HemisphereLight(0xa8b8d8, 0x5a3622, 0.42);
+  scene.add(hemi);
+  const front = new THREE.DirectionalLight(0xffe6c8, 0.85);
+  front.position.set(3, 4, 9);
+  scene.add(front);
+
+  // ACCENTS: the pendant over the wheel, and a roaming light for the kiln,
+  // the reveal and the window display
+  const pendant = new THREE.PointLight(0xffc684, 5.5, 9, 2);
+  pendant.position.copy(studio.lampPos);
+  scene.add(pendant);
+  const accent = new THREE.PointLight(0xff7a20, 0, 7, 2);
+  scene.add(accent);
+
+  /* ---- The clay ---------------------------------------------------------- */
+
+  const maps = ringMaps();
+  const body = new ClayBody();
+  const clayMat = clayMaterial(maps);
+
+  const clayGroup = new THREE.Group(); // moves (wheel → kiln)
   clayGroup.position.y = wheel.headY;
   scene.add(clayGroup);
+  const tilt = new THREE.Group(); // off-centre wobble
+  clayGroup.add(tilt);
+  const clay = new THREE.Mesh(body.geometry, clayMat);
+  clay.castShadow = true;
+  clay.receiveShadow = true;
+  tilt.add(clay);
 
-  const clayGeo = new THREE.BufferGeometry();
-  {
-    const verts = N * K + 2; // rings + top centre + bottom centre
-    clayGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts * 3), 3));
-    const idx = [];
-    for (let j = 0; j < N - 1; j++) {
-      for (let k = 0; k < K; k++) {
-        const a = j * K + k;
-        const b = j * K + ((k + 1) % K);
-        const c = (j + 1) * K + k;
-        const d = (j + 1) * K + ((k + 1) % K);
-        idx.push(a, c, b, b, c, d);
-      }
-    }
-    const top = N * K;
-    const bottom = N * K + 1;
-    for (let k = 0; k < K; k++) {
-      idx.push((N - 1) * K + k, top, (N - 1) * K + ((k + 1) % K));
-      idx.push(k, (k + 1) % K, bottom);
-    }
-    clayGeo.setIndex(idx);
-  }
-  const clayMat = new THREE.MeshMatcapMaterial({ matcap: rawMatcap, color: 0xffffff });
-  const clay = new THREE.Mesh(clayGeo, clayMat);
-  clayGroup.add(clay);
-
-  // A matcap ignores scene lights, so the pot can never receive or cast a
-  // real shadow. This painted contact shadow is what stops it floating.
+  // Contact occlusion where the foot meets the wheel head: real shadows do
+  // the rest, but nothing else darkens that crease
   const contact = (() => {
     const cv = document.createElement('canvas');
     cv.width = 64;
     cv.height = 64;
     const c2 = cv.getContext('2d');
-    const rg = c2.createRadialGradient(32, 32, 2, 32, 32, 32);
-    rg.addColorStop(0, 'rgba(20,10,4,0.75)');
-    rg.addColorStop(0.55, 'rgba(20,10,4,0.32)');
+    const rg = c2.createRadialGradient(32, 32, 12, 32, 32, 32);
+    rg.addColorStop(0, 'rgba(20,10,4,0.7)');
     rg.addColorStop(1, 'rgba(20,10,4,0)');
     c2.fillStyle = rg;
     c2.fillRect(0, 0, 64, 64);
-    const tex = new THREE.CanvasTexture(cv);
     const m = new THREE.Mesh(
-      new THREE.PlaneGeometry(1.5, 1.5),
-      new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false })
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthWrite: false })
     );
     m.rotation.x = -Math.PI / 2;
-    m.position.y = 0.004;
+    m.position.y = 0.003;
     m.renderOrder = 3;
     return m;
   })();
@@ -341,127 +312,80 @@ export async function createClay(container) {
 
   const r = new Float32Array(N);
   const startLump = (u) => 0.68 - 0.3 * u ** 1.4;
-
   function resetLump() {
     for (let j = 0; j < N; j++) r[j] = startLump(j / (N - 1));
+    body.ring.fill(0.7);
+    body.wet.fill(0.85);
   }
   resetLump();
+  body.update(r);
 
-  function updateClayGeometry() {
-    const pos = clayGeo.attributes.position;
-    const arr = pos.array;
-    for (let j = 0; j < N; j++) {
-      const y = (j / (N - 1)) * H;
-      // Throwing rings + a faint spiral of finger marks
-      const rr = Math.max(0.1, r[j]) * (1 + 0.006 * Math.sin(j * 1.9));
-      for (let k = 0; k < K; k++) {
-        const a = (k / K) * Math.PI * 2;
-        const rk = rr * (1 + 0.0045 * Math.sin(a * 3 + j * 0.55));
-        const i3 = (j * K + k) * 3;
-        arr[i3] = Math.cos(a) * rk;
-        arr[i3 + 1] = y;
-        arr[i3 + 2] = Math.sin(a) * rk;
+  /* The guide plane (ghost, diff, chevrons) and the hands live facing the camera */
+  const guide = buildGuide();
+  guide.group.position.y = wheel.headY;
+  scene.add(guide.group);
+  clayGroup.add(guide.ring);
+  const hand = buildHand();
+  hand.visible = false;
+  guide.group.add(hand);
+  const sponge = buildSponge();
+  sponge.visible = false;
+  guide.group.add(sponge);
+
+  const fx = buildFx(scene);
+  const seedRand = mulberry(71);
+  function seedSplats() {
+    fx.splats.reset((s) => {
+      for (let i = 0; i < 46; i++) {
+        const a = seedRand() * Math.PI * 2;
+        const rad = 1.25 + seedRand() * 2.8;
+        s.add(Math.cos(a) * rad, 0.004, Math.sin(a) * rad, 0.08 + seedRand() * 0.22, 0.8 + seedRand() * 0.35);
       }
-    }
-    const top = (N * K) * 3;
-    arr[top] = 0;
-    arr[top + 1] = H - 0.07; // the thrown dimple
-    arr[top + 2] = 0;
-    arr[top + 3] = 0;
-    arr[top + 4] = 0;
-    arr[top + 5] = 0;
-    pos.needsUpdate = true;
-    clayGeo.computeVertexNormals();
-  }
-  updateClayGeometry();
-
-  /* Ghost silhouette of the target, drawn as dashed hologram lines */
-  const ghostMat = new THREE.LineDashedMaterial({
-    color: 0x5eead4,
-    transparent: true,
-    opacity: 0.75,
-    dashSize: 0.09,
-    gapSize: 0.055,
-    depthTest: false
-  });
-  let ghost = null;
-
-  function buildGhost(profile) {
-    if (ghost) {
-      clayGroup.remove(ghost);
-      ghost.children.forEach((l) => l.geometry.dispose());
-    }
-    ghost = new THREE.Group();
-    [-1, 1].forEach((s) => {
-      const pts = [];
-      for (let j = 0; j <= 40; j++) {
-        const u = j / 40;
-        pts.push(new THREE.Vector3(s * profile(u), u * H, 0));
-      }
-      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), ghostMat);
-      line.computeLineDistances();
-      line.renderOrder = 40;
-      ghost.add(line);
     });
-    clayGroup.add(ghost);
   }
+  seedSplats();
 
-  /* Fingertip marker where the hand works the clay */
-  const finger = new THREE.Mesh(
-    new THREE.SphereGeometry(0.085, 10, 8),
-    new THREE.MeshMatcapMaterial({ matcap: firedMatcap, color: 0xf2d8b8 })
-  );
-  finger.visible = false;
-  clayGroup.add(finger);
+  /* ---- Post: bloom for the window, bulbs and kiln; haze while firing ---- */
 
-  /* Slip droplets that fly off while shaping */
-  const dropCount = 90;
-  const dropGeo = new THREE.BufferGeometry();
-  const dropPos = new Float32Array(dropCount * 3);
-  for (let i = 0; i < dropCount; i++) dropPos[i * 3 + 1] = -99;
-  dropGeo.setAttribute('position', new THREE.BufferAttribute(dropPos, 3));
-  const drops = new THREE.Points(dropGeo, new THREE.PointsMaterial({
-    color: 0xb87848,
-    size: 0.05,
-    transparent: true,
-    opacity: 0.85,
-    depthWrite: false
-  }));
-  drops.frustumCulled = false;
-  scene.add(drops);
-  const dropVel = [];
-  for (let i = 0; i < dropCount; i++) dropVel.push({ life: 0, vx: 0, vy: 0, vz: 0 });
-  let dropNext = 0;
-
-  function emitDrop(x, y, z, speed) {
-    const i = dropNext % dropCount;
-    dropNext++;
-    const d = dropVel[i];
-    d.life = 0.5 + Math.random() * 0.4;
-    const a = Math.random() * Math.PI * 2;
-    d.vx = Math.cos(a) * speed;
-    d.vz = Math.sin(a) * speed;
-    d.vy = 1.2 + Math.random() * 1.6;
-    dropPos[i * 3] = x;
-    dropPos[i * 3 + 1] = y;
-    dropPos[i * 3 + 2] = z;
-  }
-
-  /* Fired pieces standing on the bench */
-  const shelfPieces = [];
+  const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: lowTier ? 0 : 4 });
+  const composer = new EffectComposer(renderer, rt);
+  composer.addPass(new RenderPass(scene, camera));
+  const haze = new ShaderPass(HeatHazeShader);
+  haze.enabled = false;
+  composer.addPass(haze);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.3, 0.55, 0.88);
+  composer.addPass(bloom);
+  composer.addPass(new OutputPass());
 
   /* ---- State ----------------------------------------------------------- */
 
+  // Input state (the handlers are wired further down)
+  let dragging = false;
+  let smoothing = false;
+  let keySmooth = false;
+  let helpOpen = false;
+  let shapingEnergy = 0;
+  let hover = null;
+  let brush = null; // {j, targetR, side, y}
+
   const state = {
-    phase: 'idle', // idle | throw | fire | judge | over
-    round: 1,
+    phase: 'idle', // idle | intro | throw | fire | judge | over
+    slot: 0, // index into the evening's pieces
+    pieces: PIECES.slice(),
+    results: [],
     score: 0,
+    shownScore: 0,
     match: 0,
     bestMatch: 0,
+    stars: 0,
     timeLeft: PIECE_TIME,
-    fireT: 0,
+    t: 0,
     wheelSpeed: 0,
-    verdict: null,
+    spin: 0,
+    wobble: 0,
+    wobbleWarned: false,
+    fast: false,
+    heat: 0,
     lastToast: 0,
     timers: []
   };
@@ -472,6 +396,7 @@ export async function createClay(container) {
   } catch (e) {
     high = 0;
   }
+  const bests = readJson(BEST_KEY, {});
   const fmt = (n) => Math.round(n).toLocaleString('sv-SE');
   hud.hi.textContent = fmt(high);
 
@@ -487,7 +412,7 @@ export async function createClay(container) {
     clearTimeout(state.lastToast);
     state.lastToast = setTimeout(() => {
       hud.toast.className = 'pb-toast';
-    }, big ? 1700 : 1000);
+    }, big ? 1800 : 1200);
   }
 
   function setPhaseLabel(txt) {
@@ -495,215 +420,331 @@ export async function createClay(container) {
     hud.phase.classList.toggle('show', !!txt);
   }
 
-  function currentPiece() {
-    return PIECES[(state.round - 1) % PIECES.length];
-  }
+  const piece = () => state.pieces[state.slot];
 
-  /* Likeness between the thrown profile and the target */
-  function computeMatch() {
-    const { profile } = currentPiece();
-    let err = 0;
-    for (let j = 0; j < N; j++) {
-      err += Math.abs(r[j] - profile(j / (N - 1)));
-    }
-    err /= N;
-    return Math.max(0, Math.min(1, 1 - err / 0.42));
+  /* Fired pieces: the one in the kiln / on the stand, and the gallery */
+  let fired = null; // { mesh, def }
+  const gallery = [];
+
+  /* ---- HUD rendering ------------------------------------------------------ */
+
+  function renderChips() {
+    const list = PIECES.concat([BONUS]);
+    hud.chips.innerHTML = list.map((p, i) => {
+      const res = state.results[i];
+      const isBonus = p === BONUS;
+      const unlocked = state.pieces.length > 3;
+      const cls = [
+        'lr-chip',
+        i === state.slot && (state.phase === 'throw' || state.phase === 'intro' || state.phase === 'fire') ? 'now' : '',
+        res ? 'done' : '',
+        isBonus ? 'bonus' : '',
+        isBonus && !unlocked ? 'locked' : ''
+      ].join(' ');
+      const label = isBonus && !unlocked ? `${BONUS_STARS}★` : p.name.replace(/(en|n)$/, '');
+      return `<span class="${cls}" title="${p.name}">${silhouetteSvg(p.profile, res ? p.css : 'currentColor', 18, 16)}<b>${label}</b>${res ? `<em>${starsHtml(res.stars)}</em>` : ''}</span>`;
+    }).join('');
   }
 
   function renderMatch() {
     state.match = computeMatch();
     const pct = Math.round(state.match * 100);
-    hud.simval.textContent = `${pct}%`;
-    hud.simbar.style.width = `${pct}%`;
-    hud.sim.classList.toggle('good', state.match >= 0.78);
-    hud.sim.classList.toggle('great', state.match >= 0.9);
+    hud.meterVal.textContent = `${pct}%`;
+    hud.meterFill.style.width = `${pct}%`;
+    const stars = starsFor(state.match);
+    hud.meter.dataset.stars = String(stars);
+    if (stars !== state.stars) {
+      hud.meterStars.innerHTML = starsHtml(stars);
+      if (stars > state.stars && state.phase === 'throw') {
+        sfx.star(stars - 1);
+        hud.meterStars.classList.remove('pop');
+        void hud.meterStars.offsetWidth;
+        hud.meterStars.classList.add('pop');
+        if (stars === 3) toast('Keramikern höjer ögonbrynen!', true);
+        else if (stars === 2) toast('Nu liknar det något!');
+      }
+      state.stars = stars;
+    }
+    drawDiff(hud.diff, piece().profile, r);
   }
 
-  function drawThumb() {
-    const { profile } = currentPiece();
-    const ctx = hud.thumb.getContext('2d');
-    const w = hud.thumb.width;
-    const h = hud.thumb.height;
-    ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = 'rgba(94, 234, 212, 0.85)';
-    ctx.beginPath();
-    for (let j = 0; j <= 30; j++) {
-      const u = j / 30;
-      const x = w / 2 - (profile(u) / R_MAX) * (w / 2 - 2);
-      const y = h - 3 - u * (h - 6);
-      if (j === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    for (let j = 30; j >= 0; j--) {
-      const u = j / 30;
-      const x = w / 2 + (profile(u) / R_MAX) * (w / 2 - 2);
-      const y = h - 3 - u * (h - 6);
-      ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-    ctx.fill();
+  /** Likeness between the thrown profile and the target. */
+  function computeMatch() {
+    const { profile } = piece();
+    let err = 0;
+    for (let j = 0; j < N; j++) err += Math.abs(r[j] - profile(j / (N - 1)));
+    err /= N;
+    return Math.max(0, Math.min(1, 1 - err / 0.42));
   }
 
-  function renderRound() {
-    hud.round.textContent = `ALSTER ${Math.min(state.round, 3)}/3`;
+  function renderTask() {
+    const p = piece();
+    const bonus = p === BONUS;
+    hud.kicker.textContent = bonus ? 'BONUS · KERAMIKERNS UTMANING' : `UPPDRAG ${state.slot + 1}/3`;
+    hud.name.textContent = p.name;
+    hud.brief.textContent = p.brief;
+    const b = bests[p.id];
+    hud.best.innerHTML = b
+      ? `Ditt bästa <b>${Math.round(b.match * 100)} %</b> <span class="lr-mini-stars">${starsHtml(b.stars)}</span>`
+      : 'Ditt bästa <b>—</b>';
+    hud.task.classList.toggle('bonus', bonus);
+  }
+
+  /* ---- Overlay panels ---------------------------------------------------- */
+
+  function piecePreview(p, locked) {
+    const b = bests[p.id];
+    const best = locked
+      ? `<small>${BONUS_STARS} stjärnor låser upp</small>`
+      : b
+        ? `<small>${Math.round(b.match * 100)} % ${starsHtml(b.stars)}</small>`
+        : '<small>ej drejad</small>';
+    return `<li class="${locked ? 'locked' : ''}${p === BONUS ? ' bonus' : ''}">${silhouetteSvg(p.profile, locked ? 'rgba(255,255,255,0.14)' : p.css, 46, 40)}<b>${p.name}</b>${best}</li>`;
+  }
+
+  function showStart() {
+    hud.panel.innerHTML = `
+      <div class="lr-kicker">Barcelona · ateljén i skymningen</div>
+      <h2>Pekkas Lerskulptur</h2>
+      <p>Keramikern visar formen — dreja så likt du kan. Dra mot leran för att trycka in, dra utåt för att dra ut.</p>
+      <ul class="lr-preview">${PIECES.map((p) => piecePreview(p, false)).join('')}${piecePreview(BONUS, !bests.pokal)}</ul>
+      <ul class="fg-steps">
+        <li><i style="--c:#5eead4"></i><b>Forma</b> Dra i leran vid rätt höjd. Bandet visar var: varmt — tryck in, kallt — dra ut.</li>
+        <li><i style="--c:#f2c14e"></i><b>Glätta</b> Håll GLÄTTA för att jämna ut kurvorna och ränderna.</li>
+        <li><i style="--c:#ff9a5c"></i><b>Bränn</b> Tryck KLAR — ugnen, glasyren och keramikerns dom.</li>
+      </ul>
+      <button class="pb-btn" data-act="start">Sätt igång drejskivan</button>`;
+    hud.overlay.classList.remove('summary');
+    hud.overlay.classList.add('show');
+  }
+
+  function showSummary(isHigh) {
+    const totalStars = state.results.reduce((s, x) => s + x.stars, 0);
+    const [, title, words] = TITLES.find(([min]) => totalStars >= min);
+    const rows = state.results.map((res) => `
+      <li>
+        ${silhouetteSvg(res.def.profile, res.def.css, 40, 34)}
+        <div class="lr-sum-name"><b>${res.def.name}</b><small>${res.def.glazeName} · ${Math.round(res.match * 100)} %</small></div>
+        <span class="lr-mini-stars">${starsHtml(res.stars)}</span>
+        <em>${res.grade}/10</em>
+        <strong>+${fmt(res.total)}</strong>
+        ${res.newBest ? '<i class="lr-pb">PB</i>' : ''}
+      </li>`).join('');
+    hud.panel.innerHTML = `
+      <div class="lr-kicker">Kvällens utställning · ${totalStars} ★</div>
+      <h2>${isHigh ? 'Nytt rekord!' : title}</h2>
+      <p>${isHigh ? `${title}. ${words}` : words}</p>
+      <ul class="lr-summary">${rows}</ul>
+      <div class="pb-scoreline"><span>${fmt(state.score)}</span><small>poäng · rekord ${fmt(high)}</small></div>
+      <button class="pb-btn" data-act="start">Dreja igen</button>`;
+    hud.overlay.classList.add('summary', 'show');
   }
 
   /* ---- Phases ----------------------------------------------------------- */
 
-  function startPiece() {
-    const piece = currentPiece();
-    state.phase = 'throw';
-    state.timeLeft = PIECE_TIME;
-    state.bestMatch = 0;
-    resetLump();
-    updateClayGeometry();
-    clay.visible = true;
-    clayMat.color.set(0xffffff);
-    buildGhost(piece.profile);
-    drawThumb();
-    hud.piecename.textContent = piece.name;
-    hud.task.classList.add('show');
-    hud.sim.classList.add('show');
-    hud.tools.classList.add('show');
-    renderRound();
-    renderMatch();
-    sfx.slap();
-    setPhaseLabel(piece.brief);
-    later(() => setPhaseLabel(''), 3200);
+  function setThrowHud(on) {
+    hud.task.classList.toggle('show', on);
+    hud.meter.classList.toggle('show', on);
+    hud.tools.classList.toggle('show', on);
+    if (!on) hud.timer.textContent = '';
   }
 
-  function verdictFor(match) {
-    for (const [minMatch, points, words] of VERDICTS) {
-      if (match >= minMatch) return { points, words };
-    }
-    return { points: 1, words: '' };
+  function startPiece() {
+    const p = piece();
+    state.phase = 'intro';
+    state.t = 0;
+    state.timeLeft = PIECE_TIME;
+    state.bestMatch = 0;
+    state.stars = 0;
+    state.wobble = 0;
+    state.wobbleWarned = false;
+    hud.meterStars.innerHTML = starsHtml(0);
+    resetLump();
+    body.open = 0;
+    body.update(r);
+    clayGroup.visible = true;
+    clayGroup.position.set(0, wheel.headY + 1.6, 0);
+    clayGroup.scale.setScalar(1);
+    contact.visible = true;
+    clayMat.color.set(0xb4693f);
+    guide.setTarget(p.profile);
+    guide.updateDiff(r, 0);
+    renderTask();
+    renderChips();
+    renderMatch();
+    setThrowHud(true);
+    hud.verdict.classList.remove('show');
+    setPhaseLabel(p === BONUS ? 'BONUS: POKALEN I GULD' : p.brief);
+    later(() => setPhaseLabel(''), 3400);
   }
 
   function finishPiece() {
-    if (state.phase !== 'throw') return;
-    state.phase = 'fire';
-    state.fireT = 0;
+    if (state.phase !== 'throw' && state.phase !== 'intro') return;
+    const p = piece();
     renderMatch();
-    const timeBonus = state.match >= 0.6 ? Math.round(state.timeLeft * 3) : 0;
-    const base = Math.round(state.match ** 2 * 1000);
-    state.verdict = {
-      ...verdictFor(state.match),
-      match: state.match,
-      base,
-      timeBonus,
-      total: base + timeBonus
+    const { match } = state;
+    const timeBonus = match >= 0.6 ? Math.round(state.timeLeft * 3) : 0;
+    const base = Math.round(match ** 2 * 1000);
+    const stars = starsFor(match);
+    const prev = bests[p.id];
+    const newBest = !prev || match > prev.match + 0.001;
+    if (newBest) {
+      bests[p.id] = { match, stars };
+      writeJson(BEST_KEY, bests);
+    }
+    state.results[state.slot] = {
+      def: p, match, stars, base, timeBonus, total: base + timeBonus, newBest, ...verdictFor(match)
     };
-    hud.task.classList.remove('show');
-    hud.sim.classList.remove('show');
-    hud.tools.classList.remove('show');
-    hud.timer.textContent = '';
-    if (ghost) ghost.visible = false;
-    finger.visible = false;
-    setPhaseLabel('IN I UGNEN');
-    sfx.kiln(2.4);
+    state.phase = 'fire';
+    state.t = 0;
+    state.fast = false;
+    setThrowHud(false);
+    guide.group.visible = false;
+    hand.visible = false;
+    sponge.visible = false;
+    dragging = false;
+    brush = null;
+    smoothing = false;
+    contact.visible = false;
     sfx.setShaping(0);
-  }
-
-  function showJudgement() {
-    state.phase = 'judge';
-    const v = state.verdict;
-    state.score += v.total;
-    hud.score.textContent = fmt(state.score);
-    sfx.verdict(v.match);
+    sfx.wire();
+    sfx.whoosh(FIRE.lift);
     setPhaseLabel('');
-    hud.title.textContent = `${currentPiece().name}: ${v.points}/10`;
-    hud.text.textContent = v.words;
-    hud.steps.hidden = true;
-    hud.scoreline.hidden = false;
-    hud.scoreline.innerHTML =
-      `<span>+${fmt(v.total)}</span><small>likhet ${Math.round(v.match * 100)}% · tidsbonus ${fmt(v.timeBonus)}</small>`;
-    hud.verdict.hidden = false;
-    hud.verdict.innerHTML = `<b>${currentPiece().glazeName}</b><span>${Math.round(v.match * 100)}%</span>`;
-    hud.start.textContent = state.round >= 3 ? 'Se resultatet' : 'Nästa alster';
-    hud.overlay.classList.add('show');
+    renderChips();
+    hud.skip.classList.add('show');
+
+    // The fired twin, waiting in the kiln
+    body.open = 1;
+    const geo = body.firedGeometry(r, p.glaze);
+    const mat = glazeMaterial(maps, p.glaze.metal);
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.visible = false;
+    scene.add(mesh);
+    fired = { mesh, def: p };
   }
 
-  function placeOnBench() {
-    // Bake the thrown profile into a keepsake on the bench
-    const keep = clayGeo.clone();
-    const mesh = new THREE.Mesh(keep, new THREE.MeshMatcapMaterial({
-      matcap: firedMatcap,
-      color: currentPiece().glaze
-    }));
-    const spot = shelfPieces.length;
-    mesh.scale.setScalar(0.3);
-    mesh.position.set(-0.8 + spot * 0.8, 0.9, 0);
-    bench.add(mesh);
-    shelfPieces.push(mesh);
+  function showVerdict() {
+    state.phase = 'judge';
+    hud.skip.classList.remove('show');
+    const res = state.results[state.slot];
+    const p = res.def;
+    state.score += res.total;
+    sfx.verdict(res.match);
+    hud.vKicker.textContent = `${p === BONUS ? 'Bonus' : `Alster ${state.slot + 1}/3`} · ${p.glazeName}`;
+    hud.vName.textContent = p.name;
+    hud.vGrade.textContent = String(res.grade);
+    hud.vStars.innerHTML = starsHtml(0);
+    hud.vWords.textContent = `”${res.words}”`;
+    hud.vLines.innerHTML = `
+      <div><span>Likhet ${Math.round(res.match * 100)} %</span><b>${fmt(res.base)}</b></div>
+      <div><span>Tidsbonus</span><b>+${fmt(res.timeBonus)}</b></div>
+      <div class="sum"><span>Totalt</span><b>+${fmt(res.total)}</b></div>`;
+    hud.vBadge.hidden = !res.newBest;
+    hud.vBadge.textContent = 'Personbästa!';
+    const totalStars = state.results.reduce((s, x) => s + x.stars, 0);
+    let nextLabel = 'Nästa alster';
+    if (state.slot === 2 && state.pieces.length === 3 && totalStars >= BONUS_STARS) {
+      nextLabel = 'Keramikern har en utmaning till…';
+    } else if (state.slot >= state.pieces.length - 1) nextLabel = 'Se kvällens utställning';
+    hud.next.textContent = nextLabel;
+    hud.verdict.classList.remove('grade-hi', 'grade-mid', 'grade-lo');
+    hud.verdict.classList.add(res.grade >= 9 ? 'grade-hi' : res.grade <= 3 ? 'grade-lo' : 'grade-mid');
+    hud.verdict.classList.add('show');
+    // Stars land one at a time
+    const stars = hud.vStars.querySelectorAll('.lr-star');
+    for (let i = 0; i < res.stars; i++) {
+      later(() => {
+        stars[i].classList.add('on', 'pop');
+        sfx.star(i);
+      }, 420 + i * 340);
+    }
+    if (res.grade >= 9) later(() => sfx.fanfare(), 420 + res.stars * 340);
+    renderChips();
   }
 
+  /** From the verdict: the piece goes to the window, the next lump lands. */
   function nextPiece() {
-    placeOnBench();
-    hud.overlay.classList.remove('show');
-    if (state.round >= 3) {
-      gameOver();
+    if (state.phase !== 'judge') return;
+    hud.verdict.classList.remove('show');
+    if (fired) {
+      gallery.push({ mesh: fired.mesh, from: fired.mesh.position.clone(), to: studio.sill[gallery.length], t: 0, s0: fired.mesh.scale.x });
+      fired = null;
+      sfx.whoosh();
+    }
+    const totalStars = state.results.reduce((s, x) => s + x.stars, 0);
+    if (state.slot === 2 && state.pieces.length === 3 && totalStars >= BONUS_STARS) {
+      state.pieces.push(BONUS);
+      toast('Keramikern ler: en pokal till!', true);
+    }
+    if (state.slot >= state.pieces.length - 1) {
+      endEvening();
       return;
     }
-    state.round++;
+    state.slot++;
     startPiece();
   }
 
-  function gameOver() {
+  function endEvening() {
     state.phase = 'over';
-    clay.visible = false;
+    state.t = 0;
+    clayGroup.visible = false;
+    renderChips();
     const isHigh = state.score > high;
     if (isHigh) {
       high = state.score;
-      try {
-        localStorage.setItem(HIGHSCORE_KEY, String(Math.round(high)));
-      } catch (e) {
-        /* private mode */
-      }
+      writeJson(HIGHSCORE_KEY, String(Math.round(high)));
       hud.hi.textContent = fmt(high);
     }
-    sfx.fanfare();
-    sfx.setWheel(0);
-    hud.title.textContent = isHigh ? 'Nytt rekord!' : 'Utställningen är klar';
-    hud.text.textContent = isHigh
-      ? 'Kvällens bästa hand med leran hittills. Bravo!'
-      : 'Tre alster på hyllan och lera överallt. En vända till?';
-    hud.steps.hidden = true;
-    hud.scoreline.hidden = false;
-    hud.scoreline.innerHTML = `<span>${fmt(state.score)}</span><small>poäng · rekord ${fmt(high)}</small>`;
-    hud.verdict.hidden = true;
-    hud.start.textContent = 'Dreja igen';
-    hud.overlay.classList.add('show');
+    sfx.silence();
+    later(() => {
+      sfx.fanfare();
+      showSummary(isHigh);
+    }, 1300);
+  }
+
+  function clearGallery() {
+    gallery.forEach((g) => {
+      scene.remove(g.mesh);
+      g.mesh.geometry.dispose();
+      g.mesh.material.dispose();
+    });
+    gallery.length = 0;
+    if (fired) {
+      scene.remove(fired.mesh);
+      fired.mesh.geometry.dispose();
+      fired.mesh.material.dispose();
+      fired = null;
+    }
   }
 
   function startGame() {
     sfx.resume();
+    state.timers.forEach(clearTimeout);
+    state.timers.length = 0;
+    clearGallery();
+    seedSplats();
+    fx.clear();
     state.score = 0;
-    state.round = 1;
+    state.shownScore = 0;
+    state.slot = 0;
+    state.pieces = PIECES.slice();
+    state.results = [];
     hud.score.textContent = '0';
-    hud.scoreline.hidden = true;
-    hud.verdict.hidden = true;
-    hud.steps.hidden = false;
     hud.overlay.classList.remove('show');
-    shelfPieces.forEach((m) => {
-      bench.remove(m);
-      m.geometry.dispose();
-      m.material.dispose();
-    });
-    shelfPieces.length = 0;
     startPiece();
   }
 
   /* ---- Input ------------------------------------------------------------ */
 
   const raycaster = new THREE.Raycaster();
-  const workPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+  const workPlane = new THREE.Plane();
   const planeHit = new THREE.Vector3();
+  const planeRight = new THREE.Vector3();
   const pointerNdc = new THREE.Vector2();
-  let dragging = false;
-  let smoothing = false;
-  let helpOpen = false;
-  let shapingEnergy = 0;
 
+  /** Pointer → (signed radius, height) in the camera-facing plane through the axis. */
   function pointerToClay(e) {
     const rect = canvasHost.getBoundingClientRect();
     pointerNdc.set(
@@ -711,31 +752,18 @@ export async function createClay(container) {
       -(((e.clientY - rect.top) / rect.height) * 2 - 1)
     );
     raycaster.setFromCamera(pointerNdc, camera);
+    const n = new THREE.Vector3(camera.position.x, 0, camera.position.z).normalize();
+    workPlane.setFromNormalAndCoplanarPoint(n, new THREE.Vector3(0, 0, 0));
     if (!raycaster.ray.intersectPlane(workPlane, planeHit)) return null;
-    return { x: planeHit.x, y: planeHit.y - wheel.headY };
+    planeRight.set(n.z, 0, -n.x);
+    return { x: planeHit.dot(planeRight), y: planeHit.y - wheel.headY };
   }
 
-  let brush = null; // {j, targetR, side}
-
-  function onPointerDown(e) {
-    sfx.resume();
-    if (helpOpen || e.target.closest('.pb-overlay, .pb-mute, .pb-info, .pb-help, .cl-tool')) return;
-    if (state.phase !== 'throw') return;
-    dragging = true;
-    onPointerMove(e);
-  }
-
-  function onPointerMove(e) {
-    if (!dragging || state.phase !== 'throw') return;
-    const p = pointerToClay(e);
-    if (!p) return;
+  function brushFrom(p) {
     const u = p.y / H;
-    if (u < -0.1 || u > 1.15) {
-      brush = null;
-      return;
-    }
+    if (u < -0.1 || u > 1.15) return null;
     const j = Math.max(0, Math.min(N - 1, Math.round(u * (N - 1))));
-    brush = {
+    return {
       j,
       targetR: Math.max(R_MIN, Math.min(R_MAX, Math.abs(p.x))),
       side: Math.sign(p.x) || 1,
@@ -743,9 +771,36 @@ export async function createClay(container) {
     };
   }
 
+  function onPointerDown(e) {
+    sfx.resume();
+    if (helpOpen) return;
+    if (state.phase === 'fire') {
+      state.fast = true;
+      return;
+    }
+    if (state.phase !== 'throw') return;
+    dragging = true;
+    onPointerMove(e);
+  }
+
+  function onPointerMove(e) {
+    if (state.phase !== 'throw') return;
+    const p = pointerToClay(e);
+    if (!p) return;
+    if (!dragging) {
+      hover = e.pointerType === 'mouse' ? brushFrom(p) : null;
+      return;
+    }
+    brush = brushFrom(p);
+  }
+
   function onPointerUp() {
     dragging = false;
     brush = null;
+  }
+
+  function onPointerLeave() {
+    hover = null;
   }
 
   function onKeyDown(e) {
@@ -757,18 +812,29 @@ export async function createClay(container) {
     if (e.key === ' ' && (state.phase === 'idle' || state.phase === 'over')) {
       e.preventDefault();
       startGame();
-    } else if (e.key === 'Enter' && state.phase === 'throw') {
-      finishPiece();
+    } else if (e.key === 'Enter') {
+      if (state.phase === 'throw') finishPiece();
+      else if (state.phase === 'judge') nextPiece();
+    } else if ((e.key === 'g' || e.key === 'G') && state.phase === 'throw') {
+      keySmooth = true;
+    } else if (e.key === ' ' && state.phase === 'fire') {
+      e.preventDefault();
+      state.fast = true;
     }
   }
 
-  /* Strategy card: pauses the wheel while open, like the pinball's */
+  function onKeyUp(e) {
+    if (e.key === 'g' || e.key === 'G') keySmooth = false;
+  }
+
+  /* Strategy card: pauses the wheel while open */
   function setHelp(open) {
     helpOpen = open;
     hud.help.hidden = !open;
     if (open) {
       dragging = false;
       smoothing = false;
+      keySmooth = false;
       brush = null;
       sfx.setShaping(0);
     }
@@ -776,12 +842,15 @@ export async function createClay(container) {
 
   canvasHost.addEventListener('pointerdown', onPointerDown);
   canvasHost.addEventListener('pointermove', onPointerMove);
+  canvasHost.addEventListener('pointerleave', onPointerLeave);
   window.addEventListener('pointerup', onPointerUp);
+  window.addEventListener('pointercancel', onPointerUp);
   window.addEventListener('keydown', onKeyDown);
-  hud.start.addEventListener('click', () => {
-    if (state.phase === 'judge') nextPiece();
-    else startGame();
+  window.addEventListener('keyup', onKeyUp);
+  hud.panel.addEventListener('click', (e) => {
+    if (e.target.closest('[data-act="start"]')) startGame();
   });
+  hud.next.addEventListener('click', nextPiece);
   hud.done.addEventListener('click', finishPiece);
   hud.info.addEventListener('click', () => setHelp(!helpOpen));
   hud.helpClose.addEventListener('click', () => setHelp(false));
@@ -795,11 +864,92 @@ export async function createClay(container) {
   hud.smooth.addEventListener('pointerdown', smoothOn);
   hud.smooth.addEventListener('pointerup', smoothOff);
   hud.smooth.addEventListener('pointerleave', smoothOff);
+  hud.smooth.addEventListener('pointercancel', smoothOff);
   hud.mute.addEventListener('click', () => {
     sfx.muted = !sfx.muted;
     hud.mute.classList.toggle('off', sfx.muted);
-    sfx.setWheel(state.phase === 'throw' ? 1 : 0);
+    if (sfx.muted) sfx.silence();
   });
+
+  /* ---- Camera framing per aspect ---------------------------------------- */
+
+  const view = { aspect: 1, portrait: false, tan: Math.tan(THREE.MathUtils.degToRad(19)) };
+  const camGoal = new THREE.Vector3();
+  const lookGoal = new THREE.Vector3();
+  const lookAt = new THREE.Vector3(0, 1.6, 0);
+  const tmpV = new THREE.Vector3();
+  const camRight = new THREE.Vector3();
+  const idleDir = new THREE.Vector3();
+
+  /**
+   * Place the camera so a box of half-size (hw, hh) around `look` fills
+   * the given fraction of the view, approaching from direction `dir`.
+   * `shift` slides the subject across the frame in screen units (−1..1) to
+   * make room for side or bottom cards.
+   */
+  function frame(look, dir, hw, hh, fill, shift = [0, 0]) {
+    const dV = hh / (view.tan * fill);
+    const dH = hw / (view.tan * view.aspect * fill);
+    const d = Math.max(dV, dH);
+    tmpV.copy(dir).normalize();
+    camGoal.copy(look).addScaledVector(tmpV, d);
+    // Shift: move the look point opposite to where the subject should sit
+    camRight.set(tmpV.z, 0, -tmpV.x).normalize();
+    lookGoal.copy(look).addScaledVector(camRight, -shift[0] * d * view.tan * view.aspect);
+    lookGoal.y -= shift[1] * d * view.tan;
+  }
+
+  const DIR_THROW = new THREE.Vector3(0, 0.2, 1);
+  const DIR_KILN = new THREE.Vector3(-0.55, 0.22, 1);
+  const DIR_REVEAL = new THREE.Vector3(-0.42, 0.2, 1);
+  const DIR_SHOW = new THREE.Vector3(0.05, 0.12, 1);
+  const REVEAL_LOOK = new THREE.Vector3();
+  const SHOW_LOOK = new THREE.Vector3(studio.window.x, 1.95, -5.2);
+  const IDLE_LOOK = new THREE.Vector3(0.4, 1.9, -1.2);
+  const THROW_LOOK = new THREE.Vector3(0, 1.78, 0);
+  const kilnLook = new THREE.Vector3();
+  const kilnMouth = new THREE.Vector3();
+  const kilnFlue = new THREE.Vector3();
+  studio.group.updateMatrixWorld(true);
+  studio.kiln.group.localToWorld(kilnLook.set(0, 1.5, 0.4));
+  studio.kiln.group.localToWorld(kilnMouth.set(0, 0.63, 0.05));
+  studio.kiln.group.localToWorld(kilnFlue.copy(studio.kiln.flue));
+  const kilnFront = new THREE.Vector3();
+  studio.kiln.group.localToWorld(kilnFront.set(0, 1.15, 1.25));
+
+  function updateCamera(t, dt) {
+    const P = view.portrait;
+    const ph = state.phase;
+    if (ph === 'idle') {
+      idleDir.set(Math.sin(t * 0.12) * 0.12 - 0.15, 0.22, 1);
+      frame(IDLE_LOOK, idleDir, P ? 2.4 : 4.6, 2.4, 0.9, P ? [0, 0.3] : [0.28, 0]);
+    } else if (ph === 'intro' || ph === 'throw' || (ph === 'fire' && state.t < FIRE.lift)) {
+      frame(THROW_LOOK, DIR_THROW, 1.72, 1.3, P ? 0.94 : 0.6, P ? [0, 0.04] : [0.04, 0]);
+    } else if (ph === 'fire' && state.t < FIRE.open) {
+      frame(kilnLook, DIR_KILN, P ? 1.25 : 2.2, 1.6, P ? 0.92 : 0.82);
+    } else if (ph === 'fire' || ph === 'judge') {
+      REVEAL_LOOK.copy(studio.reveal);
+      REVEAL_LOOK.x += 0.15;
+      REVEAL_LOOK.y += 0.45;
+      frame(REVEAL_LOOK, DIR_REVEAL, P ? 0.75 : 1.3, 0.7, P ? 0.9 : 0.75,
+        ph === 'judge' ? (P ? [0, 0.42] : [-0.3, 0]) : [0, P ? 0.1 : 0]);
+    } else if (ph === 'over') {
+      frame(SHOW_LOOK, DIR_SHOW, 1.55, 0.75, P ? 0.92 : 0.7, P ? [0, 0.45] : [-0.3, 0]);
+    }
+    const k = 1 - Math.exp(-dt * (ph === 'fire' ? 2.4 : 2.0));
+    camera.position.lerp(camGoal, k);
+    lookAt.lerp(lookGoal, 1 - Math.exp(-dt * 3.2));
+    camera.lookAt(lookAt);
+    // A little firing rumble (never with reduced motion)
+    if (!reduceMotion && ph === 'fire' && state.heat > 0.5) {
+      const s = (state.heat - 0.5) * 0.012;
+      camera.position.x += Math.sin(t * 61) * s;
+      camera.position.y += Math.sin(t * 47 + 1) * s;
+    }
+    if (!reduceMotion && state.wobble > 0.25 && ph === 'throw') {
+      camera.position.x += Math.sin(t * 38) * state.wobble * 0.008;
+    }
+  }
 
   /* ---- Sizing ----------------------------------------------------------- */
 
@@ -808,25 +958,35 @@ export async function createClay(container) {
     const w = Math.max(1, Math.floor(rect.width));
     const h = Math.max(1, Math.floor(rect.height));
     renderer.setSize(w, h, false);
-    camera.aspect = w / h;
-    camera.fov = camera.aspect < 0.7 ? 58 : 48;
+    composer.setSize(w, h);
+    const pr = renderer.getPixelRatio();
+    // Phones: bloom from a quarter-size source (it is a soft glow anyway)
+    if (lowTier) bloom.setSize(Math.round((w * pr) / 2), Math.round((h * pr) / 2));
+    view.aspect = w / h;
+    view.portrait = view.aspect < 0.85;
+    camera.fov = view.portrait ? 50 : view.aspect < 1.3 ? 42 : 36;
+    camera.aspect = view.aspect;
     camera.updateProjectionMatrix();
+    view.tan = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+    fx.setScale((h * pr) / (2 * view.tan));
+    hudHost.classList.toggle('lr-wide', view.aspect >= 1.15);
+    hudHost.classList.toggle('lr-tall', view.portrait);
+    if (state.phase === 'throw' || state.phase === 'intro') renderMatch();
   }
   const ro = new ResizeObserver(resize);
   ro.observe(canvasHost);
   resize();
 
-  /* ---- Loop ------------------------------------------------------------- */
+  /* ---- Simulation --------------------------------------------------------- */
 
-  let raf = 0;
-  let last = performance.now();
-  let running = true;
-  const camGoal = new THREE.Vector3(0, 2.4, 7.6);
-  const lookGoal = new THREE.Vector3(0, 1.5, 0);
-  const lookAt = new THREE.Vector3(0, 1.5, 0);
   const rand = mulberry(99);
   let tickSecond = 0;
   let matchThrottle = 0;
+  let wobbleBeat = 0;
+  let plopGap = 0;
+  let swiftIn = 6;
+  const handPos = new THREE.Vector3();
+  const work = new THREE.Vector3();
 
   function applyBrush(dt) {
     let moved = 0;
@@ -840,13 +1000,25 @@ export async function createClay(container) {
         r[j] += (brush.targetR - r[j]) * w * rate;
         r[j] = Math.max(R_MIN, Math.min(R_MAX, r[j]));
         moved += Math.abs(r[j] - before);
+        // Fingers leave crisp, wet rings where they work
+        body.ring[j] += (1.15 - body.ring[j]) * Math.min(1, w * dt * 3);
+        body.wet[j] += (1 - body.wet[j]) * Math.min(1, w * dt * 2.5);
       }
+      // Yanking far from the wall throws the clay off-centre
+      const pressure = Math.abs(brush.targetR - r[brush.j]);
+      if (pressure > 0.5) state.wobble = Math.min(1, state.wobble + (pressure - 0.5) * dt * 2.4);
     }
-    if (smoothing) {
+    if (smoothing || keySmooth) {
       const rate = Math.min(1, dt * 6);
       for (let j = 3; j < N - 1; j++) {
         r[j] += ((r[j - 1] + r[j + 1]) / 2 - r[j]) * rate;
       }
+      // The sponge melts the rings and wets the whole wall
+      for (let j = 0; j < N; j++) {
+        body.ring[j] += (0.22 - body.ring[j]) * Math.min(1, dt * 1.4);
+        body.wet[j] += (1 - body.wet[j]) * Math.min(1, dt * 1.2);
+      }
+      state.wobble = Math.max(0, state.wobble - dt * 0.9);
       moved += 0.02;
       if (rand() < dt * 3) sfx.smooth();
     }
@@ -856,7 +1028,53 @@ export async function createClay(container) {
         r[j] += ((r[j - 1] + r[j + 1]) / 2 - r[j]) * Math.min(1, dt * 1.2);
       }
     }
+    // Off-centre clay gets lumpy toward the top until it settles
+    if (state.wobble > 0.3) {
+      for (let j = 20; j < N; j++) {
+        if (rand() < dt * 6) {
+          r[j] = Math.max(R_MIN, Math.min(R_MAX, r[j] + (rand() - 0.5) * state.wobble * 0.02 * (j / N)));
+        }
+      }
+      moved += 0.001;
+    }
+    // Clay slowly dries between touches
+    for (let j = 0; j < N; j++) body.wet[j] = Math.max(0.3, body.wet[j] - dt * 0.012);
     return moved;
+  }
+
+  function updateIntro(dt) {
+    state.t += dt;
+    const { t } = state;
+    state.wheelSpeed += (1 - state.wheelSpeed) * Math.min(1, dt * 1.5);
+    // Drop, squash, open
+    if (t < 0.42) {
+      const k = t / 0.42;
+      clayGroup.position.y = wheel.headY + 1.6 * (1 - k * k);
+      clayGroup.scale.set(1, 1, 1);
+    } else {
+      if (clayGroup.position.y !== wheel.headY) {
+        clayGroup.position.y = wheel.headY;
+        sfx.slap();
+        for (let i = 0; i < 14; i++) {
+          const a = rand() * Math.PI * 2;
+          fx.drops.emit(Math.cos(a) * 0.6, wheel.headY + 0.05, Math.sin(a) * 0.6, Math.cos(a) * 1.6, 1.2 + rand(), Math.sin(a) * 1.6, 0.7, 0.05 + rand() * 0.04);
+        }
+      }
+      const k = (t - 0.42) / 0.4;
+      const squash = k < 1 ? Math.exp(-k * 4) * Math.cos(k * 9) * 0.16 : 0;
+      clayGroup.scale.set(1 + squash * 0.6, 1 - squash, 1 + squash * 0.6);
+    }
+    if (t > 0.85) {
+      if (body.open === 0) sfx.open();
+      body.open = smooth(0.85, 1.35, t);
+      body.update(r);
+    }
+    if (t >= 1.4) {
+      body.open = 1;
+      body.update(r);
+      clayGroup.scale.setScalar(1);
+      state.phase = 'throw';
+    }
   }
 
   function updateThrow(dt, t) {
@@ -876,58 +1094,272 @@ export async function createClay(container) {
     }
 
     const moved = applyBrush(dt);
+    const working = dragging && brush;
     shapingEnergy += (Math.min(1, moved * 26) - shapingEnergy) * Math.min(1, dt * 9);
-    sfx.setShaping(dragging || smoothing ? 0.15 + shapingEnergy : 0);
-    if (moved > 0.0005 || smoothing) {
-      updateClayGeometry();
-      matchThrottle -= dt;
-      if (matchThrottle <= 0) {
-        matchThrottle = 0.12;
-        const prev = state.match;
-        renderMatch();
-        if (state.match > state.bestMatch) {
-          state.bestMatch = state.match;
-          if (state.match >= 0.9 && prev < 0.9) toast('Keramikern höjer ögonbrynen!', true);
-          else if (state.match >= 0.78 && prev < 0.78) toast('Nu liknar det något!');
-        }
-      }
+    sfx.setShaping(working || smoothing || keySmooth ? 0.15 + shapingEnergy : 0, state.wobble);
+    // Rings and wetness change continuously, so the mesh is rebuilt every frame
+    body.update(r);
+    matchThrottle -= dt;
+    if (matchThrottle <= 0 && (moved > 0.0005 || smoothing || keySmooth)) {
+      matchThrottle = 0.12;
+      renderMatch();
+      if (state.match > state.bestMatch) state.bestMatch = state.match;
+    }
+    guide.updateDiff(r, 1);
+
+    // Off-centre wobble: precessing tilt, thumps, a warning
+    state.wobble = Math.max(0, state.wobble - dt * 0.35);
+    const wob = state.wobble;
+    tilt.rotation.x = Math.sin(state.spin) * wob * 0.05;
+    tilt.rotation.z = Math.cos(state.spin) * wob * 0.05;
+    wobbleBeat -= dt;
+    if (wob > 0.3 && wobbleBeat <= 0) {
+      wobbleBeat = 0.42;
+      sfx.wobble();
+    }
+    if (wob > 0.45 && !state.wobbleWarned) {
+      state.wobbleWarned = true;
+      toast('Lugnt! Leran slår — glätta och ta det varsamt.');
     }
 
-    /* Fingertip marker + slip drops while the hands are on */
-    if (brush && dragging) {
-      finger.visible = true;
-      const fr = r[brush.j] + 0.06;
-      finger.position.set(brush.side * fr, brush.y, 0.12);
-      if (shapingEnergy > 0.12 && rand() < dt * 30 * shapingEnergy) {
-        emitDrop(
-          clayGroup.position.x + brush.side * fr,
-          wheel.headY + brush.y,
-          0.1,
-          1.4 + shapingEnergy * 2.4
-        );
+    updateHands(dt, t);
+    const show = !dragging && !(smoothing || keySmooth);
+    guide.updateHints(r, t, show);
+  }
+
+  /** Hand at the contact point, sponge while smoothing, slip thrown off. */
+  function updateHands(dt, t) {
+    const b = brush && dragging ? brush : null;
+    const ref = b || hover;
+    if (ref) {
+      const wall = r[ref.j];
+      guide.setRing(true, ref.y, wall, ref.targetR < wall ? 1 : -1, dt);
+    } else {
+      guide.setRing(false, 0, 0, 0, dt);
+    }
+    if (b) {
+      const wall = r[b.j];
+      const shake = state.wobble * 0.03 * Math.sin(t * 40);
+      handPos.set(b.side * (wall + 0.015) + shake, b.y, 0.08);
+      if (!hand.visible) {
+        hand.position.copy(handPos);
+        hand.visible = true;
+        hand.userData.k = 0;
+      }
+      hand.position.lerp(handPos, Math.min(1, dt * 22));
+      hand.userData.k = Math.min(1, (hand.userData.k || 0) + dt * 8);
+      const press = b.targetR < wall ? 1 : -1;
+      hand.rotation.z = press * 0.08 * b.side;
+      const s = 0.85 + 0.15 * hand.userData.k;
+      hand.scale.set(b.side * s, s, s);
+      // Slip flies off the spinning wall, tangent to the rotation
+      if (shapingEnergy > 0.12 && rand() < dt * 34 * shapingEnergy) {
+        guide.group.localToWorld(work.set(b.side * wall, b.y, 0));
+        const w = 3.1 * state.wheelSpeed;
+        const vx = work.z * w * 0.45 + work.x * 0.9;
+        const vz = -work.x * w * 0.45 + work.z * 0.9;
+        fx.drops.emit(work.x, work.y, work.z, vx + (rand() - 0.5), 1.4 + rand() * 1.8, vz + (rand() - 0.5), 1.4, 0.035 + rand() * 0.05);
       }
     } else {
-      finger.visible = false;
+      hand.visible = false;
+    }
+    const sm = smoothing || keySmooth;
+    sponge.visible = sm;
+    if (sm) {
+      const u = 0.55 + Math.sin(t * 3.2) * 0.38;
+      const j = Math.round(u * (N - 1));
+      sponge.position.set(r[j] + 0.1, u * H, 0.1);
+      sponge.scale.set(0.8 + Math.sin(t * 9) * 0.06, 1, 1);
+    }
+  }
+
+  /** Slip droplets land as splats on the floor or vanish into the pan. */
+  function landDrop(x, y, z) {
+    const rr = Math.hypot(x, z);
+    if (rr < 1.12 && y < 0.6) {
+      if (plopGap <= 0) {
+        sfx.plop();
+        plopGap = 0.12;
+      }
+      return true;
+    }
+    if (y <= 0.004) {
+      fx.splats.add(x, 0.004, z, 0.05 + Math.random() * 0.09, 0.9 + Math.random() * 0.25);
+      return true;
+    }
+    return false;
+  }
+
+  const heatCol = new THREE.Color();
+  function setHeat(h) {
+    state.heat = h;
+    const { kiln } = studio;
+    kiln.chamberMat.emissiveIntensity = 0.06 + h * 3.2;
+    heatCol.setRGB(1.0, 0.32 + h * 0.5, 0.08 + h * 0.3).multiplyScalar(h * 6);
+    kiln.glowMat.color.copy(heatCol);
+    sfx.setKiln(h);
+  }
+
+  /** Door shut: the raw piece becomes the fired one inside the kiln. */
+  function swapToFired() {
+    if (!clayGroup.visible) return;
+    clayGroup.visible = false;
+    fired.mesh.visible = true;
+    fired.mesh.position.copy(kilnMouth);
+    fired.mesh.scale.setScalar(0.4);
+    fired.mesh.material.emissiveIntensity = 1.4;
+  }
+
+  function updateFire(dt, t) {
+    const speed = state.fast ? 3.5 : 1;
+    const prevT = state.t;
+    state.t += dt * speed;
+    const ft = state.t;
+    const crossed = (mark) => prevT < mark && ft >= mark;
+    state.wheelSpeed += (0 - state.wheelSpeed) * Math.min(1, dt * 2.5);
+    const { hinge } = studio.kiln;
+    const OPEN = -1.95;
+
+    if (ft < FIRE.lift) {
+      clayGroup.position.y = wheel.headY + ease(ft / FIRE.lift) * 0.3;
+      hinge.rotation.y = OPEN * ease(ft / FIRE.lift);
+      setHeat(0.08);
+    } else if (ft < FIRE.fly) {
+      const k = ease((ft - FIRE.lift) / (FIRE.fly - FIRE.lift));
+      clayGroup.position.set(0, wheel.headY + 0.3, 0).lerp(kilnMouth, k);
+      clayGroup.position.y += Math.sin(Math.PI * k) * 1.1;
+      clayGroup.scale.setScalar(1 - 0.6 * k);
+      hinge.rotation.y = OPEN;
+      tilt.rotation.set(0, 0, 0);
+    } else if (ft < FIRE.close) {
+      clayGroup.position.copy(kilnMouth);
+      hinge.rotation.y = OPEN * (1 - ease((ft - FIRE.fly) / (FIRE.close - FIRE.fly)));
+      if (crossed(FIRE.close - 0.08)) sfx.door();
+    } else if (ft < FIRE.heat) {
+      swapToFired();
+      hinge.rotation.y = 0;
+      const k = (ft - FIRE.close) / (FIRE.heat - FIRE.close);
+      const h = smooth(0, 0.75, k);
+      setHeat(h);
+      const temp = Math.round(20 + 1220 * smooth(0, 0.92, k));
+      hud.tempVal.textContent = fmt(temp);
+      hud.temp.classList.add('show');
+      hud.temp.style.setProperty('--heat', h.toFixed(2));
+      studio.kiln.led.draw(String(temp).padStart(4, ' '));
+      if (rand() < dt * 14 * h) sfx.crackle();
+      // Embers pour out of the flue
+      if (rand() < dt * 40 * h) {
+        fx.embers.emit(kilnFlue.x, kilnFlue.y, kilnFlue.z, (rand() - 0.5) * 0.6, 1.0 + rand() * 1.2, (rand() - 0.5) * 0.6, 1.6 + rand(), 0.05 + rand() * 0.05);
+      }
+    } else if (ft < FIRE.open) {
+      if (crossed(FIRE.heat)) {
+        sfx.door(0.05);
+        hud.temp.classList.remove('show');
+      }
+      const k = ease((ft - FIRE.heat) / (FIRE.open - FIRE.heat));
+      hinge.rotation.y = OPEN * k;
+      setHeat(1 - 0.35 * k);
+    } else if (ft < FIRE.slide) {
+      swapToFired();
+      hinge.rotation.y = OPEN;
+      const k = ease((ft - FIRE.open) / (FIRE.slide - FIRE.open));
+      fired.mesh.position.lerpVectors(kilnMouth, studio.reveal, k);
+      fired.mesh.position.y += Math.sin(Math.PI * k) * 0.35;
+      fired.mesh.scale.setScalar(0.4 + 0.02 * k);
+      fired.mesh.rotation.y += dt * 2;
+      setHeat(0.65 - 0.3 * k);
+    } else {
+      // Cooling on the banding wheel: glow fades, glaze pings, steam, glints
+      const k = (ft - FIRE.slide) / (FIRE.cool - FIRE.slide);
+      swapToFired();
+      hinge.rotation.y = OPEN;
+      hud.temp.classList.remove('show');
+      fired.mesh.position.copy(studio.reveal);
+      fired.mesh.material.emissiveIntensity = 1.4 * Math.exp(-k * 4.5);
+      setHeat(0.35 * (1 - k));
+      if (rand() < dt * 7) sfx.ping();
+      if (rand() < dt * 18 * (1 - k)) {
+        const a = rand() * Math.PI * 2;
+        fx.steam.emit(studio.reveal.x + Math.cos(a) * 0.2, studio.reveal.y + 0.3 + rand() * 0.6, studio.reveal.z + Math.sin(a) * 0.2, 0, 0.3, 0, 1.6, 0.25);
+      }
+      if (k > 0.35 && rand() < dt * 9) emitGlint();
+      if (ft >= FIRE.cool) {
+        fired.mesh.material.emissiveIntensity = 0;
+        setHeat(0);
+        showVerdict();
+      }
     }
 
-    // The clay quivers a touch when it is being worked hard
-    const quiver = 1 + shapingEnergy * 0.012 * Math.sin(t * 40);
-    clay.scale.set(quiver, 1, quiver);
+    // Kiln glow light: at the door while firing, a flash when it opens
+    const flash = ft > FIRE.heat && ft < FIRE.heat + 0.5 ? Math.sin(((ft - FIRE.heat) / 0.5) * Math.PI) * (reduceMotion ? 0.6 : 2.2) : 0;
+    accent.position.copy(kilnFront);
+    accent.color.setRGB(1, 0.45 + state.heat * 0.2, 0.15);
+    accent.intensity = state.heat * 9 + flash * 6;
+    haze.enabled = state.heat > 0.15;
+    if (haze.enabled) {
+      tmpV.copy(kilnFlue).add(kilnLook).multiplyScalar(0.5).project(camera);
+      haze.uniforms.uCenter.value.set(tmpV.x * 0.5 + 0.5, tmpV.y * 0.5 + 0.5);
+      haze.uniforms.uRadius.value.set(0.16 / Math.max(0.6, view.aspect), 0.32);
+      haze.uniforms.uStrength.value = state.heat;
+      haze.uniforms.uTime.value = t;
+    }
+    bloom.strength = 0.3 + state.heat * 0.45 + flash * 0.25;
   }
 
-  function updateFire(dt) {
-    state.fireT += dt / 2.6;
-    state.wheelSpeed += (0 - state.wheelSpeed) * Math.min(1, dt * 3);
-    const k = Math.min(1, state.fireT);
-    const heat = Math.sin(k * Math.PI);
-    kilnLight.intensity = heat * 3.2;
-    studio.kilnDoor.color.setRGB(0.16 + heat * 0.9, 0.08 + heat * 0.35, 0.03 + heat * 0.06);
-    // White clay → glowing hot → glaze colour
-    const glaze = new THREE.Color(currentPiece().glaze);
-    if (k < 0.5) clayMat.color.lerpColors(new THREE.Color(0xffffff), new THREE.Color(0xffa668), heat);
-    else clayMat.color.lerpColors(new THREE.Color(0xffa668), glaze, (k - 0.5) * 2);
-    if (k >= 1) showJudgement();
+  function emitGlint() {
+    if (!fired) return;
+    const m = fired.mesh;
+    const j = 6 + Math.floor(rand() * (N - 8));
+    const a = (rand() - 0.5) * 1.6;
+    const camDir = Math.atan2(camera.position.x - m.position.x, camera.position.z - m.position.z);
+    const rad = r[j] * m.scale.x;
+    fx.glints.emit(
+      m.position.x + Math.sin(camDir + a) * rad,
+      m.position.y + (j / (N - 1)) * H * m.scale.y,
+      m.position.z + Math.cos(camDir + a) * rad,
+      0, 0, 0, 0.6, 0.09 + rand() * 0.06
+    );
   }
+
+  /**
+   * Outside the firing, the roaming accent becomes a soft warm display
+   * light: on the banding wheel while the piece is judged, on the window
+   * sill for the evening's exhibition.
+   */
+  const ACCENT_JUDGE = new THREE.Vector3();
+  const ACCENT_SHOW = new THREE.Vector3(studio.window.x + 0.3, 2.9, -3.7);
+  ACCENT_JUDGE.copy(studio.reveal).add(new THREE.Vector3(-0.8, 1.3, 1.2));
+  function updateAccent(dt) {
+    let goal = 0;
+    if (state.phase === 'judge') {
+      accent.position.copy(ACCENT_JUDGE);
+      goal = 3.2;
+    } else if (state.phase === 'over') {
+      accent.position.copy(ACCENT_SHOW);
+      goal = 5;
+    }
+    if (goal) accent.color.lerp(heatCol.setRGB(1, 0.86, 0.7), Math.min(1, dt * 3));
+    accent.intensity += (goal - accent.intensity) * Math.min(1, dt * 3);
+  }
+
+  /** Pieces gliding to the window sill. */
+  function updateGallery(dt) {
+    gallery.forEach((g) => {
+      if (g.t >= 1) return;
+      g.t = Math.min(1, g.t + dt / 1.2);
+      const k = ease(g.t);
+      g.mesh.position.lerpVectors(g.from, g.to, k);
+      g.mesh.position.y += Math.sin(Math.PI * k) * 1.0;
+      g.mesh.scale.setScalar(g.s0 + (0.24 - g.s0) * k);
+      g.mesh.rotation.y += dt * (1 - k) * 3;
+    });
+  }
+
+  /* ---- Loop ------------------------------------------------------------- */
+
+  let raf = 0;
+  let last = performance.now();
+  let running = true;
 
   function tick(now) {
     raf = requestAnimationFrame(tick);
@@ -935,79 +1367,81 @@ export async function createClay(container) {
     last = now;
     if (!running) return;
     const t = now / 1000;
+    plopGap -= dt;
 
     if (helpOpen) {
-      // Strategy card open: the wheel coasts, nothing advances
       state.wheelSpeed += (0 - state.wheelSpeed) * Math.min(1, dt * 2);
-    } else if (state.phase === 'throw') updateThrow(dt, t);
-    else if (state.phase === 'fire') updateFire(dt);
+    } else if (state.phase === 'intro') updateIntro(dt);
+    else if (state.phase === 'throw') updateThrow(dt, t);
+    else if (state.phase === 'fire') updateFire(dt, t);
     else {
       state.wheelSpeed += (0 - state.wheelSpeed) * Math.min(1, dt * 2);
-      kilnLight.intensity = Math.max(0, kilnLight.intensity - dt * 2);
+      if (state.heat > 0) setHeat(Math.max(0, state.heat - dt));
+      haze.enabled = false;
+      bloom.strength += (0.3 - bloom.strength) * Math.min(1, dt * 2);
     }
+    if (state.phase !== 'fire') updateAccent(dt);
+    if (state.phase !== 'throw') {
+      guide.setRing(false, 0, 0, 0, dt);
+      if (state.phase !== 'intro') guide.updateHints(r, t, false);
+    }
+    guide.group.visible = state.phase === 'throw' || state.phase === 'intro';
 
+    // Spin: clay, wheel head, motion blur fading in with speed
     sfx.setWheel(state.wheelSpeed);
-    const spin = state.wheelSpeed * 3.1 * dt;
-    clay.rotation.y += spin;
-    wheel.head.rotation.y += spin;
+    const omega = state.wheelSpeed * 9.5;
+    state.spin += omega * dt;
+    clay.rotation.y = state.spin;
+    wheel.head.rotation.y = state.spin;
+    wheel.blurMat.opacity = smooth(0.15, 0.7, state.wheelSpeed);
+    contact.scale.setScalar(r[0] * 2.4);
 
-    /* Judge nods during the verdict */
-    const { head } = studio.guy.userData;
-    if (state.phase === 'judge' || state.phase === 'fire') {
-      studio.guy.rotation.y += (-2.2 - studio.guy.rotation.y) * Math.min(1, dt * 2);
-      head.rotation.x = Math.sin(t * 2.4) * 0.1;
-    } else {
-      studio.guy.rotation.y += (-0.7 - studio.guy.rotation.y) * Math.min(1, dt * 2);
-      head.rotation.x += (0 - head.rotation.x) * Math.min(1, dt * 3);
+    // The guide plane turns to face the camera
+    guide.group.rotation.y = Math.atan2(camera.position.x, camera.position.z);
+    guide.setGhostTime(t, state.phase === 'intro' ? smooth(0.5, 1.4, state.t) : 0.9);
+
+    // The finished piece turns on the banding wheel while it is judged
+    if (fired && (state.phase === 'judge' || (state.phase === 'fire' && state.t > FIRE.slide))) {
+      fired.mesh.rotation.y += dt * 0.6;
+      studio.banding.rotation.y += dt * 0.6;
+    }
+    updateGallery(dt);
+
+    // Keramikern: watches the wheel, turns to judge, celebrates good work
+    const { guy, head, armR } = studio.judge;
+    const judging = state.phase === 'judge' || (state.phase === 'fire' && state.t > FIRE.open);
+    const res = state.results[state.slot];
+    guy.rotation.y += ((judging ? -1.35 : -0.75) - guy.rotation.y) * Math.min(1, dt * 2);
+    head.rotation.x = judging ? Math.sin(t * 2.6) * 0.09 : head.rotation.x * (1 - Math.min(1, dt * 3));
+    head.rotation.y = judging ? 0 : Math.sin(t * 0.4) * 0.25;
+    const cheer = state.phase === 'judge' && res && res.grade >= 8;
+    armR.rotation.x += ((cheer ? -2.4 + Math.sin(t * 6) * 0.15 : 0) - armR.rotation.x) * Math.min(1, dt * 5);
+
+    // Score counts up
+    if (state.shownScore !== state.score) {
+      state.shownScore += (state.score - state.shownScore) * Math.min(1, dt * 5);
+      if (Math.abs(state.score - state.shownScore) < 1) state.shownScore = state.score;
+      hud.score.textContent = fmt(state.shownScore);
     }
 
-    /* Dust motes drift */
-    studio.motes.rotation.y = Math.sin(t * 0.05) * 0.04;
+    // Particles
+    fx.drops.update(dt, landDrop);
+    fx.embers.update(dt);
+    fx.steam.update(dt);
+    fx.glints.update(dt);
+
+    // Ambience: the sun shaft shimmers, motes drift, swifts pass over
+    studio.shaft.material.uniforms.uTime.value = t;
     studio.motes.position.y = Math.sin(t * 0.11) * 0.05;
-
-    /* Slip droplets */
-    let dropsAlive = false;
-    for (let i = 0; i < dropCount; i++) {
-      const d = dropVel[i];
-      if (d.life <= 0) continue;
-      dropsAlive = true;
-      d.life -= dt;
-      d.vy -= 7 * dt;
-      dropPos[i * 3] += d.vx * dt;
-      dropPos[i * 3 + 1] += d.vy * dt;
-      dropPos[i * 3 + 2] += d.vz * dt;
-      if (dropPos[i * 3 + 1] < 0.6 || d.life <= 0) {
-        d.life = 0;
-        dropPos[i * 3 + 1] = -99;
-      }
-    }
-    if (dropsAlive) dropGeo.attributes.position.needsUpdate = true;
-
-    /* Camera: wide in the studio, closer over the wheel while working */
-    if (state.phase === 'over') {
-      // The exhibition: three glazed pieces on the bench
-      camGoal.set(-1.5, 1.75, 3.4);
-      lookGoal.set(-2.7, 1.05, -0.3);
-    } else if (state.phase === 'idle') {
-      camGoal.set(Math.sin(t * 0.1) * 0.7, 2.5, 7.8);
-      lookGoal.set(0, 1.5, 0);
-    } else if (state.phase === 'fire' || state.phase === 'judge') {
-      camGoal.set(2.0, 2.2, 6.6);
-      lookGoal.set(1.3, 1.35, -1.3);
-    } else {
-      camGoal.set(0, 2.35, 7.0);
-      lookGoal.set(0, 1.55, 0);
-    }
-    camera.position.lerp(camGoal, Math.min(1, dt * 2.6));
-    lookAt.lerp(lookGoal, Math.min(1, dt * 3.4));
-    camera.lookAt(lookAt);
-
-    /* Ghost breathes so it reads as a guide, not an object */
-    if (ghost && ghost.visible) {
-      ghostMat.opacity = 0.55 + Math.sin(t * 2.4) * 0.2;
+    studio.motes.position.x = Math.sin(t * 0.07) * 0.06;
+    swiftIn -= dt;
+    if (swiftIn <= 0) {
+      swiftIn = 7 + rand() * 12;
+      if (state.phase !== 'fire') sfx.swift();
     }
 
-    renderer.render(scene, camera);
+    updateCamera(t, dt);
+    composer.render();
   }
 
   raf = requestAnimationFrame(tick);
@@ -1015,11 +1449,14 @@ export async function createClay(container) {
   const onVisibility = () => {
     running = !document.hidden;
     last = performance.now();
+    if (!running) sfx.silence();
   };
   document.addEventListener('visibilitychange', onVisibility);
 
-  renderRound();
-  hud.overlay.classList.add('show');
+  renderChips();
+  showStart();
+  // Start with the camera already on its idle mark
+  updateCamera(0, 10);
 
   /* Deterministic hooks for automated tests */
   window.__ppLera = {
@@ -1029,23 +1466,34 @@ export async function createClay(container) {
     nextPiece,
     profile: r,
     matchTo(k = 0.9) {
-      const { profile } = currentPiece();
-      for (let j = 0; j < N; j++) {
-        r[j] = r[j] + (profile(j / (N - 1)) - r[j]) * k;
-      }
-      updateClayGeometry();
+      const { profile } = piece();
+      for (let j = 0; j < N; j++) r[j] = r[j] + (profile(j / (N - 1)) - r[j]) * k;
+      body.update(r);
       renderMatch();
+      guide.updateDiff(r, 1);
     },
     skipFire() {
-      if (state.phase === 'fire') {
-        state.fireT = 1;
-      }
+      if (state.phase === 'fire') state.t = Math.max(state.t, FIRE.cool - 0.01);
+    },
+    unlockBonus() {
+      if (state.pieces.length === 3) state.pieces.push(BONUS);
+    },
+    /** Client coordinates of the clay wall at height u on side ±1. */
+    screenOf(u, side = 1) {
+      const j = Math.round(clamp01(u) * (N - 1));
+      guide.group.updateMatrixWorld(true);
+      guide.group.localToWorld(work.set(side * r[j], u * H, 0)).project(camera);
+      const rect = canvasHost.getBoundingClientRect();
+      return { x: rect.left + (work.x * 0.5 + 0.5) * rect.width, y: rect.top + (-work.y * 0.5 + 0.5) * rect.height };
     },
     computeMatch,
+    /** Live three.js handles for test scripts (screenshots from other angles). */
+    three: { scene, camera, sun, renderer },
     info() {
       return {
         drawCalls: renderer.info.render.calls,
-        triangles: renderer.info.render.triangles
+        triangles: renderer.info.render.triangles,
+        lowTier: !!lowTier
       };
     }
   };
@@ -1059,23 +1507,28 @@ export async function createClay(container) {
     document.removeEventListener('visibilitychange', onVisibility);
     canvasHost.removeEventListener('pointerdown', onPointerDown);
     canvasHost.removeEventListener('pointermove', onPointerMove);
+    canvasHost.removeEventListener('pointerleave', onPointerLeave);
     window.removeEventListener('pointerup', onPointerUp);
+    window.removeEventListener('pointercancel', onPointerUp);
     window.removeEventListener('keydown', onKeyDown);
+    window.removeEventListener('keyup', onKeyUp);
     clearTimeout(state.lastToast);
     state.timers.forEach(clearTimeout);
     delete window.__ppLera;
 
+    guide.dispose();
+    fx.dispose();
     scene.traverse((o) => {
       if (o.geometry) o.geometry.dispose();
-      if (o.material) {
-        const mats = Array.isArray(o.material) ? o.material : [o.material];
-        mats.forEach((m) => {
-          if (m.map) m.map.dispose();
-          if (m.matcap) m.matcap.dispose();
-          m.dispose();
-        });
-      }
+      if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(disposeMaterial);
     });
+    body.dispose();
+    maps.normal.dispose();
+    maps.albedo.dispose();
+    envRT.dispose();
+    composer.dispose();
+    rt.dispose();
+    bloom.dispose();
     renderer.dispose();
     renderer.forceContextLoss?.();
     if (sfx.ctx) sfx.ctx.close();
