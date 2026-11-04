@@ -240,7 +240,10 @@ const SKY_GLSL = `
     float h = clamp(d.y, 0.0, 1.0);
     // Almost all of the gradient happens in the first few degrees above
     // the horizon — that is what makes a low sun read as a low sun.
-    vec3 c = mix(uHorizon, uZenith, pow(h, 0.42));
+    // Gold at the horizon, a band of rose, then the clear blue of a
+    // night that never gets dark
+    vec3 c = mix(uHorizon, vec3(0.66, 0.36, 0.46), smoothstep(0.0, 0.14, h));
+    c = mix(c, uZenith, pow(smoothstep(0.05, 0.6, h), 0.75));
     float s = max(dot(d, uSunDir), 0.0);
     // Warm the horizon toward the sun's azimuth, cool it away from it
     vec2 az = normalize(d.xz + 1e-4);
@@ -554,7 +557,10 @@ export function buildWater(caustics, noise, reflect) {
           vec3 refl = skyCol(R);
           // The far shore mirrored in the lake, rank by rank. The ripples
           // bend it only part way, so the trees waver instead of shattering
-          vec3 Ns = normalize(vec3(N0.x * 0.55, 1.0, N0.z * 0.55) + (N - N0) * 0.22);
+          // At grazing angles a tilt of a few degrees throws the mirrored
+          // ray clean off the shore, so far out the waves bend it less
+          float calm = mix(0.5, 0.12, smoothstep(8.0, 70.0, vDepth));
+          vec3 Ns = normalize(vec3(N0.x * calm, 1.0, N0.z * calm * 0.6) + (N - N0) * calm * 0.35);
           vec3 Rs = reflect(-V, Ns);
           Rs.y = abs(Rs.y);
           vec4 sh = shoreRefl(vWorld, Rs);

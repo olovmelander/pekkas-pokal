@@ -1018,7 +1018,14 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1, profile = null 
     add(step, 3.7, 0.085 * (i + 1), STAGE_Z + 0.45 - i * 0.3);
   });
 
-  const velvetMat = (folds) => standard(0xffffff, 0.86, { map: velvetTexture(folds) });
+  // Velvet is all sheen: light rakes across the pile and the folds glow at
+  // their edges. The phone keeps the plain version.
+  const velvetMat = (folds) => (tier === 'high'
+    ? new THREE.MeshPhysicalMaterial({
+      map: velvetTexture(folds), roughness: 0.88, metalness: 0,
+      sheen: 1, sheenRoughness: 0.42, sheenColor: new THREE.Color(0xff6a5c)
+    })
+    : standard(0xffffff, 0.86, { map: velvetTexture(folds) }));
   const pleat = (w, h, folds, amp) => {
     const geo = new THREE.PlaneGeometry(w, h, Math.max(24, folds * 6), 1);
     const p = geo.attributes.position;
@@ -1172,7 +1179,10 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1, profile = null 
   {
     const g = new THREE.Group();
     g.position.set(-2.55, STAGE_H, -6.0);
-    const pianoMat = standard(0x1c120d, 0.4);
+    // Old black piano lacquer: a deep coat that holds the stage lights
+    const pianoMat = tier === 'high'
+      ? new THREE.MeshPhysicalMaterial({ color: 0x1c120d, roughness: 0.45, clearcoat: 1, clearcoatRoughness: 0.12 })
+      : standard(0x1c120d, 0.4);
     const body = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.15, 0.55), pianoMat);
     body.position.y = 0.575;
     g.add(body);

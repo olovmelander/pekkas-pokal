@@ -143,8 +143,10 @@ export class Foe {
     this.name = opp.name;
     const trim = TRIM[opp.name] ?? 0xf1efe8;
     this.person = createPerson(appearanceFor(opp.name, {
-      outfit: { top: 'jersey', topColor: CLUB_RED, bottom: 'shorts', bottomColor: 0x1b1d24, accent: trim, shoes: 'sneakers', shoeColor: 0xe9e6de },
-      headwear: { style: 'headband', color: 0xf3efe6 }
+      // The club kit is a costume; the face, hair, beard and glasses are
+      // theirs (appearanceFor), so no headband over the hair either — the
+      // hair is half of how you know who is across the table
+      outfit: { top: 'jersey', topColor: CLUB_RED, bottom: 'shorts', bottomColor: 0x1b1d24, accent: trim, shoes: 'sneakers', shoeColor: 0xe9e6de }
     }));
     const p = this.person;
     this.root = p.root;

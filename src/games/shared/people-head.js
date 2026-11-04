@@ -430,10 +430,15 @@ function headTint(p, ctx, n) {
   const lipX = 1 - sstep(0.016, 0.024, ax);
   const upper = lipX * sstep(my0 + 0.0095, my0 + 0.0065, y) * sstep(my0 - 0.0005, my0 + 0.001, y);
   const lower = lipX * sstep(my0 - 0.0125, my0 - 0.009, y) * sstep(my0 + 0.0005, my0 - 0.001, y);
-  const lips = (upper * 1.15 + lower * 0.85) * sstep(0.07, 0.085, z) * ctx.face.lipTone;
-  r -= lips * 0.07;
-  g -= lips * 0.3;
-  bl -= lips * 0.26;
+  const lips = (upper * 1.2 + lower * 0.95) * sstep(0.07, 0.085, z) * ctx.face.lipTone;
+  r -= lips * 0.04;
+  g -= lips * 0.34;
+  bl -= lips * 0.28;
+  // A soft sheen on the middle of the lower lip
+  const lipHL = lower * gauss(ax, 0.008) * gauss(y - (my0 - 0.0068), 0.002) * 0.06;
+  r += lipHL;
+  g += lipHL;
+  bl += lipHL;
   // Cheekbones catch light; the cheek below them hollows a touch
   const bone = gauss(ax - 0.05, 0.012) * gauss(y + 0.008, 0.008) * sstep(0.03, 0.06, z);
   const hollow = gauss(ax - 0.048, 0.012) * gauss(y + 0.04, 0.012) * sstep(0.02, 0.05, z);
@@ -651,9 +656,9 @@ function buildLid(b, ctx, s, c, upper) {
       const rr = rr0 + (upper && key !== 'lid' ? 0.0007 * outer : 0);
       const lp = [Math.sin(az) * Math.cos(e) * rr, Math.sin(e) * rr, Math.cos(az) * Math.cos(e) * rr];
       let tint = skin;
-      if (key === 'lash') tint = upper ? [0.045, 0.032, 0.03] : [skin[0] * 0.8, skin[1] * 0.64, skin[2] * 0.62];
+      if (key === 'lash') tint = upper ? [0.045, 0.032, 0.03] : [skin[0] * 0.84, skin[1] * 0.74, skin[2] * 0.72];
       else if (key === 'liner') tint = [0.075 + 0.03 * (1 - outer), 0.055 + 0.02 * (1 - outer), 0.05 + 0.018 * (1 - outer)];
-      else if (key === 'rim') tint = [skin[0] * 0.9, skin[1] * 0.8, skin[2] * 0.78];
+      else if (key === 'rim') tint = upper ? [skin[0] * 0.9, skin[1] * 0.8, skin[2] * 0.78] : [skin[0] * 0.95, skin[1] * 0.9, skin[2] * 0.88];
       const fade = upper ? 1 - 0.1 * gauss(de - 0.3, 0.2) : 1;
       pts.push({
         p: toModel([c[0] + lp[0], c[1] + lp[1], c[2] + lp[2]]),
@@ -800,23 +805,23 @@ function slerpDir(a, b, t) {
 export const HAIR_STYLES = {
   bald: null,
   buzz: { h: 0.0022, side: 0.0019, ramp: 0.05, crown: [0, 0.9, -0.43], groove: 0.0002, buzz: true },
-  crop: { h: 0.0075, side: 0.0038, ramp: 0.13, crown: [0, 0.9, -0.43], groove: 0.0007, front: 0.003 },
-  tousled: { h: 0.011, side: 0.0062, ramp: 0.08, crown: [0.1, 0.92, -0.38], groove: 0.0012, noise: 0.0035, fringe: 0.006, front: 0.003 },
-  sidePart: { h: 0.0125, side: 0.0058, ramp: 0.085, crown: [0.3, 0.9, -0.3], groove: 0.0009, part: 34, front: 0.004 },
-  sweptBack: { h: 0.0125, side: 0.006, ramp: 0.06, crown: [0, 0.22, -0.97], groove: 0.0014, quiff: 0.008, front: 0.006 },
+  crop: { h: 0.0098, side: 0.0047, ramp: 0.13, crown: [0, 0.9, -0.43], groove: 0.0008, front: 0.0045 },
+  tousled: { h: 0.0138, side: 0.0068, ramp: 0.08, crown: [0.1, 0.92, -0.38], groove: 0.0012, noise: 0.0035, fringe: 0.006, front: 0.003 },
+  sidePart: { h: 0.0152, side: 0.0066, ramp: 0.085, crown: [0.3, 0.9, -0.3], groove: 0.001, part: 34, front: 0.0068 },
+  sweptBack: { h: 0.0142, side: 0.0064, ramp: 0.06, crown: [0, 0.22, -0.97], groove: 0.0015, quiff: 0.0095, front: 0.0068 },
   curly: { h: 0.02, side: 0.0145, ramp: 0.07, crown: [0, 0.9, -0.43], groove: 0, curls: 0.0055, front: 0.004 },
   long: { h: 0.0105, side: 0.0115, ramp: 0.05, crown: [0, 0.6, -0.8], groove: 0.0012, long: true, front: 0.003, part: 0 },
   bun: { h: 0.0058, side: 0.0048, ramp: 0.05, crown: [0, 0.35, -0.94], groove: 0.0016, bun: true },
   balding: { h: 0.0048, side: 0.0045, ramp: 0.08, crown: [0, 0.9, -0.43], groove: 0.0006, balding: true },
   // Short, a little unruly on top
-  messy: { h: 0.0115, side: 0.0045, ramp: 0.075, crown: [0.05, 0.92, -0.38], groove: 0.0013, noise: 0.0042, clumps: 0.0048, front: 0.0045, tufts: 3.2, jag: 3.4 },
+  messy: { h: 0.0135, side: 0.005, ramp: 0.075, crown: [0.05, 0.92, -0.38], groove: 0.0013, noise: 0.0042, clumps: 0.0048, front: 0.0045, tufts: 3.2, jag: 3.4 },
   // Medium length, wavy, tucked behind the ears and over the collar at the back
   wavy: {
     h: 0.0165, side: 0.0105, ramp: 0.06, crown: [0.12, 0.85, -0.5], groove: 0.0016, noise: 0.003, clumps: 0.004, front: 0.006,
     part: 24, waves: 0.0035, lower: 9, fringe: 0.0035
   },
   // A neat short cut with the temples receding
-  receding: { h: 0.0068, side: 0.0036, ramp: 0.11, crown: [0, 0.9, -0.43], groove: 0.0007, front: 0.0028, recede: 9 }
+  receding: { h: 0.0086, side: 0.0042, ramp: 0.11, crown: [0, 0.9, -0.43], groove: 0.0007, front: 0.0028, recede: 9 }
 };
 export const HAIR_STYLE_NAMES = Object.keys(HAIR_STYLES);
 
@@ -825,7 +830,7 @@ export function hatEdge(kind) {
   switch (kind) {
     case 'cap': return periodic([[0, 36], [50, 26], [90, 13], [130, 6], [180, 4]]);
     case 'beanie': return periodic([[0, 30], [50, 20], [90, 8], [130, 0], [180, -6]]);
-    case 'beret': return periodic([[0, 52], [90, 40], [180, 30]]);
+    case 'beret': return periodic([[0, 33], [50, 29], [90, 22], [130, 16], [180, 13]]);
     case 'headband': return periodic([[0, 47], [90, 38], [180, 30]]);
     default: return null;
   }
@@ -860,9 +865,9 @@ export function buildHair(b, ctx) {
       // A broken hairline: a little jitter everywhere, tufts at the fringe and nape
       const fr = Math.max(0, Math.cos(psi));
       const nape = Math.max(0, -Math.cos(psi));
-      const jit = high ? (hash01(j * 7 + 3) - 0.5) * (st.jag ?? 2.5) : 0;
+      const jit = high ? (hash01(j * 7 + 3) - 0.5) * (st.jag ?? 1.6) : 0;
       const tk = hash01(j * 13 + 5);
-      const tuft = high ? (tk > 0.4 ? 0.45 + tk * 0.75 : 0) * ((st.tufts ?? 2.6) * fr * fr + 2.2 * nape * nape) : 0;
+      const tuft = high ? (tk > 0.4 ? 0.45 + tk * 0.75 : 0) * ((st.tufts ?? 1.8) * fr * fr + 2.2 * nape * nape) : 0;
       let lineDeg = line(psiDeg);
       // Receding temples; longer styles grow lower over the ears and the nape
       if (st.recede) lineDeg += st.recede * gauss((Math.abs(((psiDeg + 540) % 360) - 180) - 46) / 20, 1);
@@ -915,14 +920,26 @@ export function buildHair(b, ctx) {
       h = h * edge - 0.0012 * (1 - edge);
       // Low detail: lift clear of the coarse skull's facets
       if (!high) h += 0.005 * edge;
-      if (hat && hatCover(psi, Math.asin(clamp(d[1], -1, 1)))) h = Math.min(h, 0.0022);
+      // Under a hat the hair is pressed flat. A headband only presses a
+      // band: the hair above it puffs out over the top.
+      let covered = 0;
+      if (hat) {
+        const el = Math.asin(clamp(d[1], -1, 1));
+        if (look.headwear === 'headband') {
+          const de = el / DEG - hat(psiDeg);
+          covered = sstep(-5, -2, de) * sstep(14, 10, de);
+        } else covered = hatCover(psi, el) ? 1 : 0;
+        if (covered > 0) h = lerp(h, Math.min(h, 0.0022), covered);
+      }
       const p = [sp[0] + nrm[0] * h, sp[1] + nrm[1] * h, sp[2] + nrm[2] * h];
-      if (st.quiff && high) {
+      if (covered > 0.5) {
+        // nothing sticks out from under the hat
+      } else if (st.quiff && high) {
         const q = st.quiff * Math.max(0, Math.cos(psi)) ** 3 * sstep(0.0, 0.08, tt) * sstep(0.45, 0.1, tt);
         p[1] += q;
         p[2] += q * 0.3;
       }
-      if (st.fringe) {
+      if (st.fringe && covered < 0.5) {
         const f = st.fringe * Math.max(0, Math.cos(psi)) ** 2 * sstep(0.25, 0.04, tt) * sstep(0, 0.03, tt);
         p[2] += f * 0.6;
         p[1] -= f;
@@ -930,7 +947,10 @@ export function buildHair(b, ctx) {
       // Colour: darker at the roots and in the grooves, lighter on top
       // Strand clumps: darker in the grooves, a sheen of lighter hair on top
       const strand = noise3(psi * 11, tt * 3, 2.3) * 0.6 + noise3(d[0] * 45, d[1] * 45, d[2] * 45) * 0.4;
-      const shade = (0.6 + 0.4 * edge) * (0.9 + 0.2 * top) * (1 + 0.2 * strand);
+      // A stylised sheen band across the top of the head, broken by the strands
+      const elevD = Math.asin(clamp(d[1], -1, 1)) / DEG;
+      const sheen = high ? gauss(elevD - 60, 11) * (0.55 + 0.45 * strand) * sstep(0.1, 0.4, tt) : 0;
+      const shade = (0.6 + 0.4 * edge) * (0.9 + 0.2 * top) * (1 + 0.2 * strand) * (1 + 0.2 * sheen);
       const region = st.buzz && !ctx.crowd ? REGION.FIXED : REGION.HAIR;
       const base = st.buzz && !ctx.crowd ? ctx.buzzColor : [1, 1, 1];
       pts.push({ p: toModel(p), region, tint: base.map((v) => v * shade), mat: MAT.SKIN });
@@ -1219,13 +1239,25 @@ export function buildGlasses(b, ctx, kind, opts = {}) {
       const pts = [];
       const nl = high ? 12 : 6;
       const c0 = rimPt(cx, 0, 0);
-      for (let i = 0; i < nl; i++) pts.push({ p: toModel([c0[0], c0[1], c0[2] + 0.0006]), region: REGION.FIXED, tint: [0.03, 0.035, 0.04], mat: MAT.GLOSS });
-      for (let i = 0; i < nl; i++) {
-        const q = rimPt(cx, (i / nl) * Math.PI * 2, 0.93);
-        pts.push({ p: toModel(q), region: REGION.FIXED, tint: [0.045, 0.05, 0.055], mat: MAT.GLOSS });
+      // A painted reflection: smoky at the bottom, a cool sky gradient and one
+      // soft diagonal streak across the top (the clearcoat adds the live glint)
+      const lensTint = (q, k) => {
+        const ny = (q[1] - cy) / hh;
+        const nx = (q[0] - cx) / hw;
+        const streak = gauss(nx + ny * 0.8 - 0.25, 0.22) * sstep(-0.4, 0.4, ny);
+        const sky = sstep(-0.6, 1, ny) * k;
+        return [0.03 + 0.03 * sky + 0.05 * streak, 0.035 + 0.04 * sky + 0.055 * streak, 0.045 + 0.06 * sky + 0.06 * streak];
+      };
+      const rings = high ? [0, 0.5, 0.93] : [0, 0.93];
+      for (const k of rings) {
+        for (let i = 0; i < nl; i++) {
+          const q = k === 0 ? [c0[0], c0[1], c0[2] + 0.0006] : rimPt(cx, (i / nl) * Math.PI * 2, k);
+          if (k > 0) q[2] += 0.0006 * (1 - k * k);
+          pts.push({ p: toModel(q), region: REGION.FIXED, tint: lensTint(q, k === 0 ? 0.5 : 1), mat: MAT.GLOSS });
+        }
       }
       emitGrid(b, {
-        pts, rows: 2, cols: nl, center: new THREE.Vector3(...toModel([c0[0], c0[1], c0[2] - 0.06])), poles: [0], weight: w
+        pts, rows: rings.length, cols: nl, center: new THREE.Vector3(...toModel([c0[0], c0[1], c0[2] - 0.06])), poles: [0], weight: w
       });
     }
     return cx;
@@ -1249,10 +1281,14 @@ export function buildGlasses(b, ctx, kind, opts = {}) {
     const path = [];
     const x0 = s * (Math.abs(cxL) + hw * (sun ? 1.08 : 1));
     const steps = high ? 7 : 3;
+    const yHinge = cy + (sun ? 0.009 : 0.006);
     for (let i = 0; i <= steps; i++) {
       const u = i / steps;
-      const z = lerp(zFront - Math.abs(x0) * 0.12, up ? -0.002 : -0.012, u);
-      const y = cy + (sun ? 0.009 : 0.006) + 0.004 * u - (u > 0.85 && !up ? (u - 0.85) * 0.12 : 0);
+      // Back along the side of the head, over the root of the ear, then a
+      // short hook down behind it
+      const z = lerp(zFront - Math.abs(x0) * 0.12, up ? -0.002 : -0.021, u);
+      const hook = up ? 0 : sstep(0.72, 1, u);
+      const y = up ? yHinge + 0.004 * u : lerp(yHinge, 0.0205, sstep(0, 0.7, u)) - 0.017 * hook;
       // Find the head's side at this (y, z) and sit just outside it
       let x = Math.abs(x0);
       for (let k = 0; k < 40; k++) {
@@ -1261,6 +1297,8 @@ export function buildGlasses(b, ctx, kind, opts = {}) {
         x += 0.0015;
       }
       if (i === 0) x = Math.abs(x0);
+      // Tuck in between the skull and the ear for the hook
+      if (!up && hook > 0) x = lerp(x, Math.min(x, 0.0805), hook);
       path.push(new THREE.Vector3(...toModel([s * x, y, z])));
     }
     sweep(b, { path, radius: rr * (sun ? 0.75 : 0.8) * ctx.scale, cols: high ? 4 : 3, region: REGION.FIXED, tint: frame, mat: MAT.GLOSS, weight: w, flat: 0.7 });
@@ -1287,24 +1325,43 @@ export function buildHeadwear(b, ctx, kind) {
   const ht = ctx.hatTint || [1, 1, 1];
   const tk = (k) => [ht[0] * k, ht[1] * k, ht[2] * k];
   if (kind === 'beret') {
-    const c = [0.014, 0.088, -0.012];
-    const m = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(-0.2, 0, -0.3));
-    const tmp = new THREE.Vector3();
+    // A beret is worn, not balanced: a snug band low across the forehead
+    // and round the back, then a soft flat crown that overhangs to one side
+    const cols = high ? 30 : 12;
+    const tRows = high ? [0, 0.04, 0.12, 0.24, 0.38, 0.52, 0.66, 0.8, 0.92, 1] : [0, 0.2, 0.55, 1];
+    const crown = [0.18, 1, -0.1];
+    const cl = Math.hypot(...crown);
+    const C = crown.map((v) => v / cl);
+    field.surf(0, 1, 0, sp);
+    const topY = sp[1] + ctx.hairUnder + 0.019;
+    const pts = [];
+    for (const t of tRows) {
+      for (let j = 0; j < cols; j++) {
+        const psiDeg = (j / cols) * 360;
+        const psi = psiDeg * DEG;
+        const e = edgeFn(psiDeg) * DEG;
+        const d = slerpDir(dirFrom(psi, e), C, Math.pow(t, 0.85));
+        field.surf(d[0], d[1], d[2], sp);
+        field.normal(sp[0], sp[1], sp[2], nrm);
+        // Snug band, then the pouf, fuller on the side it slouches to
+        const side = 1 + 0.45 * Math.max(0, Math.sin(psi)) + 0.15 * Math.max(0, -Math.cos(psi));
+        let off = ctx.hairUnder + 0.0035 + (t > 0 && t < 0.05 ? 0.0015 : 0) + 0.026 * side * sstep(0.04, 0.42, t) * (1 - 0.55 * sstep(0.7, 1, t));
+        if (high && t > 0.1) off += 0.0012 * noise3(d[0] * 9, d[1] * 9, d[2] * 9);
+        const p = [sp[0] + nrm[0] * off, sp[1] + nrm[1] * off, sp[2] + nrm[2] * off];
+        // A flat, slightly domed crown, dipping towards the slouch
+        const ty = topY - 0.008 * Math.max(0, Math.sin(psi)) * sstep(0.2, 0.6, t) + 0.004 * sstep(0.75, 1, t);
+        if (p[1] > ty) p[1] = ty + (p[1] - ty) * 0.22;
+        // The band hugs the head; the rest is cloth, so it shades softly
+        const k = t === 0 ? 0.62 : t < 0.05 ? 0.78 : 0.9 + 0.1 * sstep(0.3, 0.9, t);
+        pts.push({ p: toModel(p), region: color, tint: tk(k), mat: MAT.CLOTH });
+      }
+    }
+    emitGrid(b, { pts, rows: tRows.length, cols, center: new THREE.Vector3(...toModel([0.01, 0.06, -0.01])), poles: [tRows.length - 1], weight: w });
+    // The little stalk on top
+    field.surf(C[0], C[1], C[2], sp);
     addBlob(b, {
-      c: [0, 0, 0], r: [0.118, 0.036, 0.122], n: [2.3, 2], cols: high ? 22 : 10, rows: high ? 9 : 5, region: color, mat: MAT.CLOTH,
-      tint: (p, v) => tk(v > 0.55 ? 0.8 : 1),
-      warp: (p, v) => {
-        const [x, y0, z] = p;
-        const y = v > 0.5 ? y0 * 0.35 : y0;
-        tmp.set(x, y, z).applyMatrix4(m);
-        return toModel([c[0] + tmp.x, c[1] + tmp.y, c[2] + tmp.z]);
-      },
-      weight: w
-    });
-    const nub = new THREE.Vector3(0, 0.036, 0).applyMatrix4(m);
-    addBlob(b, {
-      c: toModel([c[0] + nub.x, c[1] + nub.y, c[2] + nub.z]), r: [0.006, 0.009, 0.006].map((v) => v * ctx.scale),
-      cols: 5, rows: 3, region: color, tint: tk(0.9), mat: MAT.CLOTH, weight: w
+      c: toModel([sp[0] * 0.6, topY + 0.0045, sp[2] * 0.6]), r: [0.0035, 0.0055, 0.0035].map((v) => v * ctx.scale),
+      cols: 5, rows: 3, region: color, tint: tk(0.85), mat: MAT.CLOTH, weight: w
     });
     return;
   }

@@ -895,7 +895,9 @@ export async function createFencing(container) {
         // Drift the guard line around so the player has something to read
         if (rand() < dt * 0.7) ai.line = Math.floor(rand() * 3);
         // Footwork: small advances and retreats, keeping the distance alive
-        if (rand() < dt * 0.6) animAi.stepBy(animAi.ox > 0.05 ? -0.12 : animAi.ox < -0.05 ? 0.12 : (rand() < 0.5 ? -0.1 : 0.1));
+        if (rand() < dt * 0.6 && animAi.stepBy(animAi.ox > 0.05 ? -0.12 : animAi.ox < -0.05 ? 0.12 : (rand() < 0.5 ? -0.1 : 0.1))) {
+          sfx.footfall(0.7);
+        }
         if (ai.timer <= 0 && state.phase === 'live') {
           ai.pose = 'telegraph';
           ai.t = 0;
@@ -907,6 +909,7 @@ export async function createFencing(container) {
           if (state.firstAttack && state.tutorial) ai.willFeint = false;
           state.firstAttack = false;
           foe.express('frown', 0.6, ai.tele);
+          sfx.coil();
           salle.crowd.react('tense');
           coach('read', `<b>Anfall i ${LINE_NAME[ai.line]}!</b> Välj samma linje för att parera.`, 2200);
         }
@@ -1001,11 +1004,11 @@ export async function createFencing(container) {
     const want = Math.max(-0.16, Math.min(0.12, -animAi.ox * 0.8));
     const d = want - animMe.ox;
     if (Math.abs(d) > 0.06) {
-      animMe.stepBy(Math.max(-0.12, Math.min(0.12, d)));
+      if (animMe.stepBy(Math.max(-0.12, Math.min(0.12, d)))) sfx.footfall(1);
       meS.measureT = 0.25 + rand() * 0.3;
     } else if (rand() < dt * 0.35) {
       // A small step of your own now and then: the piste is never still
-      animMe.stepBy(animMe.ox > 0.02 ? -0.08 : 0.08);
+      if (animMe.stepBy(animMe.ox > 0.02 ? -0.08 : 0.08)) sfx.footfall(0.8);
       meS.measureT = 0.6 + rand() * 0.6;
     }
   }

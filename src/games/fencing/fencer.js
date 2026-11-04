@@ -346,8 +346,9 @@ export class Fencer {
     this.button = foil.button;
     // The fencing glove on the sword hand: a padded white fist and a long
     // gauntlet cuff over the sleeve
-    const gloveGeo = new THREE.SphereGeometry(1, 12, 9);
-    gloveGeo.scale(0.047, 0.056, 0.05);
+    // (long enough up the back of the hand to cover the skin fist inside)
+    const gloveGeo = new THREE.SphereGeometry(1, 14, 10);
+    gloveGeo.scale(0.053, 0.074, 0.057).translate(0, 0.016, -0.004);
     this.glove = new THREE.Mesh(gloveGeo, this.mats.pad);
     this.glove.castShadow = true;
     const cuffGeo = new THREE.CylinderGeometry(0.056, 0.047, 0.1, 12, 1, true);
@@ -939,11 +940,12 @@ const ACTIONS = {
     out[P.hy] += (0.0 - out[P.hy]) * up + (-0.26 * s - out[P.hy]) * down;
     out[P.fa] += (Math.PI / 2 - out[P.fa]) * up + (-0.62 - out[P.fa]) * down;
     out[P.fyaw] += 0.12 * up;
-    // Upright, the front heel at the rear instep (a right angle)
+    // Upright over the back foot, the front heel at its instep (a right
+    // angle); coming en garde, only the front foot steps out
     out[P.py] = lerp(out[P.py], 0.9 * s, stand);
     out[P.lean] = lerp(out[P.lean], -0.02, stand);
-    out[P.ffx] = lerp(out[P.ffx], a.ox + 0.06 * s, stand);
-    out[P.bfx] = lerp(out[P.bfx], a.ox - 0.06 * s, stand);
+    out[P.ffx] = lerp(out[P.ffx], out[P.bfx] + 0.13 * s, stand);
+    out[P.px] = lerp(out[P.px], out[P.bfx] + 0.07 * s, stand);
     out[P.nod] += 0.08 * up - 0.05 * down;
     out[P.mask] = k < 0.6 ? 0 : 1;
     return 12;

@@ -353,7 +353,7 @@ export function bracketScreen({ bracket, round, results, opp, place }) {
   const col = (title, list) => `<div class="fen-bcol"><div class="fen-bhead">${title}</div><div class="fen-bms">${list.map(match).join('')}</div></div>`;
   return `
     <div class="fen-kicker">${ROUNDS[round]} · match ${round + 1} av 3</div>
-    <div class="fen-bracket">
+    <div class="fen-bracket${round > 0 ? ' adv' : ''}">
       ${col('Kvartsfinal', bracket.qf)}
       ${col('Semifinal', bracket.sf)}
       ${col('Final', bracket.f)}

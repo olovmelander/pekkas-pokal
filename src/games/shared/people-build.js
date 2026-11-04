@@ -702,7 +702,10 @@ export function buildLeg(b, ctx, side) {
   const { legEnd } = bot;
   bands.push({ from: -0.075, to: legEnd, region: REGION.BOTTOM, mat: bot.mat, off: bot.off, tint: bot.tint });
   if (bot.sock) {
-    bands.push({ from: legEnd, to: bot.sock.end, region: bot.sock.region, mat: MAT.CLOTH, off: 0.0015, tint: bot.sock.tint });
+    // Bare leg between the hem and an ankle or crew sock (sock.from), or a knee sock
+    const from = Math.max(legEnd, bot.sock.from ?? legEnd);
+    if (from > legEnd + 1e-4) bands.push({ from: legEnd, to: from, region: REGION.SKIN, mat: MAT.SKIN, off: 0 });
+    bands.push({ from, to: bot.sock.end, region: bot.sock.region, mat: MAT.CLOTH, off: 0.0015, tint: bot.sock.tint });
     if (bot.sock.end < 0.87) bands.push({ from: bot.sock.end, to: 0.87, region: REGION.SKIN, mat: MAT.SKIN, off: 0 });
   } else if (legEnd < 0.87) {
     bands.push({ from: legEnd, to: 0.87, region: REGION.SKIN, mat: MAT.SKIN, off: 0 });

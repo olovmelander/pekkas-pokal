@@ -1365,16 +1365,32 @@ export async function createClay(container) {
         const vz = -work.x * w * 0.45 + work.z * 0.9;
         fx.drops.emit(work.x, work.y, work.z, vx + (rand() - 0.5), 1.4 + rand() * 1.8, vz + (rand() - 0.5), 1.4, 0.035 + rand() * 0.05);
       }
-    } else {
-      hand.visible = false;
     }
     const sm = smoothing || keySmooth;
     sponge.visible = sm;
     if (sm) {
       const u = 0.55 + Math.sin(t * 3.2) * 0.38;
       const j = Math.round(u * (N - 1));
-      sponge.position.set(r[j] + 0.1, u * H, 0.1);
-      sponge.scale.set(0.8 + Math.sin(t * 9) * 0.06, 1, 1);
+      // Squeezed a little against the wall as it rides up and down
+      const squeeze = 0.86 + Math.sin(t * 9) * 0.05;
+      sponge.position.set(r[j] + 0.1 * squeeze, u * H, 0.1);
+      sponge.scale.set(squeeze, 1, 1);
+      // ...and held there by the hand, fingertips on its back
+      if (!b) {
+        handPos.set(r[j] + 0.2 * squeeze + 0.01, u * H + 0.02, 0.06);
+        if (!hand.visible) {
+          hand.position.copy(handPos);
+          hand.visible = true;
+          hand.userData.k = 0;
+        }
+        hand.position.lerp(handPos, Math.min(1, dt * 22));
+        hand.userData.k = Math.min(1, (hand.userData.k || 0) + dt * 8);
+        hand.rotation.z = 0;
+        const s = 0.85 + 0.15 * hand.userData.k;
+        hand.scale.set(s, s, s);
+      }
+    } else if (!b) {
+      hand.visible = false;
     }
   }
 

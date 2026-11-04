@@ -1426,6 +1426,20 @@ export function buildSalle({ glow, high, crowdNames = [] }) {
       metal.add(new THREE.CylinderGeometry(0.045, 0.03, 0.05, 8), brass, x + Math.cos(a) * 0.55, chY + 0.05, chZ + Math.sin(a) * 0.55);
     }
   });
+  // Two-armed candle sconces on the four pilasters between the windows: a
+  // warm rhythm along the back wall, merged into the brass and the candles
+  // (no extra draw calls; the flames join the chandeliers' points)
+  const SCONCE_Y = 3.15;
+  const SCONCE_Z = WALL_Z + 0.2;
+  const sconceX = PILASTERS.slice(0, 4);
+  sconceX.forEach((x) => {
+    metal.add(new THREE.CylinderGeometry(0.075, 0.075, 0.025, 14), brass, x, SCONCE_Y, SCONCE_Z + 0.012, Math.PI / 2, 0, 0);
+    metal.add(new THREE.SphereGeometry(0.035, 10, 6), brass, x, SCONCE_Y - 0.09, SCONCE_Z + 0.03);
+    [-1, 1].forEach((sd) => {
+      metal.box(0.024, 0.024, 0.2, brass, x + sd * 0.06, SCONCE_Y - 0.02, SCONCE_Z + 0.11, 0, sd * 0.5, 0);
+      metal.add(new THREE.CylinderGeometry(0.05, 0.03, 0.04, 10), brass, x + sd * 0.12, SCONCE_Y + 0.02, SCONCE_Z + 0.2);
+    });
+  });
   const metalMesh = metal.build(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.32, metalness: 0.85 }));
   metalMesh.castShadow = true;
   g.add(metalMesh);
@@ -1446,6 +1460,12 @@ export function buildSalle({ glow, high, crowdNames = [] }) {
       crystal.add(new THREE.OctahedronGeometry(0.028, 0), 0xffffff, x + Math.cos(b) * 0.28, chY + 0.16, chZ + Math.sin(b) * 0.28, 0, 0, 0, 0.7, 1.5, 0.7);
     }
   });
+  sconceX.forEach((x) => {
+    [-1, 1].forEach((sd) => {
+      candleB.add(new THREE.CylinderGeometry(0.018, 0.018, 0.15, 6), 0xfff2dc, x + sd * 0.12, SCONCE_Y + 0.115, SCONCE_Z + 0.2);
+      flamePos.push(x + sd * 0.12, SCONCE_Y + 0.23, SCONCE_Z + 0.2);
+    });
+  });
   const candleMesh = candleB.build(new THREE.MeshBasicMaterial({ vertexColors: true }));
   g.add(candleMesh);
   const crystalMesh = crystal.build(new THREE.MeshStandardMaterial({
@@ -1460,6 +1480,17 @@ export function buildSalle({ glow, high, crowdNames = [] }) {
   });
   const flames = new THREE.Points(flameGeo, flameMat);
   g.add(flames);
+  // The warm wash each sconce throws on the panelling: one soft point per
+  // sconce, one draw call for all of them
+  const washGeo = new THREE.BufferGeometry();
+  washGeo.setAttribute('position', new THREE.Float32BufferAttribute(sconceX.flatMap((x) => [x, SCONCE_Y + 0.25, WALL_Z + 0.26]), 3));
+  const washMat = new THREE.PointsMaterial({
+    map: glow, color: new THREE.Color(1.0, 0.62, 0.3), size: 1.7, transparent: true, opacity: 0.42,
+    depthWrite: false, blending: THREE.AdditiveBlending
+  });
+  const wash = new THREE.Points(washGeo, washMat);
+  wash.renderOrder = 3;
+  g.add(wash);
   const haloMat = new THREE.SpriteMaterial({
     map: glow, color: 0xffb46a, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending
   });

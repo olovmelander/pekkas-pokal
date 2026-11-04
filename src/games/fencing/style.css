@@ -812,6 +812,28 @@
 
 .fen-bm.pending { opacity: 0.55; border-style: dashed; }
 
+/* After a win your name moves on into the next round: it slides across
+   into its new box and the box lights up */
+.fen-bracket.adv .fen-bm.cur .fen-bm-row.you {
+  animation: fen-adv 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.35s both;
+}
+
+.fen-bracket.adv .fen-bm.cur {
+  animation: fen-adv-box 1.2s ease-out 0.5s both, fen-cur 1.6s ease-in-out 1.7s infinite;
+}
+
+@keyframes fen-adv {
+  0% { opacity: 0; transform: translateX(-48px); color: #fff; }
+  60% { opacity: 1; }
+  100% { opacity: 1; transform: none; }
+}
+
+@keyframes fen-adv-box {
+  0% { box-shadow: 0 0 0 rgba(242, 193, 78, 0); }
+  35% { box-shadow: 0 0 34px rgba(242, 193, 78, 0.7); background: rgba(242, 193, 78, 0.12); }
+  100% { box-shadow: 0 0 22px rgba(242, 193, 78, 0.25); }
+}
+
 .fen-bm-row {
   display: flex;
   justify-content: space-between;
@@ -1059,7 +1081,9 @@
 @media (prefers-reduced-motion: reduce) {
   .fen-flash.show { animation-duration: 0.3s; opacity: 0.4; }
   .fen-line.threat { animation: none; }
-  .fen-bm.cur { animation: none; }
+  .fen-bm.cur,
+  .fen-bracket.adv .fen-bm.cur,
+  .fen-bracket.adv .fen-bm.cur .fen-bm-row.you { animation: none; }
   .fen-call.show { animation-name: fen-call-calm; }
 }
 

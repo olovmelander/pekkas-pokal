@@ -1900,6 +1900,7 @@ export async function createShooting(container) {
       gameOver();
     },
     clays,
+    shafts,
     /** Show the between-series reaction shot for a given result (hits of 8); `hold` keeps it up. */
     reactionShot(hits = 8, hold = false) {
       reactToSeries(hits, 8);

@@ -472,6 +472,8 @@ export async function createPinball(container, opts = {}) {
     renderMult();
   }
 
+  const clock = (secs) => `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+
   /** The one thing worth doing next, in words */
   function nextGoal() {
     if (state.phase === 'launch') return 'Släpp avfyraren i det turkosa fältet för skill shot';
@@ -483,9 +485,13 @@ export async function createPinball(container, opts = {}) {
       return state.jackpotLit ? 'Jackpot tänd — skjut pokalen i borgen' : 'Skjut en orbit eller ramp för att tända jackpot';
     }
     if (m) {
-      if (m.def.id === 'skytte') return `Skytte: fäll ${L.targets[Math.min(4, m.progress)].letter} härnäst`;
-      if (m.def.id === 'fiske') return 'Fiske: porten är öppen — skjut pokalen';
-      return `${m.def.label}: ${m.def.hint.toLowerCase()}`;
+      // Progress and the clock in the line itself: in portrait this pill is
+      // the only place the gren's objective is spelled out
+      const left = clock(Math.max(0, Math.ceil(m.timeLeft)));
+      const head = `${m.def.label} ${m.progress}/${m.def.goal}`;
+      if (m.def.id === 'skytte') return `${head} · fäll ${L.targets[Math.min(4, m.progress)].letter} härnäst · ${left}`;
+      if (m.def.id === 'fiske') return `${head} · skjut pokalen i borgen · ${left}`;
+      return `${head} · ${m.def.hint.toLowerCase()} · ${left}`;
     }
     if (state.modeStartLit) {
       return MODES.every((x) => state.modeDone.has(x.id)) ? 'Finalen tänd — skjut vänster orbit' : 'Gren tänd — skjut vänster orbit';
@@ -504,8 +510,6 @@ export async function createPinball(container, opts = {}) {
     hud.goalText.textContent = g;
     hud.goal.classList.toggle('on', !!g);
   }
-
-  const clock = (secs) => `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
 
   function addScore(n) {
     const wiz = state.mode && state.mode.wizard ? 5 : 1;
@@ -545,6 +549,47 @@ export async function createPinball(container, opts = {}) {
   }
 
   const say = (lines, o) => dmd.say(lines, o);
+
+  /**
+   * Onboarding: a speech bubble pinned to the shot it talks about, for the
+   * first few games on a device. Each tip shows once per game, one at a
+   * time, and follows its target as the camera drifts.
+   */
+  const COACH_GAMES = 3;
+  let gamesPlayed = 0;
+  try {
+    gamesPlayed = Number(localStorage.getItem('pbf-games')) || 0;
+  } catch (e) {
+    gamesPlayed = 0;
+  }
+  const coachState = { seen: new Set(), x: 0, y: 0, h: 0, until: 0, on: false };
+  function coach(key, text, x, y, h = 1.2, ms = 3800) {
+    if (gamesPlayed > COACH_GAMES || coachState.seen.has(key)) return;
+    coachState.seen.add(key);
+    Object.assign(coachState, { x, y, h, until: performance.now() + ms, on: true });
+    hud.coachText.textContent = text;
+    hud.coach.hidden = false;
+    hud.coach.classList.remove('go');
+    void hud.coach.offsetWidth;
+    hud.coach.classList.add('go');
+  }
+  function hideCoach() {
+    coachState.on = false;
+    hud.coach.hidden = true;
+  }
+  const coachV = new THREE.Vector3();
+  function updateCoach(now) {
+    if (!coachState.on) return;
+    if (now > coachState.until || state.phase !== 'play') {
+      hideCoach();
+      return;
+    }
+    coachV.set(coachState.x, coachState.h, -coachState.y);
+    tableGroup.localToWorld(coachV);
+    coachV.project(camera);
+    hud.coach.style.left = `${((coachV.x + 1) / 2) * view.w}px`;
+    hud.coach.style.top = `${((1 - coachV.y) / 2) * view.h}px`;
+  }
 
   /* ---- Effects ---- */
   const flashes = [];
@@ -654,6 +699,9 @@ export async function createPinball(container, opts = {}) {
       const pts = addScore(1000 * 2 ** Math.min(state.combo.n - 1, 4));
       sfx.combo(state.combo.n);
       dmd.combo(state.combo.n, pts);
+      const lead = state.balls[0];
+      if (lead) pop(`KOMBO ×${state.combo.n}`, lead.x, lead.y + 1.4, 'combo');
+      if (state.combo.n >= 3) fireFlasher(state.combo.n % 2 ? 'left' : 'right', 0.8);
     } else {
       state.combo.n = 1;
     }
@@ -716,6 +764,7 @@ export async function createPinball(container, opts = {}) {
           sfx.modeStart();
           lampShow('chase', 0x7c8cf8, 1.2);
           say(['LÅS TÄNT', 'PORTEN ÖPPNAS'], { prio: 2, flash: true, border: true, dur: 2 });
+          coach('lock', 'Låset tänt — skjut in bollen i borgen', GATE_X, GATE_Y - 0.6);
           updateStatus();
         }
       }
@@ -826,6 +875,9 @@ export async function createPinball(container, opts = {}) {
           const allDone = MODES.every((m) => state.modeDone.has(m.id));
           say(allDone ? ['FINALEN TÄND', 'VÄNSTER ORBIT'] : ['P-O-K-A-L!', 'GREN TÄND · V. ORBIT'],
             { prio: 2, flash: true, border: true, dur: 2.2 });
+          later(() => {
+            if (state.modeStartLit) coach('orbit', 'Skjut vänster orbit — starta grenen!', -8.95, 17.2);
+          }, 900);
         } else {
           say(['P-O-K-A-L!', `POÄNG ×${state.mult}`], { prio: 2, flash: true, dur: 2 });
         }
@@ -1028,6 +1080,14 @@ export async function createPinball(container, opts = {}) {
     setGI(0x7c8cf8, 1.2 * LAMP);
     renderGrenar();
     updateStatus();
+    const spot = {
+      gokart: [-8.95, 17.2, 'Orbit eller ramp = ett varv'],
+      femkamp: [L.centerX, 16.4, 'Fem olika skott — vad som helst'],
+      pingis: [-2.4, 24.4, 'Bumprarna! Tolv träffar'],
+      skytte: [L.targets[0].x, L.targets[0].y, 'Börja med P, sen O, K, A, L'],
+      fiske: [L.jackpot.x, L.jackpot.y, 'Porten är öppen — skjut pokalen']
+    }[next.id];
+    if (spot) later(() => coach(`mode-${next.id}`, spot[2], spot[0], spot[1], next.id === 'fiske' ? 2.8 : 1.2), 4300);
   }
 
   function completeMode() {
@@ -1167,6 +1227,7 @@ export async function createPinball(container, opts = {}) {
     });
     state.locked = 0;
     updateStatus();
+    later(() => coach('jackpot', 'Träffa pokalen i borgen: JACKPOT', L.jackpot.x, L.jackpot.y, 2.8), 1600);
   }
 
   /* ======================= Wireform ramps ======================= */
@@ -1330,6 +1391,9 @@ export async function createPinball(container, opts = {}) {
     if (touch) {
       hud.zones.classList.add('show');
       later(() => hud.zones.classList.remove('show'), 3500);
+    }
+    if (state.ballNo === 1 && !state.saveUsed) {
+      later(() => coach('bank', 'Fäll alla fem P-O-K-A-L-mål', -4.3, 16.0), touch ? 3800 : 1600);
     }
 
     buzz(14 + Math.round(p * 16));
@@ -1509,6 +1573,14 @@ export async function createPinball(container, opts = {}) {
   function startGame() {
     if (pendingScore) return;
     sfx.resume();
+    gamesPlayed++;
+    try {
+      localStorage.setItem('pbf-games', String(gamesPlayed));
+    } catch (e) {
+      /* private mode: tips every game */
+    }
+    coachState.seen.clear();
+    hideCoach();
     state.score = 0;
     state.ballNo = 1;
     state.mult = 1;
@@ -1574,6 +1646,8 @@ export async function createPinball(container, opts = {}) {
     const f = side === 'left' ? flipL : flipR;
     if (f.pressed !== pressed) {
       f.pressed = pressed;
+      // The half of the glass under the thumb answers, like a lit button
+      if (touch) hud.zones.children[side === 'left' ? 0 : 1].classList.toggle('press', pressed);
       if (pressed) {
         sfx.flipperUp();
         buzz(7);
@@ -2084,6 +2158,15 @@ export async function createPinball(container, opts = {}) {
 
   /* ---- DMD content between callouts ---- */
   const startHint = touch ? 'TRYCK PÅ STARTA' : 'MELLANSLAG';
+  // The DMD score counts up to the real one instead of jumping, so a big
+  // award reads as a payout rather than a typo
+  let scoreShown = 0;
+  function rollScore(dt) {
+    const diff = state.score - scoreShown;
+    if (diff <= 0) scoreShown = state.score;
+    else scoreShown += Math.max(10, Math.ceil((diff * Math.min(1, dt * 7)) / 10) * 10);
+    if (scoreShown > state.score) scoreShown = state.score;
+  }
   dmd.base = (d, t) => {
     if (state.phase === 'idle' || state.phase === 'over') {
       d.attract(t, { board, last: state.lastScore, startHint });
@@ -2108,7 +2191,7 @@ export async function createPinball(container, opts = {}) {
     else if (state.lockLit) [status, hot] = ['LÅS TÄNT', true];
     else if (state.modeStartLit) [status, hot] = ['GREN TÄND', true];
     else status = `LÅS ${'●'.repeat(state.locked)}${'○'.repeat(Math.max(0, 2 - state.locked))}`;
-    d.play({ score: state.score, ball: state.ballNo, mult: state.mult, mode, status, hot }, t);
+    d.play({ score: scoreShown, ball: state.ballNo, mult: state.mult, mode, status, hot }, t);
   };
 
   /* ---- Graphics watchdogs ---- */
@@ -2188,6 +2271,7 @@ export async function createPinball(container, opts = {}) {
       watch.on = false; // nothing cheaper left to give
     }
   }
+  let peek = null;
   let raf = 0;
   let last = performance.now();
   let acc = 0;
@@ -2389,6 +2473,7 @@ export async function createPinball(container, opts = {}) {
       hud.mode.hidden = true;
     }
     renderGoal();
+    updateCoach(performance.now());
     boardTick += dtRaw;
     if (view.land && boardTick > 0.4) {
       boardTick = 0;
@@ -2503,6 +2588,7 @@ export async function createPinball(container, opts = {}) {
     }
 
     fx.update(dt > 0 ? dtRaw : 0);
+    rollScore(dtRaw);
     dmd.update(dtRaw);
     room.update(t);
 
@@ -2512,6 +2598,11 @@ export async function createPinball(container, opts = {}) {
     camera.position.copy(camBase).add(kick.p);
     pv.copy(target).addScaledVector(kick.p, 0.5);
     camera.lookAt(pv);
+    if (peek) {
+      // Test hook: a close-up camera (window.__pbFlipper.peek)
+      camera.position.copy(peek.from);
+      camera.lookAt(peek.to);
+    }
 
     drawFrame();
     watchdog.afterFrame();
@@ -2634,6 +2725,25 @@ export async function createPinball(container, opts = {}) {
       launchBall();
     },
     nudge: doNudge,
+    /** Close-up camera for screenshots: peek([x,y,z], [tx,ty,tz]) in world units; peek() restores */
+    peek(from, to) {
+      if (!from) {
+        peek = null;
+        camera.near = clamp(camBase.distanceTo(target) * 0.35, 0.5, 40);
+        resize();
+        return;
+      }
+      peek = { from: new THREE.Vector3(...from), to: new THREE.Vector3(...to) };
+      camera.clearViewOffset();
+      camera.near = 0.5;
+      camera.updateProjectionMatrix();
+      scene.fog.near = 200;
+      scene.fog.far = 400;
+    },
+    /** Fire the flasher domes (for screenshots) */
+    flasher: fireFlasher,
+    /** Show an onboarding bubble now (for screenshots) */
+    coach,
     /** Drop every ball straight into the drain */
     drain() {
       state.riders.splice(0).forEach((r) => {

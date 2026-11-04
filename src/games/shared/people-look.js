@@ -121,8 +121,9 @@ export function appearanceFor(name, overrides = {}) {
       skin: pick(r, [SKIN_TONES.fair, SKIN_TONES.light, SKIN_TONES.light, SKIN_TONES.lightWarm, SKIN_TONES.medium, SKIN_TONES.olive]),
       hair: { style: pick(r, styles), color: pick(r, Object.values(HAIR_COLORS)) },
       facialHair: pick(r, [null, null, 'stubble', 'beard', 'fullBeard', 'moustache']),
-      // Only Henrik and Viktor wear glasses: nobody gets them from a hashed name
-      glasses: r() < 0 ? 'round' : null,
+      // Of the participants only Henrik and Viktor wear glasses; invented
+      // spectators may wear glasses or sunglasses
+      glasses: r() < 0.14 ? pick(r, ['round', 'rect', 'sun']) : null,
       eyes: pick(r, Object.keys(EYE_COLORS)),
       face: { jaw: 0.95 + r() * 0.1, nose: 0.95 + r() * 0.12, chin: 0.95 + r() * 0.1, brow: 0.95 + r() * 0.12, cheek: 0.96 + r() * 0.08 },
       seed: hashName(key),

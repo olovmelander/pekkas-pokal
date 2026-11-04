@@ -67,6 +67,7 @@ export function buildHud(root, { touch }) {
       <button class="pbf-nudge" id="pbf-nudge" aria-label="Nudga bordet" hidden>Nudga</button>
 
       <div class="pbf-pops" id="pbf-pops" aria-hidden="true"></div>
+      <div class="pbf-coach" id="pbf-coach" role="status" hidden><span id="pbf-coach-text"></span></div>
       <div class="pbf-zones" id="pbf-zones" aria-hidden="true">
         <div><span>Vänster flipper</span></div>
         <div><span>Höger flipper</span></div>
@@ -120,6 +121,8 @@ export function buildHud(root, { touch }) {
     nudge: $('pbf-nudge'),
     zones: $('pbf-zones'),
     pops: $('pbf-pops'),
+    coach: $('pbf-coach'),
+    coachText: $('pbf-coach-text'),
     mute: $('pbf-mute'),
     info: $('pbf-info'),
     help: $('pbf-help'),

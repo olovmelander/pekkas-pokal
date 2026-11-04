@@ -150,12 +150,12 @@ function makeRank(spec, lite) {
   return { ...spec, step, n, h, birch, hmax: Math.max(1, hmax) };
 }
 
-/** Where the sun is, seen across the lake from the boat: 1 straight at it. */
-function towardSun(x, z, sunAz) {
+/** Angle (radians) between a point on the shore and the sun, seen from the boat. */
+function sunAngle(x, z, sunAz) {
   const dx = x + 6;
   const dz = z - 14;
   const l = Math.hypot(dx, dz) || 1;
-  return Math.max(0, (dx * sunAz.x + dz * sunAz.y) / l);
+  return Math.acos(Math.min(1, Math.max(-1, (dx * sunAz.x + dz * sunAz.y) / l)));
 }
 
 /**
@@ -175,9 +175,10 @@ function rankGeometry(rank, sunAz, glowC) {
     const x = rank.x0 + i * rank.step;
     const hy = Math.max(h[i], base + 0.05);
     const my = Math.min(hy, base + rank.mistH);
-    const glow = towardSun(x, z, sunAz);
-    const g1 = glow ** 18 * rank.glow;
-    const g2 = glow ** 5 * rank.glow * 0.35;
+    // A hot core of haze right under the sun and a wide, faint skirt
+    const a = sunAngle(x, z, sunAz);
+    const g1 = Math.exp(-((a / 0.09) ** 2)) * rank.glow * 0.8;
+    const g2 = Math.exp(-((a / 0.42) ** 2)) * rank.glow * 0.22;
     top.set(rank.top);
     if (rank.birch[i]) top.lerp(birchC, 0.35);
     top.lerp(glowC, Math.min(1, g1 + g2));
@@ -309,9 +310,9 @@ function buildHeadland(lite) {
   for (let i = 0; i < gp.count; i++) gp.setY(i, G(gp.getX(i), gp.getZ(i)));
   const granite = col(0x8a7a76);
   const graniteDark = col(0x5c5150);
-  const moss = col(0x2c3a1e);
-  const grass = col(0x45502a);
-  const heath = col(0x4a3a2e);
+  const moss = col(0x222a16);
+  const grass = col(0x363c1f);
+  const heath = col(0x3c2f26);
   const tmp = new THREE.Color();
   kit.add(ground, (v) => {
     const k = n(v.x * 0.31 + v.z * 0.17);
@@ -353,7 +354,7 @@ function buildHeadland(lite) {
     kit.add(trunk, 0x3a2a20);
     trees.push({ x, z, g, H, W, birch: false, tiers });
   };
-  const birchLeaf = [col(0x4f6e2e), col(0x5f7a34), col(0x44652c)];
+  const birchLeaf = [col(0x3e5424), col(0x4b5c28), col(0x384d22)];
   const bark = col(0xe8e4da);
   const barkDark = col(0x2a2622);
   const birch = (x, z, H) => {
@@ -729,7 +730,7 @@ export function buildShore({ sunDir, noise, timeU, lite = false }) {
       gap: (x, r) => 1.6 + r() * 2.4
     },
     {
-      name: 'near forest', z: -121, x0: -320, x1: 320, step: 0.2, base: -0.5, seed: 31, mistH: 3.2, midMix: 0.3, glow: 0.55,
+      name: 'near forest', z: -121, x0: -320, x1: 320, step: 0.2, base: -0.5, seed: 31, mistH: 3.2, midMix: 0.3, glow: 0.4,
       top: 0x131c26, mist: 0xae8a86, birchTint: 0x3a5440,
       ground: (x) => 0.5 + 2.2 * smooth(0.3, 0.9, fbm(landN, x * 0.03 + 21, 3)),
       trees: (x, r) => {
@@ -740,7 +741,7 @@ export function buildShore({ sunDir, noise, timeU, lite = false }) {
       gap: (x, r) => 1.7 + r() * 2.6
     },
     {
-      name: 'holme', z: -86, x0: -76, x1: -26, step: 0.15, base: -0.7, seed: 41, mistH: 1.6, midMix: 0.25, glow: 0.4,
+      name: 'holme', z: -86, x0: -76, x1: -26, step: 0.15, base: -0.7, seed: 41, mistH: 1.6, midMix: 0.25, glow: 0.3,
       top: 0x0f171c, mist: 0x9a8280,
       ground: (x) => {
         const k = 1 - ((x + 51) / 24) ** 2;
