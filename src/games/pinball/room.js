@@ -245,7 +245,13 @@ function buildNeighbour(THREE, mergeGeometries, materials, theme, disposables) {
   const pfTex = playfieldArt(THREE, theme);
   const pf = new THREE.Mesh(
     new THREE.PlaneGeometry(w - 1.2, len - 1.2).rotateX(-Math.PI / 2),
-    new THREE.MeshBasicMaterial({ map: pfTex, color: 0x6c6c6c, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 })
+    new THREE.MeshBasicMaterial({
+      map: pfTex,
+      color: 0x6c6c6c,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -2
+    })
   );
   pf.position.y = 0.02;
   g.add(pf);

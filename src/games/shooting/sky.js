@@ -105,8 +105,10 @@ export function buildSky() {
         float mu = dot(d, uSunDir);
         float m = max(mu, 0.0);
 
-        // Golden hour lights only the sun's half of the sky
-        float az = dot(normalize(d.xz + 1e-5), normalize(uSunDir.xz)) * 0.5 + 0.5;
+        // Golden hour lights only the sun's half of the sky. (Guarded: straight
+        // up, d.xz has no direction to normalise.)
+        float lxz = length(d.xz);
+        float az = lxz > 1e-4 ? dot(d.xz / lxz, normalize(uSunDir.xz)) * 0.5 + 0.5 : 0.5;
         vec3 horizon = mix(uCool, uWarm, az * az * az);
         vec3 c = mix(horizon, uMid, smoothstep(0.0, 0.3, h));
         c = mix(c, uZenith, smoothstep(0.16, 0.9, h));
@@ -133,11 +135,15 @@ export function buildSky() {
           c = mix(c, cloud, mask * 0.9);
         }
 
-        // HDR disk — well above 1.0 so the bloom pass flares it
-        c += uSunColor * smoothstep(0.99984, 0.99991, mu) * 14.0 * uDisk;
+        // HDR disk — well above 1.0 so the bloom pass flares it. Measured as the
+        // sine of the angle to the sun (|d × s|), not as cos = 0.9999…: those
+        // edges sit closer together than a half-float or a mediump GPU can
+        // tell apart, and smoothstep with equal edges divides by zero.
+        float sinA = length(cross(d, uSunDir));
+        c += uSunColor * (1.0 - smoothstep(0.0134, 0.0179, sinA)) * step(0.0, mu) * 14.0 * uDisk;
 
-        if (d.y < 0.0) c = mix(c, uBelow, smoothstep(0.0, -0.06, d.y));
-        gl_FragColor = vec4(c, 1.0);
+        if (d.y < 0.0) c = mix(c, uBelow, smoothstep(0.0, 0.06, -d.y));
+        gl_FragColor = vec4(max(c, vec3(0.0)), 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }

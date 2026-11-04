@@ -16,6 +16,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { guardRenderer, postTarget, addSanitize, RenderWatchdog, gfxNotice, precompile } from '../shared/gfx.js';
 
 import { World, Ball, clamp } from './physics.js';
 import { L, buildColliders, createPlayfieldCanvas } from './table.js';
@@ -112,6 +113,10 @@ export async function createPinball(container, opts = {}) {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.06;
   canvasHost.appendChild(renderer.domElement);
+  // Real GPUs are stricter than the test machine's software one: a render
+  // target they can actually draw into, an on-screen notice if a shader
+  // fails, ?gfx=safe for no post-processing (see shared/gfx.js)
+  const gfx = guardRenderer(renderer, container);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x03050c);
@@ -163,7 +168,8 @@ export async function createPinball(container, opts = {}) {
     ballMeshes.push(m);
   }
   // One contact shadow per pooled ball, parented to the table so it inherits
-  // the shake. Kept just above the wood and drawn after it.
+  // the shake. Kept just above the wood and drawn after it, with a polygon
+  // offset so it stays above the wood in any depth buffer.
   const ballShadows = ballMeshes.map(() => {
     const m = new THREE.Mesh(
       refs.contactGeometry,
@@ -171,7 +177,10 @@ export async function createPinball(container, opts = {}) {
         map: refs.contactTexture,
         transparent: true,
         depthWrite: false,
-        toneMapped: false
+        toneMapped: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -4
       })
     );
     m.scale.setScalar(L.ballRadius * 4.2);
@@ -236,6 +245,11 @@ export async function createPinball(container, opts = {}) {
   key.shadow.camera.top = 30;
   key.shadow.camera.bottom = -30;
   key.shadow.bias = -0.0016;
+  // The Vogel disk compares taps up to `radius` texels from the centre
+  // against one depth, so a receiver that slopes away from the light (the
+  // wall faces, the castle) needs more than the depth bias alone or it
+  // breaks into acne stripes — worst on GPUs with coarser depth.
+  key.shadow.normalBias = 0.035;
   // Vogel-disk spread in texels (r187 PCF): soft edges without the old
   // PCFSoft cost. Scaled with the map so the penumbra stays the same size.
   key.shadow.radius = small ? 2.5 : 4;
@@ -284,14 +298,33 @@ export async function createPinball(container, opts = {}) {
   }
 
   /* ---- Post-processing ---- */
-  const composer = new EffectComposer(renderer);
+  // Our own target: the composer's default is half-float without MSAA, which
+  // some GPUs cannot render into at all (a black screen) and which leaves the
+  // thin wireforms and rails crawling as the camera drifts with the ball.
+  // postTarget() picks a format and sample count this GPU really supports.
+  const composer = new EffectComposer(renderer, postTarget(gfx, { samples: small ? 2 : 4 }));
   composer.addPass(new RenderPass(scene, camera));
+  // NaN/Inf → black and HDR clamped before bloom. Clamped low here: twenty
+  // point lights on near-mirror chrome and a 0.09-rough ball make specular
+  // glints of several hundred, and a one-pixel glint that a third-resolution
+  // bloom pass catches on one frame and misses on the next is exactly a
+  // flickering firefly. ACES maps everything above ~6 to white anyway, so the
+  // clamp costs the picture nothing and takes the energy out of the blinking.
+  addSanitize(composer);
+  const sanitize = composer.passes.find((p) => p.uniforms && p.uniforms.uMax);
+  if (sanitize) sanitize.uniforms.uMax.value = 6;
   // Higher threshold than before: bloom should be the lamps, the DMD and the
   // backglass blooming, not every lit gold surface bleeding into its neighbour.
   const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.38, 0.5, 0.96);
   composer.addPass(bloom);
-  const outputPass = new OutputPass();
-  composer.addPass(outputPass);
+  composer.addPass(new OutputPass());
+  // UnrealBloomPass draws into half-float targets of its own, so without a
+  // renderable float format the whole chain is skipped rather than half-run.
+  let usePost = !gfx.safe && gfx.floatRT;
+  const drawFrame = () => {
+    if (usePost) composer.render();
+    else renderer.render(scene, camera);
+  };
 
   /* ---- Physics ---- */
   // Real machines pitch the playfield at 6.5°. At this table's scale
@@ -1739,6 +1772,12 @@ export async function createPinball(container, opts = {}) {
       if (Math.abs(s - 1) < 0.003) break;
       dist = clamp(dist * s, 16, 220);
     }
+    // Nothing comes nearer the camera than the lockdown bar at ~0.8 × the
+    // framing distance, so the near plane can sit far out. Depth precision
+    // goes with near/distance: at the old 0.5 a 16-bit depth buffer could
+    // not tell the wood from anything a quarter of a unit above it.
+    camera.near = clamp(dist * 0.35, 0.5, 40);
+    camera.far = dist + 200;
     const dx = ins.l + RW / 2 - box.cx;
     const dy = ins.t + RH / 2 - box.cy;
     camera.setViewOffset(W, H, -dx, -dy, W, H);
@@ -1925,13 +1964,83 @@ export async function createPinball(container, opts = {}) {
     d.play({ score: state.score, ball: state.ballNo, mult: state.mult, mode, status, hot }, t);
   };
 
+  /* ---- Graphics watchdogs ---- */
+  /**
+   * The table lit with the fewest, cheapest shaders: insert and bumper lamps
+   * out of the lighting loop (their glow pools and emissive stay), and the
+   * clearcoat playfield on a standard material. The last resort if the frame
+   * is still black after the other steps — e.g. a GPU whose uniform limit the
+   * twenty-light clearcoat shader overruns, which fails to link and leaves
+   * the playfield invisible.
+   */
+  let lightRig = 'full';
+  function simplifyShading() {
+    lightRig = 'simple';
+    Object.values(refs.inserts).forEach((ins) => (ins.light.visible = false));
+    refs.bumpers.forEach((b) => (b.light.visible = false));
+    const plain = new THREE.MeshStandardMaterial({
+      map: pfTexture,
+      roughness: 0.42,
+      metalness: 0,
+      envMapIntensity: 0.6
+    });
+    refs.playfield.material = plain;
+  }
+  function dropShadows() {
+    renderer.shadowMap.enabled = false;
+    scene.traverse((o) => {
+      if (o.material) [].concat(o.material).forEach((m) => (m.needsUpdate = true));
+    });
+  }
+  // A black frame on some GPU: step down instead of leaving the game
+  // unplayable — past the post-processing, then without shadows, then the
+  // simple light rig. Nothing in a working frame of this table is dark enough
+  // to trip it: the lit playfield alone is a quarter of the screen.
+  const watchdog = new RenderWatchdog(renderer, [
+    () => {
+      usePost = false;
+    },
+    dropShadows,
+    simplifyShading
+  ], {
+    minLitFraction: 0.06,
+    onStep: () => gfxNotice(container, 'Grafiken förenklades för att fungera på den här enheten.')
+  });
+
   /* ---- Loop ---- */
   renderer.info.autoReset = false;
   const perf = { drawCalls: 0, triangles: 0, frameMs: 16 };
   // Frame-time watchdog: if the device can't hold ~45 fps, trim the pixel
-  // ratio a step at a time. (Skipped under automation, where software GL
-  // would trim it to nothing.)
-  const watch = { acc: 0, frames: 0, on: !navigator.webdriver };
+  // ratio a step at a time; at the floor, drop bloom for good. It only ever
+  // steps down — a quality setting that comes back when the frame rate
+  // recovers is one that toggles forever, and every toggle reallocates the
+  // render targets. A step needs two slow windows in a row, so one hitch
+  // (a GC, a tab switch) never costs resolution. (Skipped under automation,
+  // where software GL would trim it to nothing.)
+  const DPR_FLOOR = Math.max(0.75, dprMax * 0.55);
+  const watch = { acc: 0, frames: 0, slow: 0, on: !navigator.webdriver };
+  function adapt(real) {
+    if (!watch.on || real <= 0 || real >= 0.25) return;
+    watch.acc += real;
+    watch.frames++;
+    if (watch.acc < 2.5) return;
+    const avg = watch.acc / watch.frames;
+    watch.acc = 0;
+    watch.frames = 0;
+    watch.slow = avg > 1 / 45 ? watch.slow + 1 : 0;
+    if (watch.slow < 2) return;
+    watch.slow = 0;
+    if (dpr > DPR_FLOOR + 0.01) {
+      dpr = Math.max(DPR_FLOOR, dpr - 0.2);
+      renderer.setPixelRatio(dpr);
+      composer.setPixelRatio(dpr);
+      resize();
+    } else if (usePost && avg > 1 / 36) {
+      usePost = false;
+    } else {
+      watch.on = false; // nothing cheaper left to give
+    }
+  }
   let raf = 0;
   let last = performance.now();
   let acc = 0;
@@ -1952,21 +2061,7 @@ export async function createPinball(container, opts = {}) {
     // rAF timestamps can predate `last` (clamped above) or arrive seconds
     // late after a shader compile; neither says anything about steady-state
     // frame time, so the watchdog ignores them.
-    if (watch.on && real > 0 && real < 0.25) {
-      watch.acc += real;
-      watch.frames++;
-      if (watch.acc > 2.5) {
-        const avg = watch.acc / watch.frames;
-        if (avg > 1 / 45 && dpr > Math.max(0.75, dprMax * 0.55)) {
-          dpr = Math.max(0.75, dpr - 0.2);
-          renderer.setPixelRatio(dpr);
-          composer.setPixelRatio(dpr);
-          resize();
-        }
-        watch.acc = 0;
-        watch.frames = 0;
-      }
-    }
+    adapt(real);
 
     // Time scale: hit-stop freezes, slow motion eases back to full speed
     let ts = 1;
@@ -2270,7 +2365,8 @@ export async function createPinball(container, opts = {}) {
     pv.copy(target).addScaledVector(kick.p, 0.5);
     camera.lookAt(pv);
 
-    composer.render();
+    drawFrame();
+    watchdog.afterFrame();
     // The composer's output pass is the last thing drawn, so reading
     // renderer.info afterwards reports one fullscreen quad. Snapshot the
     // whole frame instead, for the perf checks.
@@ -2279,6 +2375,27 @@ export async function createPinball(container, opts = {}) {
     renderer.info.reset();
   }
 
+  // Compile every shader before the first frame, without locking the GPU.
+  // On Windows, Chrome and Edge translate WebGL to Direct3D 11, whose
+  // compiler is slow on a clearcoat material looping over twenty lights;
+  // compiled in one blocking burst at the first render, that can trip the
+  // GPU process's watchdog and leave a permanently black canvas. Hidden
+  // things (the trolls, the multiball balls, the flash sprites, the trails)
+  // are shown for the compile so their first appearance mid-game doesn't
+  // stall a frame either.
+  ballMeshes.forEach((m, i) => fx.trail(i, m.position, 0, false));
+  const hidden = [];
+  scene.traverse((o) => {
+    if (!o.visible) {
+      hidden.push(o);
+      o.visible = true;
+    }
+  });
+  await precompile(renderer, scene, camera);
+  hidden.forEach((o) => {
+    o.visible = false;
+  });
+  last = performance.now();
   raf = requestAnimationFrame(tick);
 
   const onVisibility = () => {
@@ -2311,7 +2428,16 @@ export async function createPinball(container, opts = {}) {
     /** The physics flippers: `.pressed` shows input arriving, `.angle` the swing */
     flippers: colliderRefs.flippers,
     info() {
-      return { ...perf, dpr, orient: root.dataset.orient };
+      return {
+        ...perf,
+        dpr,
+        orient: root.dataset.orient,
+        post: usePost,
+        shadows: renderer.shadowMap.enabled,
+        lights: lightRig,
+        watchdog: watchdog.level,
+        near: camera.near
+      };
     },
     startGame,
     startNextMode,
@@ -2384,6 +2510,10 @@ export async function createPinball(container, opts = {}) {
     window.removeEventListener('keydown', onKeyDown);
     window.removeEventListener('keyup', onKeyUp);
     if (window.__pbFlipper && window.__pbFlipper.state === state) delete window.__pbFlipper;
+    // Before the context is lost on purpose below, or the guard's listener
+    // would put a "graphics lost" notice on the next game's stage
+    watchdog.dispose();
+    gfx.dispose();
 
     scene.traverse((o) => {
       if (o.geometry) o.geometry.dispose();
@@ -2404,9 +2534,10 @@ export async function createPinball(container, opts = {}) {
     room.dispose();
     envRT.dispose();
     pmrem.dispose();
-    bloom.dispose();
-    outputPass.dispose();
+    // Passes own their materials and targets; the composer only its two
+    composer.passes.forEach((pass) => pass.dispose());
     composer.dispose();
+    if (refs.playfield.material !== materials.playfield) refs.playfield.material.dispose();
     renderer.dispose();
     renderer.forceContextLoss?.();
     sfx.close();
