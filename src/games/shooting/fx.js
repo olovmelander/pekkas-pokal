@@ -3,11 +3,11 @@
  *
  * Everything that flies, puffs or glints, kept to a handful of draw calls:
  *
- *  - Particles: a CPU-simulated pool drawn as ONE `Points` call per blend
- *    mode. Dust puffs and gun smoke use normal blending, sparks and the
- *    golden dove's glitter use additive. Sizes are in metres (the vertex
- *    shader does the perspective), so a puff at 35 m and smoke at 1 m
- *    come out right from the same numbers.
+ *  - Particles: a CPU-simulated pool drawn as ONE instanced draw call per
+ *    blend mode. Dust puffs and gun smoke use normal blending, sparks and
+ *    the golden dove's glitter use additive. Sizes are in metres (the
+ *    vertex shader does the perspective), so a puff at 35 m and smoke at
+ *    1 m come out right from the same numbers.
  *  - Shards: the clay breaks into real 3D chips — an InstancedMesh with
  *    gravity, drag, tumbling and a bounce when they hit the field.
  *  - ShotCloud: the pellet swarm, drawn as short motion-blurred streaks
@@ -21,31 +21,46 @@
 
 import * as THREE from 'three';
 
-const POINT_VERT = /* glsl */`
-  attribute float aSize;
-  attribute vec4 aColor;
-  uniform float uScale;
+/*
+ * Particles are camera-facing quads, one instance each — not GL points.
+ * gl_PointSize is capped by the GPU (often at 64–256 px, and the cap is
+ * silent), so a puff of smoke at the muzzle would shrink to a dot on one
+ * machine and fill the screen on another; and a point is clipped by its
+ * centre, so a big puff drifting off the frame edge vanishes in one frame.
+ * Quads have neither problem and cost four vertices instead of one.
+ */
+const QUAD_VERT = /* glsl */`
+  attribute vec3 iPos;
+  attribute float iSize;
+  attribute vec4 iColor;
   uniform float uFogNear;
   uniform float uFogFar;
   varying vec4 vColor;
+  varying vec2 vUv;
   varying float vFog;
   void main() {
-    vColor = aColor;
-    vec4 mv = modelViewMatrix * vec4(position, 1.0);
-    gl_PointSize = min(aSize * uScale / max(0.05, -mv.z), 480.0);
+    vColor = iColor;
+    vUv = position.xy * 2.0;
+    vec4 mv = modelViewMatrix * vec4(iPos, 1.0);
+    float depth = -mv.z;
+    // Sizes are diameters in metres. A puff right at the lens is capped to
+    // about the height of the view there, so smoke never swallows the frame,
+    // and anything about to cross the near plane fades instead of slicing.
+    mv.xy += position.xy * min(iSize, max(depth, 0.0) * 0.8);
+    vColor.a *= smoothstep(0.12, 0.5, depth);
     gl_Position = projectionMatrix * mv;
-    vFog = smoothstep(uFogNear, uFogFar, -mv.z);
+    vFog = smoothstep(uFogNear, uFogFar, depth);
   }
 `;
 
-const POINT_FRAG = /* glsl */`
+const QUAD_FRAG = /* glsl */`
   uniform float uAdditive;
   uniform vec3 uFogColor;
   varying vec4 vColor;
+  varying vec2 vUv;
   varying float vFog;
   void main() {
-    vec2 p = gl_PointCoord * 2.0 - 1.0;
-    float r2 = dot(p, p);
+    float r2 = dot(vUv, vUv);
     if (r2 > 1.0) discard;
     // Soft gaussian body with a clean edge — reads as a puff, not a disc
     float a = exp(-r2 * 2.6) * (1.0 - r2);
@@ -62,17 +77,16 @@ const POINT_FRAG = /* glsl */`
   }
 `;
 
-function pointMaterial(additive, fog) {
+function quadMaterial(additive, fog) {
   return new THREE.ShaderMaterial({
     uniforms: {
-      uScale: { value: 600 },
       uAdditive: { value: additive ? 1 : 0 },
       uFogColor: { value: fog.color },
       uFogNear: { value: fog.near },
       uFogFar: { value: fog.far }
     },
-    vertexShader: POINT_VERT,
-    fragmentShader: POINT_FRAG,
+    vertexShader: QUAD_VERT,
+    fragmentShader: QUAD_FRAG,
     transparent: true,
     depthWrite: false,
     blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending
@@ -97,20 +111,21 @@ export class Particles {
     this.grav = new Float32Array(max);
     this.windK = new Float32Array(max);
 
-    const geo = new THREE.BufferGeometry();
-    this.aPos = new THREE.BufferAttribute(new Float32Array(max * 3), 3).setUsage(THREE.DynamicDrawUsage);
-    this.aSize = new THREE.BufferAttribute(new Float32Array(max), 1).setUsage(THREE.DynamicDrawUsage);
-    this.aColor = new THREE.BufferAttribute(new Float32Array(max * 4), 4).setUsage(THREE.DynamicDrawUsage);
-    geo.setAttribute('position', this.aPos);
-    geo.setAttribute('aSize', this.aSize);
-    geo.setAttribute('aColor', this.aColor);
-    geo.setDrawRange(0, 0);
-    this.material = pointMaterial(additive, fog);
-    this.points = new THREE.Points(geo, this.material);
-    this.points.frustumCulled = false;
-    this.points.renderOrder = additive ? 3 : 2;
+    const geo = new THREE.InstancedBufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute([-0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, 0.5, 0, -0.5, 0.5, 0], 3));
+    geo.setIndex([0, 1, 2, 0, 2, 3]);
+    this.aPos = new THREE.InstancedBufferAttribute(new Float32Array(max * 3), 3).setUsage(THREE.DynamicDrawUsage);
+    this.aSize = new THREE.InstancedBufferAttribute(new Float32Array(max), 1).setUsage(THREE.DynamicDrawUsage);
+    this.aColor = new THREE.InstancedBufferAttribute(new Float32Array(max * 4), 4).setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('iPos', this.aPos);
+    geo.setAttribute('iSize', this.aSize);
+    geo.setAttribute('iColor', this.aColor);
+    geo.instanceCount = 0;
+    this.material = quadMaterial(additive, fog);
+    this.mesh = new THREE.Mesh(geo, this.material);
+    this.mesh.frustumCulled = false;
+    this.mesh.renderOrder = additive ? 3 : 2;
   }
-
   /** o: { pos, vel, life, size, size1, color, alpha, drag, grav, wind } */
   spawn(o) {
     if (this.n >= this.max) return;
@@ -190,7 +205,7 @@ export class Particles {
       C[i4 + 3] = this.alpha[i] * fade;
       i++;
     }
-    this.points.geometry.setDrawRange(0, this.n);
+    this.mesh.geometry.instanceCount = this.n;
     this.aPos.needsUpdate = true;
     this.aSize.needsUpdate = true;
     this.aColor.needsUpdate = true;
@@ -198,7 +213,7 @@ export class Particles {
 
   clear() {
     this.n = 0;
-    this.points.geometry.setDrawRange(0, 0);
+    this.mesh.geometry.instanceCount = 0;
   }
 }
 
@@ -487,11 +502,12 @@ export function buildAmbient(rand, { sunDir, sunColor }) {
           p.z += sin(uTime * 0.3 + ph) * 0.4;
         }
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
-        vec3 view = normalize((modelMatrix * vec4(p, 1.0)).xyz - cameraPosition);
-        float back = max(dot(view, uSunDir), 0.0);
+        vec3 toSpeck = (modelMatrix * vec4(p, 1.0)).xyz - cameraPosition;
+        float back = max(dot(toSpeck, uSunDir), 0.0) / max(length(toSpeck), 1e-3);
         vGlow = (0.03 + 0.95 * pow(back, 12.0)) * smoothstep(2.5, 5.0, -mv.z) * (1.0 - smoothstep(14.0, 26.0, -mv.z));
         float size = (aSeed.z < 0.5 ? 0.03 : 0.045) * aSeed.w;
-        gl_PointSize = min(size * uScale / max(0.1, -mv.z), 9.0);
+        // A few pixels at most — well inside every GPU's point-size range
+        gl_PointSize = clamp(size * uScale / max(0.1, -mv.z), 1.0, 9.0);
         gl_Position = projectionMatrix * mv;
       }
     `,

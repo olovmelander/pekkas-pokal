@@ -107,24 +107,50 @@ void main() {
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }`;
 
+/*
+ * Two reads of the same 128×32 bytes. The dot itself is an exact texelFetch,
+ * so each dot is one value however the texture is filtered; the plasma's
+ * haze between the dots is a soft bilinear read of the neighbours, which
+ * gives the display its glow without involving the bloom pass at all.
+ *
+ * The peak is held just under the bloom threshold on purpose. A grid of
+ * 2–3-pixel dots going into a bloom pass that samples at a third of the
+ * resolution aliases: as the camera drifts with the ball, the dots slide in
+ * and out of the bloom's samples and the glow crawls. Dots at the threshold
+ * edge (where they used to sit) were the worst case — on some GPUs they
+ * bloomed, on others not, and in between they flickered.
+ */
 const FRAG = /* glsl */ `
 uniform sampler2D map;
 uniform vec3 hot;
 uniform vec3 dim;
 uniform float gain;
+uniform float haze;
 varying vec2 vUv;
 void main() {
   vec2 grid = vec2(${W}.0, ${H}.0);
   vec2 cell = vec2(vUv.x, 1.0 - vUv.y) * grid;
-  vec2 id = floor(cell);
-  float v = texture2D(map, (id + 0.5) / grid).r;
+  vec2 id = clamp(floor(cell), vec2(0.0), grid - 1.0);
+  float v = texelFetch(map, ivec2(id), 0).r;
+  vec2 st = cell / grid;
+  vec2 o = 0.6 / grid;
+  float soft = 0.25 * (texture2D(map, st + vec2(o.x, o.y)).r + texture2D(map, st + vec2(-o.x, o.y)).r +
+    texture2D(map, st + vec2(o.x, -o.y)).r + texture2D(map, st - o).r);
   float d = length(fract(cell) - 0.5);
-  float w = max(fwidth(cell.x), 1e-4);
+  // Dots per pixel along whichever axis is densest: the head leans back,
+  // so the rows are foreshortened more than the columns.
+  vec2 fw = fwidth(cell);
+  float w = max(max(fw.x, fw.y), 1e-3);
   float dotMask = 1.0 - smoothstep(0.37 - w, 0.37 + w, d);
   // A dot smaller than a pixel would shimmer: settle on its average instead
   dotMask = mix(dotMask, 0.42, clamp((w - 0.3) * 2.5, 0.0, 1.0));
-  vec3 col = (dim + hot * gain * v) * dotMask + hot * v * 0.07;
+  vec3 col = (dim + hot * gain * v) * dotMask + hot * soft * haze;
   gl_FragColor = vec4(col, 1.0);
+  // No-ops inside the composer (OutputPass grades the whole frame), but they
+  // keep the display amber rather than raw linear red when the frame is
+  // drawn straight to the screen (?gfx=safe, or after the watchdog steps in)
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
 }`;
 
 export class Dmd {
@@ -134,8 +160,9 @@ export class Dmd {
     this.data = new Uint8Array(W * H);
     this.last = new Uint8Array(W * H);
     this.texture = new THREE.DataTexture(this.data, W, H, THREE.RedFormat, THREE.UnsignedByteType);
-    this.texture.minFilter = THREE.NearestFilter;
-    this.texture.magFilter = THREE.NearestFilter;
+    // Linear for the haze read; the dots use texelFetch and ignore it
+    this.texture.minFilter = THREE.LinearFilter;
+    this.texture.magFilter = THREE.LinearFilter;
     this.texture.generateMipmaps = false;
     this.texture.needsUpdate = true;
     this.material = new THREE.ShaderMaterial({
@@ -144,7 +171,9 @@ export class Dmd {
         // Plasma orange, pulled a little toward the site's gold
         hot: { value: new THREE.Color(0xff8c2e) },
         dim: { value: new THREE.Color(0x1c0d05) },
-        gain: { value: 2.3 }
+        // Peak luminance ≈ 0.87, under the bloom threshold (0.96) with margin
+        gain: { value: 2.0 },
+        haze: { value: 0.14 }
       },
       vertexShader: VERT,
       fragmentShader: FRAG,

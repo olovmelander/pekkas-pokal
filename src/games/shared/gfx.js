@@ -261,18 +261,37 @@ export class RenderWatchdog {
  *
  * Dolda objekt kompileras inte av three — gör dem synliga runt anropet om
  * de ska med (t.ex. glasyrmallar som visas senare).
+ *
+ * VIKTIGT för spel med efterbehandling: ett material blir ett annat
+ * shaderprogram när det ritar in i ett renderingsmål (linjärt, utan
+ * tonmappning) än när det ritar direkt till skärmen. Skicka därför med
+ * kompositörens mål — `{ target: composer.renderTarget1 }` — annars värms
+ * skärmvarianterna och de riktiga kompileras ändå i ett block vid första
+ * bilden.
  */
-export async function precompile(renderer, scene, camera, { timeout = 20000 } = {}) {
-  // Utan parallell kompilering finns inget att vinna på att vänta asynkront
-  // (och three varnar om tillägget saknas) — kompilera då direkt.
-  if (!renderer.compileAsync || !renderer.extensions.has('KHR_parallel_shader_compile')) {
-    renderer.compile(scene, camera);
-    return;
+export async function precompile(renderer, scene, camera, { timeout = 20000, target = null } = {}) {
+  // compile() bestämmer programvarianten utifrån det aktuella målet, och
+  // compileAsync anropar compile() synkront innan den börjar vänta — så det
+  // räcker att målet är satt runt själva anropet.
+  const prev = renderer.getRenderTarget();
+  const parallel = !!renderer.compileAsync && renderer.extensions.has('KHR_parallel_shader_compile');
+  let pending = null;
+  if (target) renderer.setRenderTarget(target);
+  try {
+    // Utan parallell kompilering finns inget att vinna på att vänta
+    // asynkront (och three varnar om tillägget saknas) — kompilera direkt.
+    if (parallel) pending = renderer.compileAsync(scene, camera);
+    else renderer.compile(scene, camera);
+  } catch (e) {
+    pending = null; // då kompileras det vid första bilden i stället
+  } finally {
+    if (target) renderer.setRenderTarget(prev);
   }
+  if (!pending) return;
   let timer = 0;
   try {
     await Promise.race([
-      renderer.compileAsync(scene, camera),
+      pending,
       new Promise((resolve) => {
         timer = setTimeout(resolve, timeout);
       })

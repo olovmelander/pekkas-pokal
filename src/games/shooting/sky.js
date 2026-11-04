@@ -105,8 +105,10 @@ export function buildSky() {
         float mu = dot(d, uSunDir);
         float m = max(mu, 0.0);
 
-        // Golden hour lights only the sun's half of the sky
-        float az = dot(normalize(d.xz + 1e-5), normalize(uSunDir.xz)) * 0.5 + 0.5;
+        // Golden hour lights only the sun's half of the sky. (Guarded: straight
+        // up, d.xz has no direction to normalise.)
+        float lxz = length(d.xz);
+        float az = lxz > 1e-4 ? dot(d.xz / lxz, normalize(uSunDir.xz)) * 0.5 + 0.5 : 0.5;
         vec3 horizon = mix(uCool, uWarm, az * az * az);
         vec3 c = mix(horizon, uMid, smoothstep(0.0, 0.3, h));
         c = mix(c, uZenith, smoothstep(0.16, 0.9, h));
@@ -133,20 +135,67 @@ export function buildSky() {
           c = mix(c, cloud, mask * 0.9);
         }
 
-        // HDR disk — well above 1.0 so the bloom pass flares it
-        c += uSunColor * smoothstep(0.99984, 0.99991, mu) * 14.0 * uDisk;
+        // HDR disk — well above 1.0 so the bloom pass flares it. Measured as the
+        // sine of the angle to the sun (|d × s|), not as cos = 0.9999…: those
+        // edges sit closer together than a half-float or a mediump GPU can
+        // tell apart, and smoothstep with equal edges divides by zero.
+        float sinA = length(cross(d, uSunDir));
+        c += uSunColor * (1.0 - smoothstep(0.0134, 0.0179, sinA)) * step(0.0, mu) * 14.0 * uDisk;
 
-        if (d.y < 0.0) c = mix(c, uBelow, smoothstep(0.0, -0.06, d.y));
-        gl_FragColor = vec4(c, 1.0);
+        if (d.y < 0.0) c = mix(c, uBelow, smoothstep(0.0, 0.06, -d.y));
+        gl_FragColor = vec4(max(c, vec3(0.0)), 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }
     `
   });
-  const dome = new THREE.Mesh(new THREE.SphereGeometry(300, 32, 16), material);
+  const geometry = new THREE.SphereGeometry(300, 48, 24);
+  bakeFallbackColors(geometry, uniforms);
+  const dome = new THREE.Mesh(geometry, material);
   dome.renderOrder = -10;
   dome.frustumCulled = false;
-  return { dome, material, uniforms };
+  // The last-resort sky: the same palette as plain vertex colours, for a GPU
+  // that renders the dome black. Swapped in by the graphics watchdog.
+  const plain = new THREE.MeshBasicMaterial({
+    vertexColors: true, side: THREE.BackSide, depthWrite: false, fog: false
+  });
+  return { dome, material, plain, uniforms };
+}
+
+/**
+ * The dome's gradient evaluated per vertex on the CPU — horizon ramp, haze
+ * band, zenith and the broad sun glow, no clouds and no disk. Coarse, but a
+ * GPU that cannot run the sky shader still gets an evening, not a void.
+ */
+function bakeFallbackColors(geometry, u) {
+  const P = geometry.attributes.position;
+  const col = new Float32Array(P.count * 3);
+  const d = new THREE.Vector3();
+  const c = new THREE.Color();
+  const tmp = new THREE.Color();
+  const sun = u.uSunDir.value;
+  const sxz = Math.hypot(sun.x, sun.z);
+  const ss = (a, b, x) => {
+    const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+    return t * t * (3 - 2 * t);
+  };
+  for (let i = 0; i < P.count; i++) {
+    d.fromBufferAttribute(P, i).normalize();
+    const h = Math.max(d.y, 0);
+    const m = Math.max(d.dot(sun), 0);
+    const lxz = Math.hypot(d.x, d.z);
+    const az = lxz > 1e-4 ? ((d.x * sun.x + d.z * sun.z) / (lxz * sxz)) * 0.5 + 0.5 : 0.5;
+    c.copy(u.uCool.value).lerp(u.uWarm.value, az * az * az);
+    c.lerp(u.uMid.value, ss(0, 0.3, h));
+    c.lerp(u.uZenith.value, ss(0.16, 0.9, h));
+    c.lerp(u.uHaze.value, (1 - ss(0, 0.075, h)) * 0.86);
+    c.add(tmp.copy(u.uSunColor.value).multiplyScalar(m ** 6 * 0.16 + m ** 48 * 0.38));
+    if (d.y < 0) c.lerp(u.uBelow.value, ss(0, 0.06, -d.y));
+    col[i * 3] = c.r;
+    col[i * 3 + 1] = c.g;
+    col[i * 3 + 2] = c.b;
+  }
+  geometry.setAttribute('color', new THREE.BufferAttribute(col, 3));
 }
 
 /**
@@ -155,6 +204,12 @@ export function buildSky() {
  * ground half is swapped to a field green for the capture only.
  */
 export function bakeEnvironment(renderer, sky) {
+  // PMREM renders into half-float targets; a GPU that cannot render to
+  // those would bake garbage (or NaN) into every reflection. No bake then —
+  // the caller falls back to non-reflective metal.
+  const gl = renderer.getContext();
+  const isWebGL2 = typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext;
+  if (!isWebGL2 || !(gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float'))) return null;
   const pmrem = new THREE.PMREMGenerator(renderer);
   const envScene = new THREE.Scene();
   const prevBelow = sky.uniforms.uBelow.value.clone();
@@ -222,9 +277,11 @@ export function buildHaze() {
           float glow = pow(max(dot(v, uSunDir), 0.0), 6.0);
           float x = vWorld.x;
           float breakup = 0.72 + 0.28 * sin(x * 0.021 + uSeed + uTime * 0.03) * sin(x * 0.057 + uSeed * 2.0);
-          float a = pow(1.0 - vUv.y, 1.6) * smoothstep(0.0, 0.04, vUv.y + 0.02);
+          // (clamped: an interpolated vUv.y a hair above 1 would hand pow() a
+          // negative base, which is NaN on Direct3D)
+          float a = pow(clamp(1.0 - vUv.y, 0.0, 1.0), 1.6) * smoothstep(0.0, 0.04, vUv.y + 0.02);
           // Fade the sheet's ends so its edges never show
-          a *= smoothstep(0.0, 0.18, vUv.x) * smoothstep(1.0, 0.82, vUv.x);
+          a *= smoothstep(0.0, 0.18, vUv.x) * (1.0 - smoothstep(0.82, 1.0, vUv.x));
           vec3 col = uHaze + uSunColor * glow * 0.4;
           gl_FragColor = vec4(col, a * breakup * uOpacity);
           #include <tonemapping_fragment>

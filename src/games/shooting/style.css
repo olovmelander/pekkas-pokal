@@ -1282,3 +1282,28 @@
     padding: 0.55rem 1.4rem 0.45rem;
   }
 }
+
+/* The reaction shot after a series: the gang's faces own the frame, so the
+   aiming UI steps aside and, on wide screens, the series card rides above
+   their heads instead of sitting on Ludvig's face */
+.sk-ui .sk-hud.reaction .sk-pull,
+.sk-ui .sk-hud.reaction .sk-cross,
+.sk-ui .sk-hud.reaction .sk-edge,
+.sk-ui .sk-hud.reaction .sk-lead,
+.sk-ui .sk-hud.reaction .sk-lead-label {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (min-aspect-ratio: 1/1) {
+  .sk-ui .sk-seriecard {
+    top: 22%;
+  }
+}
+
+/* (in portrait the gang fills the middle of the frame — the card goes below them) */
+@media (max-aspect-ratio: 1/1) {
+  .sk-ui .sk-seriecard {
+    top: 70%;
+  }
+}

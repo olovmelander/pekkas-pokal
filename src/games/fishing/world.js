@@ -19,8 +19,9 @@
  *  - the lake basin: terraced rock walls that frame the descent on wide
  *    screens, kelp that sways in the vertex shader, boulders, the bed, a
  *    sunken eka — and something golden next to it
- *  - light shafts with soft edges and a flicker, and shimmering thermocline
- *    layers at the zone boundaries you sink through
+ *  - light shafts with soft edges and a flicker
+ *
+ * The eka and the angler in it live in boat.js and angler.js.
  */
 
 import * as THREE from 'three';
@@ -284,6 +285,11 @@ export function buildSky(noise) {
       void main() {
         vec3 d = normalize(vDir);
         vec3 c = skyCol(d);
+        // Below the horizon the dome is only ever seen THROUGH the lake
+        // surface (alpha 0.74 looking down), so it is the lake's own deep
+        // green-teal, not the peach horizon — otherwise the water near the
+        // boat goes milky pink.
+        c = mix(c, vec3(0.006, 0.05, 0.062), smoothstep(-0.005, -0.18, d.y));
         // Clouds on a high plane, stretched along x into long summer streaks
         if (d.y > 0.0) {
           vec2 p = d.xz / (d.y + 0.06);
@@ -397,10 +403,12 @@ export function buildShore() {
   };
   const sx = -26;
   const sz = -119;
+  // Seen from 120 m, anything a few cm proud of a wall would flicker on a
+  // 16-bit depth buffer: the window, door and corner boards stand 0.15 m out.
   box(5.4, 3.0, 4.0, sx, 1.5, sz, 0x8c2a22);       // falu red walls
-  [-2.65, 2.65].forEach((dx) => box(0.25, 3.0, 4.1, sx + dx, 1.5, sz, 0xe8e2d4)); // white corners
-  box(1.0, 1.0, 0.1, sx - 1.2, 1.7, sz + 2.02, 0xffd48a); // lit window
-  box(0.9, 1.8, 0.1, sx + 1.3, 0.9, sz + 2.02, 0xe8e2d4);  // door
+  [-2.7, 2.7].forEach((dx) => box(0.3, 3.0, 4.3, sx + dx, 1.5, sz, 0xe8e2d4)); // white corners
+  box(1.0, 1.0, 0.3, sx - 1.2, 1.7, sz + 2.05, 0xffd48a); // lit window
+  box(0.9, 1.8, 0.3, sx + 1.3, 0.9, sz + 2.05, 0xe8e2d4);  // door
   const roof = new THREE.ConeGeometry(4.1, 1.9, 4, 1);
   roof.rotateY(Math.PI / 4);
   roof.scale(1.0, 1, 0.78);
@@ -449,6 +457,21 @@ function hillGeometry(rand) {
 }
 
 /* ----------------------------------------------------------------- water */
+
+/**
+ * The lake's five waves in GLSL (and, below, in JS for things that float).
+ * Waves die out toward the horizon, where the water's rings get coarse.
+ */
+export const WAVE_GLSL = `
+  float waveH(vec2 p, float t) {
+    float fade = 1.0 - smoothstep(60.0, 140.0, length(p));
+    return (sin(p.x * 0.32 + t * 1.10) * 0.30
+          + sin(p.y * 0.41 - t * 0.85) * 0.24
+          + sin((p.x + p.y) * 0.19 + t * 1.60) * 0.16
+          + sin(p.x * 1.70 + t * 2.60) * 0.045
+          + sin(p.y * 1.90 - t * 2.20) * 0.040) * fade;
+  }
+`;
 
 /** The same five waves the vertex shader uses — for things that float. */
 export function waveHeight(x, z, t) {
@@ -516,21 +539,13 @@ export function buildWater(caustics, noise) {
       varying vec3 vWorld;
       varying vec3 vNrm;
       varying float vDepth;
-
-      float h(vec2 p, float t) {
-        return sin(p.x * 0.32 + t * 1.10) * 0.30
-             + sin(p.y * 0.41 - t * 0.85) * 0.24
-             + sin((p.x + p.y) * 0.19 + t * 1.60) * 0.16
-             + sin(p.x * 1.70 + t * 2.60) * 0.045
-             + sin(p.y * 1.90 - t * 2.20) * 0.040;
-      }
+      ${WAVE_GLSL}
 
       void main() {
         vec4 w = modelMatrix * vec4(position, 1.0);
         float t = uTime;
-        // Waves die out toward the horizon, where the rings get coarse
         float fade = 1.0 - smoothstep(60.0, 140.0, length(w.xz));
-        w.y += h(w.xz, t) * fade;
+        w.y += waveH(w.xz, t);
         float dx = cos(w.x * 0.32 + t * 1.10) * 0.30 * 0.32
                  + cos((w.x + w.z) * 0.19 + t * 1.60) * 0.16 * 0.19
                  + cos(w.x * 1.70 + t * 2.60) * 0.045 * 1.70;
@@ -561,13 +576,19 @@ export function buildWater(caustics, noise) {
 
       // Treeline elevation by azimuth — the reflection's silhouette
       float treeline(vec3 r) {
-        float az = atan(r.x, -r.z);
+        // (+1e-5: atan(0, 0) is undefined, and NaN on some GPUs)
+        float az = atan(r.x, -r.z + 1e-5);
         float n = texture2D(uNoise, vec2(az * 0.9, 0.31)).r;
         float m = texture2D(uNoise, vec2(az * 5.3, 0.73)).g;
         return 0.022 + n * 0.05 + m * 0.025;
       }
 
       void main() {
+        // The land strip on the far shore lies 6 cm over the water from
+        // z = -118 m back. There the two would only be told apart by depth
+        // precision — and the waves, still a few cm tall that far out, poke
+        // through it — so the lake simply stops under the land.
+        if (vWorld.z < -118.5) discard;
         vec3 N0 = normalize(vNrm);
         // Fine ripples from the noise field: this is what breaks the sun
         // into glitter instead of one smeared highlight
@@ -618,7 +639,10 @@ export function buildWater(caustics, noise) {
           col = mix(body, refl, clamp(fres * 1.25, 0.0, 1.0));
           vec3 H = normalize(uSunDir + V);
           float nh = max(dot(N, H), 0.0);
-          col += uSunColor * (pow(nh, 900.0) * 9.0 + pow(nh, 90.0) * 0.55);
+          // Glitter: a needle-sharp glint near the boat. Far away a pixel
+          // covers many ripples, so the needle would only sparkle on and off
+          // from frame to frame — there it widens and dims instead.
+          col += uSunColor * (pow(nh, mix(260.0, 900.0, near)) * mix(2.4, 9.0, near) + pow(nh, 90.0) * 0.55);
           alpha = mix(0.74, 0.985, fres);
         }
 
@@ -732,7 +756,7 @@ export function buildVolume(noise) {
         vec3 s = normalize(uSun);
         vec3 t1 = normalize(cross(s, vec3(0.0, 0.0, 1.0)));
         vec3 t2 = cross(s, t1);
-        float ang = atan(dot(d, t2), dot(d, t1)) / 6.28318;
+        float ang = atan(dot(d, t2), dot(d, t1) + 1e-5) / 6.28318; // never atan(0, 0)
         float a = texture2D(uNoise, vec2(ang * 23.0, uTime * 0.012)).r;
         float b = texture2D(uNoise, vec2(ang * 11.0 + 0.5, -uTime * 0.017)).g;
         // Rays from above only: kept off the horizon band, where the fogged
@@ -788,191 +812,6 @@ export function makeEnvironment(renderer) {
   scene.children[0].geometry.dispose();
   mat.dispose();
   return rt;
-}
-
-/* ------------------------------------------------------------------ boat */
-
-function woodMat(color) {
-  return new THREE.MeshLambertMaterial({ color, flatShading: true });
-}
-
-export function buildBoat() {
-  const g = new THREE.Group();
-
-  /* Hull: a side profile extruded across the beam, then pinched at bow
-     and stern so it stops being a slab and becomes a boat. Painted like an
-     old eka: white strakes over a tarred bottom, a green sheer strake. */
-  const shape = new THREE.Shape();
-  shape.moveTo(-2.35, 0.62);
-  shape.lineTo(2.5, 0.86);
-  shape.lineTo(2.78, 0.18);
-  shape.quadraticCurveTo(1.4, -0.62, 0.1, -0.66);
-  shape.quadraticCurveTo(-1.5, -0.62, -2.35, -0.12);
-  shape.closePath();
-  const hullGeo = new THREE.ExtrudeGeometry(shape, { depth: 1.9, bevelEnabled: false, curveSegments: 6, steps: 2 });
-  hullGeo.translate(0, 0, -0.95);
-  const hp = hullGeo.attributes.position;
-  const hc = new Float32Array(hp.count * 3);
-  const paint = new THREE.Color();
-  for (let i = 0; i < hp.count; i++) {
-    const x = hp.getX(i);
-    const k = Math.min(1, Math.max(0, (Math.abs(x) - 1.1) / 1.7));
-    hp.setZ(i, hp.getZ(i) * (1 - 0.72 * k * k));
-    const y = hp.getY(i);
-    if (y < -0.18) paint.set(0x2a2320);
-    else if (y > 0.5 + x * 0.04) paint.set(0x2f5d4a);
-    else paint.set(Math.floor((y + 0.2) * 6) % 2 ? 0xe9e4d6 : 0xd9d3c4);
-    hc[i * 3] = paint.r;
-    hc[i * 3 + 1] = paint.g;
-    hc[i * 3 + 2] = paint.b;
-  }
-  hullGeo.setAttribute('color', new THREE.BufferAttribute(hc, 3));
-  hullGeo.computeVertexNormals();
-  const hull = new THREE.Mesh(hullGeo, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }));
-  g.add(hull);
-
-  // Dark interior so the boat reads as open, not solid
-  const inner = new THREE.Mesh(
-    new THREE.BoxGeometry(4.2, 0.5, 1.35),
-    new THREE.MeshLambertMaterial({ color: 0x5a3a20, flatShading: true })
-  );
-  inner.position.set(0.1, 0.5, 0);
-  g.add(inner);
-
-  const rimMat = woodMat(0xc98a4b);
-  [1, -1].forEach((s) => {
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(4.9, 0.16, 0.17), rimMat);
-    rail.position.set(0.1, 0.74, s * 0.72);
-    rail.rotation.y = s * 0.04;
-    g.add(rail);
-  });
-  [-0.9, 0.9].forEach((x) => {
-    const seat = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.11, 1.5), rimMat);
-    seat.position.set(x, 0.72, 0);
-    g.add(seat);
-  });
-
-  /* The tunna — the target every tapped fish flies into */
-  const barrel = new THREE.Group();
-  const staves = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.4, 0.95, 14, 1), woodMat(0x8a5a30));
-  barrel.add(staves);
-  [-0.3, 0.3].forEach((y) => {
-    const hoop = new THREE.Mesh(new THREE.TorusGeometry(0.455, 0.045, 4, 16), woodMat(0x4a4f5c));
-    hoop.rotation.x = Math.PI / 2;
-    hoop.position.y = y;
-    barrel.add(hoop);
-  });
-  const water = new THREE.Mesh(
-    new THREE.CircleGeometry(0.42, 14),
-    new THREE.MeshLambertMaterial({ color: 0x2a5c68 })
-  );
-  water.rotation.x = -Math.PI / 2;
-  water.position.y = 0.36;
-  barrel.add(water);
-  barrel.position.set(1.75, 1.05, 0);
-  g.add(barrel);
-
-  /* Termosen on the thwart — kaffe vid bryggan sen */
-  const thermos = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.42, 8), woodMat(0xb23a48));
-  thermos.position.set(-0.95, 0.98, 0.42);
-  g.add(thermos);
-  const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.09, 0.1, 8), woodMat(0xe8e2d4));
-  cup.position.set(-0.95, 1.23, 0.42);
-  g.add(cup);
-
-  /* Oar resting across the gunwale */
-  const oar = new THREE.Group();
-  const shaftMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 3.1, 6), woodMat(0xb07b40));
-  shaftMesh.rotation.z = Math.PI / 2;
-  oar.add(shaftMesh);
-  const bladeMesh = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.05, 0.3), woodMat(0xb07b40));
-  bladeMesh.position.x = -1.75;
-  oar.add(bladeMesh);
-  oar.position.set(-0.4, 0.86, -0.55);
-  oar.rotation.y = 0.22;
-  g.add(oar);
-
-  /* Fisherman */
-  const guy = new THREE.Group();
-  const skin = new THREE.MeshLambertMaterial({ color: 0xe6b184, flatShading: true });
-  const coat = new THREE.MeshLambertMaterial({ color: 0xf2c14e, flatShading: true });
-  const pants = new THREE.MeshLambertMaterial({ color: 0x2c4a72, flatShading: true });
-  const bootMat = new THREE.MeshLambertMaterial({ color: 0x22303c, flatShading: true });
-
-  [-0.22, 0.22].forEach((z) => {
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.12, 0.62, 6), pants);
-    leg.position.set(0.12, 0.42, z);
-    guy.add(leg);
-    const boot = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.16, 0.24), bootMat);
-    boot.position.set(0.2, 0.12, z);
-    guy.add(boot);
-  });
-
-  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 0.86, 7), coat);
-  torso.position.y = 1.14;
-  guy.add(torso);
-
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.25, 10, 8), skin);
-  head.position.y = 1.76;
-  guy.add(head);
-  const beard = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 6), new THREE.MeshLambertMaterial({ color: 0xcbb59a, flatShading: true }));
-  beard.position.set(0.09, 1.66, 0);
-  beard.scale.set(0.9, 0.75, 0.85);
-  guy.add(beard);
-  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.29, 0.2, 8), new THREE.MeshLambertMaterial({ color: 0xb23a48, flatShading: true }));
-  cap.position.y = 1.95;
-  guy.add(cap);
-  const brim = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.05, 0.42), new THREE.MeshLambertMaterial({ color: 0x8e2c38, flatShading: true }));
-  brim.position.set(0.26, 1.88, 0);
-  guy.add(brim);
-  const bobble = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 5), new THREE.MeshLambertMaterial({ color: 0xf6f1e4, flatShading: true }));
-  bobble.position.y = 2.09;
-  guy.add(bobble);
-
-  // Arms + rod live in their own pivot so the cast can be animated
-  const arms = new THREE.Group();
-  arms.position.set(0.12, 1.42, 0);
-  [-0.34, 0.34].forEach((z) => {
-    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.09, 0.72, 6), coat);
-    arm.position.set(0.2, -0.16, z);
-    arm.rotation.z = -0.95;
-    arms.add(arm);
-  });
-  const rod = new THREE.Group();
-  const rodMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.055, 3.0, 5), woodMat(0x2f2418));
-  rodMesh.position.x = 1.5;
-  rodMesh.rotation.z = Math.PI / 2;
-  rod.add(rodMesh);
-  const reel = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.12, 8), new THREE.MeshLambertMaterial({ color: 0x9aa4b8, flatShading: true }));
-  reel.position.set(0.34, -0.16, 0);
-  rod.add(reel);
-  rod.position.set(0.38, -0.28, 0.1);
-  rod.rotation.z = 0.5;
-  arms.add(rod);
-  guy.add(arms);
-
-  guy.position.set(-0.55, 0.5, 0);
-  guy.rotation.y = -0.12;
-  g.add(guy);
-
-  /* Foam ring where the hull meets the water */
-  const foam = new THREE.Mesh(
-    new THREE.RingGeometry(2.4, 3.0, 24),
-    new THREE.MeshBasicMaterial({
-      color: 0xdff5f2,
-      transparent: true,
-      opacity: 0.07,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      side: THREE.DoubleSide
-    })
-  );
-  foam.rotation.x = -Math.PI / 2;
-  foam.scale.z = 0.62;
-  foam.position.y = 0.02;
-
-  g.userData = { guy, arms, rod, barrel, foam, oar };
-  return g;
 }
 
 /* ----------------------------------------------------------- the basin */
@@ -1479,7 +1318,7 @@ export function buildLure() {
   body.rotation.z = Math.PI / 2;
   g.add(body);
   const stripe = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.155, 0.155, 0.14, 10),
+    new THREE.CylinderGeometry(0.165, 0.165, 0.14, 10), // 1.5 cm proud: no z-fight with the body
     new THREE.MeshStandardMaterial({ color: 0xf4f0e2, roughness: 0.35 })
   );
   stripe.rotation.z = Math.PI / 2;
@@ -1501,7 +1340,23 @@ export function buildLure() {
   g.add(spinner);
   const glow = new THREE.PointLight(0xffd9a0, 1.1, 10, 2);
   g.add(glow);
-  g.userData = { spinner, glow };
+  const parts = [body, stripe, hook, spinner];
+  g.userData = {
+    spinner,
+    glow,
+    /**
+     * Show or hide the lure. The group itself always stays visible: three
+     * counts only visible lights, and a light coming and going changes the
+     * light count every lit material is compiled for — a burst of shader
+     * compiles mid-game, exactly what stalls a D3D11 GPU. A dark light is free.
+     */
+    show(v, intensity) {
+      parts.forEach((m) => {
+        m.visible = v;
+      });
+      glow.intensity = v ? intensity : 0;
+    }
+  };
   return g;
 }
 

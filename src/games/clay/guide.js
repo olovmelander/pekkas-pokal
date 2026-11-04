@@ -81,8 +81,10 @@ export function buildGuide() {
       void main() {
         float edge = 1.0 - abs(vUv.y * 2.0 - 1.0);
         edge = smoothstep(0.0, 0.6, edge);
-        float dash = smoothstep(0.38, 0.5, fract(vUv.x * 7.0 - uTime * 0.5));
-        dash = 1.0 - dash * smoothstep(1.0, 0.88, fract(vUv.x * 7.0 - uTime * 0.5));
+        // (smoothstep needs edge0 < edge1 — reversed edges are undefined in GLSL)
+        float f = fract(vUv.x * 7.0 - uTime * 0.5);
+        float dash = smoothstep(0.38, 0.5, f);
+        dash = 1.0 - dash * (1.0 - smoothstep(0.88, 1.0, f));
         float a = edge * mix(0.3, 1.0, dash) * uOpacity;
         gl_FragColor = vec4(uColor, a);
         #include <tonemapping_fragment>

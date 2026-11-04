@@ -1,57 +1,81 @@
 /**
- * Pekkas Fäktning — the fencer: an articulated low-poly figure, posed in
- * code every frame.
+ * Pekkas Fäktning — the fencer: a people.js character in fencing whites
+ * (jacket with a lamé vest, knickers, socks in the fencer's colour), with
+ * a mask and a foil, posed in code every frame.
  *
  * The rig is driven by a small vector of numbers (the POSE): pelvis
  * position and lean, where each ankle is, where the weapon hand is, the
- * foil's pitch, yaw and bend, the rear arm and the head. Everything else
- * is solved: legs and the weapon arm are two-bone IK chains, so the feet
- * stay planted when the body sinks into a lunge, and the arm bends
- * naturally when the hand comes back. Because a pose is just numbers it
- * can be sprung (critically damped, so anticipation and follow-through
- * come for free when a target jumps), and it can be recorded and played
- * back — which is how the slow-motion replay works.
+ * foil's pitch, sweep and bend, the rear arm, the head, how relaxed the
+ * fencer stands and whether the mask is on. Everything else is solved:
+ * both legs and both arms are two-bone IK chains on the shared skeleton,
+ * so the feet stay planted when the body sinks into a lunge, the elbow
+ * finds its own place, and the fist is turned so the foil points exactly
+ * where the pose says. Because a pose is just numbers it can be sprung
+ * (critically damped, so anticipation and follow-through come for free
+ * when a target jumps), and it can be recorded and played back — which is
+ * how the slow-motion replay works.
  *
- * Fencer-local space: +x towards the opponent, +y up, +z towards the
- * camera. The opponent is the same figure mirrored with scale.x = -1, so
- * both weapon arms are on the camera side — the Nidhogg mirror, and the
- * reason every blade line stays readable.
+ * Fencer space: +x towards the opponent, +y up from the piste, +z towards
+ * the camera. Both fencers keep their weapon arm on the camera side — the
+ * Nidhogg rule that keeps every blade line readable — so you fence right-
+ * handed and your opponents are left-handed (as a good share of elite
+ * foilists are). The person is never mirrored: faces, hair partings and
+ * the lamé stay true; only which hand holds the foil changes.
  */
 
 import * as THREE from 'three';
+import { createPerson, appearanceFor } from '../shared/people.js';
 
-/* ---- Proportions (metres) ------------------------------------------- */
+/* ---- Proportions (metres, for a 1.80 m fencer; scaled per person) ------ */
 
-const THIGH = 0.47;
-const SHIN = 0.46;
-export const ANKLE_H = 0.08;
-const UPPER = 0.29;
-const FORE = 0.27;
+export const ANKLE_H = 0.08; // ankle joint above the sole
 export const BLADE = 0.9;
 const BLADE_START = 0.075; // from the fist to where the blade leaves the bell
-const TORSO_Y = 0.03; // torso pivot above the pelvis
-const SHOULDER_F = [0.1, 0.5, 0.08];
-const SHOULDER_B = [-0.1, 0.49, -0.05];
-const HIP_F = [0.07, -0.04, 0.06];
-const HIP_B = [-0.07, -0.04, -0.05];
+const PELVIS = 0.76; // hips height en garde: knees well bent
+const FRONT_FOOT = 0.38;
+const BACK_FOOT = -0.36;
+const FOOT_Z = 0.045; // feet either side of the piste's centre line
+const REACH = 0.6; // shoulder to fist at full extension (elbow just soft)
+/** The opponent's target in front of his pelvis (chest surface, en garde). */
+export const TARGET_FRONT = 0.13;
+/** Line heights on a 1.80 m target en garde, HÖG / MITT / LÅG (above the piste). */
+const LINE_BASE = [1.13, 0.97, 0.83];
+/* Weapon-hand guard position per line, relative to the shoulder */
+const GUARD_HAND = [[0.27, -0.02], [0.31, -0.14], [0.28, -0.28]];
+const HAND_Z = -0.07; // the sword hand sits a little inside the shoulder
+/** Torso turn en garde: the weapon side leads (radians). */
+const TWIST = 0.5;
+/** How far the at-ease stance turns towards the camera. */
+const EASE_TURN = 1.05;
+/**
+ * The foil in the fist (hand-bone space): along the forearm, tipped 25°
+ * towards the thumb — the French grip. −Y runs from the wrist to the
+ * fingers, +Z out of the thumb side.
+ */
+const GRIP_TILT = (25 * Math.PI) / 180;
+const BLADE_L = new THREE.Vector3(0, -Math.cos(GRIP_TILT), Math.sin(GRIP_TILT));
+/** In-plane perpendicular towards the thumb (and the elbow): the blade bows this way. */
+const BOW_L = new THREE.Vector3(0, Math.sin(GRIP_TILT), Math.cos(GRIP_TILT));
+const UP_L = new THREE.Vector3(0, 1, 0);
+const COS_YB = -Math.cos(GRIP_TILT); // cos of the angle between hand +Y and the blade
+const SIN_YB = Math.sin(GRIP_TILT);
 
 /* ---- Pose channels --------------------------------------------------- */
 
 export const P = {
   px: 0, py: 1, lean: 2,
-  ffx: 3, ffy: 4, ffp: 5, // front ankle x/y, foot pitch
+  ffx: 3, ffy: 4, ffp: 5, // front ankle x/y, foot pitch (toes up +)
   bfx: 6, bfy: 7, bfp: 8, // back ankle
-  hx: 9, hy: 10, // weapon hand relative to the shoulder, fencer frame
-  fa: 11, fyaw: 12, bend: 13, // foil pitch, sideways sweep, blade curvature
-  back: 14, nod: 15, // rear arm 0 = classic curl, 1 = thrown back; head nod
-  flash: 16 // lamé hit flash (0..1), recorded with the pose for replays
+  hx: 9, hy: 10, // weapon fist relative to the shoulder, fencer frame
+  fa: 11, fyaw: 12, bend: 13, // foil pitch, inward sweep, blade curvature
+  back: 14, nod: 15, // rear arm 0 = classic carriage, 1 = thrown back; head nod
+  flash: 16, // lamé hit flash (0..1), recorded with the pose for replays
+  relax: 17, // 0 = en garde, 1 = standing at ease, turned to the camera
+  cheer: 18, // at ease: −1 dejected … 0 neutral … +1 triumphant
+  mask: 19, // 0 = carried in the rear hand, 1 = on the head
+  bob: 20 // at ease: a little bounce (metres), for the champion
 };
-export const POSE_LEN = 17;
-
-/* Line heights (world y) on the opponent's target, HÖG / MITT / LÅG */
-export const LINE_Y = [1.42, 1.18, 0.96];
-/* Weapon-hand guard position per line, relative to the shoulder */
-const GUARD_HAND = [[0.25, 0.0], [0.3, -0.11], [0.27, -0.25]];
+export const POSE_LEN = 21;
 
 /* ---- Small maths ------------------------------------------------------ */
 
@@ -59,33 +83,7 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const smooth = (k) => k * k * (3 - 2 * k);
 const easeOut = (k) => 1 - (1 - k) ** 3;
 const bell = (k) => Math.sin(clamp(k, 0, 1) * Math.PI);
-
-/**
- * Two-bone IK in a plane. Segments hang along -y at rotation 0, so a
- * segment with rotation θ points along (sin θ, -cos θ). `bend` picks the
- * side the middle joint goes: +1 knee forward, -1 elbow down.
- */
-function ik2(out, hx, hy, tx, ty, l1, l2, bend) {
-  let dx = tx - hx;
-  let dy = ty - hy;
-  let d = Math.hypot(dx, dy);
-  const max = (l1 + l2) * 0.9995;
-  if (d > max) {
-    dx *= max / d;
-    dy *= max / d;
-    d = max;
-  }
-  d = Math.max(d, Math.abs(l1 - l2) + 1e-4);
-  const base = Math.atan2(dx, -dy);
-  const a = Math.acos(clamp((l1 * l1 + d * d - l2 * l2) / (2 * l1 * d), -1, 1));
-  const a1 = base + bend * a;
-  const kx = hx + l1 * Math.sin(a1);
-  const ky = hy - l1 * Math.cos(a1);
-  const a2 = Math.atan2(hx + dx - kx, -(hy + dy - ky));
-  out[0] = a1;
-  out[1] = a2 - a1;
-  return out;
-}
+const lerp = (a, b, k) => a + (b - a) * k;
 
 /** Arc-length chord of a blade bent with curvature k. */
 function chord(k) {
@@ -105,32 +103,63 @@ function bendFor(d) {
   return (lo + hi) / 2;
 }
 
-/* ---- Geometry helpers ------------------------------------------------- */
+const BODY = [
+  'hips', 'spine', 'chest', 'neck', 'head', 'shoulderL', 'upperArmL', 'forearmL', 'handL',
+  'shoulderR', 'upperArmR', 'forearmR', 'handR', 'thighL', 'shinL', 'footL', 'thighR', 'shinR', 'footR'
+];
+const FINGERS = ['thumbL', 'indexL', 'indexTipL', 'fingersL', 'fingersTipL', 'thumbR', 'indexR', 'indexTipR', 'fingersR', 'fingersTipR'];
+const BLEND = [...BODY, ...FINGERS];
+const swapLR = (n) => (n.endsWith('L') ? `${n.slice(0, -1)}R` : n.endsWith('R') ? `${n.slice(0, -1)}L` : n);
 
-/** A tapered limb hanging from its joint along -y: lathe of a profile. */
-function limb(len, r0, r1, bulge = 0, seg = 8) {
-  const pts = [];
-  const n = 7;
-  for (let i = 0; i <= n; i++) {
-    const k = i / n;
-    const r = r0 + (r1 - r0) * k + bulge * Math.sin(k * Math.PI) * (1 - k * 0.4);
-    pts.push(new THREE.Vector2(Math.max(0.004, r * (i === 0 || i === n ? 0.82 : 1)), -k * len));
+/**
+ * A pose object written for a right-handed fencer, mirrored on the fly
+ * for the left-handed one (L↔R swapped, y and z rotations negated).
+ */
+class PoseWriter {
+  constructor(mirror) {
+    this.mirror = mirror;
+    this.pose = { hipsPos: [0, 0, 0], gripL: 0.25, gripR: 0.25, pointL: 0, pointR: 0 };
+    for (const n of BODY) this.pose[n] = [0, 0, 0];
   }
-  // Round the ends by pulling the first and last ring onto the axis
-  pts.unshift(new THREE.Vector2(0.001, 0.012));
-  pts.push(new THREE.Vector2(0.001, -len - 0.012));
-  return new THREE.LatheGeometry(pts, seg);
+
+  clear() {
+    for (const n of BODY) {
+      const a = this.pose[n];
+      a[0] = 0;
+      a[1] = 0;
+      a[2] = 0;
+    }
+    return this;
+  }
+
+  set(n, x, y, z) {
+    const m = this.mirror;
+    const a = this.pose[m ? swapLR(n) : n];
+    a[0] = x;
+    a[1] = m ? -y : y;
+    a[2] = m ? -z : z;
+    return this;
+  }
+
+  /** Grip of the weapon hand (W) and the rear hand (B). */
+  grips(w, b) {
+    this.pose[this.mirror ? 'gripL' : 'gripR'] = w;
+    this.pose[this.mirror ? 'gripR' : 'gripL'] = b;
+    return this;
+  }
 }
+
+/* ---- Props: mask and foil -------------------------------------------- */
 
 function gridTexture() {
   const cv = document.createElement('canvas');
   cv.width = 64;
   cv.height = 64;
   const ctx = cv.getContext('2d');
-  ctx.fillStyle = '#0c0e12';
+  ctx.fillStyle = '#16191e';
   ctx.fillRect(0, 0, 64, 64);
-  ctx.strokeStyle = 'rgba(150,158,172,0.55)';
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(176,184,198,0.62)';
+  ctx.lineWidth = 1.2;
   for (let i = 0; i < 64; i += 4) {
     ctx.beginPath();
     ctx.moveTo(i + 0.5, 0);
@@ -143,157 +172,495 @@ function gridTexture() {
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(5, 4);
+  tex.repeat.set(9, 6);
+  // Mipmapped and anisotropic: a fine mesh at a distance averages to grey
+  // instead of crawling with moiré as the head moves.
+  tex.anisotropy = 4;
   return tex;
+}
+
+/**
+ * The foil mask, in head space for a 1.80 m figure (origin at the head's
+ * centre, +z forward): a dark steel mesh bowl over the face — semi-see-
+ * through, so the face shows behind it in close-ups — a white padded
+ * tongue over the crown and the back, a white rim and a lamé bib.
+ */
+function buildMask(mats) {
+  const g = new THREE.Group();
+  const add = (geo, mat) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.castShadow = true;
+    g.add(m);
+    return m;
+  };
+  const R = [0.125, 0.162, 0.165];
+  const C = [0, -0.012, -0.004];
+  // The mesh: front 212°, from the crown to below the chin
+  const FRONT = 3.7;
+  const grille = new THREE.SphereGeometry(1, 28, 16, Math.PI / 2 - FRONT / 2, FRONT, 0, 2.6);
+  grille.scale(R[0], R[1], R[2]).translate(C[0], C[1], C[2]);
+  add(grille, mats.grille).renderOrder = 2;
+  // The back: padded white tongue and strap, starting exactly where the
+  // mesh ends (overlapping shells of different tessellation cross each
+  // other in a sawtooth); a few millimetres proud, like the padded edge
+  const back = new THREE.SphereGeometry(1, 20, 12, Math.PI / 2 + FRONT / 2, Math.PI * 2 - FRONT, 0, 2.05);
+  back.scale(R[0] * 1.035, R[1] * 1.025, R[2] * 1.035).translate(C[0], C[1], C[2]);
+  add(back, mats.pad);
+  // White padded edge along the bottom of the mesh (where the bib is sewn on)
+  const edgeT = 2.6; // the grille's lower edge, from the crown
+  const er = Math.sin(edgeT);
+  const ey = C[1] + Math.cos(edgeT) * R[1];
+  const rim = new THREE.TorusGeometry(1, 0.06, 6, 32, FRONT);
+  rim.rotateZ(Math.PI / 2 - FRONT / 2).rotateX(Math.PI / 2);
+  rim.scale(R[0] * er, 0.16, R[2] * er);
+  rim.translate(C[0], ey, C[2]);
+  add(rim, mats.pad);
+  // The bib: a flared lamé flap under the chin, hanging lower at the front
+  const bib = new THREE.CylinderGeometry(1, 1.3, 0.1, 20, 1, true, -1.9, 3.8);
+  const pos = bib.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const z = pos.getZ(i);
+    const y = pos.getY(i);
+    if (y < 0) pos.setY(i, y - Math.max(0, z) * 0.03);
+  }
+  bib.scale(R[0] * er * 1.02, 1, R[2] * er * 1.02);
+  bib.computeVertexNormals();
+  bib.translate(C[0], ey - 0.05, C[2]);
+  const bibMat = mats.pad;
+  const bibMesh = add(bib, bibMat);
+  return { group: g, bib: bibMesh };
+}
+
+/** The foil in its own space: blade along +x from the fist, bowing towards +y. */
+function buildFoil(mats) {
+  const g = new THREE.Group();
+  const bellGeo = new THREE.SphereGeometry(0.06, 16, 6, 0, Math.PI * 2, 0, Math.PI / 2.6);
+  bellGeo.rotateZ(-Math.PI / 2);
+  bellGeo.translate(0.03, 0, 0);
+  const bell = new THREE.Mesh(bellGeo, mats.steel);
+  bell.castShadow = true;
+  g.add(bell);
+  const gripGeo = new THREE.CylinderGeometry(0.012, 0.015, 0.12, 6);
+  gripGeo.rotateZ(Math.PI / 2);
+  gripGeo.translate(-0.025, 0, 0);
+  const grip = new THREE.Mesh(gripGeo, mats.grip);
+  g.add(grip);
+  // The blade is rebuilt in place whenever its curvature changes
+  const segs = 12;
+  const bladeGeo = new THREE.CylinderGeometry(0.0032, 0.0062, BLADE, 4, segs, false);
+  bladeGeo.rotateZ(-Math.PI / 2);
+  bladeGeo.translate(BLADE / 2, 0, 0);
+  const rest = Float32Array.from(bladeGeo.attributes.position.array);
+  const blade = new THREE.Mesh(bladeGeo, mats.steel);
+  blade.position.x = BLADE_START;
+  blade.castShadow = true;
+  blade.frustumCulled = false;
+  g.add(blade);
+  const button = new THREE.Mesh(new THREE.SphereGeometry(0.009, 6, 4), mats.button);
+  g.add(button);
+  return { group: g, blade, rest, button };
 }
 
 /* ---- The fencer ------------------------------------------------------- */
 
+const _v = new THREE.Vector3();
+const _v2 = new THREE.Vector3();
+const _v3 = new THREE.Vector3();
+const _w = new THREE.Vector3();
+const _q = new THREE.Quaternion();
+const _q2 = new THREE.Quaternion();
+const _m = new THREE.Matrix4();
+const _m2 = new THREE.Matrix4();
+const _s = new THREE.Vector3();
+const _wc = new THREE.Vector3();
+const FWD_L = new THREE.Vector3(0, 0, 1);
+
+/** Rotation taking local unit vector a→A and (the part of) b→B. */
+function frameQuat(a, A, b, B, out) {
+  // Orthonormal bases on both sides, then R = W · Lᵀ
+  const la = _v.copy(a).normalize();
+  const lb = _v2.copy(b).addScaledVector(la, -b.dot(la)).normalize();
+  const lc = _v3.crossVectors(la, lb);
+  _m.makeBasis(la, lb, lc);
+  const wa = _w.copy(A).normalize();
+  const wb = _s.copy(B).addScaledVector(wa, -B.dot(wa));
+  if (wb.lengthSq() < 1e-10) wb.set(wa.y, -wa.x, 0).add(_v3.set(0, wa.z, -wa.y)); // any perpendicular
+  wb.normalize();
+  const wc = _wc.crossVectors(wa, wb);
+  _m2.makeBasis(wa, wb, wc);
+  _m.transpose();
+  _m2.multiply(_m);
+  return out.setFromRotationMatrix(_m2);
+}
+
 export class Fencer {
   /**
    * @param {object} o
+   * @param {string} o.name    who fences (appearanceFor)
    * @param {number} o.sock    sock colour (identifies the fencer)
-   * @param {boolean} o.mirror true for the fencer on the right
+   * @param {boolean} o.mirror true for the fencer on the right (left-handed)
    */
-  constructor({ sock, mirror = false }) {
+  constructor({ name, sock, mirror = false }) {
+    this.mirror = mirror;
+    this.mx = mirror ? -1 : 1; // fencer x → world x
+    this.hand = mirror ? 'L' : 'R';
+    this.rear = mirror ? 'R' : 'L';
     this.group = new THREE.Group();
-    if (mirror) this.group.scale.x = -1;
     this.pose = new Float32Array(POSE_LEN);
-    this._ik = [0, 0];
-    this._bend = -1;
+    this.writer = new PoseWriter(mirror);
+    this.flashColor = new THREE.Color(0xffffff);
     this.tipLocal = new THREE.Vector3();
     this.midLocal = new THREE.Vector3();
-    this._build(sock);
+    this._bend = -1;
+    this.look = null; // world point the head turns to (null: straight ahead)
+    this.lookWeight = 1;
+    this.expr = { base: 'neutral', name: 'neutral', amount: 0, t: 0 };
+    this.qa = BLEND.map(() => new THREE.Quaternion());
+    this.qb = BLEND.map(() => new THREE.Quaternion());
+    this.ha = new THREE.Vector3();
+    this.hb = new THREE.Vector3();
+    // Scratch vectors for the per-frame solve (no garbage every frame)
+    this.pool = Array.from({ length: 48 }, () => new THREE.Vector3());
+    this.qpool = Array.from({ length: 4 }, () => new THREE.Quaternion());
+    this.pi = 0;
+    this.qi = 0;
+
+    this.mats = {
+      grille: new THREE.MeshStandardMaterial({
+        color: 0x9aa2ae, map: gridTexture(), roughness: 0.42, metalness: 0.7, transparent: true, opacity: 0.84
+      }),
+      pad: new THREE.MeshStandardMaterial({ color: 0xf1efe8, roughness: 0.7 }),
+      steel: new THREE.MeshStandardMaterial({ color: 0xdfe4ec, roughness: 0.3, metalness: 0.95 }),
+      grip: new THREE.MeshStandardMaterial({ color: 0x2a2422, roughness: 0.7 }),
+      // The point's button: a warm pin of light that bloom can catch
+      button: new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 1.4, 1.0) })
+    };
+    const mask = buildMask(this.mats);
+    this.mask = mask.group;
+    this.bib = mask.bib;
+    this.group.add(this.mask);
+    const foil = buildFoil(this.mats);
+    this.foil = foil.group;
+    this.blade = foil.blade;
+    this.bladeRest = foil.rest;
+    this.button = foil.button;
+    // The fencing glove on the sword hand: a padded white fist and a long
+    // gauntlet cuff over the sleeve
+    const gloveGeo = new THREE.SphereGeometry(1, 12, 9);
+    gloveGeo.scale(0.047, 0.056, 0.05);
+    this.glove = new THREE.Mesh(gloveGeo, this.mats.pad);
+    this.glove.castShadow = true;
+    const cuffGeo = new THREE.CylinderGeometry(0.056, 0.047, 0.1, 12, 1, true);
+    this.cuff = new THREE.Mesh(cuffGeo, this.mats.pad);
+    this.cuff.castShadow = true;
+    // Foil space → fist space: +x along the blade, +y the way it bows
+    this.foilQ = frameQuat(new THREE.Vector3(1, 0, 0), BLADE_L, new THREE.Vector3(0, 1, 0), BOW_L, new THREE.Quaternion());
+    this.person = null;
+    this.setPerson(name, sock);
+    this._setBend(0);
   }
 
-  _build(sockColor) {
-    const std = (color, roughness, metalness = 0, extra = {}) =>
-      new THREE.MeshStandardMaterial({ color, roughness, metalness, ...extra });
-    const m = {
-      jacket: std(0xf3f1ea, 0.62),
-      knickers: std(0xe9e6dd, 0.66),
-      lame: std(0xdfe3ea, 0.34, 0.8, { emissive: 0x000000, envMapIntensity: 1.4 }),
-      sock: std(sockColor, 0.78),
-      shoe: std(0x1f2329, 0.45),
-      grille: std(0x9aa2ae, 0.42, 0.75, { map: gridTexture() }),
-      shell: std(0xe9e7e0, 0.5),
-      skin: std(0xd9a47e, 0.6),
-      glove: std(0xeeeae0, 0.5),
-      steel: std(0xdfe4ec, 0.2, 0.96),
-      grip: std(0x2a2422, 0.7),
-      button: new THREE.MeshBasicMaterial({ color: 0xfff0c8 })
+  /** Dress someone else in the whites (the opponent changes per round). */
+  setPerson(name, sock) {
+    if (this.person && this.name === name && this.sock === sock) return;
+    this.name = name;
+    this.sock = sock;
+    // The new person first, then the old one goes: the shared materials and
+    // their shader programs stay alive, so nothing recompiles mid-game
+    const p = createPerson(appearanceFor(name, {
+      outfit: { top: 'fencing', bottom: 'knickers', accent: sock, shoes: 'sneakers', shoeColor: 0xe9e7e2 }
+    }));
+    if (this.person) this.person.dispose();
+    this.person = p;
+    this.s = p.scale;
+    this.group.add(p.root);
+    p.attach(this.foil, `grip${this.hand}`, { quaternion: this.foilQ });
+    p.attach(this.glove, `grip${this.hand}`, { position: [0, 0.008 * p.scale, 0], scale: p.scale });
+    p.attach(this.cuff, `forearm${this.hand}`, { position: [0, -0.215 * p.scale, 0.004 * p.scale], scale: p.scale });
+    const { lame } = p.materials;
+    if (lame) {
+      // Lamé is woven metal: duller than a mirror, so the sun leaves a sheen
+      // rather than a hot glint that bloom would turn into a firefly
+      lame.roughness = 0.46;
+      lame.metalness = 0.62;
+      lame.emissive.copy(this.flashColor);
+      lame.emissiveIntensity = 0;
+      this.bib.material = lame;
+    } else this.bib.material = this.mats.pad;
+    this.lines = LINE_BASE.map((y) => y * this.s);
+    this.front = TARGET_FRONT * this.s;
+    // Head centre in head-bone space, from the face socket (in front of the eyes)
+    const f = p.sockets.face.position;
+    this.headC = new THREE.Vector3(f.x, f.y, f.z - 0.115 * this.s);
+    this._measure();
+    this.apply(this.pose);
+    this.update(0, 0);
+  }
+
+  /**
+   * The weapon shoulder relative to the hips en garde (lean 0), measured on
+   * this person's skeleton once — the Animator aims from it analytically.
+   */
+  _measure() {
+    const p = this.person;
+    p.root.rotation.y = (this.mx * Math.PI) / 2;
+    this._torso(0, 0);
+    p.bones.hips.position.set(0, PELVIS * this.s, 0);
+    this.group.updateMatrixWorld(true);
+    const hips = this._toFencer(p.bones.hips.getWorldPosition(new THREE.Vector3()), new THREE.Vector3());
+    const sh = this._toFencer(p.bones[`upperArm${this.hand}`].getWorldPosition(new THREE.Vector3()), new THREE.Vector3());
+    this.sh = sh.sub(hips);
+  }
+
+  /** Weapon shoulder in the fencer frame for a pose (hips height py, lean). */
+  shoulderAt(p) {
+    const l = p[P.lean];
+    const c = Math.cos(l);
+    const s = Math.sin(l);
+    return [p[P.px] + this.sh.x * c + this.sh.y * s, p[P.py] - this.sh.x * s + this.sh.y * c];
+  }
+
+  _toFencer(w, out) {
+    const g = this.group.position;
+    return out.set((w.x - g.x) * this.mx, w.y - g.y, w.z - g.z);
+  }
+
+  _toWorld(x, y, z, out) {
+    const g = this.group.position;
+    return out.set(g.x + this.mx * x, g.y + y, g.z + z);
+  }
+
+  _dir(x, y, z, out) {
+    return out.set(this.mx * x, y, z);
+  }
+
+  /** The torso en garde: pelvis turned so the weapon side leads, lean and nod on top. */
+  _torso(lean, nod, rearGrip = 0.32) {
+    const w = this.writer.clear();
+    w.set('hips', lean, TWIST, 0)
+      .set('spine', 0.05, 0.1, 0.02)
+      .set('chest', 0.01, 0.14, -0.02)
+      // The head is turned to the opponent by look-at; only a hint here
+      .set('neck', -0.04, -0.03, 0)
+      .set('head', nod - 0.04, -0.05, 0)
+      .set('shoulderR', 0, 0.06, -0.03)
+      .set('shoulderL', 0, -0.04, 0.04)
+      .grips(1, rearGrip);
+    this.person.setPose(w.pose, 1);
+  }
+
+  V() {
+    const v = this.pool[this.pi];
+    this.pi = (this.pi + 1) % this.pool.length;
+    return v;
+  }
+
+  Q() {
+    const q = this.qpool[this.qi];
+    this.qi = (this.qi + 1) % this.qpool.length;
+    return q;
+  }
+
+  /** Place every joint from a pose vector. */
+  apply(p) {
+    const { person } = this;
+    this.pi = 0;
+    this.qi = 0;
+    const { root } = person;
+    const relax = clamp(p[P.relax], 0, 1);
+    const duelYaw = (this.mx * Math.PI) / 2;
+    const easeYaw = this.mx * (Math.PI / 2 - EASE_TURN);
+    const b = person.bones;
+    if (relax < 0.999) {
+      root.rotation.y = duelYaw;
+      this._duel(p);
+      if (relax > 0.001) this._capture(this.qa, this.ha);
+    }
+    if (relax > 0.001) {
+      root.rotation.y = easeYaw;
+      this._ease(p);
+      if (relax < 0.999) {
+        this._capture(this.qb, this.hb);
+        const k = smooth(relax);
+        BLEND.forEach((n, i) => b[n].quaternion.slerpQuaternions(this.qa[i], this.qb[i], k));
+        b.hips.position.lerpVectors(this.ha, this.hb, k);
+        root.rotation.y = lerp(duelYaw, easeYaw, k);
+      }
+    }
+    this._setBend(p[P.bend] * (1 - relax));
+    const { lame } = person.materials;
+    if (lame) lame.emissiveIntensity = p[P.flash] * 1.6;
+  }
+
+  _capture(qs, hp) {
+    const b = this.person.bones;
+    BLEND.forEach((n, i) => qs[i].copy(b[n].quaternion));
+    hp.copy(b.hips.position);
+  }
+
+  /** En garde, lunging, parrying …: everything from the pose vector. */
+  _duel(p) {
+    const { person } = this;
+    const b = person.bones;
+    const { s } = this;
+    const m = clamp(p[P.mask], 0, 1);
+    this._torso(p[P.lean], p[P.nod], lerp(0.85, 0.32, smooth(m)));
+    b.hips.position.set(0, p[P.py], p[P.px]);
+    this.group.updateMatrixWorld(true);
+
+    /* Legs: the front foot points at the opponent, the rear one turned out */
+    const lift = (pitch) => {
+      // Keep the heel (or the toes) out of the piste when the foot pitches
+      const c = Math.cos(pitch);
+      const sn = Math.sin(pitch);
+      const heel = -0.08 * c - 0.06 * sn;
+      const toe = -0.08 * c + 0.2 * sn;
+      return Math.max(0, -Math.min(heel, toe) * s - ANKLE_H * s);
     };
-    this.mats = m;
-    const mesh = (geo, mat, parent, x = 0, y = 0, z = 0) => {
-      const o = new THREE.Mesh(geo, mat);
-      o.position.set(x, y, z);
-      o.castShadow = true;
-      parent.add(o);
-      return o;
+    const footQ = (toe, pitch, out) => {
+      const c = Math.cos(pitch);
+      const sn = Math.sin(pitch);
+      const fwd = this._dir(toe[0] * c, sn, toe[2] * c, this.V());
+      const up = this._dir(-toe[0] * sn, c, -toe[2] * sn, this.V());
+      return frameQuat(FWD_L, fwd, UP_L, up, out);
     };
-    const joint = (parent, x = 0, y = 0, z = 0) => {
-      const j = new THREE.Group();
-      j.position.set(x, y, z);
-      parent.add(j);
-      return j;
+    const ff = this._toWorld(p[P.ffx], p[P.ffy] + lift(p[P.ffp]), FOOT_Z * s, this.V());
+    const fPole = this._toWorld(p[P.ffx] + 0.5 * s, p[P.ffy] + 0.6 * s, 0.08 * s, this.V());
+    person.ikLeg(this.hand, ff, fPole, footQ([1, 0, 0.04], p[P.ffp], _q));
+    const toe = [0.28, 0, -0.96];
+    const bf = this._toWorld(p[P.bfx], p[P.bfy] + lift(p[P.bfp]), -FOOT_Z * s, this.V());
+    const bPole = this._toWorld(p[P.bfx] + 0.35 * s, p[P.bfy] + 0.55 * s, -0.75 * s, this.V());
+    person.ikLeg(this.rear, bf, bPole, footQ(toe, p[P.bfp], _q));
+
+    /* Weapon arm: the fist where the pose says, the foil along fa / fyaw */
+    const [sx, sy] = this.shoulderAt(p);
+    const grip = this._toWorld(sx + p[P.hx], sy + p[P.hy], this.sh.z + HAND_Z * s, this.V());
+    const fa = p[P.fa];
+    const yaw = p[P.fyaw];
+    const dir = this._dir(Math.cos(fa) * Math.cos(yaw), Math.sin(fa), -Math.cos(fa) * Math.sin(yaw), this.V());
+    const pole = this._toWorld(sx + 0.18 * s, sy - 0.7 * s, this.sh.z + 0.02 * s, this.V());
+    this._weapon(grip, dir, pole);
+
+    /* Rear arm: carriage ↔ thrown back, or carrying / donning the mask */
+    const rs = this._toFencer(b[`upperArm${this.rear}`].getWorldPosition(this.V()), this.V());
+    const back = clamp(p[P.back], -0.35, 1);
+    const carriage = [-0.3, 0.25, -0.1];
+    const thrown = [-0.58, -0.04, -0.07];
+    const held = [0.04, -0.54, 0.05];
+    const duelT = [0, 1, 2].map((i) => lerp(carriage[i], thrown[i], back));
+    const ms = smooth(m);
+    const target = [0, 1, 2].map((i) => rs.getComponent(i) + lerp(held[i], duelT[i], ms) * s);
+    // Donning: the hand rises to the face with the mask on the way
+    const pull = Math.sin(Math.PI * m) ** 0.8;
+    if (pull > 1e-3) {
+      const hc = this._toFencer(b.head.localToWorld(_v.copy(this.headC)), this.V());
+      const face = [hc.x + 0.2 * s, hc.y - 0.16 * s, hc.z - 0.02 * s];
+      for (let i = 0; i < 3; i++) target[i] = lerp(target[i], face[i], pull * 0.85);
+    }
+    const rw = this._toWorld(target[0], target[1], target[2], this.V());
+    const rPole = this._toWorld(rs.x - 0.5 * s, rs.y - 0.35 * s - (1 - ms) * 0.3 * s, rs.z - 0.3 * s, this.V());
+    // Hand: floppy and forward in the carriage, palm up when thrown back,
+    // fingers down carrying the mask, palm to the face when donning
+    const fing = [0, 1, 2].map((i) => lerp([0.02, -1, 0.05][i], lerp([0.62, 0.42, -0.08][i], [-1, -0.15, 0][i], clamp(back, 0, 1)), ms));
+    const palm = [0, 1, 2].map((i) => lerp([0, 0, 1][i], lerp([0.4, -0.85, 0.2][i], [0, 1, 0][i], clamp(back, 0, 1)), ms));
+    if (pull > 1e-3) {
+      for (let i = 0; i < 3; i++) {
+        fing[i] = lerp(fing[i], [0.25, 0.9, 0][i], pull);
+        palm[i] = lerp(palm[i], [-1, 0, 0][i], pull);
+      }
+    }
+    this._rearHand(rw, rPole, fing, palm);
+  }
+
+  /** Standing at ease, turned to the camera: foil down, mask in the rear hand. */
+  _ease(p) {
+    const { person } = this;
+    const b = person.bones;
+    const { s } = this;
+    const ch = clamp(p[P.cheer], -1, 1);
+    const up = Math.max(0, ch);
+    const down = Math.max(0, -ch);
+    const w = this.writer.clear();
+    w.set('hips', 0.0, 0.08, 0.02)
+      .set('spine', 0.02 + down * 0.16, 0.0, -0.01)
+      .set('chest', -0.02 - up * 0.08 + down * 0.1, -0.06, 0)
+      .set('neck', 0.04 + down * 0.12, 0, 0)
+      .set('head', -0.03 + down * 0.28 - up * 0.12, 0.0, 0)
+      .set('shoulderL', 0, 0, -0.03 - down * 0.05)
+      .set('shoulderR', 0, 0, 0.03 + down * 0.05)
+      .set('thighL', 0, 0.06, 0.05)
+      .set('thighR', -0.06, -0.12, -0.04)
+      .set('shinL', 0.04, 0, 0)
+      .set('shinR', 0.1, 0, 0)
+      .set('footL', -0.04, 0.12, -0.05)
+      .set('footR', 0.02, -0.24, 0.04)
+      .grips(1, 0.85);
+    person.setPose(w.pose, 1);
+    b.hips.position.set(0, (0.95 - 0.006) * s + p[P.bob], 0.01 * s);
+    this.group.updateMatrixWorld(true);
+    // Targets in the person's own frame (right-handed; x mirrors for the lefty)
+    const mx = this.mirror ? -1 : 1;
+    const local = (x, y, z, out) => out.set(x * mx * s, y * s, z * s).applyMatrix4(person.root.matrixWorld);
+    const ldir = (x, y, z, out) => out.set(x * mx, y, z).transformDirection(person.root.matrixWorld);
+    const gx = lerp(lerp(-0.25, -0.2, down), -0.2, up);
+    const gy = lerp(lerp(0.84, 0.79, down), 2.02, up);
+    const gz = lerp(lerp(0.13, 0.06, down), 0.1, up);
+    const grip = local(gx, gy, gz, this.V());
+    const dir = ldir(lerp(lerp(-0.22, -0.08, down), -0.25, up), lerp(lerp(-0.72, -0.98, down), 1, up), lerp(lerp(0.62, 0.22, down), 0.12, up), this.V());
+    const pole = local(lerp(-0.7, -1.2, up), lerp(0.9, 1.7, up), lerp(-0.6, -0.1, up), this.V());
+    this._weapon(grip, dir, pole);
+    const rw = local(0.24, 0.84, 0.03, this.V());
+    const rPole = local(0.6, 1.1, -0.7, this.V());
+    const fing = ldir(0.04, -1, 0.06, this.V());
+    const palm = ldir(-1, 0, 0.1, this.V());
+    // ldir already mirrors x; hand on the person's own left/right is handled in _rearHand
+    this._rearHandW(rw, rPole, fing, palm);
+  }
+
+  /**
+   * Weapon hand: blade direction is exact; the fist is rolled about the
+   * blade so the wrist lines up with the forearm (two passes: the elbow
+   * from a first solve tells where the forearm comes from).
+   */
+  _weapon(grip, dir, pole) {
+    const { person } = this;
+    const b = person.bones;
+    const sock = person.sockets[`grip${this.hand}`].position;
+    const bladeW = this.V().copy(dir).normalize();
+    const q = this.Q();
+    const wrist = this.V();
+    const solve = (towardElbow) => {
+      // u: perpendicular to the blade, towards the elbow and up (never degenerate)
+      const u = this.V();
+      const add = (v, k) => u.addScaledVector(_v.copy(v).addScaledVector(bladeW, -v.dot(bladeW)), k);
+      if (towardElbow) add(towardElbow, 1);
+      add(_v2.set(0, 1, 0), 0.35);
+      add(this._dir(-1, 0, 0, _v3), 0.08);
+      if (u.lengthSq() < 1e-8) u.set(0, 0, 1).addScaledVector(bladeW, -bladeW.z);
+      u.normalize();
+      const yW = this.V().copy(bladeW).multiplyScalar(COS_YB).addScaledVector(u, SIN_YB);
+      frameQuat(BLADE_L, bladeW, UP_L, yW, q);
+      wrist.copy(sock).applyQuaternion(q).negate().add(grip);
+      person.ikArm(this.hand, wrist, pole, q);
     };
+    solve(null);
+    const elbow = b[`forearm${this.hand}`].getWorldPosition(this.V());
+    const hand = b[`hand${this.hand}`].getWorldPosition(this.V());
+    solve(elbow.sub(hand));
+  }
 
-    /* Pelvis — only ever translated; the legs solve from it */
-    const pelvis = joint(this.group);
-    const seat = mesh(new THREE.SphereGeometry(0.16, 12, 8), m.knickers, pelvis, 0, -0.02, 0);
-    seat.scale.set(0.95, 0.78, 0.88);
+  /** Rear hand IK from fencer-frame finger/palm directions. */
+  _rearHand(target, pole, fing, palm) {
+    const f = this._dir(fing[0], fing[1], fing[2], this.V());
+    const pl = this._dir(palm[0], palm[1], palm[2], this.V());
+    this._rearHandW(target, pole, f, pl);
+  }
 
-    /* Legs: hip → thigh → knee → shin → ankle → foot */
-    const leg = (hip, back) => {
-      const h = joint(pelvis, ...hip);
-      const thigh = joint(h);
-      mesh(limb(THIGH + 0.05, 0.085, 0.064, 0.012), m.knickers, thigh);
-      const knee = joint(thigh, 0, -THIGH, 0);
-      const shin = joint(knee);
-      mesh(limb(SHIN, 0.058, 0.04, 0.012, 7), m.sock, shin);
-      const ankle = joint(shin, 0, -SHIN, 0);
-      const footRot = joint(ankle);
-      if (back) footRot.rotation.y = -1.25; // rear foot turned out, toes to the camera
-      const shoe = mesh(new THREE.CapsuleGeometry(0.048, 0.17, 3, 8), m.shoe, footRot, 0.06, -ANKLE_H + 0.035, 0);
-      shoe.rotation.z = Math.PI / 2;
-      shoe.scale.set(0.62, 1, 0.82);
-      return { thigh, shin, ankle };
-    };
-    this.legF = leg(HIP_F, false);
-    this.legB = leg(HIP_B, true);
-
-    /* Torso — leans about the pelvis */
-    const torso = joint(pelvis, 0, TORSO_Y, 0);
-    const jacketGeo = new THREE.LatheGeometry([
-      [0.001, -0.06], [0.15, -0.05], [0.158, 0.06], [0.165, 0.2], [0.18, 0.34],
-      [0.178, 0.44], [0.15, 0.53], [0.08, 0.6], [0.001, 0.61]
-    ].map(([r, y]) => new THREE.Vector2(r, y)), 12);
-    const chest = mesh(jacketGeo, m.jacket, torso);
-    chest.scale.set(1, 1, 0.72);
-    // The lamé: a conductive vest over the trunk — the valid target in foil
-    const lameGeo = new THREE.LatheGeometry([
-      [0.001, -0.05], [0.157, -0.04], [0.165, 0.06], [0.172, 0.2], [0.187, 0.34],
-      [0.184, 0.44], [0.12, 0.52], [0.001, 0.525]
-    ].map(([r, y]) => new THREE.Vector2(r, y)), 12);
-    const lame = mesh(lameGeo, m.lame, torso);
-    lame.scale.set(1, 1, 0.74);
-    this.lame = lame;
-
-    /* Head: grille, white back shell and bib */
-    const neck = joint(torso, 0.03, 0.6, 0);
-    const head = joint(neck);
-    const grille = mesh(new THREE.SphereGeometry(0.12, 14, 10), m.grille, head, 0.02, 0.1, 0);
-    grille.scale.set(1.02, 1.22, 1.0);
-    const shell = mesh(new THREE.SphereGeometry(0.128, 12, 10, -Math.PI / 2, Math.PI), m.shell, head, 0.0, 0.1, 0);
-    shell.scale.set(1.0, 1.2, 1.02);
-    const bib = mesh(new THREE.CylinderGeometry(0.1, 0.13, 0.1, 12, 1, true), m.shell, head, 0.03, -0.02, 0);
-    bib.rotation.z = -0.35;
-    bib.scale.z = 0.86;
-    this.head = head;
-
-    /* Weapon arm: shoulder → upper → elbow → fore → wrist → foil */
-    const shF = joint(torso, ...SHOULDER_F);
-    const upF = joint(shF);
-    mesh(limb(UPPER, 0.062, 0.05, 0.008), m.jacket, upF);
-    const elF = joint(upF, 0, -UPPER, 0);
-    const foF = joint(elF);
-    mesh(limb(FORE, 0.05, 0.043, 0.006, 7), m.jacket, foF);
-    // Gauntlet cuff over the end of the sleeve
-    mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.1, 10), m.glove, foF, 0, -FORE + 0.06, 0);
-    const wrist = joint(foF, 0, -FORE, 0);
-    const fist = mesh(new THREE.SphereGeometry(0.046, 10, 8), m.glove, wrist, 0.012, 0, 0);
-    fist.scale.set(1.15, 1, 0.95);
-
-    const foil = joint(wrist);
-    const bellGeo = new THREE.SphereGeometry(0.06, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2.6);
-    bellGeo.rotateZ(-Math.PI / 2);
-    mesh(bellGeo, m.steel, foil, 0.03, 0, 0);
-    const gripGeo = new THREE.CylinderGeometry(0.013, 0.016, 0.12, 6);
-    gripGeo.rotateZ(Math.PI / 2);
-    mesh(gripGeo, m.grip, foil, -0.02, 0, 0);
-    // The blade is rebuilt in place whenever its curvature changes
-    const segs = 12;
-    const bladeGeo = new THREE.CylinderGeometry(0.0032, 0.0062, BLADE, 4, segs, false);
-    bladeGeo.rotateZ(-Math.PI / 2);
-    bladeGeo.translate(BLADE / 2, 0, 0);
-    this.bladeRest = Float32Array.from(bladeGeo.attributes.position.array);
-    const blade = mesh(bladeGeo, m.steel, foil, BLADE_START, 0, 0);
-    blade.frustumCulled = false;
-    this.blade = blade;
-    const button = mesh(new THREE.SphereGeometry(0.009, 6, 4), m.button, foil);
-    button.castShadow = false;
-    this.button = button;
-
-    /* Rear arm, curled up behind in the classic carriage */
-    const shB = joint(torso, ...SHOULDER_B);
-    const upB = joint(shB);
-    mesh(limb(UPPER, 0.058, 0.048, 0.008), m.jacket, upB);
-    const elB = joint(upB, 0, -UPPER, 0);
-    const foB = joint(elB);
-    mesh(limb(FORE - 0.02, 0.046, 0.037, 0.005, 7), m.jacket, foB);
-    mesh(new THREE.SphereGeometry(0.04, 8, 6), m.skin, foB, 0, -FORE + 0.01, 0);
-
-    this.j = { pelvis, torso, neck, head, upF, foF, wrist, foil, upB, foB };
+  _rearHandW(target, pole, fingW, palmW) {
+    // Fingers run along the hand's −Y, the palm faces +X (right) or −X (left)
+    const palmL = new THREE.Vector3(this.rear === 'R' ? 1 : -1, 0, 0);
+    frameQuat(new THREE.Vector3(0, -1, 0), fingW, palmL, palmW, _q2);
+    this.person.ikArm(this.rear, target, pole, _q2);
   }
 
   /** Bend the blade into a circular arc of curvature k (towards +y). */
@@ -304,13 +671,13 @@ export class Fencer {
     const rest = this.bladeRest;
     const arr = pos.array;
     for (let i = 0; i < arr.length; i += 3) {
-      const s = rest[i];
+      const sv = rest[i];
       const y = rest[i + 1];
       if (k < 1e-4) {
-        arr[i] = s;
+        arr[i] = sv;
         arr[i + 1] = y;
       } else {
-        const a = s * k;
+        const a = sv * k;
         arr[i] = Math.sin(a) / k - y * Math.sin(a);
         arr[i + 1] = (1 - Math.cos(a)) / k + y * Math.cos(a);
       }
@@ -319,78 +686,108 @@ export class Fencer {
     pos.needsUpdate = true;
     this.blade.geometry.computeVertexNormals();
     // Tip and a mid-blade point, in foil space, for trails and sparks
-    const tipPt = (s, out) => {
-      if (k < 1e-4) out.set(BLADE_START + s, 0, 0);
-      else out.set(BLADE_START + Math.sin(s * k) / k, (1 - Math.cos(s * k)) / k, 0);
+    const tipPt = (sv, out) => {
+      if (k < 1e-4) out.set(BLADE_START + sv, 0, 0);
+      else out.set(BLADE_START + Math.sin(sv * k) / k, (1 - Math.cos(sv * k)) / k, 0);
     };
     tipPt(BLADE, this.tipLocal);
     tipPt(BLADE * 0.62, this.midLocal);
     this.button.position.copy(this.tipLocal);
   }
 
-  /** Place every joint from a pose vector. */
-  apply(p) {
-    const { j } = this;
-    const lean = p[P.lean];
-    j.pelvis.position.set(p[P.px], p[P.py], 0);
-    j.torso.rotation.z = -lean;
-
-    // Legs: solve in pelvis space (the pelvis is never rotated)
-    const leg = (L, hip, ax, ay, pitch) => {
-      const r = ik2(this._ik, hip[0], hip[1], ax - p[P.px], ay - p[P.py], THIGH, SHIN, 1);
-      L.thigh.rotation.z = r[0];
-      L.shin.rotation.z = r[1];
-      L.ankle.rotation.z = -(r[0] + r[1]) + pitch;
-    };
-    leg(this.legF, HIP_F, p[P.ffx], p[P.ffy], p[P.ffp]);
-    leg(this.legB, HIP_B, p[P.bfx], p[P.bfy], p[P.bfp]);
-
-    // Weapon arm: hand target is given relative to the shoulder in the
-    // fencer frame; rotate it into the leaning torso frame first
-    const c = Math.cos(lean);
-    const s = Math.sin(lean);
-    const tx = p[P.hx] * c - p[P.hy] * s;
-    const ty = p[P.hx] * s + p[P.hy] * c;
-    const a = ik2(this._ik, 0, 0, tx, ty, UPPER, FORE, -1);
-    j.upF.rotation.z = a[0];
-    j.foF.rotation.z = a[1];
-    j.wrist.rotation.z = p[P.fa] + lean - a[0] - a[1];
-    j.foil.rotation.y = p[P.fyaw];
-    this._setBend(p[P.bend]);
-
-    // Rear arm: blend between the raised carriage and thrown-back lunge
-    const b = p[P.back];
-    j.upB.rotation.z = -1.35 + b * 0.25;
-    j.foB.rotation.z = -1.85 + b * 1.75;
-
-    j.head.rotation.z = -p[P.nod];
-    j.neck.rotation.z = lean * 0.35;
-
-    const f = p[P.flash];
-    this.mats.lame.emissiveIntensity = f * 1.1;
+  /**
+   * After apply(): look-at, breathing, blinks and expressions, then the
+   * mask follows the head (worn) or the rear hand (carried).
+   */
+  update(dt, t) {
+    const { person } = this;
+    const e = this.expr;
+    if (e.t > 0) {
+      e.t -= dt;
+      if (e.t <= 0) person.setExpression(e.base, 0.6);
+    }
+    person.lookAt(this.look, this.lookWeight);
+    person.update(dt, t);
+    this._placeMask();
+    this.group.updateMatrixWorld(true);
   }
 
-  /** World position of the blade tip (after apply + matrix update). */
+  _placeMask() {
+    const { person } = this;
+    const { s } = this;
+    const m = clamp(this.pose[P.mask], 0, 1);
+    const k = smooth(clamp((m - 0.22) / 0.4, 0, 1));
+    const { head } = person.bones;
+    head.updateWorldMatrix(true, false);
+    // Worn: centred on the head
+    const pw = head.localToWorld(_v.copy(this.headC));
+    head.getWorldQuaternion(_q);
+    let pos = pw;
+    if (k < 1) {
+      // Carried: hanging upright from the rear fist by the strap, grille
+      // facing the way the fencer faces — upright whatever the wrist does,
+      // so on its way to the face it never tumbles
+      const sock = person.sockets[`grip${this.rear}`];
+      sock.updateWorldMatrix(true, false);
+      person.root.getWorldQuaternion(_q2);
+      const out = this.rear === 'L' ? 1 : -1;
+      const ph = sock.getWorldPosition(_v2).add(_v3.set(out * 0.05 * s, -0.16 * s, 0.03 * s).applyQuaternion(_q2));
+      pos = _v3.copy(ph).lerp(pw, k);
+      _q.slerpQuaternions(_q2, _q, k);
+    }
+    this.mask.position.copy(this.group.worldToLocal(pos));
+    this.mask.quaternion.copy(_q);
+    this.mask.scale.setScalar(s);
+  }
+
+  /** A held expression that relaxes back to the base one. */
+  express(name, amount = 1, hold = 1.2) {
+    this.expr.t = hold;
+    this.person.setExpression(name, amount);
+  }
+
+  /** The resting expression (focus in the bout, neutral at ease). */
+  setBaseExpression(name) {
+    if (this.expr.base === name) return;
+    this.expr.base = name;
+    if (this.expr.t <= 0) this.person.setExpression(name, 0.6);
+  }
+
+  /** World position of the blade tip (after apply + update). */
   tipWorld(out) {
-    return out.copy(this.tipLocal).applyMatrix4(this.j.foil.matrixWorld);
+    return out.copy(this.tipLocal).applyMatrix4(this.foil.matrixWorld);
   }
 
   midWorld(out) {
-    return out.copy(this.midLocal).applyMatrix4(this.j.foil.matrixWorld);
+    return out.copy(this.midLocal).applyMatrix4(this.foil.matrixWorld);
   }
 
-  setSock(color) {
-    this.mats.sock.color.set(color);
+  /** Bones the game frames the camera on. */
+  get j() {
+    return { torso: this.person.bones.chest, head: this.person.bones.head };
+  }
+
+  /** World height of one of this fencer's target lines. */
+  lineWorldY(i) {
+    return this.group.position.y + this.lines[i];
   }
 
   setFlashColor(color) {
-    this.mats.lame.emissive.set(color);
+    this.flashColor.set(color);
+    if (this.person.materials.lame) this.person.materials.lame.emissive.copy(this.flashColor);
+  }
+
+  get triangles() {
+    return this.person.triangles;
   }
 
   dispose() {
-    this.group.traverse((o) => {
-      if (o.geometry) o.geometry.dispose();
-    });
+    this.person.dispose();
+    for (const o of [this.mask, this.foil, this.glove, this.cuff]) {
+      o.traverse((c) => {
+        if (c.geometry) c.geometry.dispose();
+      });
+    }
     Object.values(this.mats).forEach((mat) => {
       if (mat.map) mat.map.dispose();
       mat.dispose();
@@ -431,13 +828,14 @@ const ACTIONS = {
   feint(a, out, ctx, k) {
     // Half an extension and an appel — the stamp of the front foot
     a.guardPose(out, ctx);
+    const { s } = a.f;
     const b = bell(k);
     const g = GUARD_HAND[a.line];
-    out[P.hx] = g[0] + 0.16 * b;
-    out[P.hy] = g[1] + 0.03 * b;
-    out[P.px] += 0.06 * b;
-    out[P.ffx] += 0.1 * b;
-    out[P.ffy] = ANKLE_H + 0.07 * bell(k * 1.6);
+    out[P.hx] = (g[0] + 0.16 * b) * s;
+    out[P.hy] = (g[1] + 0.03 * b) * s;
+    out[P.px] += 0.06 * b * s;
+    out[P.ffx] += 0.1 * b * s;
+    out[P.ffy] = (ANKLE_H + 0.07 * bell(k * 1.6)) * s;
     out[P.lean] += 0.06 * b;
     return 40;
   },
@@ -448,23 +846,24 @@ const ACTIONS = {
     const b = bell(clamp(k * 1.6, 0, 1));
     out[P.fa] += 0.38 * b * (a.line === 2 ? -1 : 1);
     out[P.fyaw] = 0.04 + 0.42 * b;
-    out[P.hx] += 0.04 * b;
+    out[P.hx] += 0.04 * b * a.f.s;
     return 44;
   },
 
   stagger(a, out, ctx, k) {
     // Blade knocked aside, a stumbling step back, then composure
     a.guardPose(out, ctx);
+    const { s } = a.f;
     const b = bell(k);
     const early = bell(clamp(k * 2.2, 0, 1));
     out[P.fa] += 0.95 * early + 0.2 * b;
     out[P.fyaw] = 0.04 - 0.5 * early;
-    out[P.hx] -= 0.1 * b;
-    out[P.hy] += 0.14 * early;
+    out[P.hx] -= 0.1 * b * s;
+    out[P.hy] += 0.14 * early * s;
     out[P.lean] -= 0.16 * b;
-    out[P.px] -= 0.12 * b;
-    out[P.bfx] -= 0.12 * bell(clamp(k * 1.4, 0, 1));
-    out[P.bfy] = ANKLE_H + 0.05 * bell(clamp(k * 2.5, 0, 1));
+    out[P.px] -= 0.12 * b * s;
+    out[P.bfx] -= 0.12 * bell(clamp(k * 1.4, 0, 1)) * s;
+    out[P.bfy] = (ANKLE_H + 0.05 * bell(clamp(k * 2.5, 0, 1))) * s;
     out[P.back] = 0.5 * b;
     out[P.nod] = -0.12 * b;
     return 22;
@@ -473,11 +872,12 @@ const ACTIONS = {
   bitten(a, out, ctx, k) {
     // Went for the feint: the parry swings into empty air
     a.guardPose(out, ctx);
+    const { s } = a.f;
     const b = bell(clamp(k * 1.3, 0, 1));
     out[P.fa] -= 0.75 * b;
     out[P.fyaw] = 0.04 + 0.55 * b;
-    out[P.hy] -= 0.1 * b;
-    out[P.hx] -= 0.05 * b;
+    out[P.hy] -= 0.1 * b * s;
+    out[P.hx] -= 0.05 * b * s;
     out[P.lean] -= 0.05 * b;
     return 30;
   },
@@ -492,55 +892,60 @@ const ACTIONS = {
   telegraph(a, out, ctx, k) {
     // The coil: sit back, sink, draw the hand back and aim the point
     a.guardPose(out, ctx);
+    const { s } = a.f;
     const c = smooth(clamp(k * 1.8, 0, 1));
-    out[P.py] -= 0.1 * c;
-    out[P.px] -= 0.09 * c;
+    out[P.py] -= 0.09 * c * s;
+    out[P.px] -= 0.09 * c * s;
     out[P.lean] += 0.06 * c;
-    out[P.hx] -= 0.12 * c;
-    out[P.hy] += [0.08, 0.02, -0.06][a.line] * c;
+    out[P.hx] -= 0.12 * c * s;
+    out[P.hy] += [0.08, 0.02, -0.06][a.line] * c * s;
     out[P.fa] = a.aim(out, ctx, a.line).a + 0.02 * Math.sin(a.t * 40) * c;
     out[P.back] = -0.15 * c;
     return 24;
   },
 
   salute(a, out, ctx, k) {
-    // Blade to the mask, sweep down towards the opponent, en garde
+    // Mask in the rear hand: blade up before the face, sweep down towards
+    // the opponent, then the mask goes on and down into guard
     a.guardPose(out, ctx);
-    const up = smooth(clamp(k / 0.4, 0, 1)) * (1 - smooth(clamp((k - 0.55) / 0.2, 0, 1)));
-    const down = smooth(clamp((k - 0.55) / 0.2, 0, 1)) * (1 - smooth(clamp((k - 0.85) / 0.15, 0, 1)));
-    out[P.hx] += (0.08 - out[P.hx]) * up + (0.42 - out[P.hx]) * down;
-    out[P.hy] += (0.0 - out[P.hy]) * up + (-0.18 - out[P.hy]) * down;
-    out[P.fa] += (Math.PI / 2 - out[P.fa]) * up + (-0.55 - out[P.fa]) * down;
-    out[P.fyaw] += 0.1 * up;
-    out[P.py] += 0.08 * (up + down);
-    out[P.nod] += 0.1 * up;
+    const { s } = a.f;
+    const up = smooth(clamp(k / 0.36, 0, 1)) * (1 - smooth(clamp((k - 0.48) / 0.18, 0, 1)));
+    const down = smooth(clamp((k - 0.48) / 0.18, 0, 1)) * (1 - smooth(clamp((k - 0.8) / 0.18, 0, 1)));
+    out[P.hx] += (0.14 * s - out[P.hx]) * up + (0.42 * s - out[P.hx]) * down;
+    out[P.hy] += (0.0 - out[P.hy]) * up + (-0.24 * s - out[P.hy]) * down;
+    out[P.fa] += (Math.PI / 2 - out[P.fa]) * up + (-0.6 - out[P.fa]) * down;
+    out[P.fyaw] += 0.12 * up;
+    out[P.py] += 0.1 * (up + down) * s;
+    out[P.nod] += 0.08 * up;
+    out[P.mask] = k < 0.62 ? 0 : 1;
     return 12;
+  },
+
+  /** At ease (title, bracket, final): standing, mask carried. */
+  ease(a, out, ctx) {
+    a.guardPose(out, ctx);
+    out[P.relax] = 1;
+    out[P.mask] = 0;
+    return 7;
   },
 
   win(a, out, ctx, k) {
     a.guardPose(out, ctx);
-    const big = a.act === 'champion' ? 1 : 0.6;
+    const big = a.act === 'champion' ? 1 : 0.7;
     const r = smooth(clamp(k * 2, 0, 1));
-    out[P.py] = 0.94 + Math.abs(Math.sin(a.t * 7)) * 0.05 * big * r;
-    out[P.hx] += (0.12 - out[P.hx]) * r;
-    out[P.hy] += (0.42 * big - out[P.hy]) * r;
-    out[P.fa] += (1.25 - out[P.fa]) * r;
-    out[P.back] = -0.25 * r;
-    out[P.lean] = -0.04 * r;
-    out[P.nod] = -0.18 * r;
-    return 10;
+    out[P.relax] = r;
+    out[P.mask] = 0;
+    out[P.cheer] = big * r;
+    out[P.bob] = Math.abs(Math.sin(a.t * 6.5)) * (a.act === 'champion' ? 0.05 : 0.012) * a.f.s * r;
+    return 9;
   },
 
   lose(a, out, ctx, k) {
     a.guardPose(out, ctx);
     const r = smooth(clamp(k * 1.5, 0, 1));
-    out[P.py] = 0.86 + 0.08 * r;
-    out[P.hx] += (0.18 - out[P.hx]) * r;
-    out[P.hy] += (-0.38 - out[P.hy]) * r;
-    out[P.fa] += (-1.05 - out[P.fa]) * r;
-    out[P.nod] = 0.06 + 0.32 * r;
-    out[P.lean] = 0.1 * r;
-    out[P.back] = 0.6 * r;
+    out[P.relax] = r;
+    out[P.mask] = 0;
+    out[P.cheer] = -r;
     return 7;
   },
 
@@ -567,13 +972,14 @@ export class Animator {
     this.dur = 0.3;
     this.opts = {};
     this.line = 1;
-    this.lineFrom = 1;
     this.phase = seed;
     this.ox = 0; // footwork offset along the piste
     this.step = null; // { from, to, t, dur }
     this.flash = 0;
-    this.speed = 18;
-    this.guardPose(this.f.pose, { dist: 2.6, oppPx: 0 });
+    this.hold = -1; // target line while the point is in contact
+    const ctx = { dist: 2.44, oppPx: 0, lines: LINE_BASE, front: TARGET_FRONT };
+    this.guardPose(this.f.pose, ctx);
+    this.f.pose[P.mask] = 1;
     this.target.set(this.f.pose);
   }
 
@@ -582,6 +988,13 @@ export class Animator {
     this.t = 0;
     this.dur = dur;
     this.opts = opts;
+  }
+
+  /** Jump straight to the current action's pose (no springs), e.g. on open. */
+  snap(ctx) {
+    (ACTIONS[this.act] || ACTIONS.guard)(this, this.target, ctx, 1);
+    this.f.pose.set(this.target);
+    this.vel.fill(0);
   }
 
   /** Small advance (+) or retreat (−) step, front foot leads on advance. */
@@ -595,89 +1008,96 @@ export class Animator {
     this.vel[ch] += v;
   }
 
-  /** Shoulder position in the fencer frame for a pose vector. */
-  static shoulder(out) {
-    const l = out[P.lean];
-    const sy = SHOULDER_F[1] + TORSO_Y;
-    return [
-      out[P.px] + SHOULDER_F[0] * Math.cos(l) + sy * Math.sin(l),
-      out[P.py] - SHOULDER_F[0] * Math.sin(l) + sy * Math.cos(l)
-    ];
-  }
-
-  /** Angle from the weapon hand to the opponent's target in `line`. */
+  /** Angle from the weapon fist to the opponent's target in `line`. */
   aim(out, ctx, line) {
-    const [sx, sy] = Animator.shoulder(out);
+    const [sx, sy] = this.f.shoulderAt(out);
     const handX = sx + out[P.hx];
     const handY = sy + out[P.hy];
-    const tx = ctx.dist - ctx.oppPx - 0.17;
-    return { a: Math.atan2(LINE_Y[line] - handY, tx - handX), handX, handY, tx, sx, sy };
+    const tx = ctx.dist - ctx.oppPx - ctx.front;
+    const ty = ctx.lines[line];
+    return { a: Math.atan2(ty - handY, tx - handX), handX, handY, tx, ty, sx, sy };
   }
 
   guardPose(out, ctx, line = this.line) {
+    const { s } = this.f;
     const ph = this.phase;
     const bob = Math.sin(ph * 2 * Math.PI * 1.25);
-    out[P.px] = this.ox + Math.sin(ph * 2.6) * 0.012;
-    out[P.py] = 0.86 + bob * 0.016;
+    out[P.px] = this.ox + Math.sin(ph * 2.6) * 0.012 * s;
+    out[P.py] = (PELVIS + bob * 0.014) * s;
     out[P.lean] = 0.05 + bob * 0.008;
-    out[P.ffx] = this.ox + 0.44;
-    out[P.ffy] = ANKLE_H;
+    out[P.ffx] = this.ox + FRONT_FOOT * s;
+    out[P.ffy] = ANKLE_H * s;
     out[P.ffp] = 0;
-    out[P.bfx] = this.ox - 0.4;
-    out[P.bfy] = ANKLE_H;
+    out[P.bfx] = this.ox + BACK_FOOT * s;
+    out[P.bfy] = ANKLE_H * s;
     out[P.bfp] = 0;
     // The hand drifts between lines rather than snapping
     const g = GUARD_HAND[line];
-    out[P.hx] = g[0] + Math.sin(ph * 2.3) * 0.008;
-    out[P.hy] = g[1] + Math.cos(ph * 1.9) * 0.008;
+    out[P.hx] = (g[0] + Math.sin(ph * 2.3) * 0.008) * s;
+    out[P.hy] = (g[1] + Math.cos(ph * 1.9) * 0.008) * s;
     out[P.fa] = this.aim(out, ctx, line).a + [0.1, 0.05, -0.02][line];
     out[P.fyaw] = 0.04;
     out[P.bend] = 0;
     out[P.back] = 0;
     out[P.nod] = 0.06;
     out[P.flash] = this.flash;
+    out[P.relax] = 0;
+    out[P.cheer] = 0;
+    out[P.mask] = 1;
+    out[P.bob] = 0;
   }
 
   /** The lunge (player) and the attack (AI) share one shape. */
   lungePose(out, ctx, k, hold, line, depth = 1) {
     this.guardPose(out, ctx, line);
+    const { s } = this.f;
     const e = easeOut(clamp(k, 0, 1));
     const arm = easeOut(clamp(k * 1.45, 0, 1)); // the arm leads the foot: right of way
     // How far the body has to travel for the point to land. The rear foot
     // slides up a little (a step-lunge), which is what lets the back leg
     // stay on the floor at full stretch.
-    const need = clamp(ctx.dist - ctx.oppPx - 1.95, 0.15, 0.66) * depth;
+    const need = clamp(ctx.dist - ctx.oppPx - ctx.front - 1.76 * s, 0.15 * s, 0.72 * s) * depth;
     out[P.px] += need * e;
-    out[P.py] = 0.86 - 0.18 * e * depth;
+    out[P.py] = (PELVIS - 0.16 * e * depth) * s;
     out[P.lean] = 0.05 + 0.24 * e;
-    out[P.ffx] += (need + 0.1) * e;
+    out[P.ffx] += (need + 0.1 * s) * e;
     out[P.bfx] += need * 0.4 * smooth(clamp(k * 1.3, 0, 1));
     const flight = clamp(k * 1.25, 0, 1);
-    out[P.ffy] = ANKLE_H + 0.13 * bell(flight) * depth;
+    out[P.ffy] = (ANKLE_H + 0.12 * bell(flight) * depth) * s;
     out[P.ffp] = 0.45 * bell(flight * 0.9) - (k > 0.75 ? 0.1 * bell((k - 0.75) * 4) : 0);
     out[P.back] = e;
     out[P.nod] = -0.05;
     // Extend at the target line
-    const [sx, sy] = Animator.shoulder(out);
-    const tx = ctx.dist - ctx.oppPx - 0.17;
+    const [sx, sy] = this.f.shoulderAt(out);
+    const tx = ctx.dist - ctx.oppPx - ctx.front;
     const dirX = tx - sx;
-    const dirY = LINE_Y[line] - sy;
+    const dirY = ctx.lines[line] - sy;
     const len = Math.hypot(dirX, dirY);
-    const reach = 0.555;
+    const reach = REACH * s;
     const g = GUARD_HAND[line];
-    out[P.hx] = g[0] + ((dirX / len) * reach - g[0]) * arm;
-    out[P.hy] = g[1] + ((dirY / len) * reach - g[1]) * arm;
-    const a2 = this.aim(out, ctx, line);
-    out[P.fa] = a2.a;
+    out[P.hx] = g[0] * s + ((dirX / len) * reach - g[0] * s) * arm;
+    out[P.hy] = g[1] * s + ((dirY / len) * reach - g[1] * s) * arm;
+    out[P.fa] = this.aim(out, ctx, line).a;
     // On contact the blade bows instead of passing through the target
     if (hold) {
-      const bx = a2.handX + Math.cos(a2.a) * BLADE_START;
-      const by = a2.handY + Math.sin(a2.a) * BLADE_START;
-      const d = Math.hypot(a2.tx - bx, LINE_Y[line] - by);
-      const kb = bendFor(d);
-      out[P.bend] = kb;
-      out[P.fa] = a2.a - (kb * BLADE) / 2;
+      this.contact(out, ctx, line);
+      this.hold = line;
     }
+  }
+
+  /**
+   * Bow the blade so its point lands exactly on the target line: the
+   * curvature that makes the blade span the distance from the bell to the
+   * target, and the pitch that puts the chord on it.
+   */
+  contact(p, ctx, line) {
+    const a2 = this.aim(p, ctx, line);
+    const bx = a2.handX + Math.cos(a2.a) * BLADE_START;
+    const by = a2.handY + Math.sin(a2.a) * BLADE_START;
+    const d = Math.hypot(a2.tx - bx, a2.ty - by);
+    const kb = bendFor(d);
+    p[P.bend] = kb;
+    p[P.fa] = a2.a - (kb * BLADE) / 2;
   }
 
   /** Writes this frame's target pose and springs the real pose to it. */
@@ -687,6 +1107,7 @@ export class Animator {
     const out = this.target;
     const { act } = this;
     const k = this.dur > 0 ? this.t / this.dur : 1;
+    this.hold = -1;
 
     if (this.step) {
       const st = this.step;
@@ -703,8 +1124,8 @@ export class Animator {
       const st = this.step;
       const sk = clamp(st.t / st.dur, 0, 1);
       const fwd = st.to > st.from;
-      const lead = bell(clamp(sk * 1.6, 0, 1)) * 0.05;
-      const trail = bell(clamp(sk * 1.6 - 0.6, 0, 1)) * 0.04;
+      const lead = bell(clamp(sk * 1.6, 0, 1)) * 0.05 * this.f.s;
+      const trail = bell(clamp(sk * 1.6 - 0.6, 0, 1)) * 0.04 * this.f.s;
       out[fwd ? P.ffy : P.bfy] += lead;
       out[fwd ? P.bfy : P.ffy] += trail;
     }
@@ -714,19 +1135,36 @@ export class Animator {
     const v = this.vel;
     for (let i = 0; i < POSE_LEN; i++) {
       // Hit flash is driven directly; bend snaps so the blade never wobbles through the target
-      if (i === P.flash || i === P.bend) {
+      if (i === P.flash || i === P.bend || i === P.bob) {
         p[i] = out[i];
         continue;
       }
-      // Feet move slower than the hands — weight transfers last
-      const wi = i === P.ffx || i === P.bfx ? w * 0.85 : i === P.fa || i === P.hy ? w * 1.15 : w;
+      // The mask goes on and comes off at a steady hand's pace
+      if (i === P.mask) {
+        const d = out[i] - p[i];
+        p[i] += clamp(d, -dt * 1.9, dt * 1.9);
+        continue;
+      }
+      // Feet move slower than the hands — weight transfers last; the
+      // whole body settles into (or out of) the at-ease stance slowly
+      const wi = i === P.ffx || i === P.bfx ? w * 0.85
+        : i === P.fa || i === P.hy ? w * 1.15
+          : i === P.relax || i === P.cheer ? Math.min(w, 9) : w;
       const r = springStep(p[i], v[i], out[i], wi, dt);
       p[i] = r[0];
       v[i] = r[1];
     }
+    // In contact: bow the blade for where the body really is, not where
+    // the springs are taking it — the point lands on the lamé on the very
+    // frame the touch freezes
+    if (this.hold >= 0) {
+      this.contact(p, ctx, this.hold);
+      v[P.fa] = 0;
+    }
     // Feet never sink into the floor, even when a spring overshoots
-    p[P.ffy] = Math.max(ANKLE_H, p[P.ffy]);
-    p[P.bfy] = Math.max(ANKLE_H, p[P.bfy]);
+    p[P.ffy] = Math.max(ANKLE_H * this.f.s, p[P.ffy]);
+    p[P.bfy] = Math.max(ANKLE_H * this.f.s, p[P.bfy]);
+    p[P.relax] = clamp(p[P.relax], 0, 1);
     this.flash = Math.max(0, this.flash - dt * 1.6);
   }
 }

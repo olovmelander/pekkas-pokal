@@ -19,9 +19,9 @@
  *    travel across between the muzzle and the treeline.
  *
  * Draw calls are budgeted like a phone game: every static prop that
- * shares a material is merged into one vertex-coloured mesh, the swallows
- * are one InstancedMesh flapping in the vertex shader, and the gang is one
- * mesh per person plus one for their arms (two poses, swapped on a cheer).
+ * shares a material is merged into one vertex-coloured mesh, and the
+ * swallows are one InstancedMesh flapping in the vertex shader. The gang on
+ * the fika chairs lives in gang.js.
  */
 
 import * as THREE from 'three';
@@ -37,6 +37,9 @@ export function mulberry(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+/** Where the fika table (and Pekkas Pokal on it) stands, at the end of the gang's row. */
+export const FIKA_TABLE = [3.25, 2.62];
 
 /* ---------------------------------------------------------------- helpers */
 
@@ -107,7 +110,8 @@ class Batch {
   }
 
   put(geo, color, { at = [0, 0, 0], rot = [0, 0, 0], scale = [1, 1, 1], darken = 0 } = {}) {
-    const g = paint(geo, color, darken);
+    // color === null keeps a geometry's own (non-indexed) vertex colours
+    const g = color === null ? geo : paint(geo, color, darken);
     this.q.setFromEuler(this.e.set(rot[0], rot[1], rot[2]));
     this.m.compose(this.p.set(at[0], at[1], at[2]), this.q, this.s.set(scale[0], scale[1], scale[2]));
     g.applyMatrix4(this.m);
@@ -296,10 +300,14 @@ function forestMass(rand, z, height, color, haze) {
 }
 
 /** Birches at the field edge: white stems, light crowns — a Swedish tell. */
+const BIRCH_SPOTS = [[24, -58], [31, -64], [38, -57], [46, -70], [55, -62],
+  [-48, -66], [-56, -74], [16, -84], [-14, -92], [64, -80],
+  // behind the station, where the reaction shot looks
+  [-26, 52], [-19, 60], [-31, 66], [22, 58], [30, 49], [37, 63], [8, 74]];
+
 function birches(rand) {
   const b = new Batch();
-  const spots = [[24, -58], [31, -64], [38, -57], [46, -70], [55, -62], [-48, -66], [-56, -74], [16, -84], [-14, -92], [64, -80]];
-  spots.forEach(([x, z]) => {
+  BIRCH_SPOTS.forEach(([x, z]) => {
     const h = 5 + rand() * 4;
     b.put(cyl(0.12, 0.18, h, 5), 0xe9e5da, { at: [x, h / 2, z], rot: [0, 0, (rand() - 0.5) * 0.12], darken: 0.25 });
     const n = 5 + Math.floor(rand() * 3);
@@ -316,67 +324,36 @@ function birches(rand) {
   return b.mesh();
 }
 
-/* ------------------------------------------------------------------ crowd */
+/* ---------------------------------------------------------------- flowers */
 
-const SHIRTS = [0xd23b4e, 0x3e6e9e, 0xc9982e, 0x8a4a8c, 0x4a8c8a];
-const SKIN = [0xe2b08a, 0xd9a07a, 0xebbf9a, 0xc98f68, 0xe6b48f];
-const CAPS = [0x2c4a72, 0xe8e2d0, 0x3d5a2a, 0x1f2328, 0xb5452e];
-
-/** Arms of a seated spectator, as one geometry: resting on the lap, or up. */
-function armsGeometry(shirt, skin, up) {
-  const b = new Batch();
-  [-1, 1].forEach((s) => {
-    if (up) {
-      // Fists in the air: a V above the head
-      b.put(cyl(0.045, 0.05, 0.36), shirt, { at: [s * 0.27, 1.25, 0], rot: [0, 0, -s * 0.5] });
-      b.put(cyl(0.04, 0.045, 0.3), skin, { at: [s * 0.36, 1.55, -0.02], rot: [0, 0, -s * 0.25] });
-      b.put(new THREE.SphereGeometry(0.05, 6, 4), skin, { at: [s * 0.4, 1.72, -0.03] });
-    } else {
-      // Upper arm down the side, forearm forward onto the thigh
-      b.put(cyl(0.045, 0.05, 0.32), shirt, { at: [s * 0.23, 0.98, 0.02], rot: [0.1, 0, s * 0.12] });
-      b.put(cyl(0.04, 0.045, 0.28), skin, { at: [s * 0.2, 0.8, -0.13], rot: [1.25, 0, 0] });
-    }
-  });
-  return mergeColored(b.parts);
-}
-
-function buildPerson(rand, i, chairColor) {
-  const shirt = new THREE.Color(SHIRTS[i % SHIRTS.length]);
-  const skin = new THREE.Color(SKIN[i % SKIN.length]);
-  const b = new Batch();
-  // Folding chair: aluminium frame, fabric seat and back
-  b.put(box(0.5, 0.05, 0.46), chairColor, { at: [0, 0.48, -0.02] });
-  b.put(box(0.5, 0.46, 0.04), chairColor, { at: [0, 0.75, 0.2], rot: [-0.18, 0, 0] });
-  [[-0.23, -0.2], [0.23, -0.2], [-0.23, 0.2], [0.23, 0.2]].forEach(([x, z]) => {
-    b.put(cyl(0.014, 0.014, 0.52, 4), 0x9aa0a6, { at: [x, 0.25, z], rot: [z > 0 ? -0.2 : 0.2, 0, 0] });
-  });
-  // Torso, head, cap
-  b.put(cyl(0.17, 0.2, 0.56, 7), shirt, { at: [0, 0.82, 0.04], rot: [-0.08, 0, 0], darken: 0.2 });
-  b.put(new THREE.SphereGeometry(0.135, 8, 6), skin, { at: [0, 1.25, 0.02] });
-  const cap = CAPS[i % CAPS.length];
-  b.put(cyl(0.14, 0.15, 0.08, 8), cap, { at: [0, 1.36, 0.02] });
-  b.put(box(0.15, 0.025, 0.16), cap, { at: [0, 1.33, -0.14] });
-  // Thighs forward, shins down — jeans and boots
-  [-1, 1].forEach((s) => {
-    b.put(cyl(0.075, 0.08, 0.42), 0x3c4a62, { at: [s * 0.1, 0.53, -0.2], rot: [Math.PI / 2, 0, 0] });
-    b.put(cyl(0.065, 0.07, 0.46), 0x3c4a62, { at: [s * 0.1, 0.27, -0.4] });
-    b.put(box(0.1, 0.07, 0.2), 0x3a2a1e, { at: [s * 0.1, 0.035, -0.45] });
-  });
-  // Coffee cup — they are on fikastolar after all
-  if (i % 2 === 0) b.put(cyl(0.04, 0.034, 0.09, 7), 0xf0ede4, { at: [0.19, 0.66, -0.3] });
-
-  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
-  const person = new THREE.Group();
-  const body = b.mesh(mat);
-  body.castShadow = true;
-  person.add(body);
-  const down = armsGeometry(shirt, skin, false);
-  const up = armsGeometry(shirt, skin, true);
-  const arms = new THREE.Mesh(down, mat);
-  arms.castShadow = true;
-  person.add(arms);
-  person.userData = { arms, poses: { down, up }, phase: rand() * 6.28, cheer: 0 };
-  return person;
+/**
+ * A flower head as a little star of petals around a raised eye, coloured
+ * per vertex (eye → petal tips), facing up. Low-poly spheres read as
+ * pebbles or sugar cubes from standing height; petals read as flowers.
+ */
+function flowerHead(r, petals, eye, tip) {
+  const pos = [];
+  const col = [];
+  const n = petals * 2;
+  const rim = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const rr = i % 2 ? r * 0.42 : r;
+    rim.push([Math.cos(a) * rr, i % 2 ? 0.004 : -0.006, Math.sin(a) * rr]);
+  }
+  const e = new THREE.Color(eye);
+  const t = new THREE.Color(tip);
+  for (let i = 0; i < n; i++) {
+    const p0 = rim[i];
+    const p1 = rim[(i + 1) % n];
+    // Counter-clockwise seen from above, so the face points up
+    pos.push(0, r * 0.22, 0, ...p1, ...p0);
+    col.push(e.r, e.g, e.b, t.r, t.g, t.b, t.r, t.g, t.b);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  return g;
 }
 
 /* ---------------------------------------------------------------- swallows */
@@ -504,8 +481,15 @@ export function buildRange(rand, { envMap } = {}) {
   /* ---- Props: one merged, shadow-casting mesh ---- */
   const props = new Batch();
   // Worn dirt apron and the shooting mat — where boots killed the grass
-  props.put(new THREE.CircleGeometry(1.7, 20), 0x9c8757, { at: [0, 0.008, 0], rot: [-Math.PI / 2, 0, 0] });
-  props.put(box(1.7, 0.05, 1.7), 0x2e3338, { at: [0, 0.025, 0] });
+  // (1.5 cm up: far enough above the ground plane to never z-fight, even on
+  // a 16-bit depth buffer at vista distance)
+  props.put(new THREE.CircleGeometry(1.7, 20), 0x9c8757, { at: [0, 0.015, 0], rot: [-Math.PI / 2, 0, 0] });
+  // The station's platform: weathered decking, plank by plank
+  const plankRand = mulberry(31);
+  for (let i = 0; i < 7; i++) {
+    const tone = new THREE.Color(0x8a7a5e).offsetHSL(0, (plankRand() - 0.5) * 0.06, (plankRand() - 0.5) * 0.08);
+    props.put(box(0.235, 0.06, 1.7), tone, { at: [-0.75 + i * 0.25, 0.03, 0], darken: 0.5 });
+  }
   // The gun rest rail in front of the station
   props.put(box(2.5, 0.09, 0.09), 0x6b5136, { at: [0, 0.88, -1.15] });
   [-1.15, 1.15].forEach((x) => props.put(cyl(0.05, 0.06, 0.88, 5), 0x5a422c, { at: [x, 0.44, -1.15] }));
@@ -519,16 +503,17 @@ export function buildRange(rand, { envMap } = {}) {
   [-1.2, -0.4, 0.4, 1.2].forEach((x) => {
     props.put(new THREE.SphereGeometry(0.24, 6, 4), 0x9a8a63, { at: [x, 0.16, -15.65], scale: [1.25, 0.7, 0.85] });
   });
-  // Fika table beside the gang: thermos, cups and a plate of bullar
-  props.put(box(0.9, 0.04, 0.6), 0xd8d2c2, { at: [3.75, 0.72, 2.6] });
+  // Fika table at the end of the gang's row: thermos, cups and a plate of bullar
+  const [tx, tz] = FIKA_TABLE;
+  props.put(box(0.9, 0.04, 0.6), 0xd8d2c2, { at: [tx, 0.72, tz] });
   [[-0.4, -0.25], [0.4, -0.25], [-0.4, 0.25], [0.4, 0.25]].forEach(([x, z]) => {
-    props.put(cyl(0.015, 0.015, 0.72, 4), 0x9aa0a6, { at: [3.75 + x, 0.36, 2.6 + z] });
+    props.put(cyl(0.015, 0.015, 0.72, 4), 0x9aa0a6, { at: [tx + x, 0.36, tz + z] });
   });
-  props.put(cyl(0.065, 0.07, 0.32, 10), 0xc8312c, { at: [3.95, 0.9, 2.5] });
-  props.put(cyl(0.05, 0.05, 0.05, 10), 0x2a2a2a, { at: [3.95, 1.08, 2.5] });
-  props.put(cyl(0.11, 0.11, 0.015, 12), 0xf0ede4, { at: [3.6, 0.75, 2.7] });
-  [[3.55, 2.66], [3.63, 2.74], [3.66, 2.64]].forEach(([x, z]) => {
-    props.put(new THREE.SphereGeometry(0.04, 6, 4), 0xc08440, { at: [x, 0.78, z], scale: [1, 0.6, 1] });
+  props.put(cyl(0.065, 0.07, 0.32, 10), 0xc8312c, { at: [tx + 0.2, 0.9, tz - 0.1] });
+  props.put(cyl(0.05, 0.05, 0.05, 10), 0x2a2a2a, { at: [tx + 0.2, 1.08, tz - 0.1] });
+  props.put(cyl(0.11, 0.11, 0.015, 12), 0xf0ede4, { at: [tx - 0.15, 0.75, tz + 0.1] });
+  [[-0.2, 0.06], [-0.12, 0.14], [-0.09, 0.04]].forEach(([x, z]) => {
+    props.put(new THREE.SphereGeometry(0.04, 6, 4), 0xc08440, { at: [tx + x, 0.78, tz + z], scale: [1, 0.6, 1] });
   });
   // Flagpole by the barn, white with a gilded knob
   props.put(cyl(0.06, 0.09, 10, 6), 0xf2efe6, { at: [-20, 5, -41] });
@@ -578,21 +563,35 @@ export function buildRange(rand, { envMap } = {}) {
   bushMesh.castShadow = true;
   g.add(bushMesh);
 
-  // Wildflowers: a stem and a head, merged flat. Pure decoration, near-free.
+  // Wildflowers of a Norrland August verge, merged flat, near-free:
+  // prästkrage and smörblomma as petal stars, rödklöver as a soft ball,
+  // blåklocka as a nodding bell.
   const flowers = new Batch();
-  const FLOWER = [0xf2e9c8, 0xe8d24a, 0xd86a8a, 0xe8f0f4, 0x8f7fd8];
-  for (let i = 0; i < 210; i++) {
+  const STARS = [[0xf2c230, 0xf7f3e6], [0xf2c230, 0xf7f3e6], [0xe8a820, 0xf0d43a], [0xf7e9a0, 0xe9eef2]];
+  for (let i = 0; i < 230; i++) {
     const a = rand() * Math.PI * 2;
     const r = 2.4 + rand() * 22;
     const fx = Math.cos(a) * r;
     const fz = Math.sin(a) * r;
     if (Math.abs(fx) < 1.4 && Math.abs(fz) < 1.8) continue;
     const h = 0.28 + rand() * 0.2;
-    flowers.put(cyl(0.008, 0.012, h, 3), 0x5c7434, { at: [fx, h / 2, fz] });
-    flowers.put(new THREE.SphereGeometry(0.045 + rand() * 0.03, 5, 3),
-      FLOWER[Math.floor(rand() * FLOWER.length)], { at: [fx, h, fz] });
+    const lean = [(rand() - 0.5) * 0.5, 0, (rand() - 0.5) * 0.5];
+    flowers.put(cyl(0.006, 0.01, h, 3), 0x5c7434, { at: [fx, h / 2, fz] });
+    const kind = rand();
+    if (kind < 0.6) {
+      const [eye, tip] = STARS[Math.floor(rand() * STARS.length)];
+      const head = flowerHead(0.05 + rand() * 0.025, kind < 0.4 ? 8 : 5, eye, tip);
+      flowers.put(head, null, { at: [fx, h, fz], rot: lean });
+    } else if (kind < 0.8) {
+      flowers.put(new THREE.IcosahedronGeometry(0.03 + rand() * 0.012, 1), 0xc8507a,
+        { at: [fx, h, fz], scale: [1, 1.15, 1], darken: 0.35 });
+    } else {
+      flowers.put(new THREE.ConeGeometry(0.026, 0.05, 6, 1, true), 0x6f62c8,
+        { at: [fx, h - 0.02, fz], rot: [Math.PI + lean[0], 0, lean[2]], darken: 0.3 });
+    }
   }
-  g.add(flowers.mesh());
+  const flowerMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide });
+  g.add(flowers.mesh(flowerMat));
 
   /* ---- Fence: posts and two sagging wires ---- */
   const fence = new Batch();
@@ -638,15 +637,17 @@ export function buildRange(rand, { envMap } = {}) {
   [-4.55, 4.55].forEach((x) => {
     [2.8, -2.8].forEach((z) => barn.put(box(0.45, 5, 0.45), WHITE, { at: [x, 2.5, z] }));
   });
-  // Door: white frame, red boards, the white cross brace
-  barn.put(box(2.8, 3.6, 0.08), WHITE, { at: [0, 1.8, 3.02] });
-  barn.put(box(2.4, 3.2, 0.1), 0x7a241e, { at: [0, 1.7, 3.04] });
-  barn.put(box(0.16, 3.6, 0.04), WHITE, { at: [0, 1.7, 3.1], rot: [0, 0, 0.64] });
-  barn.put(box(0.16, 3.6, 0.04), WHITE, { at: [0, 1.7, 3.1], rot: [0, 0, -0.64] });
+  // Door: white frame, red boards, the white cross brace. Each layer stands
+  // 5–6 cm proud of the one behind: invisible at 60 m, but enough depth for
+  // any GPU's depth buffer to keep them apart (no shimmering door).
+  barn.put(box(2.8, 3.6, 0.12), WHITE, { at: [0, 1.8, 3.0] });
+  barn.put(box(2.4, 3.2, 0.12), 0x7a241e, { at: [0, 1.7, 3.05] });
+  barn.put(box(0.16, 3.6, 0.04), WHITE, { at: [0, 1.7, 3.13], rot: [0, 0, 0.64] });
+  barn.put(box(0.16, 3.6, 0.04), WHITE, { at: [0, 1.7, 3.13], rot: [0, 0, -0.64] });
   // Windows with white frames
   [-3, 3].forEach((x) => {
-    barn.put(box(1.1, 0.9, 0.06), WHITE, { at: [x, 3.3, 3.02] });
-    barn.put(box(0.86, 0.66, 0.08), 0x2a3038, { at: [x, 3.3, 3.03] });
+    barn.put(box(1.1, 0.9, 0.1), WHITE, { at: [x, 3.3, 3.0] });
+    barn.put(box(0.86, 0.66, 0.1), 0x2a3038, { at: [x, 3.3, 3.05] });
   });
   const barnMesh = barn.mesh();
   barnMesh.position.set(-31, 0, -49);
@@ -687,17 +688,12 @@ export function buildRange(rand, { envMap } = {}) {
     color: 0x22402a, scale: 2.0, depth: 16, haze: 0.16, trunks: true, lift: -0.6
   }));
   g.add(birches(rand));
-
-  /* ---- The gang on folding chairs, watching the field ---- */
-  const crowd = [];
-  const chairs = [0x2f6d4a, 0x2b4f86, 0x9a3a2e, 0x2f6d4a, 0x6a5a8a];
-  for (let i = 0; i < 5; i++) {
-    const p = buildPerson(rand, i, new THREE.Color(chairs[i]));
-    p.position.set(-2.7 + i * 1.3, 0, 2.7 + (rand() - 0.5) * 0.5);
-    p.rotation.y = (rand() - 0.5) * 0.35;
-    g.add(p);
-    crowd.push(p);
-  }
+  // Behind the station: only the reaction shot after a series turns round
+  // far enough to see it, but then it needs to be a forest edge, not a void
+  g.add(forestMass(rand, 108, 10, 0x22402a, 0.42));
+  g.add(spruceRank(rand, 94, 74, 420, {
+    color: 0x22402a, scale: 2.2, depth: 14, haze: 0.3, trunks: true, lift: -1.0
+  }));
 
   /* ---- Pekkas Pokal itself, waiting on the fika table ---- */
   const trophyMat = new THREE.MeshStandardMaterial({
@@ -720,14 +716,14 @@ export function buildRange(rand, { envMap } = {}) {
   const plinth = new THREE.Mesh(box(0.2, 0.08, 0.2), new THREE.MeshLambertMaterial({ color: 0x2a1c14 }));
   plinth.position.y = -0.04;
   trophy.add(plinth);
-  trophy.position.set(3.45, 0.82, 2.5);
+  trophy.position.set(FIKA_TABLE[0] - 0.3, 0.82, FIKA_TABLE[1] - 0.1);
   g.add(trophy);
 
   /* ---- Swallows over the field ---- */
   const swallows = buildSwallows(rand, 11);
   g.add(swallows.mesh);
 
-  return { group: g, crowd, swallows, flagUniforms };
+  return { group: g, swallows, flagUniforms };
 }
 
 /* ----------------------------------------------------------------- clays */

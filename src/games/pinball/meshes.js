@@ -16,25 +16,33 @@ function flatten(geo) {
 
 /**
  * Capsule outline between two points — the silhouette of every wall and rail.
+ *
+ * Both end caps sweep counter-clockwise, so each bulges AWAY from the other
+ * end. (They used to sweep the other way and bulge inward: every wall had a
+ * semicircular bite out of each end, and where two segments met the two
+ * bites left a round hole in the top of the wall, showing the dark inside.)
  */
 function capsuleShape(THREE, ax, ay, bx, by, r) {
   const shape = new THREE.Shape();
   const ang = Math.atan2(by - ay, bx - ax);
-  shape.absarc(ax, ay, r, ang + Math.PI / 2, ang - Math.PI / 2, true);
-  shape.absarc(bx, by, r, ang - Math.PI / 2, ang + Math.PI / 2, true);
+  shape.absarc(ax, ay, r, ang + Math.PI / 2, ang + Math.PI * 1.5, false);
+  shape.absarc(bx, by, r, ang - Math.PI / 2, ang + Math.PI / 2, false);
   shape.closePath();
   return shape;
 }
 
 /**
  * Flipper silhouette: two circles of different radii joined by their outer
- * tangents, pivot at the origin pointing along +x.
+ * tangents, pivot at the origin pointing along +x. The tangents touch both
+ * circles at ±(π/2 − α), leaning toward the tip; the round pivot end sweeps
+ * the long way round behind the pivot and the tip end the short way round
+ * the tip, both counter-clockwise (inverted, both ends had a bite out).
  */
 function flipperShape(THREE, length, r0, r1) {
   const alpha = Math.asin((r0 - r1) / length);
   const shape = new THREE.Shape();
-  shape.absarc(0, 0, r0, Math.PI / 2 + alpha, -Math.PI / 2 - alpha, true);
-  shape.absarc(length, 0, r1, -Math.PI / 2 - alpha, Math.PI / 2 + alpha, true);
+  shape.absarc(0, 0, r0, Math.PI / 2 - alpha, Math.PI * 1.5 + alpha, false);
+  shape.absarc(length, 0, r1, -Math.PI / 2 + alpha, Math.PI / 2 - alpha, false);
   shape.closePath();
   return shape;
 }
@@ -201,8 +209,35 @@ function radialTexture(THREE, inner, stops) {
 
 /* -------------------------------------------------------------- materials */
 
+/**
+ * Caps the direct-light highlight on polished metal at just under the bloom
+ * threshold, keeping its hue (the brightest channel is scaled, not each one).
+ *
+ * The key light's glint on a 0.17-rough cylinder — the lockdown bar, the
+ * wireforms — is hundreds of times brighter than white. Tone mapping hides
+ * that, but bloom does not: the bar turned the bottom corner of the screen
+ * into a haze, and a wire only a pixel wide blinks in and out of a
+ * third-resolution bloom as the camera drifts with the ball. Capped, the
+ * streak still reads as polished steel (it still tones to near-white), and
+ * the room's reflection on top of it carries the rest.
+ */
+function tameGlints(material, cap = 0.9) {
+  material.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <lights_fragment_end>',
+      `#include <lights_fragment_end>
+      {
+        float peak = max(max(reflectedLight.directSpecular.r, reflectedLight.directSpecular.g), reflectedLight.directSpecular.b);
+        reflectedLight.directSpecular *= min(1.0, ${cap.toFixed(2)} / max(peak, 1e-4));
+      }`
+    );
+  };
+  material.customProgramCacheKey = () => `pb-glint-${cap}`;
+  return material;
+}
+
 export function createMaterials(THREE, playfieldTexture) {
-  return {
+  const m = {
     // A playfield is ink on wood under a thick pour of clearcoat. The coat is
     // what carries the room's reflection; the print below stays matte, and
     // the wear map keeps the gloss from being a perfect mirror.
@@ -285,6 +320,11 @@ export function createMaterials(THREE, playfieldTexture) {
       emissive: 0xffb703,
       emissiveIntensity: 1.4
     }),
+    // Inserts and their pockets sit a few hundredths of a unit above the
+    // wood. That is plenty in a 24-bit depth buffer and nothing in a 16-bit
+    // one (some phones, and the direct-render fallback on others), where the
+    // wood would punch through them in a crawling pattern. A polygon offset
+    // is measured in the depth buffer's own steps, so it holds on both.
     insert: new THREE.MeshStandardMaterial({
       color: 0xffffff,
       roughness: 0.35,
@@ -292,7 +332,10 @@ export function createMaterials(THREE, playfieldTexture) {
       emissive: 0xffffff,
       emissiveIntensity: 0.12,
       transparent: true,
-      opacity: 0.92
+      opacity: 0.92,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2
     }),
     rubber: new THREE.MeshStandardMaterial({
       color: 0x10152a,
@@ -336,9 +379,14 @@ export function createMaterials(THREE, playfieldTexture) {
       color: 0x05070f,
       roughness: 0.9,
       metalness: 0,
-      envMapIntensity: 0.15
+      envMapIntensity: 0.15,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1
     })
   };
+  [m.chrome, m.rail, m.armour].forEach((mat) => tameGlints(mat));
+  return m;
 }
 
 /* ----------------------------------------------------------- the machine */
@@ -547,9 +595,11 @@ export function buildCabinet(THREE, materials, logo, dmdMaterial) {
   // Body below the playfield, as deep as a real cabinet: on a wide screen
   // the floor is in frame and a shallow box would read as a tray on stilts.
   // Top face must land BELOW the playfield plane, not on it: at y = 0 this
-  // box covers the entire print and the table renders as a dark slab.
+  // box covers the entire print and the table renders as a dark slab. And
+  // well below — the playfield covers it completely, and a top face a
+  // tenth of a unit under the wood fights it in a 16-bit depth buffer.
   const body = new THREE.Mesh(new THREE.BoxGeometry(w, 12, len), materials.cabinet);
-  body.position.set(cx, -6 - 0.12, cz);
+  body.position.set(cx, -6 - 0.5, cz);
   body.receiveShadow = true;
   g.add(body);
 
@@ -884,6 +934,102 @@ function buildCastle(THREE, materials) {
   return { group: g, refs };
 }
 
+/* ------------------------------------------------------------------- apron */
+
+/**
+ * The apron's print. On a real machine the plate over the drain is never
+ * bare: it carries the logo and the instruction cards, and it is the last
+ * thing the eye crosses before the flippers. Painted in apron space (the
+ * extrusion's cap UVs are the shape's own coordinates, so the texture is
+ * offset and scaled onto the plate's bounding box): x −4.4…2.0, y −1.6…3.4.
+ */
+function apronTexture(THREE) {
+  const PX = 100; // pixels per unit
+  const W = 640;
+  const H = 500;
+  const cv = document.createElement('canvas');
+  cv.width = W;
+  cv.height = H;
+  const g = cv.getContext('2d');
+  const X = (x) => (x + 4.4) * PX;
+  const Y = (y) => (3.4 - y) * PX;
+  const cx = X(-1.2);
+  const corners = [[-4.4, -1.6], [2.0, -1.6], [0.2, 3.4], [-2.6, 3.4]];
+  // The plate's outline, each corner pulled `inset` pixels toward the middle
+  const trap = (inset) => {
+    const my = Y(0.4);
+    const path = new Path2D();
+    corners.forEach(([x, y], i) => {
+      const px = X(x);
+      const py = Y(y);
+      const k = 1 - inset / Math.hypot(px - cx, py - my);
+      const qx = cx + (px - cx) * k;
+      const qy = my + (py - my) * k;
+      if (i) path.lineTo(qx, qy);
+      else path.moveTo(qx, qy);
+    });
+    path.closePath();
+    return path;
+  };
+  g.fillStyle = '#0b0f24';
+  g.fillRect(0, 0, W, H);
+  const bg = g.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#232b66');
+  bg.addColorStop(1, '#0e1333');
+  g.fillStyle = bg;
+  g.fill(trap(0));
+  g.strokeStyle = 'rgba(242,193,78,.85)';
+  g.lineWidth = 5;
+  g.stroke(trap(18));
+  g.strokeStyle = 'rgba(242,193,78,.35)';
+  g.lineWidth = 2;
+  g.stroke(trap(30));
+
+  // A small pokal over the name
+  g.fillStyle = 'rgba(242,193,78,.92)';
+  g.beginPath();
+  g.moveTo(cx - 26, 196);
+  g.lineTo(cx + 26, 196);
+  g.quadraticCurveTo(cx + 24, 236, cx + 5, 242);
+  g.lineTo(cx + 5, 252);
+  g.lineTo(cx + 16, 260);
+  g.lineTo(cx - 16, 260);
+  g.lineTo(cx - 5, 252);
+  g.lineTo(cx - 5, 242);
+  g.quadraticCurveTo(cx - 24, 236, cx - 26, 196);
+  g.fill();
+
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillStyle = '#f2c14e';
+  g.font = '700 50px Fraunces, Georgia, serif';
+  g.fillText('PEKKAS POKAL', cx, 300);
+  g.fillStyle = 'rgba(214,222,255,.8)';
+  g.font = '700 21px "Schibsted Grotesk", Inter, sans-serif';
+  g.letterSpacing = '6px';
+  g.fillText('FLIPPER · 2025', cx, 348);
+  g.letterSpacing = '0px';
+  // The bank in little lamp rings: the plate's one instruction card
+  g.font = '700 22px "Schibsted Grotesk", Inter, sans-serif';
+  g.lineWidth = 3;
+  'POKAL'.split('').forEach((ch, i) => {
+    const x = cx + (i - 2) * 58;
+    g.strokeStyle = 'rgba(242,109,141,.9)';
+    g.beginPath();
+    g.arc(x, 414, 20, 0, Math.PI * 2);
+    g.stroke();
+    g.fillStyle = '#f9c3d0';
+    g.fillText(ch, x, 415);
+  });
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  tex.repeat.set(1 / 6.4, 1 / 5);
+  tex.offset.set(4.4 / 6.4, 1.6 / 5);
+  return tex;
+}
+
 /* ------------------------------------------------------------------ builder */
 
 export function buildTable(THREE, mergeGeometries, materials) {
@@ -900,6 +1046,7 @@ export function buildTable(THREE, mergeGeometries, materials) {
   playfield.position.set((ART.x0 + ART.x1) / 2, 0, -(ART.y0 + ART.y1) / 2);
   playfield.receiveShadow = true;
   group.add(playfield);
+  refs.playfield = playfield;
 
   /* ---- Walls ---- */
   const wallShapes = [];
@@ -1136,9 +1283,16 @@ export function buildTable(THREE, mergeGeometries, materials) {
     apron.lineTo(0.2, 3.4);
     apron.lineTo(-2.6, 3.4);
     apron.closePath();
+    // Caps (group 0) carry the printed plate, sides (group 1) stay stone
+    const plate = new THREE.MeshStandardMaterial({
+      map: apronTexture(THREE),
+      roughness: 0.45,
+      metalness: 0.15,
+      envMapIntensity: 0.5
+    });
     const mesh = new THREE.Mesh(
       flatten(new THREE.ExtrudeGeometry(apron, { depth: 0.7, bevelEnabled: false })),
-      materials.stoneDark
+      [plate, materials.stoneDark]
     );
     mesh.castShadow = true;
     group.add(mesh);
@@ -1215,7 +1369,10 @@ export function buildTable(THREE, mergeGeometries, materials) {
           opacity: 0,
           blending: THREE.AdditiveBlending,
           depthWrite: false,
-          toneMapped: false
+          toneMapped: false,
+          polygonOffset: true,
+          polygonOffsetFactor: -3,
+          polygonOffsetUnits: -3
         })
       );
       pool.position.set(s.x, 0.05, -s.y);

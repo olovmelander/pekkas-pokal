@@ -22,14 +22,22 @@
  * of it costs a draw call.
  *
  * Draw calls are the budget a phone runs out of, so every static group —
- * the house, the trestle, the parasol and chairs, each easel, each part of
- * each painter that moves as one — is baked into a single vertex-coloured
- * mesh at build time. The forest, the hedge, the flowers, the grass, the
- * bunting and the birds are instanced.
+ * the house, the trestle, the parasol and chairs, the whole field of other
+ * painters' easels — is baked into a single vertex-coloured mesh at build
+ * time. The forest, the hedge, the flowers, the grass, the bunting and the
+ * birds are instanced. The people themselves come from the shared character
+ * system (see cast.js).
+ *
+ * Real GPUs are less forgiving than the software renderer the game is
+ * tested on, so the wind never sees the raw clock: every oscillator's phase
+ * is wrapped to 0..2π on the CPU in double precision and handed over as a
+ * uniform. A float time of a few thousand seconds has lost the precision a
+ * sine needs, and on some GPUs the sway would start to step and shimmer
+ * after the tab has been open for an hour.
  */
 
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export function mulberry(seed) {
   let a = seed;
@@ -75,16 +83,20 @@ function bake(root, { skip = [], castShadow = true, receiveShadow = false } = {}
     if (o.isMesh && !o.isInstancedMesh) {
       rel.multiplyMatrices(inv, o.matrixWorld);
       const g = o.geometry.clone().applyMatrix4(rel);
+      // An already-baked part keeps its vertex colours (tinted by its
+      // material), so baked groups can be baked again into a bigger one
+      const own = o.material.vertexColors && g.attributes.color;
+      const src = own ? g.attributes.color : null;
+      const c = o.material.color;
+      const cols = new Float32Array(g.attributes.position.count * 3);
+      for (let i = 0, v = 0; i < cols.length; i += 3, v++) {
+        cols[i] = c.r * (src ? src.getX(v) : 1);
+        cols[i + 1] = c.g * (src ? src.getY(v) : 1);
+        cols[i + 2] = c.b * (src ? src.getZ(v) : 1);
+      }
       Object.keys(g.attributes).forEach((n) => {
         if (n !== 'position' && n !== 'normal') g.deleteAttribute(n);
       });
-      const c = o.material.color;
-      const cols = new Float32Array(g.attributes.position.count * 3);
-      for (let i = 0; i < cols.length; i += 3) {
-        cols[i] = c.r;
-        cols[i + 1] = c.g;
-        cols[i + 2] = c.b;
-      }
       g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
       geos.push(g);
       sources.push(o);
@@ -97,7 +109,8 @@ function bake(root, { skip = [], castShadow = true, receiveShadow = false } = {}
   geos.forEach((g) => g.dispose());
   sources.forEach((o) => {
     o.geometry.dispose();
-    o.material.dispose();
+    // The shared baked material outlives any one group
+    if (o.material !== bakedMaterial) o.material.dispose();
   });
   root.children.filter((c) => !skip.includes(c)).forEach((c) => root.remove(c));
   const mesh = new THREE.Mesh(merged, vertexColourMaterial());
@@ -109,6 +122,18 @@ function bake(root, { skip = [], castShadow = true, receiveShadow = false } = {}
 
 /* ------------------------------------------------------------------- wind */
 
+const TAU = Math.PI * 2;
+
+/**
+ * An oscillator whose phase is kept on the CPU: `rates` are radians per
+ * second, the uniform holds each phase already wrapped to 0..2π.
+ */
+function phaseUniform(wind, rates) {
+  const u = { value: new THREE.Vector3() };
+  wind.phases.push({ u, rates });
+  return u;
+}
+
 /**
  * Sway in the vertex shader. Height inside the object (`base`..`base+span`
  * in its own y) sets how much a vertex moves, the world position sets the
@@ -117,21 +142,64 @@ function bake(root, { skip = [], castShadow = true, receiveShadow = false } = {}
  */
 function windify(material, wind, { amp, base = 0, span = 1, freq = 1, instanced = true, key }) {
   const f = (v) => v.toFixed(4);
+  const phase = phaseUniform(wind, [1.2 * freq, 2.9 * freq, 0.9 * freq]);
   material.onBeforeCompile = (shader) => {
-    shader.uniforms.uTime = wind.uTime;
+    shader.uniforms.uWindPh = phase;
     shader.uniforms.uGust = wind.uGust;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform float uGust;')
+      .replace('#include <common>', '#include <common>\nuniform vec3 uWindPh;\nuniform float uGust;')
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         vec4 wOrigin = modelMatrix * ${instanced ? 'instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)' : 'vec4(position, 1.0)'};
         float wH = clamp((position.y - ${f(base)}) / ${f(span)}, 0.0, 1.0);
         float wPh = wOrigin.x * 0.31 + wOrigin.z * 0.17;
-        float wS = sin(uTime * ${f(1.2 * freq)} + wPh) * 0.65 + sin(uTime * ${f(2.9 * freq)} + wPh * 1.9) * 0.35;
+        float wS = sin(uWindPh.x + wPh) * 0.65 + sin(uWindPh.y + wPh * 1.9) * 0.35;
         transformed.x += wS * ${f(amp)} * wH * wH * (0.55 + uGust);
-        transformed.z += cos(uTime * ${f(0.9 * freq)} + wPh) * ${f(amp * 0.35)} * wH * wH;`);
+        transformed.z += cos(uWindPh.z + wPh) * ${f(amp * 0.35)} * wH * wH;`);
   };
   material.customProgramCacheKey = () => `pm-wind-${key}`;
+  material.userData.windy = true;
   return material;
+}
+
+/* ----------------------------------------------------------------- shapes */
+
+/**
+ * Ambient occlusion in vertex colours: darker toward the bottom of a shape
+ * (local y from y0 to y1), with a little variation hashed off position so
+ * neighbouring facets never match. A spruce skirt with a dark hem reads as
+ * layered boughs; the same cone lit flat reads as a party hat.
+ */
+function shadeByHeight(geo, y0, y1, lo, hi, vary = 0.06) {
+  const p = geo.attributes.position;
+  const cols = new Float32Array(p.count * 3);
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i);
+    const y = p.getY(i);
+    const z = p.getZ(i);
+    const k = Math.min(1, Math.max(0, (y - y0) / (y1 - y0)));
+    const n = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719) * 0.5;
+    const v = lo + (hi - lo) * k * k * (3 - 2 * k) + n * vary;
+    cols[i * 3] = v;
+    cols[i * 3 + 1] = v;
+    cols[i * 3 + 2] = v * 0.96;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+  return geo;
+}
+
+/** A round shape pushed in and out into lumps: a bush, a clump of leaves. */
+function lumpy(radius, amount, seed) {
+  const g = mergeVertices(new THREE.IcosahedronGeometry(radius, 1));
+  const p = g.attributes.position;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i).normalize();
+    const bump = Math.sin(v.x * 4.1 + seed) * Math.sin(v.y * 3.7 + seed * 1.7) * Math.sin(v.z * 4.6 + seed * 0.6);
+    v.multiplyScalar(radius * (1 + amount * bump + amount * 0.4 * Math.sin(v.x * 9 + v.z * 7 + seed)));
+    p.setXYZ(i, v.x, v.y, v.z);
+  }
+  g.computeVertexNormals();
+  return g;
 }
 
 /* --------------------------------------------------------------- textures */
@@ -188,7 +256,7 @@ export function lawnTexture() {
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(6, 6);
+  tex.repeat.set(13.7, 13.7);
   // Grass is always seen at a grazing angle; without this mipmaps eat it
   tex.anisotropy = 8;
   return tex;
@@ -385,11 +453,16 @@ export function buildGarden({ lowTier = false } = {}) {
   const group = new THREE.Group();
   const rand = mulberry(2021);
   const refs = {};
-  const wind = { uTime: { value: 0 }, uGust: { value: 0 } };
+  const wind = { uGust: { value: 0 }, phases: [] };
+  // What a "simpler garden" can do without (see simplifyGarden)
+  refs.extras = [];
+  refs.windy = [];
 
   /* Lawn */
   const lawn = new THREE.Mesh(
-    new THREE.PlaneGeometry(70, 70),
+    // Wide enough that the spruces all round stand on grass; the fog has
+    // swallowed it long before its edge
+    new THREE.PlaneGeometry(160, 160),
     new THREE.MeshLambertMaterial({ map: lawnTexture() })
   );
   lawn.rotation.x = -Math.PI / 2;
@@ -422,8 +495,11 @@ export function buildGarden({ lowTier = false } = {}) {
         color: 0x2b5024 + Math.floor(rand() * 3) * 0x000a04
       });
     }
-    const hedgeMat = windify(lambert(0xffffff), wind, { amp: 0.035, base: 0, span: 1, freq: 0.8, key: 'hedge' });
-    group.add(instanced(new THREE.SphereGeometry(1, 8, 6), bushes, hedgeMat, true));
+    const hedgeMat = windify(lambert(0xffffff, { vertexColors: true }), wind, { amp: 0.035, base: 0, span: 1, freq: 0.8, key: 'hedge' });
+    // Lumpy and darker underneath: a clipped hedge, not a row of green balls
+    const hedge = instanced(shadeByHeight(lumpy(1, 0.12, 3), -1, 1, 0.5, 1.1), bushes, hedgeMat, true);
+    refs.windy.push(hedge);
+    group.add(hedge);
 
     // A bed of summer flowers along the foot of the hedge
     const flowers = [];
@@ -437,7 +513,9 @@ export function buildGarden({ lowTier = false } = {}) {
       });
     }
     const bedMat = windify(lambert(0xffffff), wind, { amp: 0.6, base: -1, span: 2, freq: 1.4, key: 'bed' });
-    group.add(instanced(new THREE.SphereGeometry(1, 6, 4), flowers, bedMat));
+    const bed = instanced(new THREE.SphereGeometry(1, 6, 4), flowers, bedMat);
+    refs.windy.push(bed);
+    group.add(bed);
   }
 
   /* The house — Terrassvägen 47: falu red with white knots, as it should be */
@@ -461,25 +539,28 @@ export function buildGarden({ lowTier = false } = {}) {
     });
     // Windows: dark glass inside a white frame. A white pane on a white
     // frame is what turned these into blank patches the first time round.
+    // The layers stand centimetres apart, not millimetres: the house is
+    // twenty metres off, where a 16-bit depth buffer (some phones) cannot
+    // tell 1 cm from nothing and the glass would flicker through the frame.
     [-3.4, -1.15, 1.15, 3.4].forEach((wx) => {
       const fr = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.45, 0.08), lambert(0xf2efe6));
       fr.position.set(wx, 2.05, 3.26);
       house.add(fr);
       const win = new THREE.Mesh(new THREE.PlaneGeometry(0.98, 1.22), lambert(0x2a3a44));
-      win.position.set(wx, 2.05, 3.31);
+      win.position.set(wx, 2.05, 3.34);
       house.add(win);
-      const bar = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.06, 0.03), lambert(0xf2efe6));
-      bar.position.set(wx, 2.05, 3.33);
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.06, 0.04), lambert(0xf2efe6));
+      bar.position.set(wx, 2.05, 3.39);
       house.add(bar);
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.24, 0.03), lambert(0xf2efe6));
-      post.position.set(wx, 2.05, 3.33);
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.24, 0.04), lambert(0xf2efe6));
+      post.position.set(wx, 2.05, 3.39);
       house.add(post);
     });
     const door = new THREE.Mesh(new THREE.BoxGeometry(1.15, 2.2, 0.1), lambert(0xf2efe6));
     door.position.set(0, 1.1, 3.26);
     house.add(door);
     const panel = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 1.9), lambert(0x6d4a2c));
-    panel.position.set(0, 1.1, 3.32);
+    panel.position.set(0, 1.1, 3.35);
     house.add(panel);
     const step = new THREE.Mesh(new THREE.BoxGeometry(2, 0.16, 0.9), lambert(0xb8b0a0));
     step.position.set(0, 0.08, 3.7);
@@ -506,10 +587,22 @@ export function buildGarden({ lowTier = false } = {}) {
       spruce(rand, 7 + rand() * 3, 0x7f9fa8, 2,
         -44 + i * 6.2 + rand() * 3, -44 - rand() * 5, cones, null);
     }
+    // The forest closes round to the west too: the judging shot and the
+    // phones look that way, and a lawn running bare to the horizon there
+    // was the one place the garden read as a stage set. (Its own random
+    // stream, so nothing placed after it moves.)
+    const rw = mulberry(4747);
+    for (let z = -22; z < 14; z += 2.6) {
+      spruce(rw, 5 + rw() * 3, SPRUCE_GREENS[Math.floor(rw() * SPRUCE_GREENS.length)], 5, -26 - rw() * 3, z + rw(), cones, trunks);
+    }
+    for (let z = -32; z < 22; z += 3.8) spruce(rw, 6 + rw() * 3, 0x466a72, 3, -35 - rw() * 4, z + rw() * 2, cones, null);
+    for (let z = -42; z < 30; z += 6) spruce(rw, 7 + rw() * 3, 0x7f9fa8, 2, -45 - rw() * 5, z + rw() * 3, cones, null);
     // Cones are one unit tall centred on the origin: the tip moves, the
-    // skirt's hem barely does
-    const coneMat = windify(lambert(0xffffff), wind, { amp: 0.09, base: -0.5, span: 1, freq: 0.7, key: 'spruce' });
-    group.add(instanced(new THREE.ConeGeometry(1, 1, 9), cones, coneMat));
+    // skirt's hem barely does. Each skirt is darker at its hem.
+    const coneMat = windify(lambert(0xffffff, { vertexColors: true }), wind, { amp: 0.09, base: -0.5, span: 1, freq: 0.7, key: 'spruce' });
+    const forest = instanced(shadeByHeight(new THREE.ConeGeometry(1, 1, 9), -0.5, 0.5, 0.6, 1.12), cones, coneMat);
+    refs.windy.push(forest);
+    group.add(forest);
     group.add(instanced(new THREE.CylinderGeometry(0.5, 1, 1, 5), trunks));
   }
 
@@ -518,6 +611,7 @@ export function buildGarden({ lowTier = false } = {}) {
   {
     const trunks = new THREE.Group();
     const crowns = new THREE.Group();
+    const rc = mulberry(5150);
     const birch = (x, z, h) => {
       const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.15, h, 7), lambert(0xe4e0d4));
       trunk.position.set(x, h / 2, z);
@@ -528,11 +622,22 @@ export function buildGarden({ lowTier = false } = {}) {
         mark.rotation.y = rand() * Math.PI;
         trunks.add(mark);
       }
+      // The crown: a loose cloud of leaf clumps, sunlit on top and dark
+      // inside, instead of five smooth balls
       for (let i = 0; i < 5; i++) {
         const leaf = 0x6d9c3c + Math.floor(rand() * 3) * 0x040602;
-        const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(1 + rand() * 0.5, 1), lambert(leaf));
-        crown.position.set(x + (rand() - 0.5) * 1.6, h + rand() * 1.2, z + (rand() - 0.5) * 1.6);
-        crowns.add(crown);
+        const cx = x + (rand() - 0.5) * 1.6;
+        const cy = h + rand() * 1.2;
+        const cz = z + (rand() - 0.5) * 1.6;
+        const r0 = 1 + rand() * 0.5;
+        for (let k = 0; k < 3; k++) {
+          const r = r0 * (k ? 0.62 : 0.9);
+          const a = rc() * Math.PI * 2;
+          const g = shadeByHeight(lumpy(r, 0.16, rc() * 9), -r, r, 0.62, 1.18);
+          const clump = new THREE.Mesh(g, lambert(leaf, { vertexColors: true }));
+          clump.position.set(cx + (k ? Math.cos(a) * r0 * 0.55 : 0), cy + (k ? (rc() - 0.3) * r0 * 0.6 : 0), cz + (k ? Math.sin(a) * r0 * 0.55 : 0));
+          crowns.add(clump);
+        }
       }
     };
     birch(-8.6, -8.4, 5);
@@ -543,6 +648,7 @@ export function buildGarden({ lowTier = false } = {}) {
     crownMesh.material = windify(new THREE.MeshLambertMaterial({ vertexColors: true }), wind, {
       amp: 0.22, base: 3.6, span: 3.5, freq: 0.9, instanced: false, key: 'crown'
     });
+    refs.windy.push(crownMesh);
     group.add(trunks, crowns);
 
     // The dappled light, from the near birch's canopy
@@ -555,6 +661,7 @@ export function buildGarden({ lowTier = false } = {}) {
     canopy.castShadow = true;
     canopy.layers.set(1);
     refs.canopy = canopy;
+    refs.extras.push(canopy);
     group.add(canopy);
   }
 
@@ -595,17 +702,20 @@ export function buildGarden({ lowTier = false } = {}) {
     // Each pennant swings on the line (its instance matrix, per frame) and
     // ripples along its length (here)
     const flagMat = lambert(0xffffff, { side: THREE.DoubleSide });
+    const flagPh = phaseUniform(wind, [7, 0, 0]);
     flagMat.onBeforeCompile = (shader) => {
-      shader.uniforms.uTime = wind.uTime;
+      shader.uniforms.uFlagPh = flagPh;
       shader.uniforms.uGust = wind.uGust;
       shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform float uGust;')
+        .replace('#include <common>', '#include <common>\nuniform vec3 uFlagPh;\nuniform float uGust;')
         .replace('#include <begin_vertex>', `#include <begin_vertex>
           float fPh = instanceMatrix[3].x * 1.7;
-          transformed.z += sin(uTime * 7.0 + fPh - position.y * 4.0) * 0.12 * (-position.y) * (0.6 + uGust);`);
+          transformed.z += sin(uFlagPh.x + fPh - position.y * 4.0) * 0.12 * (-position.y) * (0.6 + uGust);`);
     };
     flagMat.customProgramCacheKey = () => 'pm-pennant';
+    flagMat.userData.windy = true;
     const bunting = instanced(pennantGeometry(), flags, flagMat);
+    refs.windy.push(bunting);
     refs.bunting = { mesh: bunting, flags };
     group.add(bunting);
   }
@@ -627,8 +737,20 @@ export function buildGarden({ lowTier = false } = {}) {
       });
     }
     const grassMat = windify(lambert(0xffffff, { side: THREE.DoubleSide }), wind, { amp: 0.6, base: 0, span: 1, freq: 1.6, key: 'grass' });
+    // Double-sided, three flips the normal on the back face — and a blade
+    // seen from behind would go dark and flick to light as the camera
+    // drifts past edge-on. Every blade is lit like the lawn from both sides.
+    const windGrass = grassMat.onBeforeCompile;
+    grassMat.onBeforeCompile = (shader) => {
+      windGrass(shader);
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <normal_fragment_begin>',
+        '#include <normal_fragment_begin>\n  normal = normalize( vNormal );'
+      );
+    };
     const grass = instanced(bladeGeometry(), blades, grassMat);
     grass.receiveShadow = true;
+    refs.extras.push(grass);
     group.add(grass);
 
     // Daisies and clover heads in the near lawn
@@ -643,19 +765,21 @@ export function buildGarden({ lowTier = false } = {}) {
     }
     const headMesh = instanced(new THREE.IcosahedronGeometry(1, 0), heads);
     headMesh.receiveShadow = true;
+    refs.extras.push(headMesh);
     group.add(headMesh);
   }
 
   /* Swallows, looping over the hedge */
   {
     const birdMat = new THREE.MeshBasicMaterial({ color: 0x2b2d36, side: THREE.DoubleSide });
+    const flapPh = phaseUniform(wind, [13, 0, 0]);
     birdMat.onBeforeCompile = (shader) => {
-      shader.uniforms.uTime = wind.uTime;
+      shader.uniforms.uFlapPh = flapPh;
       shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', '#include <common>\nuniform float uTime;')
+        .replace('#include <common>', '#include <common>\nuniform vec3 uFlapPh;')
         .replace('#include <begin_vertex>', `#include <begin_vertex>
           float bPh = instanceMatrix[3].x * 3.1 + instanceMatrix[3].z * 1.3;
-          float flap = sin(uTime * 13.0 + bPh);
+          float flap = sin(uFlapPh.x + bPh);
           transformed.y += flap * max(0.0, abs(position.x) - 0.06) * 0.9;`);
     };
     birdMat.customProgramCacheKey = () => 'pm-bird';
@@ -670,6 +794,7 @@ export function buildGarden({ lowTier = false } = {}) {
     const birds = new THREE.InstancedMesh(birdGeometry(), birdMat, flock.length);
     birds.frustumCulled = false;
     refs.birds = { mesh: birds, flock };
+    refs.extras.push(birds);
     group.add(birds);
   }
 
@@ -793,7 +918,10 @@ const _p = new THREE.Vector3();
 const _s = new THREE.Vector3();
 export function animateGarden(garden, t, still) {
   const { refs, wind } = garden;
-  wind.uTime.value = still ? 0 : t;
+  // Phases wrapped here, in double precision (see the header)
+  for (const { u, rates } of wind.phases) {
+    u.value.set(still ? 0 : (t * rates[0]) % TAU, still ? 0 : (t * rates[1]) % TAU, still ? 0 : (t * rates[2]) % TAU);
+  }
   // A gust every few seconds, never on a fixed beat
   wind.uGust.value = still ? 0 : Math.max(0, Math.sin(t * 0.37) * 0.6 + Math.sin(t * 0.83 + 1.3) * 0.4);
   const gust = wind.uGust.value;
@@ -909,8 +1037,11 @@ export function buildEasel(artMaterial, w = 1.5, h = 1.15) {
 
   let canvas = null;
   if (artMaterial) {
+    // 2.5 mm proud of the stretcher's face (plus a polygon offset on the
+    // material): half a millimetre was invisible to a 24-bit depth buffer
+    // and a flicker on a 16-bit one
     canvas = new THREE.Mesh(new THREE.PlaneGeometry(w, h), artMaterial);
-    canvas.position.set(0, 0.98 + h / 2, 0.0605);
+    canvas.position.set(0, 0.98 + h / 2, 0.0625);
     g.add(canvas);
   }
   g.userData = { canvas };
@@ -943,178 +1074,72 @@ export function buildBrush() {
   return { group: g, tipMat };
 }
 
-/* --------------------------------------------------------------- painters */
-
-/** Shared figure: legs, hips, torso, neck; a head pivot and two arm pivots. */
-function figure(shirt, opts = {}) {
-  const g = new THREE.Group();
-  const skin = opts.skin ?? 0xd9a678;
-  const trousers = opts.trousers ?? 0x2b3140;
-
-  const legs = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.82, 0.22), lambert(trousers));
-  legs.position.y = 0.41;
-  g.add(legs);
-  [-0.09, 0.09].forEach((x) => {
-    const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.07, 0.26), lambert(opts.shoes ?? 0x2a211a));
-    shoe.position.set(x, 0.035, 0.03);
-    g.add(shoe);
-  });
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.21, 0.36, 4, 10), lambert(shirt));
-  torso.scale.set(1, 1, 0.68);
-  torso.position.y = 1.11;
-  g.add(torso);
-  const hips = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.16, 0.24), lambert(trousers));
-  hips.position.y = 0.83;
-  g.add(hips);
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.065, 0.1, 8), lambert(skin));
-  neck.position.y = 1.36;
-  g.add(neck);
-
-  const head = new THREE.Group();
-  head.position.y = 1.5;
-  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.125, 14, 12), lambert(skin));
-  skull.scale.set(0.92, 1.08, 0.98);
-  head.add(skull);
-  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.026, 0.06, 6), lambert(skin));
-  nose.rotation.x = Math.PI / 2;
-  nose.position.set(0, -0.008, 0.118);
-  head.add(nose);
-  [-1, 1].forEach((s) => {
-    const ear = new THREE.Mesh(new THREE.SphereGeometry(0.028, 6, 5), lambert(skin));
-    ear.position.set(s * 0.118, 0, -0.005);
-    ear.scale.set(0.5, 1, 0.8);
-    head.add(ear);
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.019, 7, 6), lambert(0x2b241c));
-    eye.position.set(s * 0.048, 0.022, 0.104);
-    eye.scale.z = 0.5;
-    head.add(eye);
-  });
-  g.add(head);
-
-  const arm = (side) => {
-    const a = new THREE.Group();
-    a.position.set(side * 0.235, 1.3, 0);
-    const upper = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.4, 3, 7), lambert(shirt));
-    upper.position.y = -0.25;
-    a.add(upper);
-    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.052, 7, 6), lambert(skin));
-    hand.position.y = -0.5;
-    a.add(hand);
-    g.add(a);
-    return a;
-  };
-  const armL = arm(-1);
-  const armR = arm(1);
-  return { g, head, armL, armR };
-}
-
-/** Collapse a figure to four meshes: body, head, and each arm. */
-function bakeFigure(f) {
-  bake(f.head);
-  bake(f.armL);
-  bake(f.armR);
-  bake(f.g, { skip: [f.head, f.armL, f.armR] });
-}
+/* ------------------------------------------------------------ the field */
 
 /**
- * A Pekkas painter at an easel, seen from behind or three-quarters. Fewer
- * joints than the fencers or the table tennis players need — these are set
- * dressing — but the brush arm moves, because a garden full of people
- * standing perfectly still reads as a graveyard.
+ * Every other painter's easel — their picture so far on the front, a beer
+ * on the grass beside it — baked into ONE mesh. Ten easels as ten draw
+ * calls is a phone's whole budget for the background; as one they are free.
+ * `list` holds { x, z, ry, art } per easel: ry is the way the canvas faces,
+ * art an optional { cols, rows, colors } grid of linear RGB, one per vertex
+ * of a subdivided quad — at this distance a 16×18 grid of soft colour
+ * reads as paint, and it costs no texture.
  */
-export function buildPainter(shirt, opts = {}) {
-  const f = figure(shirt, opts);
-  const { head, armL, armR } = f;
+export function buildFieldEasels(list) {
+  const field = new THREE.Group();
+  const W = 0.78;
+  const H = 0.6;
+  list.forEach(({ x, z, ry, art }, i) => {
+    const e = buildEasel(null, W, H);
+    if (art) {
+      const g = new THREE.PlaneGeometry(W * 0.97, H * 0.96, art.cols - 1, art.rows - 1);
+      g.setAttribute('color', new THREE.BufferAttribute(art.colors, 3));
+      const pic = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true }));
+      // A centimetre proud of the board: the field is eight metres off and
+      // a 16-bit depth buffer cannot separate less there
+      pic.position.set(0, 0.98 + H / 2, 0.072);
+      e.add(pic);
+    }
+    e.position.set(x, 0, z);
+    e.rotation.y = ry;
+    e.scale.setScalar(0.88);
+    field.add(e);
+    // Per Vikman's brief: ten beers each. One is open at every easel.
+    const side = i % 2 ? 1 : -1;
+    const bx = x + Math.cos(ry) * 0.5 * side - Math.sin(ry) * 0.2;
+    const bz = z - Math.sin(ry) * 0.5 * side - Math.cos(ry) * 0.2;
+    const bottle = new THREE.Mesh(new THREE.CylinderGeometry(0.033, 0.037, 0.2, 8), lambert(0x4a2f14));
+    bottle.position.set(bx, 0.1, bz);
+    field.add(bottle);
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.02, 0.07, 7), lambert(0x4a2f14));
+    neck.position.set(bx, 0.235, bz);
+    field.add(neck);
+  });
+  const mesh = bake(field);
+  if (mesh) mesh.receiveShadow = true;
+  return field;
+}
 
-  if (opts.beret) {
-    // Per Olsson came as Hans Hedberg: red beret, brown polo, big eyebrows
-    const beret = new THREE.Mesh(new THREE.SphereGeometry(0.145, 12, 8, 0, Math.PI * 2, 0, 1.15), lambert(0xa8202c));
-    beret.position.set(0, 0.03, -0.012);
-    beret.rotation.z = 0.2;
-    beret.scale.y = 0.62;
-    head.add(beret);
-    const nub = new THREE.Mesh(new THREE.SphereGeometry(0.022, 6, 5), lambert(0xa8202c));
-    nub.position.set(0, 0.12, -0.012);
-    head.add(nub);
-    [-1, 1].forEach((s) => {
-      const brow = new THREE.Mesh(new THREE.BoxGeometry(0.058, 0.024, 0.018), lambert(0xb9b3a6));
-      brow.position.set(s * 0.048, 0.045, 0.108);
-      head.add(brow);
+/* ------------------------------------------------------------ fallback */
+
+/**
+ * The watchdog's second step (index.js): if the picture is still black once
+ * the shadows are gone, the garden sheds everything a GPU could choke on —
+ * the grass, the dappled light, the flowers in the lawn and the birds go,
+ * and every wind shader is swapped for a plain material.
+ */
+export function simplifyGarden(garden) {
+  const { refs } = garden;
+  refs.extras.forEach((o) => {
+    o.visible = false;
+  });
+  refs.windy.forEach((mesh) => {
+    const m = mesh.material;
+    const plain = new THREE.MeshLambertMaterial({
+      color: m.color, map: m.map, vertexColors: m.vertexColors, side: m.side
     });
-  } else {
-    const hair = new THREE.Mesh(
-      new THREE.SphereGeometry(0.132, 12, 9, 0, Math.PI * 2, 0, 1.25),
-      lambert(opts.hair ?? 0x3d2b18)
-    );
-    hair.position.set(0, 0.012, -0.01);
-    hair.scale.set(1, 1.02, 1.04);
-    head.add(hair);
-  }
-
-  // Off arm holds the palette; brush arm swings at the canvas
-  armL.rotation.set(0.5, 0, 0.3);
-  const held = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.014, 14), lambert(0xb98d52));
-  held.position.set(-0.02, -0.55, 0.06);
-  held.rotation.set(1.35, 0, 0.2);
-  armL.add(held);
-  [0xc0242c, 0xe8b419, 0x22459b, 0xf4f2ea, 0x2a2018].forEach((col, i) => {
-    const dab = new THREE.Mesh(new THREE.SphereGeometry(0.022, 6, 5), lambert(col));
-    const a = -1.1 + i * 0.55;
-    dab.position.set(Math.sin(a) * 0.105, 0.009, Math.cos(a) * 0.105);
-    dab.scale.y = 0.4;
-    held.add(dab);
+    mesh.material = plain;
+    m.dispose();
   });
-  const brush = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.014, 0.3, 6), lambert(0xc9a05a));
-  brush.position.set(0, -0.62, 0.03);
-  armR.add(brush);
-  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.022, 0.07, 6), lambert(0x2a2018));
-  tip.position.set(0, -0.79, 0.03);
-  armR.add(tip);
-
-  bakeFigure(f);
-  return { group: f.g, refs: { head, armL, armR } };
-}
-
-/**
- * Mikael Hägglund, the culture profile invited to judge. He is dressed for
- * it — black polo neck, round glasses, a notebook — and walks up to your
- * easel for the verdict.
- */
-export function buildJudge() {
-  const f = figure(0x1f2026, { trousers: 0x8f8268, shoes: 0x3a2a1e });
-  const { g, head, armL, armR } = f;
-  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.095, 0.08, 12), lambert(0x1f2026));
-  collar.position.y = 1.36;
-  g.add(collar);
-  const hair = new THREE.Mesh(
-    new THREE.SphereGeometry(0.13, 12, 9, 0, Math.PI * 2, 0, 1.0),
-    lambert(0x9a958c)
-  );
-  hair.position.set(0, 0.02, -0.02);
-  head.add(hair);
-  // Round glasses: two rings and a bridge
-  [-1, 1].forEach((s) => {
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.027, 0.0045, 6, 16), lambert(0x18181a));
-    ring.position.set(s * 0.048, 0.022, 0.118);
-    head.add(ring);
-  });
-  const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.006, 0.006), lambert(0x18181a));
-  bridge.position.set(0, 0.026, 0.12);
-  head.add(bridge);
-  // Notebook in the left hand, pen in the right
-  armL.rotation.set(-0.9, 0, 0.25);
-  const book = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.012, 0.21), lambert(0x6b2e24));
-  book.position.set(0.02, -0.52, 0.08);
-  book.rotation.set(0.2, 0, 0.1);
-  armL.add(book);
-  const page = new THREE.Mesh(new THREE.BoxGeometry(0.135, 0.004, 0.19), lambert(0xf3eedf));
-  page.position.set(0.02, -0.512, 0.08);
-  page.rotation.copy(book.rotation);
-  armL.add(page);
-  const pen = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.13, 6), lambert(0x18181a));
-  pen.position.set(0, -0.56, 0.03);
-  pen.rotation.x = 0.4;
-  armR.add(pen);
-  bakeFigure(f);
-  return { group: g, refs: { head, armL, armR } };
+  refs.windy.length = 0;
 }

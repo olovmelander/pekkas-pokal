@@ -112,8 +112,13 @@ export function buildGrass(rand, { count = 23000, inner = 0.3, outer = 30, sunDi
       `)
       .replace('#include <begin_vertex>', `
         #include <begin_vertex>
-        // Where in the world this blade is planted
+        // Where in the world this blade is planted (the meadow mesh sits at the origin)
         vec3 blade = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
+        // Far blades get wider. A blade a few centimetres across is under a
+        // pixel at 20 m, and sub-pixel geometry swaying in the wind is what
+        // shimmers; the outer field is sparse anyway, so wider blades there
+        // also close the gaps.
+        transformed.x *= clamp(distance(blade, cameraPosition) / 11.0, 1.0, 2.3);
         // Three layered frequencies — one sine alone reads as a machine
         float w = sin(uTime * 1.6 + blade.x * 0.42 + blade.z * 0.31)
                 + sin(uTime * 2.9 + blade.x * 0.83) * 0.45

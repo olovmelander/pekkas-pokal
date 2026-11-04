@@ -300,7 +300,8 @@ export const HeatHazeShader = {
     varying vec2 vUv;
     void main() {
       vec2 d = (vUv - uCenter) / uRadius;
-      float m = smoothstep(1.0, 0.15, length(d)) * uStrength;
+      // 1 − smoothstep, not smoothstep(1.0, 0.15, …): reversed edges are undefined in GLSL
+      float m = (1.0 - smoothstep(0.15, 1.0, length(d))) * uStrength;
       // Rising ripples: phase runs with height so the shimmer climbs
       float a = sin(vUv.y * 90.0 - uTime * 7.0) + 0.6 * sin(vUv.y * 151.0 + vUv.x * 37.0 - uTime * 11.0);
       float b = cos(vUv.x * 70.0 + vUv.y * 20.0 - uTime * 5.0);

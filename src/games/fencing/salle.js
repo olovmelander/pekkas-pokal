@@ -23,11 +23,14 @@
  * blades and the waxed parquet all reflect the place they are in.
  *
  * Draw calls are kept low by merging every static prop that shares a
- * material into one vertex-coloured mesh, and by instancing the crowd.
+ * material into one vertex-coloured mesh. The referee is a shared people.js
+ * character and the spectators are a people.js crowd: a handful of
+ * instanced draw calls for everyone on the benches.
  */
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { createPerson, appearanceFor, createCrowd, POSES, mixPoses, emptyPose, SEAT_HEIGHT } from '../shared/people.js';
 
 export function mulberry(seed) {
   let a = seed;
@@ -553,7 +556,9 @@ void main() {
   vec3 rd = normalize(vWorld - ro);
   vec3 o = uInv * (ro - vOrigin);
   vec3 d = uInv * rd;
-  d = sign(d) * max(abs(d), vec3(1e-5));
+  // sign() is 0 for an exactly axis-aligned ray: never divide by it
+  vec3 sgn = step(vec3(0.0), d) * 2.0 - 1.0;
+  d = sgn * max(abs(d), vec3(1e-5));
   vec3 t0 = -o / d;
   vec3 t1 = (vec3(1.0) - o) / d;
   vec3 tn3 = min(t0, t1);
@@ -567,13 +572,14 @@ void main() {
   for (int i = 0; i < SAMPLES; i++) {
     float tt = tn + (float(i) + 0.5) / float(SAMPLES) * len;
     vec3 b = o + d * tt;
-    float edge = smoothstep(0.0, 0.2, b.x) * smoothstep(1.0, 0.8, b.x)
-               * smoothstep(0.0, 0.16, b.y) * smoothstep(1.0, 0.86, b.y);
+    // (smoothstep with edge0 > edge1 is undefined in GLSL: flip it explicitly)
+    float edge = smoothstep(0.0, 0.2, b.x) * (1.0 - smoothstep(0.8, 1.0, b.x))
+               * smoothstep(0.0, 0.16, b.y) * (1.0 - smoothstep(0.86, 1.0, b.y));
     vec3 wp = ro + rd * tt;
     float n = texture2D(uNoise, vec2(b.x * 1.3 + uTime * 0.012, b.z * 0.9 - uTime * 0.02)).r;
     float n2 = texture2D(uNoise, vec2(b.x * 3.1 - uTime * 0.02, b.y * 2.0 + b.z * 2.2)).g;
     // Densest near the window, thinning out towards the floor
-    float fade = pow(max(1.0 - b.z, 0.0), 1.6) * smoothstep(0.0, 0.9, wp.y);
+    float fade = pow(max(1.0 - b.z, 1e-4), 1.6) * smoothstep(0.0, 0.9, wp.y);
     acc += edge * fade * (0.55 + 0.55 * n + 0.25 * n2);
   }
   float glow = acc / float(SAMPLES) * min(len, 4.0);
@@ -673,13 +679,14 @@ void main() {
   p += vec3(sin(uTime * 0.21 + ph * 6.0), sin(uTime * 0.13 + ph * 9.0) * 0.6, cos(uTime * 0.17 + ph * 4.0)) * aSeed.xyz;
   p.y += mod(uTime * 0.03 * (0.3 + ph), 0.6) - 0.3;
   vec3 b = uInv * (p - aOrigin);
-  float inside = smoothstep(0.0, 0.15, b.x) * smoothstep(1.0, 0.85, b.x)
-               * smoothstep(0.0, 0.12, b.y) * smoothstep(1.0, 0.88, b.y)
+  float inside = smoothstep(0.0, 0.15, b.x) * (1.0 - smoothstep(0.85, 1.0, b.x))
+               * smoothstep(0.0, 0.12, b.y) * (1.0 - smoothstep(0.88, 1.0, b.y))
                * step(0.0, b.z) * step(b.z, 1.0) * step(0.05, p.y);
   float tw = 0.55 + 0.45 * sin(uTime * (1.5 + ph * 3.0) + ph * 40.0);
   vBright = inside * tw;
   vec4 mv = modelViewMatrix * vec4(p, 1.0);
-  gl_PointSize = uScale * (0.6 + ph) / -mv.z;
+  // A mote right at the camera plane must not divide by ~0
+  gl_PointSize = min(uScale * (0.6 + ph) / max(-mv.z, 0.2), 48.0);
   gl_Position = projectionMatrix * mv;
 }`;
 
@@ -689,7 +696,7 @@ varying float vBright;
 void main() {
   if (vBright < 0.01) discard;
   vec2 c = gl_PointCoord - 0.5;
-  float a = smoothstep(0.5, 0.0, length(c));
+  float a = 1.0 - smoothstep(0.0, 0.5, length(c));
   gl_FragColor = vec4(uColor * a * vBright, 1.0);
   #include <colorspace_fragment>
 }`;
@@ -782,250 +789,247 @@ export function buildEnvScene() {
 
 /* ------------------------------------------------------------- crowd */
 
-const SHIRTS = [0xb8343f, 0x2f5f8f, 0x5d8a58, 0xc9922e, 0x7a4480, 0x3d7d7a, 0xc96a32, 0x6b7280, 0x2e3a59, 0x8f6b3d, 0xa04050, 0x4a6b8a];
-const SKINS = [0xe2b08a, 0xd59e78, 0xc58b62, 0xe8bf9c, 0xb87a52];
-const HAIRS = [0x2b1d12, 0x4a3220, 0x6b4e2e, 0x8a7a68, 0xc9a464, 0x1a1a1a];
+/** Bench seats either side of the referee, plus standing room behind. */
+const BENCH_X = [-5.1, 5.1];
+const BENCH_Z = -4.65;
+const BENCH_TOP = SEAT_HEIGHT; // a 1.80 m spectator sits flush on it
+
+function crowdSeats(high) {
+  const seats = [];
+  BENCH_X.forEach((bx) => {
+    for (let i = 0; i < 6; i++) {
+      const x = bx - 2 + i * 0.8;
+      seats.push({ position: [x, 0, BENCH_Z + 0.04], rotationY: Math.atan2(-x * 0.35, 4), pose: 'sit' });
+    }
+  });
+  // Latecomers standing against the panelling, looking over the benches
+  const stand = high ? [-6.7, -4.7, -3.3, 3.4, 4.5, 6.1, 7.2] : [-6.2, -3.6, 3.9, 6.6];
+  stand.forEach((x, i) => {
+    seats.push({ position: [x, 0, -5.55 - (i % 2) * 0.3], rotationY: Math.atan2(-x * 0.3, 5), pose: 'stand' });
+  });
+  return seats;
+}
+
+const _cm = new THREE.Matrix4();
+const _cl = new THREE.Matrix4();
+const _cr = new THREE.Matrix4();
 
 /**
- * Seated spectators as six InstancedMeshes (torso, head, hair, both arms,
- * legs). Each person is a tiny rig evaluated on the CPU — a dozen matrix
- * composes per frame — so they can sway, lean in when an attack is coming,
- * jump up on your touches and put their hands on their heads on theirs.
+ * The spectators: a people.js crowd (one instanced draw call per pose
+ * variant in use) with the salle's own reactions layered on top. The
+ * crowd itself knows idle, clapping, cheering and the standing ovation;
+ * leaning in on a telegraphed attack, the recoil of an »ooh« and the slump
+ * of a groan are a lean of each instance about its hips, applied to the
+ * instance matrices after the crowd has written them.
+ *
+ * Named spectators are the rest of the 2023 field: whoever you are not
+ * fencing as watches from the benches.
  */
-class Crowd {
-  constructor(seats) {
-    const rand = mulberry(41);
-    // Dimmed: the crowd is backdrop, it must never compete with the blades
-    const mat = new THREE.MeshStandardMaterial({ roughness: 0.82, color: new THREE.Color(0.62, 0.6, 0.58) });
-    const legGeo = mergeGeometries([
-      new THREE.BoxGeometry(0.34, 0.15, 0.44).translate(0, 0.6, 0.16),
-      new THREE.BoxGeometry(0.3, 0.5, 0.13).translate(0, 0.3, 0.36),
-      new THREE.BoxGeometry(0.32, 0.08, 0.22).translate(0, 0.04, 0.42)
-    ]);
-    const n = seats.length;
-    const mk = (geo) => {
-      const m = new THREE.InstancedMesh(geo, mat, n);
-      m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      m.frustumCulled = false;
-      return m;
-    };
-    this.torso = mk(new THREE.CapsuleGeometry(0.17, 0.3, 3, 10));
-    this.head = mk(new THREE.SphereGeometry(0.115, 12, 9));
-    this.hair = mk(new THREE.SphereGeometry(0.123, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2.1));
-    this.armL = mk(new THREE.CapsuleGeometry(0.048, 0.4, 3, 6).translate(0, -0.22, 0));
-    this.armR = mk(this.armL.geometry.clone());
-    this.legs = mk(legGeo);
-    this.meshes = [this.torso, this.head, this.hair, this.armL, this.armR, this.legs];
+class Spectators {
+  constructor(high) {
     this.group = new THREE.Group();
-    this.meshes.forEach((m) => this.group.add(m));
-    const col = new THREE.Color();
-    this.people = seats.map((s, i) => {
-      const shirt = SHIRTS[i % SHIRTS.length];
-      const skin = SKINS[Math.floor(rand() * SKINS.length)];
-      this.torso.setColorAt(i, col.set(shirt));
-      this.armL.setColorAt(i, col.set(shirt));
-      this.armR.setColorAt(i, col.set(shirt));
-      this.head.setColorAt(i, col.set(skin));
-      this.hair.setColorAt(i, col.set(HAIRS[Math.floor(rand() * HAIRS.length)]));
-      this.legs.setColorAt(i, col.set([0x2f3746, 0x3b3328, 0x23272e, 0x4a4f5a][i % 4]));
-      return {
-        x: s[0], z: s[1], yaw: s[2], phase: rand() * 6.28, delay: rand() * 0.3,
-        mood: 'idle', moodT: 0, lean: 0, lift: 0, armUp: 0, armFwd: 0.5, clap: 0, hands: 0
-      };
-    });
-    this.meshes.forEach((m) => {
-      m.instanceColor.needsUpdate = true;
-    });
-    this.o = new THREE.Object3D();
-    this.o.rotation.order = 'YXZ'; // local raise first, then the person's yaw
+    this.high = high;
+    this.seats = crowdSeats(high);
+    this.crowd = null;
+    this.key = '';
     this.mood = 'idle';
+    this.moodT = 0;
+    this.lean = 0;
+    this.floor = new THREE.Vector3(0, -3, 1.5);
+  }
+
+  /** (Re)build with these names; returns true when it changed. */
+  setNames(names) {
+    const key = names.join('|');
+    if (this.crowd && key === this.key) return false;
+    // Build the new crowd before disposing the old one, so the shader
+    // programs stay cached and nothing recompiles
+    // Shadows from the benches only where the GPU has room (desktop)
+    const next = createCrowd({ seats: this.seats, names, seed: 2023, hats: 0.06, castShadow: this.high });
+    if (this.crowd) this.crowd.dispose();
+    this.crowd = next;
+    this.group.add(next.root);
+    this.key = key;
+    return true;
   }
 
   /** idle | tense | ooh | cheer | groan | clap | stand */
   react(mood) {
-    this.mood = mood;
-    this.people.forEach((p) => {
-      p.mood = mood;
-      p.moodT = -p.delay;
-    });
+    const c = this.crowd;
+    if (mood !== 'ooh' || this.mood !== 'groan') {
+      this.mood = mood;
+      this.moodT = 0;
+    }
+    if (mood === 'cheer') c.react('cheer', 1.9);
+    else if (mood === 'clap') c.react('clap', 3.2);
+    else if (mood === 'stand') {
+      c.setMood('ovation');
+      c.react('ovation', 99);
+    } else if (mood === 'idle') {
+      c.setMood('idle');
+      c.react('idle');
+    }
   }
 
-  update(t, dt) {
-    const { o } = this;
-    const k = Math.min(1, dt * 7);
-    this.people.forEach((p, i) => {
-      p.moodT += dt;
-      const on = p.moodT > 0;
-      let lean = Math.sin(t * 0.7 + p.phase) * 0.03;
-      let lift = 0;
-      let armUp = 0;
-      let armFwd = 0.55;
-      let hands = 0;
-      const m = on ? p.mood : 'idle';
-      if (m === 'tense') {
-        lean = 0.22;
-        armFwd = 0.9;
-      } else if (m === 'ooh') {
-        lean = -0.12 + 0.1 * Math.sin(p.moodT * 3);
-        armFwd = 1.1;
-      } else if (m === 'cheer' || m === 'stand') {
-        const big = m === 'stand' ? 1.3 : 0.8;
-        lift = Math.abs(Math.sin(t * 8 + p.phase)) * 0.1 * big;
-        armUp = 2.5;
-        armFwd = 0.2;
-        lean = -0.08;
-      } else if (m === 'groan') {
-        hands = 1;
-        lean = 0.12;
-      } else if (m === 'clap') {
-        armFwd = 1.25;
-        lean = 0.05;
-      }
-      if (on && p.moodT > (m === 'stand' ? 99 : m === 'clap' ? 3.2 : 1.8)) p.mood = 'idle';
-      p.lean += (lean - p.lean) * k;
-      p.lift += (lift - p.lift) * k;
-      p.armUp += (armUp - p.armUp) * k;
-      p.armFwd += (armFwd - p.armFwd) * k;
-      p.hands += (hands - p.hands) * k;
-      const clap = m === 'clap' && on ? Math.max(0, Math.sin(t * 15 + p.phase)) * 0.35 : 0;
+  update(t, dt, focus) {
+    this.moodT += dt;
+    const m = this.mood;
+    const mt = this.moodT;
+    let lean = 0;
+    let look = focus;
+    if (m === 'tense') lean = 0.17;
+    else if (m === 'ooh') {
+      lean = -0.09;
+      if (mt > 0.8) this.mood = 'idle';
+    } else if (m === 'groan') {
+      // Thrown back in the seat, then the slump with heads down
+      lean = mt < 0.3 ? -0.1 : 0.2;
+      if (mt > 0.3) look = this.floor;
+      if (mt > 2) this.mood = 'idle';
+    } else if (m === 'cheer') {
+      lean = -0.05;
+      if (mt > 2) this.mood = 'idle';
+    } else if (m === 'clap' && mt > 3.4) this.mood = 'idle';
+    this.lean += (lean - this.lean) * (1 - Math.exp(-dt * 7));
+    this.crowd.lookAt(look || null);
+    this.crowd.update(dt, t);
+    if (Math.abs(this.lean) > 1e-3) this.applyLean();
+  }
 
-      const put = (mesh, x, y, z, rx, ry, rz) => {
-        o.position.set(x, y, z);
-        o.rotation.set(rx, ry, rz);
-        o.updateMatrix();
-        mesh.setMatrixAt(i, o.matrix);
-      };
-      // Everything relative to the seat, rotated by the person's yaw
-      const cy = Math.cos(p.yaw);
-      const sy = Math.sin(p.yaw);
-      const at = (lx, ly, lz) => [p.x + lx * cy + lz * sy, ly + p.lift, p.z - lx * sy + lz * cy];
-      const torsoY = 0.95;
-      const [tx, ty, tz] = at(0, torsoY, 0);
-      put(this.torso, tx, ty, tz, p.lean, p.yaw, 0);
-      const hz = Math.sin(p.lean) * 0.42;
-      const [hx, hy, hzz] = at(0, torsoY + 0.42, hz);
-      put(this.head, hx, hy, hzz, p.lean * 0.6, p.yaw, 0);
-      put(this.hair, hx, hy + 0.012, hzz - 0.01, p.lean * 0.6 - 0.15, p.yaw, 0);
-      put(this.legs, p.x, 0, p.z, 0, p.yaw, 0);
-      // Arms: raise sideways for cheers, forward for claps, to the head for groans
-      [this.armL, this.armR].forEach((arm, s) => {
-        const side = s ? 1 : -1;
-        const [ax, ay, az] = at(side * 0.21, torsoY + 0.24, hz * 0.6);
-        const fwd = -(p.armFwd + p.hands * 1.9);
-        const out = side * (p.armUp + p.hands * 0.55 - clap);
-        put(arm, ax, ay, az, fwd, p.yaw, out);
-      });
-    });
-    this.meshes.forEach((m) => {
-      m.instanceMatrix.needsUpdate = true;
-    });
+  /** Lean every instance about its hips (seated) or its waist (standing). */
+  applyLean() {
+    for (const e of this.crowd.meshes) {
+      const { mesh } = e;
+      if (!mesh.visible) continue;
+      const pivot = mesh.name.includes(':stand:') ? 0.98 : 0.56;
+      for (let i = 0; i < mesh.count; i++) {
+        mesh.getMatrixAt(i, _cm);
+        const el = _cm.elements;
+        // Per-spectator amount from where they sit: some lean further
+        const h = Math.abs(Math.sin(el[12] * 12.9898 + el[14] * 78.233) * 43758.5453) % 1;
+        const a = this.lean * (0.65 + 0.7 * h);
+        _cl.makeTranslation(0, pivot, 0);
+        _cr.makeRotationX(a);
+        _cl.multiply(_cr);
+        _cr.makeTranslation(0, -pivot, 0);
+        _cl.multiply(_cr);
+        _cm.multiply(_cl);
+        mesh.setMatrixAt(i, _cm);
+      }
+      mesh.instanceMatrix.needsUpdate = true;
+    }
+  }
+
+  get drawCalls() {
+    return this.crowd.drawCalls;
   }
 
   dispose() {
-    this.meshes.forEach((m) => {
-      m.geometry.dispose();
-      m.dispose();
-    });
-    this.meshes[0].material.dispose();
+    if (this.crowd) this.crowd.dispose();
+    this.crowd = null;
   }
 }
 
 /* ----------------------------------------------------------- referee */
 
+const v3p = (x = 0, y = 0, z = 0) => [x, y, z];
+
 /**
  * The referee (domaren) stands across the piste and runs every phrase:
  * arms out for »En garde«, a sweep together for »Kör!«, and a raised arm
- * towards whoever earned the touch.
+ * towards whoever earned the touch — saying it out loud, jaw and all. He
+ * faces the camera, so his right hand is your side.
  */
 class Referee {
-  constructor() {
-    const std = (c, r = 0.7) => new THREE.MeshStandardMaterial({ color: c, roughness: r });
-    const suit = std(0x1d2230, 0.62);
-    const shirt = std(0xece8df);
-    const skin = std(0xd8a47c, 0.6);
-    const g = new THREE.Group();
-    this.group = g;
-    const add = (geo, mat, parent, x, y, z) => {
-      const m = new THREE.Mesh(geo, mat);
-      m.position.set(x, y, z);
-      m.castShadow = true;
-      parent.add(m);
-      return m;
-    };
-    [-0.1, 0.1].forEach((x) => add(new THREE.CylinderGeometry(0.075, 0.06, 0.92, 8), suit, g, x, 0.46, 0));
-    [-0.1, 0.1].forEach((x) => add(new THREE.BoxGeometry(0.11, 0.07, 0.26), std(0x111111, 0.4), g, x, 0.035, 0.05));
-    const body = new THREE.Group();
-    body.position.y = 0.92;
-    g.add(body);
-    const jacket = add(new THREE.CapsuleGeometry(0.2, 0.42, 4, 12), suit, body, 0, 0.32, 0);
-    jacket.scale.z = 0.62;
-    add(new THREE.PlaneGeometry(0.12, 0.3), shirt, body, 0, 0.5, 0.128);
-    add(new THREE.BoxGeometry(0.035, 0.22, 0.01), std(0x8a2030), body, 0, 0.47, 0.134);
-    const head = add(new THREE.SphereGeometry(0.11, 12, 10), skin, body, 0, 0.88, 0.01);
-    head.scale.set(0.92, 1.08, 0.98);
-    add(new THREE.SphereGeometry(0.115, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2.2), std(0x6d6a66), body, 0, 0.9, -0.005);
-    this.arms = [-1, 1].map((side) => {
-      const sh = new THREE.Group();
-      sh.position.set(side * 0.24, 0.66, 0);
-      body.add(sh);
-      add(new THREE.CapsuleGeometry(0.055, 0.26, 3, 8).translate(0, -0.15, 0), suit, sh, 0, 0, 0);
-      const el = new THREE.Group();
-      el.position.y = -0.3;
-      sh.add(el);
-      add(new THREE.CapsuleGeometry(0.048, 0.24, 3, 8).translate(0, -0.13, 0), suit, el, 0, 0, 0);
-      add(new THREE.SphereGeometry(0.045, 8, 6), skin, el, 0, -0.3, 0);
-      return { sh, el, side, z: 0, x: 0, bend: 0 };
+  constructor(high) {
+    this.person = createPerson({
+      ...appearanceFor('Domaren i Stockholm', {
+        height: 1.78,
+        build: 'average',
+        hair: { style: 'sidePart', color: 0x8b857c },
+        facialHair: null,
+        glasses: 'rect',
+        glassesColor: 0x2a2a30,
+        outfit: { top: 'jacket', topColor: 0x1e2433, bottom: 'trousers', bottomColor: 0x1e2433, shoes: 'leather', shoeColor: 0x17110d }
+      }),
+      detail: high ? 'high' : 'low'
     });
-    this.body = body;
-    this.signal('idle');
+    this.group = this.person.root;
+    this.cur = POSES.stand(0);
+    this.target = emptyPose();
+    this.kind = 'idle';
+    this.side = 0;
+    this.t = 0;
+    this.talkT = 0;
+    this.person.setExpression('focus', 0.4);
   }
 
-  /** idle | engarde | allez | point (side −1 left / +1 right) | halt */
+  /** idle | engarde | allez | point (side −1 your side / +1 theirs) | halt */
   signal(kind, side = 0) {
     this.kind = kind;
     this.side = side;
     this.t = 0;
+    if (kind !== 'idle') {
+      this.person.talk(1);
+      this.talkT = kind === 'engarde' ? 0.7 : 0.45;
+    }
   }
 
-  update(dt) {
+  /** Target pose for the current signal (he faces +z: his right is −x). */
+  pose(t) {
+    const p = POSES.stand(0, this.target);
+    p.hips[2] += Math.sin(t * 0.6) * 0.02;
+    const arm = (S, x, y, z, fore = -0.15) => {
+      p[`upperArm${S}`] = v3p(x, y, z);
+      p[`forearm${S}`] = v3p(fore, 0, 0);
+      p[`hand${S}`] = v3p(0, 0, 0);
+    };
+    if (this.kind === 'engarde') {
+      arm('L', 0.05, 0, 1.45);
+      arm('R', 0.05, 0, -1.45);
+      p.gripL = 0.1;
+      p.gripR = 0.1;
+    } else if (this.kind === 'allez') {
+      const s = Math.min(1, this.t / 0.22);
+      const drop = Math.min(1, Math.max(0, (this.t - 0.7) / 0.5));
+      arm('L', -1.1 * s * (1 - drop), 0, 1.45 - 1.2 * s - 0.15 * drop, -0.1);
+      arm('R', -1.1 * s * (1 - drop), 0, -1.45 + 1.2 * s + 0.15 * drop, -0.1);
+      p.gripL = 0.1;
+      p.gripR = 0.1;
+    } else if (this.kind === 'point' && this.side) {
+      const S = this.side < 0 ? 'R' : 'L';
+      const k = this.side < 0 ? -1 : 1;
+      arm(S, -0.25, 0, k * 2.25, -0.08);
+      p[`grip${S}`] = 0.1;
+      p.chest = v3p(-0.03, -k * 0.18, k * 0.04);
+      p.head = v3p(-0.06, -k * 0.2, 0);
+    } else if (this.kind === 'halt') {
+      arm('R', -0.1, 0, -2.85, -0.05);
+      p.gripR = 0.05;
+    } else {
+      // At rest: hands loosely clasped behind the back
+      arm('L', 0.28, 0.25, 0.1, -0.55);
+      arm('R', 0.28, -0.25, -0.1, -0.55);
+    }
+    return p;
+  }
+
+  update(dt, focus) {
     this.t += dt;
-    const k = Math.min(1, dt * 9);
-    this.arms.forEach((a) => {
-      let z = 0.12 * a.side; // relaxed at the sides
-      let x = 0.25;
-      let bend = -0.5;
-      if (this.kind === 'engarde') {
-        z = a.side * 1.45;
-        x = 0.15;
-        bend = -0.05;
-      } else if (this.kind === 'allez') {
-        const s = Math.min(1, this.t / 0.22);
-        z = a.side * (1.45 - 1.25 * s);
-        x = 0.15 + 1.0 * s;
-        bend = -0.1;
-      } else if (this.kind === 'point' && a.side === this.side) {
-        z = a.side * 2.3;
-        x = 0.1;
-        bend = -0.05;
-      } else if (this.kind === 'halt' && a.side === 1) {
-        z = 2.9;
-        x = 0.2;
-        bend = 0;
-      }
-      a.z += (z - a.z) * k;
-      a.x += (x - a.x) * k;
-      a.bend += (bend - a.bend) * k;
-      a.sh.rotation.set(-a.x, 0, a.z);
-      a.el.rotation.x = a.bend;
-    });
-    this.body.rotation.y = Math.sin(this.t * 0.6) * 0.05 + (this.kind === 'point' ? this.side * 0.25 : 0);
+    if (this.talkT > 0) {
+      this.talkT -= dt;
+      if (this.talkT <= 0) this.person.talk(0);
+    }
+    // Ease our own copy of the pose (setPose(…, 1) each frame keeps the
+    // look-at layered cleanly on top)
+    mixPoses(this.cur, this.pose(this.t), 1 - Math.exp(-dt * 10), this.cur);
+    this.person.setPose(this.cur, 1);
+    this.person.lookAt(focus || null, 0.85);
+    this.person.update(dt);
   }
 
   dispose() {
-    this.group.traverse((o) => {
-      if (o.geometry) o.geometry.dispose();
-      if (o.material) o.material.dispose();
-    });
+    this.person.dispose();
   }
 }
 
@@ -1062,10 +1066,14 @@ class ScoreBox {
       g.add(ring);
       return dome;
     });
-    this.whiteMat = new THREE.MeshStandardMaterial({ color: 0x0b0c0e, emissive: 0xffffff, emissiveIntensity: 0.03 });
+    // Lamps and the score window sit on the box face: a few millimetres
+    // proud of it AND pulled forward in depth, so they never fight it on a
+    // 16-bit depth buffer
+    const decal = { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 };
+    this.whiteMat = new THREE.MeshStandardMaterial({ color: 0x0b0c0e, emissive: 0xffffff, emissiveIntensity: 0.03, ...decal });
     [-0.18, 0.18].forEach((x) => {
       const w = new THREE.Mesh(new THREE.CircleGeometry(0.035, 12), this.whiteMat);
-      w.position.set(x, -0.18, 0.172);
+      w.position.set(x, -0.18, 0.175);
       g.add(w);
     });
     const [cv, ctx] = canvas(256, 96);
@@ -1074,9 +1082,9 @@ class ScoreBox {
     this.tex = canvasTex(cv);
     const disp = new THREE.Mesh(
       new THREE.PlaneGeometry(0.5, 0.19),
-      new THREE.MeshBasicMaterial({ map: this.tex, color: new THREE.Color(1.6, 1.6, 1.6) })
+      new THREE.MeshBasicMaterial({ map: this.tex, color: new THREE.Color(1.6, 1.6, 1.6), ...decal })
     );
-    disp.position.set(0, 0.1, 0.172);
+    disp.position.set(0, 0.1, 0.176);
     g.add(disp);
     // Stand
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 2.6, 8), std(0x262a31, 0.5, 0.6));
@@ -1146,8 +1154,9 @@ class ScoreBox {
  * @param {object} o
  * @param {THREE.Texture} o.glow
  * @param {boolean} o.high  quality tier
+ * @param {string[]} o.crowdNames  participants watching from the benches
  */
-export function buildSalle({ glow, high }) {
+export function buildSalle({ glow, high, crowdNames = [] }) {
   const g = new THREE.Group();
   const disposables = [];
   const keep = (x) => {
@@ -1298,11 +1307,14 @@ export function buildSalle({ glow, high }) {
   wood.box(32, 0.14, 0.05, 0x21140b, 0, 0.07, WALL_Z + 0.03);
   // Ceiling beams
   for (let x = -14; x <= 14; x += 4) wood.box(0.34, 0.42, 24, 0x2e2318, x, 9.4, 5);
-  // Spectator benches, either side of the referee
-  [-5.1, 5.1].forEach((x) => {
-    wood.box(4.6, 0.09, 0.62, 0x6a4628, x, 0.5, -4.65);
-    wood.box(4.6, 0.36, 0.06, 0x5b3b22, x, 0.86, -4.98);
-    [-2, 0, 2].forEach((dx) => wood.box(0.12, 0.5, 0.56, 0x3a2716, x + dx, 0.25, -4.65));
+  // Spectator benches, either side of the referee, at the people's seat height
+  BENCH_X.forEach((x) => {
+    wood.box(4.6, 0.07, 0.5, 0x6a4628, x, BENCH_TOP - 0.035, BENCH_Z);
+    wood.box(4.6, 0.32, 0.05, 0x5b3b22, x, BENCH_TOP + 0.36, BENCH_Z - 0.3);
+    [-2, 0, 2].forEach((dx) => {
+      wood.box(0.1, BENCH_TOP - 0.07, 0.44, 0x3a2716, x + dx, (BENCH_TOP - 0.07) / 2, BENCH_Z);
+      wood.box(0.06, 0.5, 0.05, 0x3a2716, x + dx, BENCH_TOP + 0.2, BENCH_Z - 0.3);
+    });
   });
   // Trophy table stage left
   const tx = -6.4;
@@ -1360,7 +1372,7 @@ export function buildSalle({ glow, high }) {
   const candleMesh = candleB.build(new THREE.MeshBasicMaterial({ vertexColors: true }));
   g.add(candleMesh);
   const crystalMesh = crystal.build(new THREE.MeshStandardMaterial({
-    vertexColors: true, roughness: 0.05, metalness: 1, envMapIntensity: 2.2
+    vertexColors: true, roughness: 0.16, metalness: 1, envMapIntensity: 1.8
   }));
   g.add(crystalMesh);
   const flameGeo = new THREE.BufferGeometry();
@@ -1381,9 +1393,12 @@ export function buildSalle({ glow, high }) {
     g.add(halo);
   });
   // The pool each chandelier throws on the floor
-  const poolGeo = mergeGeometries(chX.map((x) => new THREE.PlaneGeometry(7, 7).rotateX(-Math.PI / 2).translate(x, 0.04, chZ + 0.6)));
+  // It lies over the floor AND the piste (3.5 cm up): a centimetre above
+  // the piste plus a depth offset, so it never shimmers against either
+  const poolGeo = mergeGeometries(chX.map((x) => new THREE.PlaneGeometry(7, 7).rotateX(-Math.PI / 2).translate(x, 0.045, chZ + 0.6)));
   const pools = new THREE.Mesh(poolGeo, new THREE.MeshBasicMaterial({
-    map: glow, color: 0xffa860, transparent: true, opacity: 0.11, depthWrite: false, blending: THREE.AdditiveBlending
+    map: glow, color: 0xffa860, transparent: true, opacity: 0.11, depthWrite: false, blending: THREE.AdditiveBlending,
+    polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4
   }));
   pools.renderOrder = 4;
   g.add(pools);
@@ -1392,9 +1407,11 @@ export function buildSalle({ glow, high }) {
   ['SFK', '2023'].forEach((txt, i) => {
     const b = new THREE.Mesh(
       new THREE.PlaneGeometry(1.1, 2.2),
-      new THREE.MeshStandardMaterial({ map: keep(bannerTexture(txt)), roughness: 0.9 })
+      new THREE.MeshStandardMaterial({
+        map: keep(bannerTexture(txt)), roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2
+      })
     );
-    b.position.set(PILASTERS[i ? 3 : 0], 6.0, WALL_Z + 0.22);
+    b.position.set(PILASTERS[i ? 3 : 0], 6.0, WALL_Z + 0.235);
     g.add(b);
   });
 
@@ -1430,17 +1447,11 @@ export function buildSalle({ glow, high }) {
   g.add(motes.points);
 
   /* ---- People and the apparatus ---- */
-  const seats = [];
-  [-5.1, 5.1].forEach((bx) => {
-    for (let i = 0; i < 6; i++) {
-      const x = bx - 2 + i * 0.8;
-      seats.push([x, -4.62, Math.atan2(-x * 0.35, 4)]);
-    }
-  });
-  const crowd = new Crowd(seats);
+  const crowd = new Spectators(high);
+  crowd.setNames(crowdNames);
   g.add(crowd.group);
 
-  const referee = new Referee();
+  const referee = new Referee(high);
   referee.group.position.set(0, 0, -2.7);
   g.add(referee.group);
 
@@ -1456,11 +1467,15 @@ export function buildSalle({ glow, high }) {
     score,
     trophy,
     trophyPos: new THREE.Vector3(tx, 1.4, tz),
-    update(t, dt) {
-      shafts.mat.uniforms.uTime.value = t;
-      motes.mat.uniforms.uTime.value = t;
-      crowd.update(t, dt);
-      referee.update(dt);
+    /** `focus`: where the action is (the blades), for heads to follow. */
+    update(t, dt, focus) {
+      // Wrapped clocks: the shaft's two noise scrolls (0.012 and 0.02 per
+      // second) both repeat after 250 s, so the wrap is seamless; big time
+      // uniforms lose precision on GPUs that compute in half or low floats
+      shafts.mat.uniforms.uTime.value = t % 250;
+      motes.mat.uniforms.uTime.value = t % 600;
+      crowd.update(t, dt, focus);
+      referee.update(dt, focus);
       score.update(t, dt);
       // Candles breathe; the halo follows
       const f = 1 + Math.sin(t * 9.1) * 0.04 + Math.sin(t * 23.7) * 0.03;
@@ -1472,6 +1487,11 @@ export function buildSalle({ glow, high }) {
     },
     setMoteScale(px) {
       motes.mat.uniforms.uScale.value = px;
+    },
+    /** Light shafts and dust on/off (the graphics watchdog's last step). */
+    setVolumes(on) {
+      shafts.mesh.visible = on;
+      motes.points.visible = on;
     },
     shaftMat: shafts.mat,
     dispose() {

@@ -24,14 +24,17 @@
  */
 
 import * as THREE from 'three';
+import { guardRenderer, RenderWatchdog, gfxNotice, precompile } from '../shared/gfx.js';
 import { Sfx } from './audio.js';
 import { SPECIES, JUNK, fishAssets, Shoal, spawnJunk, disposeAssets, speciesSvg } from './species.js';
 import {
   BOTTOM, causticTexture, noiseTexture, particleAtlas, buildSky, buildShore, buildWater, buildVolume,
-  makeEnvironment, buildBoat, buildBasin, buildKelp, buildSeabed, buildShafts, buildLilies,
+  makeEnvironment, buildBasin, buildKelp, buildSeabed, buildShafts, buildLilies,
   buildLure, buildLine, waveHeight, WATER_FOG
 } from './world.js';
-import { Pool, CELL, buildSnow, buildRipples, pointScale } from './fx.js';
+import { buildBoat, BARREL, WATERLINE } from './boat.js';
+import { createAngler } from './angler.js';
+import { Pool, CELL, buildSnow, buildRipples, pointScale, pointCap } from './fx.js';
 import { buildHud, replay, renderBook } from './hud.js';
 import { loadProgress, saveProgress, logCatch, weighFish, fmtKg, pickMission, MISSION_BONUS } from './progress.js';
 
@@ -47,7 +50,23 @@ const CASTS_PER_GAME = 3;
  * cut. A tap skips the wait.
  */
 const BETWEEN_HOLD = 2.3; // round card on screen, seconds
-const CAST_OUT = 0.62;    // lure arcing from the rod tip back to the water
+const WIND_UP = 0.55;     // the last part of it: he reaches back for the throw
+const CAST_OUT = 0.68;    // lure arcing from the rod tip back to the water
+
+/**
+ * The eka lies off to the left of where the lure goes in (x = 0), so the
+ * throw carries the lure from behind his shoulder out over the bow — and
+ * the line never runs down through the hull.
+ */
+const BOAT_X = -4.6;
+
+/**
+ * The game's own clock wraps once an hour. Every time uniform (waves, swim,
+ * caustics, snow) is fed from it, so none of them ever grows to the size
+ * where float precision on a GPU turns smooth motion into steps — which
+ * performance.now() alone would, on a tab left open for days.
+ */
+const CLOCK_WRAP = 3600;
 
 /**
  * The water by depth, as three gradients: the colour looking level (also
@@ -118,10 +137,11 @@ function framing(aspect) {
     dist: lerp(11.5, 13.8, w),
     follow: lerp(0.62, 0.28, w),
     look: lerp(0.88, 0.4, w),
-    // Start/end screens: on a wide screen the panel sits left and the boat
-    // right; in portrait the panel docks low and the boat and sun sit above
-    idleCam: wide ? [-6.6, 3.4, 14.8] : [-3.2, 3.4, 13.5],
-    idleLook: wide ? [-3.8, 2.3, 0] : [0.4, -3.4, 0]
+    // Start/end screens, relative to the boat: on a wide screen the panel
+    // sits left and the boat right; in portrait the panel docks low and the
+    // boat and sun sit above
+    idleCam: wide ? [-7.0, 3.4, 14.8] : [-3.6, 3.4, 13.5],
+    idleLook: wide ? [-4.2, 2.3, 0] : [0, -3.4, 0]
   };
 }
 
@@ -149,21 +169,31 @@ export async function createFishing(container) {
   /* ---- Renderer: ACES filmic tone mapping does the heavy lifting on the
      look. No post-processing — a phone keeps its frame rate instead. ---- */
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-  const maxRatio = Math.min(window.devicePixelRatio || 1, LITE ? 1.75 : 2);
-  let ratio = maxRatio;
-  renderer.setPixelRatio(ratio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.12;
   canvasHost.appendChild(renderer.domElement);
+  // Real GPUs are stricter than the test machine's (see shared/gfx.js):
+  // shader errors and a lost context get a notice, ?gfx=safe drops the
+  // heavy water effects from the start
+  const gfx = guardRenderer(renderer, container);
+  const maxRatio = Math.min(window.devicePixelRatio || 1, LITE || gfx.safe ? 1.5 : 2);
+  let ratio = maxRatio;
+  renderer.setPixelRatio(ratio);
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(0x1f8f96, 0.02);
   scene.background = new THREE.Color(0x1f8f96);
-  const envRT = makeEnvironment(renderer);
-  scene.environment = envRT.texture;
+  // The pre-filtered environment is rendered into half-float targets; a GPU
+  // that cannot render to those would hand back black. Without it the
+  // hemisphere light carries the fish a little harder instead.
+  const envRT = gfx.floatRT ? makeEnvironment(renderer) : null;
+  scene.environment = envRT ? envRT.texture : null;
+  const envBoost = envRT ? 0 : 0.35;
 
-  const camera = new THREE.PerspectiveCamera(56, 1, 0.1, 900);
+  // Near plane at 0.4 m: nothing ever comes closer than ~6 m, and every
+  // step out buys depth precision (some GPUs only give 16 bits)
+  const camera = new THREE.PerspectiveCamera(56, 1, 0.4, 900);
   camera.position.set(-3.2, 3.0, 13.5);
 
   const hemi = new THREE.HemisphereLight(0xfff0d2, 0x0a2434, 1.15);
@@ -176,6 +206,11 @@ export async function createFishing(container) {
   const caustics = causticTexture();
   const noise = noiseTexture();
   const atlas = particleAtlas();
+  // Both are sampled at grazing angles across a lake that reaches the
+  // horizon: anisotropic filtering keeps the far ripples from shimmering
+  const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  caustics.anisotropy = aniso;
+  noise.anisotropy = aniso;
   const timeU = { value: 0 };
 
   const sky = buildSky(noise);
@@ -190,9 +225,10 @@ export async function createFishing(container) {
   scene.add(lilies);
 
   const boat = buildBoat();
-  boat.position.set(0.4, -0.08, 0);
+  boat.position.set(BOAT_X, -WATERLINE, 0);
   scene.add(boat);
-  scene.add(boat.userData.foam);
+  scene.add(boat.userData.foam, boat.userData.bobber);
+  const angler = createAngler(boat);
 
   const basin = buildBasin();
   scene.add(basin);
@@ -210,12 +246,57 @@ export async function createFishing(container) {
 
   /* ---- Particles ---- */
   const scaleU = { value: 600 };
-  const glow = new Pool(LITE ? 170 : 260, atlas, THREE.AdditiveBlending, scaleU);
-  const bubbles = new Pool(LITE ? 110 : 170, atlas, THREE.AdditiveBlending, scaleU);
-  const spray = new Pool(LITE ? 150 : 220, atlas, THREE.NormalBlending, scaleU);
-  const snow = buildSnow(atlas, scaleU, LITE ? 280 : 520);
-  const ripples = buildRipples();
+  const capU = { value: pointCap(renderer, ratio) };
+  const glow = new Pool(LITE ? 170 : 260, atlas, THREE.AdditiveBlending, scaleU, capU);
+  const bubbles = new Pool(LITE ? 110 : 170, atlas, THREE.AdditiveBlending, scaleU, capU);
+  const spray = new Pool(LITE ? 150 : 220, atlas, THREE.NormalBlending, scaleU, capU);
+  bubbles.ceiling = -0.05; // they pop at the surface instead of rising on into the air
+  const snow = buildSnow(atlas, scaleU, capU, LITE ? 280 : 520);
+  const ripples = buildRipples(timeU);
   scene.add(glow.points, bubbles.points, spray.points, snow.points, ripples.mesh);
+
+  /* ---- Graphics fallbacks -------------------------------------------
+     The lake is a handful of custom shaders (surface, sky, the water
+     volume and its rays, snow) plus patches on the stock materials (fog by
+     view direction, the fish's stroke, kelp sway, the rod's bend). If a
+     GPU turns the picture black anyway, the watchdog steps down: first the
+     custom backdrop goes (a plain water surface; the fog colour carries the
+     look), then every patch and the environment map — stock three.js all
+     the way. ?gfx=safe starts at the first step. */
+  let heavy = true;
+  const plainWater = new THREE.MeshLambertMaterial({ color: 0x2e6f7a, transparent: true, opacity: 0.86, side: THREE.DoubleSide });
+  const { material: fancyWater } = water.mesh;
+  function dropHeavyEffects() {
+    heavy = false;
+    water.mesh.material = plainWater;
+    [sky.dome, volume.mesh, shafts.mesh, snow.points].forEach((o) => {
+      o.visible = false;
+    });
+  }
+  function dropShaderPatches() {
+    scene.environment = null;
+    scene.traverse((o) => {
+      if (!o.material) return;
+      [].concat(o.material).forEach((m) => {
+        if (m.onBeforeCompile === THREE.Material.prototype.onBeforeCompile) return;
+        m.onBeforeCompile = THREE.Material.prototype.onBeforeCompile;
+        m.customProgramCacheKey = THREE.Material.prototype.customProgramCacheKey;
+        m.needsUpdate = true;
+      });
+    });
+  }
+  if (gfx.safe) dropHeavyEffects();
+  // The start screen is bright sky and water: a frame that is under 12 %
+  // lit is broken, not moody (the darkest water, at 60 m, still clears it)
+  const watchdog = new RenderWatchdog(
+    renderer,
+    gfx.safe ? [dropShaderPatches] : [dropHeavyEffects, dropShaderPatches],
+    {
+      minLitFraction: 0.12,
+      darkThreshold: 10,
+      onStep: () => gfxNotice(container, 'Grafiken förenklades för att fungera på den här enheten.')
+    }
+  );
 
   /* ---- Shoal ---------------------------------------------------------- */
 
@@ -399,6 +480,7 @@ export async function createFishing(container) {
     steered: false,
     cheer: 0,
     clock: 0,
+    tossT: 0,
     timers: []
   };
 
@@ -417,6 +499,10 @@ export async function createFishing(container) {
      camera directly and runs before the loop section. */
   const camGoal = new THREE.Vector3();
   const lookGoal = new THREE.Vector3();
+  // …and the angler's: where he looks, where the float is, the tunna's rim
+  const anglerLook = new THREE.Vector3();
+  const bobberPos = new THREE.Vector3();
+  const barrelPos = new THREE.Vector3();
   const lookAt = new THREE.Vector3(0, 1.5, 0);
   let frame = framing(1);
 
@@ -609,6 +695,7 @@ export async function createFishing(container) {
       });
     }
     if (fish) catchOne(fish, true);
+    angler.trigger(reason === 'junk' ? 'junk' : reason === 'bottom' ? 'big' : 'strike');
     if (reason === 'bottom') {
       const bonus = 1500 * state.mult;
       addScore(bonus, lure.position, `BOTTEN +${fmt(bonus)}`, 'gold');
@@ -664,6 +751,7 @@ export async function createFishing(container) {
     state.session[f.sp.id] = s;
     const logged = logCatch(progress, f.sp, f.kg);
 
+    if (f.sp.rare || logged.first) angler.trigger('big');
     if (f.sp.rare) {
       sfx.legend();
       announce('PEKKAGÄDDAN!', `${fmtKg(f.kg)} — krönt och gyllene`, 'gold');
@@ -691,6 +779,7 @@ export async function createFishing(container) {
     state.tunnaN = 0;
     state.slow = 1;
     state.slowOn = false;
+    state.tossT = 0;
     sfx.toss();
     sfx.splash(0.9);
     const bx = boat.position.x;
@@ -709,6 +798,7 @@ export async function createFishing(container) {
     kick(0.9, 0, 4);
     const n = state.caught.length;
     state.tossLeft = n;
+    angler.trigger(n ? 'erupt' : 'miss');
     if (n === 0) {
       setPhaseLabel('Tomt nät den här gången');
       later(endCast, 1100);
@@ -764,6 +854,13 @@ export async function createFishing(container) {
     hud.round.hidden = true;
   }
 
+  /** A tap skips the card — but not the wind-up: the throw is the payoff. */
+  function skipCard() {
+    if (state.phase !== 'between' || state.castOut) return;
+    state.betweenT = Math.max(state.betweenT, BETWEEN_HOLD - WIND_UP);
+    hideRoundCard();
+  }
+
   function endCast() {
     if (state.phase !== 'toss') return;
     setPhaseLabel('');
@@ -805,6 +902,7 @@ export async function createFishing(container) {
     hud.hi.textContent = fmt(progress.high);
     sfx.fanfare();
     state.cheer = isHigh || state.stars === 3 ? 3 : 0;
+    if (isHigh) angler.trigger('big');
     hud.kicker.textContent = `Kvällens fiske · ${state.stars} av 3 uppdrag`;
     hud.title.textContent = isHigh ? 'Nytt rekord!' : 'Fisket är slut';
     hud.text.textContent = isHigh
@@ -884,7 +982,7 @@ export async function createFishing(container) {
       return;
     }
     if (state.phase === 'between' && !state.castOut) {
-      state.betweenT = Math.max(state.betweenT, BETWEEN_HOLD); // tap to skip the card
+      skipCard();
       return;
     }
     dragging = true;
@@ -923,7 +1021,7 @@ export async function createFishing(container) {
         startGame();
       } else if (state.phase === 'between' && !state.castOut) {
         e.preventDefault();
-        state.betweenT = Math.max(state.betweenT, BETWEEN_HOLD);
+        skipCard();
       }
     }
   }
@@ -975,10 +1073,11 @@ export async function createFishing(container) {
     }
     // Arc it into the tunna: launch at 7.5 m/s up and solve the flight time
     // to the barrel's rim, so the horizontal speed lands it dead centre
-    // (y = y0 + 7.5t − 10t², rim at 1.3 m)
-    const T = (7.5 + Math.sqrt(56.25 + 40 * Math.max(0, pos.y - 1.3))) / 20;
-    bestF.air.vx = (boat.position.x + 1.75 - pos.x) / T;
-    bestF.air.vz = -pos.z / T;
+    // (y = y0 + 7.5t − 10t²)
+    const rim = barrelTop(barrelPos).y;
+    const T = (7.5 + Math.sqrt(56.25 + 40 * Math.max(0, pos.y - rim))) / 20;
+    bestF.air.vx = (barrelPos.x - pos.x) / T;
+    bestF.air.vz = (barrelPos.z - pos.z) / T;
     bestF.air.vy = 7.5;
     bestF.air.spin *= 2.2;
     checkMission();
@@ -991,6 +1090,7 @@ export async function createFishing(container) {
     const all = state.caught.length > 0 && state.caught.every((f) => f.air && f.air.done === 'hit');
     if (all) state.rec.perfect = true;
     if (all && state.caught.length > 1) {
+      angler.trigger('perfect');
       const bonus = Math.round(2000 * state.mult);
       later(() => {
         announce('PERFEKT KAST!', `+${fmt(bonus)}`, 'gold');
@@ -1055,6 +1155,7 @@ export async function createFishing(container) {
     camera.fov = baseFov + fovPunch;
     camera.updateProjectionMatrix();
     updatePointScale();
+    capU.value = pointCap(renderer, ratio);
     hudHost.classList.toggle('fi-wide', camera.aspect > 1.15);
   }
 
@@ -1067,6 +1168,10 @@ export async function createFishing(container) {
   let raf = 0;
   let last = performance.now();
   let running = true;
+  let clockT = 0;          // the game's own time, see CLOCK_WRAP
+  let eyeUnder = false;    // last frame: was the camera under the surface?
+  let anglerAct = 'rest';  // for the test hook
+  let lureGlow = 0.7;
   const tmpColor = new THREE.Color();
   const tmpColor2 = new THREE.Color();
   const rodTip = new THREE.Vector3();
@@ -1178,21 +1283,29 @@ export async function createFishing(container) {
     }
   }
 
-  function updateLine(dt, lx, ly) {
+  /**
+   * The line from the rod tip to (lx, ly, lz). Each node relaxes toward its
+   * neighbours' midpoint, so the line lags and swings; `sag` pulls every
+   * node down a little, which settles into a gentle catenary-like belly.
+   */
+  function updateLine(dt, lx, ly, lz, sag = 0) {
     const { nodes, segments } = line.userData;
-    boat.userData.rod.getWorldPosition(rodTip);
-    rodTip.x += 2.6;
-    rodTip.y += 1.1;
     nodes[0].copy(rodTip);
-    nodes[segments].set(lx, ly + 0.22, 0);
+    nodes[segments].set(lx, ly, lz);
+    if (!line.userData.live) {
+      // Just shown: start straight instead of whipping in from old positions
+      for (let i = 1; i < segments; i++) nodes[i].lerpVectors(nodes[0], nodes[segments], i / segments);
+      line.userData.live = true;
+    }
+    const k = Math.min(1, dt * 26);
     for (let pass = 0; pass < 2; pass++) {
       for (let i = 1; i < segments; i++) {
         const prev = nodes[i - 1];
         const next = nodes[i + 1];
         const n = nodes[i];
-        n.x += ((prev.x + next.x) * 0.5 - n.x) * Math.min(1, dt * 26);
-        n.y += ((prev.y + next.y) * 0.5 - n.y) * Math.min(1, dt * 26);
-        n.z += ((prev.z + next.z) * 0.5 - n.z) * Math.min(1, dt * 26);
+        n.x += ((prev.x + next.x) * 0.5 - n.x) * k;
+        n.y += ((prev.y + next.y) * 0.5 - sag - n.y) * k;
+        n.z += ((prev.z + next.z) * 0.5 - n.z) * k;
       }
     }
     const arr = line.geometry.attributes.position.array;
@@ -1228,11 +1341,20 @@ export async function createFishing(container) {
     later(() => hud.zone.classList.remove('show'), 2200);
   }
 
+  let camOverride = null; // test hook: { pos, look } pins the camera
+
   function updateCamera(dt, rdt) {
+    if (camOverride) {
+      camera.position.fromArray(camOverride.pos);
+      camera.lookAt(lookAt.fromArray(camOverride.look));
+      return;
+    }
     const surfaceAbove = state.phase === 'idle' || state.phase === 'over';
     if (surfaceAbove) {
       camGoal.fromArray(frame.idleCam);
       lookGoal.fromArray(frame.idleLook);
+      camGoal.x += boat.position.x;
+      lookGoal.x += boat.position.x;
     } else if (state.phase === 'toss') {
       camGoal.set(boat.position.x, 3.6, 15.5);
       lookGoal.set(boat.position.x, 2.7, 0.4);
@@ -1306,13 +1428,16 @@ export async function createFishing(container) {
     }
     scene.background.copy(scene.fog.color);
 
-    sky.dome.visible = !under;
+    eyeUnder = under;
+    sky.dome.visible = !under && heavy;
     shore.visible = !under;
-    volume.mesh.visible = under;
+    volume.mesh.visible = under && heavy;
     basin.visible = under;
     kelp.visible = under;
     seabed.visible = under && eyeD > 30;
-    snow.points.visible = under;
+    snow.points.visible = under && heavy;
+    // Nobody can see the angler from down there (the surface hides him)
+    angler.person.root.visible = !under;
 
     // The volume is a direction lookup: keep it centred on the eye, or its
     // gradient drifts off the fog's as the camera sinks
@@ -1326,7 +1451,7 @@ export async function createFishing(container) {
     water.uniforms.uDeepTint.value.copy(under ? WATER_FOG.uFogDown.value : tmpColor.set(0x0b4658));
     water.uniforms.uCausticStrength.value = 1 - k * 0.55;
 
-    hemi.intensity = 1.15 - ke * 0.78;
+    hemi.intensity = 1.15 + envBoost - ke * 0.78;
     sun.intensity = 1.7 - ke * 1.45;
     if (under) {
       hemi.color.copy(gradient(UP_STOPS, eyeD, tmpColor)).lerp(tmpColor2.set(0xffffff), 0.5);
@@ -1337,7 +1462,7 @@ export async function createFishing(container) {
     }
     scene.environmentIntensity = under ? 0.9 - ke * 0.6 : 1;
     renderer.toneMappingExposure = 1.12 + ke * 0.12;
-    lure.userData.glow.intensity = 0.7 + k * 2.4;
+    lureGlow = 0.7 + k * 2.4;
 
     // The shafts follow the descent, so there is always something raking
     // through the water instead of an empty void below 20 m — they just
@@ -1346,7 +1471,7 @@ export async function createFishing(container) {
     shafts.mesh.position.y = -eyeD * 0.82 + 16;
     shafts.uniforms.uStrength.value = Math.max(0, 0.34 - ke * 0.26);
     gradient(RAY_STOPS, eyeD, shafts.uniforms.uColor.value);
-    shafts.mesh.visible = under && shafts.uniforms.uStrength.value > 0.01;
+    shafts.mesh.visible = heavy && under && shafts.uniforms.uStrength.value > 0.01;
 
     // Marine snow: green-gold in the lit shallows, cold blue in the deep
     snow.uniforms.uCam.value.copy(camera.position);
@@ -1356,13 +1481,13 @@ export async function createFishing(container) {
 
   /** The air phase: physics, glints, the tunna, and slow-mo for the last fish. */
   function updateToss(dt) {
-    const bx = boat.position.x;
+    const top = barrelTop(barrelPos);
     let pending = null;
     let pendingN = 0;
     state.caught.forEach((f) => {
       const { air } = f;
       if (!air || air.done === true) return;
-      if (air.done === 'hit' && f.mesh.position.y < 1.15 && Math.abs(f.mesh.position.x - (bx + 1.75)) < 1.1) {
+      if (air.done === 'hit' && f.mesh.position.y < top.y - 0.15 && Math.abs(f.mesh.position.x - top.x) < 1.1) {
         setVisible(f, false);
         air.done = true;
         state.tunnaN++;
@@ -1370,7 +1495,8 @@ export async function createFishing(container) {
         replay(hud.tunna, 'bump');
         sfx.tunna(state.tunnaN);
         boat.userData.barrel.userData.squash = 1;
-        spray.burst(bx + 1.75, 1.6, 0, 12, 3, { cell: CELL.DROP, color: 0xdff2ff, grav: -14, size: 0.1, life: 0.6, lift: 0.8 });
+        angler.trigger('tunna');
+        spray.burst(top.x, top.y + 0.2, top.z, 12, 3, { cell: CELL.DROP, color: 0xdff2ff, grav: -14, size: 0.1, life: 0.6, lift: 0.8 });
         return;
       }
       if (!air.done) {
@@ -1414,6 +1540,7 @@ export async function createFishing(container) {
         sfx.miss();
         sfx.splash(0.5);
         popScore('PLASK', f.mesh.position.clone().setY(0.4), 'miss');
+        angler.trigger('miss');
         spray.burst(air.x, 0.1, air.z, 22, 4, { cell: CELL.DROP, color: 0xe8f6ff, grav: -16, size: 0.13, life: 0.9, lift: 1.2, drag: 0.3 });
         ripples.spawn(air.x, air.z, 2.4, 0.7, 1.3);
         if (state.tossLeft <= 0) finishToss();
@@ -1432,32 +1559,136 @@ export async function createFishing(container) {
     }
   }
 
-  function updateBoat(dt, t) {
-    boat.position.y = -0.08 + Math.sin(t * 1.05) * 0.12;
-    boat.rotation.z = Math.sin(t * 0.9) * 0.035;
-    boat.rotation.x = Math.sin(t * 0.7 + 1.1) * 0.02;
-    boat.userData.foam.position.set(boat.position.x, 0.05, 0);
-    boat.userData.foam.material.opacity = 0.06 + Math.sin(t * 2.2) * 0.02;
+  /* What the angler does, as a function of the game. Reused every frame. */
+  const anglerCtx = { action: 'rest', crank: 0, load: 0, look: null, expr: null, idle: false, camera: null };
+  const FACE = {
+    easy: { smile: 0.35 },
+    happy: { smile: 0.7 },
+    proud: { grin: 0.6 },
+    keen: { focus: 0.55 },
+    hard: { focus: 1 },
+    cheer: { grin: 0.85, shout: 0.35 }
+  };
+  /** The tunna's rim, in the world (the boat rocks, so it moves). */
+  function barrelTop(out) {
+    boat.userData.barrel.getWorldPosition(out);
+    out.y += BARREL.h / 2;
+    return out;
+  }
 
-    // The rod loads up while the reel is turning, and between casts it winds
-    // all the way back before whipping forward on the throw.
-    const load = state.phase === 'reel' ? 0.55
-      : state.phase === 'drop' ? 0.2
-        : state.phase === 'between' ? (state.castOut ? 0.85 : -0.5)
-          : 0;
-    const { rod, arms, barrel } = boat.userData;
-    rod.rotation.z += (0.5 - load - rod.rotation.z) * Math.min(1, dt * 5);
+  function anglerContext() {
+    const c = anglerCtx;
+    const p = state.phase;
+    c.idle = false;
+    c.crank = 0;
+    c.load = 0.08;
+    c.camera = camera.position;
+    c.look = anglerLook;
+    c.expr = FACE.easy;
     if (state.cheer > 0) {
-      // A perfect cast or a record: the fisherman pumps the rod in the air
-      state.cheer = Math.max(0, state.cheer - dt);
-      arms.rotation.z = 0.35 + Math.abs(Math.sin(t * 7)) * 0.35;
+      // A perfect cast or a record: he pumps the rod in the air
+      c.action = 'cheer';
+      c.look = camera.position;
+      c.expr = FACE.cheer;
+    } else if (p === 'drop' || p === 'reel') {
+      c.action = p;
+      anglerLook.set(state.lureX, 0, 0);
+      if (p === 'reel') {
+        c.crank = 2.6;
+        c.load = Math.min(0.95, 0.5 + state.caught.length * 0.07);
+        c.expr = FACE.hard;
+      } else {
+        c.load = 0.18;
+        c.expr = FACE.keen;
+      }
+    } else if (p === 'toss') {
+      // The catch erupts: heave the rod up, then follow the fish in the air
+      const heave = state.tossT < 0.45;
+      c.action = heave ? 'heave' : 'watch';
+      c.load = heave ? 0.75 : 0.1;
+      const f = state.caught.find((x) => x.air && !x.air.done);
+      if (f) anglerLook.copy(f.mesh.position);
+      else barrelTop(anglerLook);
+      c.expr = FACE.happy;
+    } else if (p === 'between') {
+      anglerLook.set(0, 0.2, 0);
+      if (state.castOut) {
+        c.action = 'throw';
+        anglerLook.set(state.castOut.x, state.castOut.y, state.castOut.z);
+        c.expr = FACE.keen;
+      } else if (state.betweenT > BETWEEN_HOLD - WIND_UP) {
+        c.action = 'windup';
+        c.expr = FACE.keen;
+      } else {
+        // Reel in the slack while the card is up, with a look to the camera
+        c.action = 'rest';
+        c.crank = state.betweenT < BETWEEN_HOLD - WIND_UP - 0.35 ? 1.6 : 0;
+        if (state.betweenT < 0.9) c.look = camera.position;
+        c.expr = FACE.happy;
+      }
     } else {
-      arms.rotation.z = state.phase === 'reel' ? Math.sin(t * 9) * 0.06 : arms.rotation.z * (1 - Math.min(1, dt * 6));
+      // Waiting in the menu, or done for the evening: watch the float
+      c.action = 'rest';
+      c.idle = true;
+      c.look = bobberPos;
+      c.expr = p === 'over' && progress.high === state.score && state.score > 0 ? FACE.proud : FACE.easy;
     }
+    return c;
+  }
+
+  function updateBoat(dt, t) {
+    // Ride the swell: follow the lake's own waves at the boat, a little
+    // damped, and tilt with their slope (the dry mask keeps the lake out)
+    const bx = boat.position.x;
+    const h = waveHeight(bx, 0, t);
+    const slopeX = (waveHeight(bx + 1.2, 0, t) - waveHeight(bx - 1.2, 0, t)) / 2.4;
+    const slopeZ = (waveHeight(bx, 0.8, t) - waveHeight(bx, -0.8, t)) / 1.6;
+    boat.position.y = -WATERLINE + h * 0.8;
+    boat.rotation.z = Math.atan(slopeX) * 0.6;
+    boat.rotation.x = -Math.atan(slopeZ) * 0.6;
+    const { foam, barrel, bobber } = boat.userData;
+    foam.position.set(bx, h + 0.05, 0);
+    foam.material.opacity = 0.06 + Math.sin(t * 2.2) * 0.02;
     const sq = barrel.userData.squash || 0;
     if (sq > 0) barrel.userData.squash = Math.max(0, sq - dt * 3.5);
     const wob = Math.sin((1 - sq) * 14) * sq;
     barrel.scale.set(1 + wob * 0.12, 1 - wob * 0.16, 1 + wob * 0.12);
+
+    // The float, out past the bow, riding the same waves
+    const fx = bx + 3.55;
+    const fz = 0.55;
+    bobberPos.set(fx, waveHeight(fx, fz, t) - 0.01, fz);
+    bobber.position.copy(bobberPos);
+    bobber.rotation.set(Math.sin(t * 1.7) * 0.12, 0, Math.sin(t * 1.3 + 1) * 0.14);
+
+    if (state.cheer > 0) state.cheer = Math.max(0, state.cheer - dt);
+    // Out of sight under the surface: no need to pose him
+    if (!eyeUnder) {
+      angler.update(dt, t, anglerContext());
+      anglerAct = anglerCtx.action;
+    }
+  }
+
+  /** The lure on a short line under the tip while the card is up: a pendulum. */
+  const dangle = new THREE.Vector3();
+  const danglePrev = new THREE.Vector3();
+  const dangleTmp = new THREE.Vector3();
+  let dangling = false;
+  function updateDangle(dt) {
+    if (!dangling) {
+      dangle.copy(rodTip).y -= 0.5;
+      danglePrev.copy(dangle);
+      dangling = true;
+    }
+    // Verlet: carry the velocity, add gravity, then keep it on 0.5 m of line
+    dangleTmp.copy(dangle);
+    dangle.x += (dangle.x - danglePrev.x) * 0.985;
+    dangle.y += (dangle.y - danglePrev.y) * 0.985 - 9.8 * dt * dt;
+    dangle.z += (dangle.z - danglePrev.z) * 0.985;
+    danglePrev.copy(dangleTmp);
+    const d = dangleTmp.subVectors(dangle, rodTip);
+    const len = d.length();
+    if (len > 0.5) dangle.copy(rodTip).addScaledVector(d, 0.5 / len);
   }
 
   /* Adaptive resolution: if frames keep running long, step the pixel
@@ -1488,7 +1719,8 @@ export async function createFishing(container) {
     if (!running) return;
     adapt(rawMs);
     const rdt = dt; // real time, for the camera and UI
-    const t = now / 1000;
+    clockT = (clockT + rdt) % CLOCK_WRAP;
+    const t = clockT;
     state.clock += dt;
 
     if (hitStop > 0) {
@@ -1563,6 +1795,7 @@ export async function createFishing(container) {
         startToss();
       }
     } else if (state.phase === 'toss') {
+      state.tossT += dt;
       updateToss(dt);
     } else if (state.phase === 'between') {
       state.betweenT += dt;
@@ -1570,16 +1803,17 @@ export async function createFishing(container) {
         if (!state.castOut) {
           hideRoundCard();
           sfx.toss();
-          state.castOut = { x: 0, y: 0.2 };
+          // The lure leaves from where it swung to behind his shoulder
+          const p0 = dangling ? dangle : rodTip;
+          state.castOut = { x: p0.x, y: p0.y, z: p0.z, x0: p0.x, y0: p0.y, z0: p0.z };
         }
+        const c = state.castOut;
         const k = Math.min(1, (state.betweenT - BETWEEN_HOLD) / CAST_OUT);
-        boat.userData.rod.getWorldPosition(rodTip);
-        rodTip.x += 2.6;
-        rodTip.y += 1.1;
         // Constant horizontal speed with a sine arc on top — the shape a
-        // thrown lure actually traces, and it reads even at 0.6 s.
-        state.castOut.x = rodTip.x * (1 - k);
-        state.castOut.y = rodTip.y + (0.2 - rodTip.y) * k + Math.sin(Math.PI * k) * 2.1;
+        // thrown lure actually traces — out over the bow to where it goes in
+        c.x = c.x0 * (1 - k);
+        c.y = c.y0 + (0.2 - c.y0) * k + Math.sin(Math.PI * k) * 2.3;
+        c.z = c.z0 * (1 - k);
         if (k >= 1) {
           state.castOut = null;
           startCast();
@@ -1594,15 +1828,37 @@ export async function createFishing(container) {
       }
     }
 
-    /* Lure, line and the string of fish following it */
-    const lureX = state.castOut ? state.castOut.x : state.lureX;
-    const lureY = state.castOut ? state.castOut.y : -state.depth;
-    lure.position.set(lureX, lureY, 0);
-    lure.rotation.z = state.castOut ? t * 9 : (state.targetX - state.lureX) * -0.06;
+    /* Lure, line and the string of fish following it. Between casts the
+       lure hangs under the rod tip; waiting in the menu, a float bobs out
+       past the bow on the end of the line. */
+    angler.tip(rodTip);
+    const hanging = state.phase === 'between' && !state.castOut;
+    if (hanging) updateDangle(dt);
+    else dangling = false;
+    let { lureX } = state;
+    let lureY = -state.depth;
+    let lureZ = 0;
+    if (state.castOut) {
+      ({ x: lureX, y: lureY, z: lureZ } = state.castOut);
+    } else if (hanging) {
+      ({ x: lureX, y: lureY, z: lureZ } = dangle);
+      lureY -= 0.22;
+    }
+    lure.position.set(lureX, lureY, lureZ);
+    // Underwater the lure is drawn big enough to steer by; in his hands, on
+    // a short line under the rod tip, it is the size of a real spinner
+    const lureK = hanging || state.castOut ? 0.5 : 1;
+    lure.scale.setScalar(lure.scale.x + (lureK - lure.scale.x) * Math.min(1, dt * 7));
+    lure.rotation.z = state.castOut ? t * 9 : hanging ? (dangle.x - rodTip.x) * 1.2 : (state.targetX - state.lureX) * -0.06;
     lure.userData.spinner.rotation.x = t * 12;
-    lure.visible = state.phase === 'drop' || state.phase === 'reel' || !!state.castOut;
-    line.visible = lure.visible;
-    if (lure.visible) updateLine(dt, lureX, lureY);
+    const lureOn = state.phase === 'drop' || state.phase === 'reel' || !!state.castOut || hanging;
+    const floatOn = (state.phase === 'idle' || state.phase === 'over') && !eyeUnder;
+    lure.userData.show(lureOn, lureGlow);
+    boat.userData.bobber.visible = floatOn;
+    line.visible = lureOn || floatOn;
+    if (!line.visible) line.userData.live = false;
+    else if (lureOn) updateLine(dt, lureX, lureY + 0.22, lureZ);
+    else updateLine(dt, bobberPos.x, bobberPos.y + 0.2, bobberPos.z, 0.004);
 
     if (state.phase === 'reel' || state.phase === 'drop') {
       // The catch hangs off the barb itself, not off the lure's centre: the
@@ -1654,7 +1910,7 @@ export async function createFishing(container) {
     glow.update(dt, t);
     bubbles.update(dt, t);
     spray.update(dt, t);
-    ripples.update(dt, (x, z) => waveHeight(x, z, t));
+    ripples.update(dt);
     shoal.sync();
     updateCamera(dt, rdt);
     updateAtmosphere(t);
@@ -1669,9 +1925,8 @@ export async function createFishing(container) {
     }
     hudHost.style.setProperty('--deep', (Math.max(0, -camera.position.y) / BOTTOM).toFixed(3));
     renderer.render(scene, camera);
+    watchdog.afterFrame();
   }
-
-  raf = requestAnimationFrame(tick);
 
   const onVisibility = () => {
     running = !document.hidden;
@@ -1688,6 +1943,33 @@ export async function createFishing(container) {
   hud.overlay.classList.add('show');
   hudHost.classList.add('fi-menu');
   spawnFishSet();
+  shoal.sync();
+
+  /*
+   * Compile every program now, behind the site's loading card, and without
+   * blocking: on Windows, Chrome and Edge translate WebGL to Direct3D 11,
+   * whose compiler is slow on heavy materials, and one big synchronous
+   * burst can trip the GPU watchdog and leave a black canvas for good.
+   * Everything hidden at the start — the underwater world, the lure, the
+   * angler's heavier variants — is shown for the call, so nothing compiles
+   * mid-dive.
+   */
+  updateAtmosphere(0);
+  const hidden = [];
+  scene.traverse((o) => {
+    if (!o.visible) {
+      hidden.push(o);
+      o.visible = true;
+    }
+  });
+  if (!heavy) [sky.dome, volume.mesh, shafts.mesh, snow.points].forEach((o) => { o.visible = false; });
+  await precompile(renderer, scene, camera);
+  hidden.forEach((o) => {
+    o.visible = false;
+  });
+  updateAtmosphere(0);
+  last = performance.now();
+  raf = requestAnimationFrame(tick);
 
   /* Deterministic hooks for automated tests */
   window.__ppFiske = {
@@ -1730,7 +2012,11 @@ export async function createFishing(container) {
       for (let i = 0; i < 40; i++) updateCamera(0.05, 0.05);
     },
     skipBetween() {
-      if (state.phase === 'between') state.betweenT = Math.max(state.betweenT, BETWEEN_HOLD);
+      skipCard();
+    },
+    /** Pin the camera (world position and look-at point, arrays); null releases. */
+    pinCamera(pos, look) {
+      camOverride = pos ? { pos, look } : null;
     },
     openBook(open = true) {
       setBook(open);
@@ -1748,6 +2034,17 @@ export async function createFishing(container) {
     },
     roundCardVisible() {
       return !hud.round.hidden && hud.round.classList.contains('show');
+    },
+    angler,
+    boat,
+    /** What the angler is doing, and where his rod tip is. */
+    anglerState() {
+      const tip = angler.tip(new THREE.Vector3());
+      return { action: anglerAct, visible: angler.person.root.visible, tip: tip.toArray() };
+    },
+    /** The graphics guard: heavy effects on? which step has the watchdog reached? */
+    gfx() {
+      return { heavy, level: watchdog.level, safe: gfx.safe, floatRT: gfx.floatRT };
     },
     info() {
       return {
@@ -1774,10 +2071,15 @@ export async function createFishing(container) {
     state.timers.forEach(clearTimeout);
     delete window.__ppFiske;
 
+    gfx.dispose();
+    watchdog.dispose();
+    angler.dispose(); // before the traverse below: people share materials
     clearFish();
     shoal.dispose();
     [glow, bubbles, spray].forEach((p) => p.dispose());
     ripples.dispose();
+    plainWater.dispose();
+    fancyWater.dispose();
     scene.traverse((o) => {
       if (o.geometry) o.geometry.dispose();
       if (o.material) {
@@ -1790,7 +2092,7 @@ export async function createFishing(container) {
     caustics.dispose();
     noise.dispose();
     atlas.dispose();
-    envRT.dispose();
+    if (envRT) envRT.dispose();
     renderer.dispose();
     renderer.forceContextLoss?.();
     if (sfx.ctx) sfx.ctx.close();
