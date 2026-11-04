@@ -34,8 +34,8 @@
 .pbf[data-orient='land'] .pbf-vignette {
   background:
     radial-gradient(ellipse 34% 70% at 50% 50%, transparent 70%, rgba(1, 2, 6, 0.35) 100%),
-    linear-gradient(90deg, rgba(2, 3, 9, 0.82), rgba(2, 3, 9, 0.25) 28%, transparent 38%,
-      transparent 62%, rgba(2, 3, 9, 0.25) 72%, rgba(2, 3, 9, 0.82));
+    linear-gradient(90deg, rgba(2, 3, 9, 0.88), rgba(2, 3, 9, 0.5) 24%, transparent 36%,
+      transparent 64%, rgba(2, 3, 9, 0.5) 76%, rgba(2, 3, 9, 0.88));
 }
 
 /* ------------------------------------------------------------ shared bits */

@@ -15,7 +15,7 @@ import { CAB } from './meshes.js';
 
 // Real cabinets put the playfield about 90 cm off the floor: ≈36 units here
 const FLOOR_Y = -36;
-const GAP = 7.5; // between cabinets
+const GAP = 13; // between cabinets: far enough that only their inner edges show
 
 function canvas(w, h) {
   const cv = document.createElement('canvas');
@@ -244,7 +244,7 @@ function buildNeighbour(THREE, mergeGeometries, materials, theme, disposables) {
   const pfTex = playfieldArt(THREE, theme);
   const pf = new THREE.Mesh(
     new THREE.PlaneGeometry(w - 1.2, len - 1.2).rotateX(-Math.PI / 2),
-    new THREE.MeshBasicMaterial({ map: pfTex, color: 0x9a9a9a })
+    new THREE.MeshBasicMaterial({ map: pfTex, color: 0x6c6c6c })
   );
   pf.position.y = 0.02;
   g.add(pf);
@@ -288,7 +288,7 @@ export function buildRoom(THREE, { mergeGeometries, materials }) {
   // ninety units from the camera the fog would otherwise swallow it whole.
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(260, 260).rotateX(-Math.PI / 2),
-    new THREE.MeshBasicMaterial({ map: carpet, color: 0x5d6178, fog: false })
+    new THREE.MeshBasicMaterial({ map: carpet, color: 0x4a4d63, fog: false })
   );
   floor.position.set(0, FLOOR_Y, -40);
   group.add(floor);
@@ -301,7 +301,7 @@ export function buildRoom(THREE, { mergeGeometries, materials }) {
     /** Attract-mode breathing on the neighbours' translites */
     update(t) {
       neighbours.forEach((n, i) => {
-        n.translite.color.setScalar(0.82 + Math.sin(t * 1.3 + i * 2.1) * 0.18);
+        n.translite.color.setScalar(0.6 + Math.sin(t * 1.3 + i * 2.1) * 0.12);
       });
     },
     dispose() {

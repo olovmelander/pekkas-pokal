@@ -425,11 +425,11 @@ export function buildGarden({ lowTier = false } = {}) {
 
     // A bed of summer flowers along the foot of the hedge
     const flowers = [];
-    const cols = [0xd8394d, 0xf2c14e, 0xf4f0e6, 0xb05bb8, 0xe8743b, 0x5b7fd8];
-    for (let i = 0; i < (lowTier ? 110 : 220); i++) {
-      const s = 0.09 + rand() * 0.07;
+    const cols = [0xc8414f, 0xe8b84e, 0xece6d6, 0x9c5aa6, 0xd8743f, 0x6a84c8, 0xc8414f, 0xece6d6];
+    for (let i = 0; i < (lowTier ? 160 : 320); i++) {
+      const s = 0.045 + rand() * 0.04;
       flowers.push({
-        pos: [-13 + rand() * 26, 0.12 + rand() * 0.3, -8.55 + rand() * 0.55],
+        pos: [-13 + rand() * 26, 0.06 + rand() * 0.34, -8.75 + rand() * 0.4],
         scale: [s, s * 0.8, s],
         color: cols[Math.floor(rand() * cols.length)]
       });
@@ -534,7 +534,7 @@ export function buildGarden({ lowTier = false } = {}) {
     };
     birch(-8.6, -8.4, 5);
     birch(9.2, -8.8, 5.4);
-    birch(-5.2, 2.6, 5.6);
+    birch(-7.6, 4.4, 5.6);
     bake(trunks);
     const crownMesh = bake(crowns);
     crownMesh.material = windify(new THREE.MeshLambertMaterial({ vertexColors: true }), wind, {
@@ -631,11 +631,11 @@ export function buildGarden({ lowTier = false } = {}) {
     // Daisies and clover heads in the near lawn
     const heads = [];
     for (let i = 0; i < (lowTier ? 90 : 200); i++) {
-      const s = 0.022 + rand() * 0.018;
+      const s = 0.012 + rand() * 0.01;
       heads.push({
         pos: [-7 + rand() * 14, 0.05 + rand() * 0.06, -8 + rand() * 9.5],
         scale: [s, s * 0.45, s],
-        color: rand() < 0.65 ? 0xf6f4ea : rand() < 0.6 ? 0xf0c840 : 0xc77aa6
+        color: rand() < 0.65 ? 0xe4e2d6 : rand() < 0.6 ? 0xe0b83c : 0xb87a9c
       });
     }
     const headMesh = instanced(new THREE.IcosahedronGeometry(1, 0), heads);
