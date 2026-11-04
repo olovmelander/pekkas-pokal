@@ -1165,6 +1165,20 @@
   display: none;
 }
 
+/* The plunger meter steps off the glass too: beside the machine, in the
+   same corner as the nudge button that replaces it once the ball is out */
+.pbf[data-orient='land'] .pbf-bottom {
+  left: auto;
+  right: calc(28px + env(safe-area-inset-right));
+  bottom: calc(22px + env(safe-area-inset-bottom));
+  transform: none;
+  width: min(var(--side-w), 300px);
+}
+
+.pbf[data-orient='land'] .pbf-plunger-label {
+  white-space: normal;
+}
+
 /* Off the table, where a thumb rests when the phone is on its side */
 .pbf[data-orient='land'] .pbf-nudge {
   left: auto;

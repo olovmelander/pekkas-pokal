@@ -945,7 +945,7 @@ export const HAIR_STYLES = {
   crop: { h: 0.0098, side: 0.0047, ramp: 0.075, crown: [0, 0.9, -0.43], groove: 0.0015, front: 0.0045 },
   tousled: { h: 0.0138, side: 0.0068, ramp: 0.08, crown: [0.1, 0.92, -0.38], groove: 0.0012, noise: 0.0035, fringe: 0.006, front: 0.003 },
   sidePart: { h: 0.0152, side: 0.0066, ramp: 0.055, crown: [0.3, 0.9, -0.3], groove: 0.0018, part: 34, front: 0.0068 },
-  sweptBack: { h: 0.0142, side: 0.0064, ramp: 0.06, crown: [0, 0.85, -0.52], groove: 0.0024, quiff: 0.0095, front: 0.0068 },
+  sweptBack: { h: 0.0142, side: 0.0064, ramp: 0.06, crown: [0, 0.85, -0.52], groove: 0.0034, grooveTint: 0.42, cols: 38, quiff: 0.0095, front: 0.0068 },
   curly: { h: 0.02, side: 0.0145, ramp: 0.07, crown: [0, 0.9, -0.43], groove: 0, curls: 0.0055, front: 0.004 },
   long: { h: 0.0105, side: 0.0115, ramp: 0.05, crown: [0, 0.82, -0.57], groove: 0.0012, long: true, front: 0.003, part: 0 },
   bun: { h: 0.0068, side: 0.0052, ramp: 0.05, crown: [0, 0.82, -0.57], groove: 0.0016, bun: true },
@@ -955,7 +955,7 @@ export const HAIR_STYLES = {
   // Medium length, wavy, tucked behind the ears and over the collar at the back
   wavy: {
     h: 0.0165, side: 0.0105, ramp: 0.045, crown: [0.12, 0.85, -0.5], groove: 0.002, noise: 0.003, clumps: 0.004, front: 0.006,
-    part: 24, waves: 0.0035, lower: 9, fringe: 0.0035, medium: true
+    part: 24, waves: 0.0035, lower: 9, lowerBack: 15, fringe: 0.0035, lockLen: 1.5
   },
   // A neat short cut with the temples receding
   receding: { h: 0.0086, side: 0.0042, ramp: 0.065, crown: [0, 0.9, -0.43], groove: 0.0014, front: 0.0028, recede: 9 }
@@ -986,7 +986,7 @@ export function buildHair(b, ctx) {
   const { crown } = st;
   const cl = Math.hypot(...crown);
   const C = [crown[0] / cl, crown[1] / cl, crown[2] / cl];
-  const cols = high ? (st.curls ? 34 : 28) : 10;
+  const cols = high ? (st.cols ?? (st.curls ? 34 : 28)) : 10;
   const tRows = high ? (st.curls ? [0, 0.025, 0.06, 0.11, 0.18, 0.27, 0.38, 0.5, 0.63, 0.77, 0.9, 1] : [0, 0.03, 0.075, 0.14, 0.23, 0.35, 0.5, 0.67, 0.84, 1]) : [0, 0.14, 0.45, 1];
   const nrm = [0, 0, 0];
   const sp = [0, 0, 0];
@@ -1005,10 +1005,7 @@ export function buildHair(b, ctx) {
       const jit = high ? (hash01(j * 7 + 3) - 0.5) * (st.jag ?? 1.6) : 0;
       const tk = hash01(j * 13 + 5);
       const tuft = high ? (tk > 0.4 ? 0.45 + tk * 0.75 : 0) * ((st.tufts ?? 1.8) * fr * fr + 2.2 * nape * nape) : 0;
-      let lineDeg = line(psiDeg);
-      // Receding temples; longer styles grow lower over the ears and the nape
-      if (st.recede) lineDeg += st.recede * gauss((Math.abs(((psiDeg + 540) % 360) - 180) - 46) / 20, 1);
-      if (st.lower) lineDeg -= st.lower * sstep(55, 100, Math.abs(((psiDeg + 540) % 360) - 180));
+      const lineDeg = hairlineAt(st, line, psiDeg);
       const elev = (lineDeg + jit - tuft) * DEG;
       let tt = t;
       let bandMax = 1;
@@ -1053,10 +1050,14 @@ export function buildHair(b, ctx) {
         const n2 = noise3(d[0] * 52 + 7, d[1] * 52, d[2] * 52);
         h += st.curls * (Math.abs(n1) * 1.1 + Math.abs(n2) * 0.5 - 0.45);
       }
+      let gv = 0;
       if (st.groove && high) {
         const g = noise3(psi * 4.5, tt * 2.5, 1.7) * 0.7 + Math.sin(psi * cols * 0.5 + noise3(psi * 2, tt * 3, 4) * 2) * 0.3;
-        h += st.groove * g * sstep(0.02, 0.15, tt) * sstep(1, 0.75, tt);
+        gv = g * sstep(0.02, 0.15, tt) * sstep(1, 0.75, tt);
+        h += st.groove * gv;
       }
+      // Not a ball: a little flatter over the crown
+      if (!st.curls) h *= 1 - 0.16 * sstep(0.78, 1, tt);
       // Edge ramp (and the far edge for the horseshoe)
       let edge = sstep(0, st.ramp, tt);
       if (st.balding) edge *= sstep(bandMax, bandMax * 0.55, tt) * sstep(0, 0.1, Math.min(u, 1 - u));
@@ -1097,7 +1098,8 @@ export function buildHair(b, ctx) {
       // A stylised sheen band across the top of the head, broken by the strands
       const elevD = Math.asin(clamp(d[1], -1, 1)) / DEG;
       const sheen = high ? gauss(elevD - 60, 11) * (0.55 + 0.45 * strand) * sstep(0.1, 0.4, tt) : 0;
-      const shade = (0.6 + 0.4 * edge) * (0.9 + 0.2 * top) * (1 + 0.2 * strand) * (1 + 0.2 * sheen) * (1 - 0.3 * partK);
+      // Combing grooves read as darker lines between lighter strands
+      const shade = (0.6 + 0.4 * edge) * (0.9 + 0.2 * top) * (1 + 0.2 * strand) * (1 + 0.2 * sheen) * (1 - 0.3 * partK) * (1 + (st.grooveTint ?? 0.12) * gv);
       const region = st.buzz && !ctx.crowd ? REGION.FIXED : REGION.HAIR;
       const base = st.buzz && !ctx.crowd ? ctx.buzzColor : [1, 1, 1];
       pts.push({ p: toModel(p), region, tint: base.map((v) => v * shade), mat: MAT.SKIN, cov: covered });
@@ -1114,8 +1116,107 @@ export function buildHair(b, ctx) {
   });
   // Long hair, or medium hair that covers the nape and curls over the collar
   if ((st.long || st.medium) && !(hat && look.headwear !== 'headband' && st.medium)) buildLongHair(b, ctx, st);
+  if (high && !ctx.crowd) {
+    buildHairTufts(b, ctx, st, line);
+    buildSideburns(b, ctx, st, line);
+  }
   // A bun is let out under a headband; under a hat it is tucked away
   if (st.bun && (!hat || look.headwear === 'headband')) buildBun(b, ctx);
+}
+
+/** Hairline elevation (degrees) for a style at azimuth ψ (degrees, 0 = front). */
+function hairlineAt(st, line, psiDeg) {
+  const fromFront = Math.abs(((psiDeg + 540) % 360) - 180);
+  let e = line(psiDeg);
+  // Receding temples; longer styles grow lower over the ears and the nape
+  if (st.recede) e += st.recede * gauss((fromFront - 46) / 20, 1);
+  if (st.lower) e -= st.lower * sstep(55, 100, fromFront);
+  if (st.lowerBack) e -= st.lowerBack * sstep(110, 170, fromFront);
+  return e;
+}
+
+/**
+ * A lock lying on the scalp: a flattened, tapering tube that follows the
+ * surface from `e0` down to `e1` (degrees) at azimuth ψ, starting `h0` proud
+ * of the skin (inside the hair shell) and ending close to it.
+ */
+function scalpLock(b, ctx, { psi, e0, e1, w, h0, h1 = 0.0012, drift = 0, tint, flat = 0.45, n = 5, cols = 4 }) {
+  const { field, toModel } = ctx;
+  const sp = [0, 0, 0];
+  const nrm = [0, 0, 0];
+  const P = [];
+  const N = [];
+  for (let i = 0; i < n; i++) {
+    const u = i / (n - 1);
+    const d = dirFrom((psi + drift * u * u) * DEG, lerp(e0, e1, u) * DEG);
+    field.surf(d[0], d[1], d[2], sp);
+    field.normal(sp[0], sp[1], sp[2], nrm);
+    const h = lerp(h0, h1, Math.pow(u, 0.7));
+    P.push(new THREE.Vector3(sp[0] + nrm[0] * h, sp[1] + nrm[1] * h, sp[2] + nrm[2] * h));
+    N.push(new THREE.Vector3(...nrm));
+  }
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const u = i / (n - 1);
+    const T = P[Math.min(n - 1, i + 1)].clone().sub(P[Math.max(0, i - 1)]).normalize();
+    const S = new THREE.Vector3().crossVectors(N[i], T).normalize();
+    const r = w * (i === n - 1 ? 0 : Math.pow(1 - u, 0.75)) + (i === n - 1 ? 0 : 0.0003);
+    for (let j = 0; j < cols; j++) {
+      const a = (j / cols) * Math.PI * 2;
+      const q = P[i].clone().addScaledVector(S, Math.cos(a) * r).addScaledVector(N[i], Math.sin(a) * r * flat);
+      pts.push({ p: toModel([q.x, q.y, q.z]), region: REGION.HAIR, tint, mat: MAT.SKIN });
+    }
+  }
+  const mid = P[Math.floor(n / 2)].clone().addScaledVector(N[Math.floor(n / 2)], -0.006);
+  emitGrid(b, { pts, rows: n, cols, center: new THREE.Vector3(...toModel([mid.x, mid.y, mid.z])), poles: [n - 1], weight: () => [['head', 1]] });
+}
+
+/** Layered locks breaking the hair's outline at the nape, round the ears, at the temples and the fringe. */
+function buildHairTufts(b, ctx, st, line) {
+  if (st.buzz || st.balding || st.long) return;
+  const hat = ctx.hatEdge;
+  const headband = ctx.look.headwear === 'headband';
+  const spots = [];
+  const add = (psi, len, w, k) => {
+    spots.push([psi, len, w, k]);
+    if (psi > 0.5 && psi < 179.5) spots.push([-psi, len, w, k + 17]);
+  };
+  const lenK = st.lockLen ?? 1;
+  // Broad, short clumps where the outline is seen: the nape and behind the ears
+  add(180, 0.013, 0.0085, 1);
+  add(166, 0.012, 0.008, 2);
+  add(151, 0.011, 0.0075, 3);
+  add(136, 0.0095, 0.007, 4);
+  add(121, 0.0085, 0.0065, 5);
+  for (const [psi, len, w, k] of spots) {
+    const e = hairlineAt(st, line, psi);
+    // Not under a hat (a headband only hides its own band)
+    if (hat) {
+      const he = hat(psi);
+      if (headband ? e + 2 > he - 5 && e - 4 < he + 14 : e + 3 > he - 3) continue;
+    }
+    const jitter = hash01(k * 5 + 1) - 0.5;
+    const lenDeg = (len * lenK * (1 + 0.35 * jitter)) / 0.1 / DEG;
+    const shade = 0.82 + 0.12 * hash01(k * 3 + 2);
+    scalpLock(b, ctx, {
+      psi, e0: e + 7, e1: e - lenDeg, w: w * (1 + 0.2 * jitter), h0: Math.max(0.003, st.side * 0.7), drift: jitter * 8,
+      tint: [shade, shade, shade]
+    });
+  }
+}
+
+/** Sideburns in front of the ears (short styles; beards already cover them). */
+function buildSideburns(b, ctx, st, line) {
+  const L = ctx.look;
+  if (st.long || st.balding || L.facialHair === 'beard' || L.facialHair === 'fullBeard') return;
+  for (const s of [1, -1]) {
+    const psi = s * 83;
+    const e = hairlineAt(st, line, psi);
+    scalpLock(b, ctx, {
+      psi, e0: e + 6, e1: (st.sideburn ?? -13), w: 0.0072, h0: Math.max(0.003, st.side * 0.7), h1: 0.0013, flat: 0.32,
+      tint: [0.8, 0.8, 0.8], n: 5, cols: 4
+    });
+  }
 }
 
 function buildLongHair(b, ctx, st) {
@@ -1199,7 +1300,7 @@ export function beardMask(p) {
   if (z < -0.035) return 0;
   const my = FACE.mouthY;
   // Cheek line: from the sideburn down towards the mouth corners
-  const cheekY = lerp(my + 0.006, -0.008, sstep(0.025, 0.075, ax));
+  const cheekY = lerp(my + 0.008, -0.004, sstep(0.025, 0.07, ax));
   let m = sstep(cheekY + 0.006, cheekY - 0.01, y);
   // Keep the lips clear
   const lip = gauss(ax / 0.024, 1) * gauss((y - my) / 0.0085, 1);
@@ -1227,7 +1328,9 @@ export function buildFacialHair(b, ctx, kind) {
     const pts = [];
     // Elevations (from O) of the neck line and of the cheek/lip line
     const loE = periodic([[0, -74], [30, -68], [60, -54], [90, -36], [110, -22]]);
-    const hiE = periodic([[0, -23], [12, -22], [20, -18], [30, -11], [45, -5], [62, 1], [80, 8], [100, 13], [110, 16]]);
+    // The upper edge: under the lower lip, up round the mouth corners to meet
+    // the moustache, then high over the cheeks to the sideburns
+    const hiE = periodic([[0, -23], [12, -21], [20, -14], [28, -4], [38, 7], [50, 13], [65, 16], [80, 18], [100, 19.5], [110, 21]]);
     for (const t of rows) {
       for (let j = 0; j < cols; j++) {
         const u = j / (cols - 1);
@@ -1266,7 +1369,7 @@ export function buildFacialHair(b, ctx, kind) {
   const cols = high ? 11 : 4;
   const rows = high ? [0, 0.2, 0.5, 0.8, 1] : [0, 1];
   const pts = [];
-  const big = kind === 'moustache' ? 1.12 : 1;
+  const big = kind === 'moustache' ? 1.12 : ctx.look.beardLong ? 1.14 : kind === 'fullBeard' ? 1.05 : 1;
   for (const t of rows) {
     for (let j = 0; j < cols; j++) {
       const u = j / (cols - 1);
@@ -1320,10 +1423,10 @@ function buildLongBeard(b, ctx) {
       const y = lerp(-0.066, -0.268, tl) - (high ? 0.014 * (lock - 0.5) * sstep(0.85, 1, t) : 0);
       // Starts wide and deep round the jaw inside the beard shell, bows out
       // over the chest and closes to a rounded point
-      const zc = lerp(0.03, 0.093, sstep(0, 0.7, tl)) - 0.005 * sstep(0.85, 1, tl);
+      const zc = lerp(0.034, 0.093, sstep(0, 0.65, tl)) + 0.008 * Math.sin(tl * Math.PI) - 0.006 * sstep(0.85, 1, tl);
       const round = Math.sqrt(Math.max(0, 1 - sstep(0.8, 1, t) ** 2 * 0.95));
       const wHalf = lerp(0.071, 0.02, Math.pow(tl, 1.25)) * (1 + 0.07 * Math.sin(tl * Math.PI)) * round;
-      const dHalf = lerp(0.05, 0.016, Math.pow(tl, 1.05)) * round;
+      const dHalf = lerp(0.056, 0.017, Math.pow(tl, 1.35)) * round;
       // Strand clumps: ridges and furrows running down the beard, stronger in front
       const ridge = high ? Math.sin(a * 7 + tl * 2.5 + noise3(a * 1.7, tl * 3, 3.1) * 1.6) : 0;
       const clump = 0.0042 * ridge * sstep(0.04, 0.25, t) * (0.6 + 0.4 * Math.max(0, ca)) + (high ? 0.0016 * noise3(a * 5, tl * 9, 1.3) : 0);

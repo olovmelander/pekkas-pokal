@@ -316,11 +316,13 @@
 
 /* ---- Repris: brevlådeformat och en blinkande etikett --------------------- */
 
-/* Under reprisen är det tv-bild: poäng, tavla och tangenttips viker undan */
+/* Under reprisen är det tv-bild: poäng, tavla och tangenttips viker undan
+   (one class more than each element's own .show, so this wins) */
 .pg-ui.pg-replaying .pb-top,
-.pg-ui.pg-replaying .pg-bug,
-.pg-ui.pg-replaying .pg-keys,
-.pg-ui.pg-replaying .pg-rally {
+.pg-ui.pg-replaying .pg-bug.show,
+.pg-ui.pg-replaying .pg-keys.show,
+.pg-ui.pg-replaying .pg-rally.show,
+.pg-ui.pg-replaying .pg-ghost.show {
   opacity: 0;
   transition: opacity 0.25s ease;
 }

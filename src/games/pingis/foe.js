@@ -184,6 +184,12 @@ export class Foe {
     // Where the blade centre sits in the hand's frame
     this.bladeInHand.add(new THREE.Vector3(0, BLADE_Y, 0).applyQuaternion(this.paddleInHand));
     this.paddleInHandInv = this.paddleInHand.clone().invert();
+    // Every free-hand shape he will use, solved once now (each first solve
+    // costs a few ms and is cached), not mid-rally
+    if (typeof p.setGrip === 'function') {
+      for (const g of ['open', 'fist', 'point', 'relaxed']) p.setGrip('L', g, { blend: 0 });
+      p.setGrip('L', null, { blend: 0 });
+    }
     this.leftShape = undefined;
     this.style = STYLE[opp.name] ?? STYLE.default;
 

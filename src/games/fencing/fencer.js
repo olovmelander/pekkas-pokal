@@ -31,7 +31,7 @@
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { createPerson, appearanceFor } from '../shared/people.js';
+import { createPerson, appearanceFor, HAND_BONES } from '../shared/people.js';
 
 /* ---- Proportions (metres, for a 1.80 m fencer; scaled per person) ------ */
 
@@ -116,7 +116,10 @@ const BODY = [
   'hips', 'spine', 'chest', 'neck', 'head', 'shoulderL', 'upperArmL', 'forearmL', 'handL',
   'shoulderR', 'upperArmR', 'forearmR', 'handR', 'thighL', 'shinL', 'footL', 'thighR', 'shinR', 'footR'
 ];
-const FINGERS = ['thumbL', 'indexL', 'indexTipL', 'fingersL', 'fingersTipL', 'thumbR', 'indexR', 'indexTipR', 'fingersR', 'fingersTipR'];
+// Every finger bone of both hands blends between the duel and the at-ease
+// stance (the old five-per-hand names are a fallback for an older rig)
+const FINGERS = (HAND_BONES && HAND_BONES.length ? HAND_BONES : ['thumb', 'index', 'indexTip', 'fingers', 'fingersTip'])
+  .flatMap((n) => [`${n}L`, `${n}R`]);
 const BLEND = [...BODY, ...FINGERS];
 const swapLR = (n) => (n.endsWith('L') ? `${n.slice(0, -1)}R` : n.endsWith('R') ? `${n.slice(0, -1)}L` : n);
 
@@ -415,6 +418,9 @@ export class Fencer {
     this.group.add(p.root);
     this.rearGrip = '';
     this._grip();
+    // A new person between bouts: their grips are solved here, on the
+    // bracket screen, never mid-phrase
+    this.warmGrips();
     const { lame } = p.materials;
     if (lame) {
       // Lamé is woven metal: duller than a mirror, so the sun leaves a sheen
@@ -554,7 +560,7 @@ export class Fencer {
       if (relax < 0.999) {
         this._capture(this.qb, this.hb);
         const k = smooth(relax);
-        BLEND.forEach((n, i) => b[n].quaternion.slerpQuaternions(this.qa[i], this.qb[i], k));
+        BLEND.forEach((n, i) => b[n] && b[n].quaternion.slerpQuaternions(this.qa[i], this.qb[i], k));
         b.hips.position.lerpVectors(this.ha, this.hb, k);
         root.rotation.y = lerp(duelYaw, easeYaw, k);
       }
@@ -569,7 +575,7 @@ export class Fencer {
 
   _capture(qs, hp) {
     const b = this.person.bones;
-    BLEND.forEach((n, i) => qs[i].copy(b[n].quaternion));
+    BLEND.forEach((n, i) => b[n] && qs[i].copy(b[n].quaternion));
     hp.copy(b.hips.position);
   }
 
@@ -829,6 +835,20 @@ export class Fencer {
     }
     this._placeMask();
     this.group.updateMatrixWorld(true);
+  }
+
+  /**
+   * Solve every grip this fencer will use once, while the game loads: the
+   * first solve of a grip and size costs a few milliseconds, then it is
+   * cached (the foil's French grip is solved in setPerson already).
+   */
+  warmGrips() {
+    const p = this.person;
+    if (typeof p.setGrip !== 'function') return;
+    p.setGrip(this.rear, 'power', { diameter: 0.03, blend: 0 });
+    p.setGrip(this.rear, 'fist', { diameter: 0.04, blend: 0 });
+    p.setGrip(this.rear, null, { blend: 0 });
+    this.rearGrip = '';
   }
 
   /**

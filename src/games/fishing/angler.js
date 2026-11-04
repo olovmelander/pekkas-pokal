@@ -120,7 +120,9 @@ export function createAngler(boat) {
     else if (want === 'rod') person.setGrip('L', 'power', { diameter: 0.034, blend: 0.18 });
     else person.setGrip('L', want, { blend: 0.2 });
   }
-  shapeLeft('fore');
+  // Every grip the left hand will use is solved once now, behind the
+  // loading card (each first solve costs a few ms, then it is cached)
+  ['crank', 'fist', 'cap', 'fore'].forEach(shapeLeft);
 
   /* Springs for every channel, starting at rest */
   const sp = {};

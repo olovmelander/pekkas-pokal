@@ -1731,6 +1731,9 @@ export async function createFencing(container) {
   };
   document.addEventListener('visibilitychange', onVisibility);
 
+  // Every grip the hands will take, solved now rather than mid-bout (the
+  // fencers solve theirs whenever they are dressed)
+  salle.referee.warmGrips();
   showTitle();
   // Open on the at-ease pose (no springing in from en garde) and pose
   // everyone once before the shaders compile

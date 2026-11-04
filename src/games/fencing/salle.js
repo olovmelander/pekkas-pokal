@@ -1060,6 +1060,18 @@ class Referee {
     return p;
   }
 
+  /** Solve the signal hand shapes once while the game loads (they are cached after). */
+  warmGrips() {
+    const p = this.person;
+    if (typeof p.setGrip !== 'function') return;
+    ['L', 'R'].forEach((side) => {
+      p.setGrip(side, 'open', { blend: 0 });
+      p.setGrip(side, 'point', { blend: 0 });
+      p.setGrip(side, null, { blend: 0 });
+    });
+    this.hands = { L: '', R: '' };
+  }
+
   /**
    * Hand shapes for the signals: flat open hands for »En garde«, »Allez«
    * and »Halte«, the index pointing at the scorer for the touch, and the
