@@ -117,6 +117,22 @@ const smoothstep = (a, b, x) => {
   return k * k * (3 - 2 * k);
 };
 
+function urlFlag(name) {
+  try {
+    return new URLSearchParams(location.search).get(name) || '';
+  } catch (e) {
+    return '';
+  }
+}
+
+function storedGfx() {
+  try {
+    return localStorage.getItem('pp-gfx') || '';
+  } catch (e) {
+    return '';
+  }
+}
+
 function load(key, fallback) {
   try {
     const v = localStorage.getItem(key);
@@ -151,12 +167,19 @@ export async function createFencing(container) {
   const coarse = matchMedia('(pointer: coarse)').matches;
   const hiQ = !(coarse && Math.min(screen.width, screen.height) < 700);
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const adaptive = !navigator.webdriver; // stable output under automated tests
+  // Frame-time adaptive quality is off under automated tests (stable
+  // output); ?perf=adapt forces it on so the path can be exercised there
+  let adaptive = !navigator.webdriver || urlFlag('perf') === 'adapt';
 
   const sfx = new Sfx();
   const rand = mulberry(77);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+  // Safe mode (?gfx=safe, or the stored pp-gfx flag) draws straight to the
+  // screen without the composer, so it would have no antialiasing at all:
+  // ask the canvas for MSAA instead. Everywhere else the composer's own
+  // multisampled target does the job and the canvas stays cheap.
+  const safeAsked = urlFlag('gfx') === 'safe' || storedGfx() === 'safe';
+  const renderer = new THREE.WebGLRenderer({ antialias: safeAsked, powerPreference: 'high-performance' });
   let pixelRatio = Math.min(window.devicePixelRatio || 1, hiQ ? 2 : 1.75);
   renderer.setPixelRatio(pixelRatio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;

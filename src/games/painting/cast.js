@@ -5,8 +5,7 @@
  * shared character system (../shared/people.js) so they look the same as
  * in every other year's game:
  *
- *  - Mikael Hägglund, the invited culture profile, in his black polo neck
- *    and round glasses. He strolls between the easels with his notebook,
+ *  - Mikael Hägglund, the invited culture profile, in his black polo neck. He strolls between the easels with his notebook,
  *    walks over when your time is up, studies the canvas with the pen at
  *    his chin, writes, and turns to deliver the verdict — talking, and with
  *    a face that tells you the grade before the card does.
@@ -57,9 +56,9 @@ const FIST = 0.08;
 const PAINTERS = [
   {
     name: 'Per Olsson', work: 'stjarnenatten', at: [-1.0, -4.75], face: -0.8, detail: 'high',
-    // Per came as Hans Hedberg: the red beret (the bun tucked under it), and
-    // a ceramicist's apron over a linen shirt
-    look: { hair: { style: 'crop' }, headwear: { style: 'beret', color: 0xa8202c }, outfit: { top: 'apron', topColor: 0xe4dac6, accent: 0x6b4a2e, bottom: 'trousers', bottomColor: 0x4a4038, shoes: 'leather' } }
+    // Per came as Hans Hedberg: the red beret, and a ceramicist's apron over
+    // a linen shirt. Face, hair and beard stay his own (appearanceFor).
+    look: { headwear: { style: 'beret', color: 0xa8202c }, outfit: { top: 'apron', topColor: 0xe4dac6, accent: 0x6b4a2e, bottom: 'trousers', bottomColor: 0x4a4038, shoes: 'leather' } }
   },
   {
     // Olov drew Skriet out of the hat — and won with it
@@ -85,6 +84,9 @@ const BACK_ROW = {
   names: ['Tobias Lundqvist', 'Ludvig Ulenius', 'Erik Vallgren', 'Rickard Nilsson', 'Niklas Norberg'],
   at: [[-6.2, -7.8], [0.3, -8.6], [3.4, -7.4], [-5.6, -5.4], [4.4, -4.6]]
 };
+
+/** Hägglund's costume: the culture profile's black polo neck. */
+const JUDGE_OUTFIT = { top: 'poloNeck', topColor: 0x1f2026, bottomColor: 0x8f8268, shoes: 'leather' };
 
 /** Where the wide shot's camera stands on average (index.js): the field faces it. */
 const AUDIENCE = new THREE.Vector2(3.0, 2.7);
@@ -481,7 +483,8 @@ class Painter {
  */
 class Judge {
   constructor(opts) {
-    this.person = createPerson(appearanceFor('Mikael Hägglund'));
+    // His own head (appearanceFor), in the black polo neck he judged in
+    this.person = createPerson(appearanceFor('Mikael Hägglund', { outfit: JUDGE_OUTFIT }));
     this.home = opts.home;
     this.spot = opts.spot;
     this.canvasC = opts.canvasC;

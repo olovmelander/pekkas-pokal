@@ -70,7 +70,9 @@ const FinishShader = {
       col = mix(col, col * uTint, uTintAmt);
       // Vignette, elliptical with the frame
       vec2 dv = d * vec2(max(1.0, uAspect) * 0.9, max(1.0, 1.0 / uAspect) * 0.9);
-      float v = smoothstep(0.95, 0.15, length(dv) * (1.0 + uVignette));
+      // Edges in rising order: a reversed smoothstep is undefined in GLSL
+      // and D3D11 (ANGLE) really does return garbage for it
+      float v = 1.0 - smoothstep(0.15, 0.95, length(dv) * (1.0 + uVignette));
       col *= mix(1.0, v, 0.85);
       col += uFlash * vec3(1.0, 0.96, 0.88);
       // Stillastående dither (interleaved gradient noise) i stället för ett

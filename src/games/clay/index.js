@@ -1067,7 +1067,15 @@ export async function createClay(container) {
   const kilnSeam = new THREE.Vector3();
   studio.kiln.group.localToWorld(kilnSeam.set(0, 1.76, 0.78));
 
+  // Test hook: a fixed camera for close-ups (window.__ppLera.debugCam)
+  let camOverride = null;
+
   function updateCamera(t, dt) {
+    if (camOverride) {
+      camera.position.copy(camOverride.pos);
+      camera.lookAt(camOverride.look);
+      return;
+    }
     const P = view.portrait;
     const ph = state.phase;
     if (ph === 'idle') {
@@ -1750,8 +1758,12 @@ export async function createClay(container) {
       return { x: rect.left + (work.x * 0.5 + 0.5) * rect.width, y: rect.top + (-work.y * 0.5 + 0.5) * rect.height };
     },
     computeMatch,
+    /** Freeze the camera at pos looking at look (arrays); null releases it. */
+    debugCam(pos, look) {
+      camOverride = pos ? { pos: new THREE.Vector3(...pos), look: new THREE.Vector3(...look) } : null;
+    },
     /** Live three.js handles for test scripts (screenshots from other angles). */
-    three: { scene, camera, sun, renderer },
+    three: { scene, camera, sun, renderer, keramiker: keramiker.root },
     info() {
       return {
         drawCalls: renderer.info.render.calls,
