@@ -100,14 +100,25 @@ Table Tennis Touch och Rockstars Table Tennis.
 2021 är *Pekkas Måleri* — måleritävlingen i trädgården på Terrassvägen,
 där färgen blandas subtraktivt på en riktig palett.
 
+Alla spel kör på Three.js r187 och har egna adresser — `#/spel/2024` öppnar
+fisket direkt, och bakåtknappen stänger spelet.
+
 Att lägga till ett nytt års spel:
 
-1. Skapa modulen under `src/games/<spel>/index.js` och exportera en funktion
-   `createX(container, opts)` som returnerar `{ destroy() }`.
-2. Lägg till en rad i `GAMES` i [`src/scripts/app.js`](src/scripts/app.js) med
-   `year`, `title`, `tagline`, `icon` och sökvägen i `module`.
+1. Skapa modulen under `src/games/<spel>/index.js` och exportera
+   `default async function createX(container, opts)` som returnerar
+   `{ destroy() }`. `destroy` ska städa allt — spelet öppnas och stängs om
+   och om igen.
+2. Exportera `layout = 'full'` om spelet fyller hela scenen på liggande
+   skärmar. Utan den visas spelet i en centrerad porträttram på datorn.
+3. Spelets egna stilar läggs i `src/games/<spel>/style.css` — filen laddas
+   automatiskt när spelet öppnas, efter de delade HUD-stilarna i
+   [`src/styles/game-hud.css`](src/styles/game-hud.css).
+4. Lägg till en rad i `GAMES` i [`src/scripts/app.js`](src/scripts/app.js) med
+   `year`, `title`, `tagline`, `icon`, `colors` (affischens två toner),
+   `cover` (en stillbild i `public/games/`) och sökvägen i `module`.
 
-År utan spel visas automatiskt som "inte byggt än".
+År utan spel visas automatiskt under "Kommande".
 
 **Pekkas Fiske (2024)**
 
@@ -538,15 +549,54 @@ npm run build    # produktionsbygge till dist/
 npm run lint     # ESLint
 ```
 
+### Formgivning
+
+Uttrycket är ett nordiskt pokalrum — en förgylld almanacka snarare än en
+instrumentpanel. Tre typsnitt med var sin uppgift: **Fraunces** för rubriker
+och siffror, **Schibsted Grotesk** för gränssnittet och **JetBrains Mono** för
+koordinater och små data. Guldet är den enda accentfärgen och ritas som
+polerad metall (`--metal-gold`, `--metal-silver`, `--metal-bronze`) — allt
+annat är varmt grått, så det som glänser betyder något: segrar, medaljer och
+det som går att klicka på. Mörkt tema är polarnatt, ljust tema är
+elfenbenspapper; sidan följer systemets val tills man själv byter.
+
+Översikten öppnar med pokalen i 3D ([`src/scripts/trophy.js`](src/scripts/trophy.js)):
+en svarvad guldpokal på en lackad sockel med varje års vinnare graverad på
+mässingsplåtar och föreningens älg etsad på kupan. Det som får metall att se
+ut som metall är vad den speglar, så pokalen står i en liten fotostudio —
+en mörk kupol med softboxar, ett varmt svep bakom kameran och ett studsljus
+från golvet — bakad till en PMREM-miljö. Pokalen laddas efter sidan, ritar
+bara när den syns och ersätter en SVG-pokal som redan står på plats, så
+inget hoppar och inget saknas utan WebGL. Bakom den ligger höjdkurvor —
+Höga kusten, dit koordinaterna i loggan pekar.
+
+### Adresser
+
+Varje vy, profil, år och spel har en egen adress som går att dela. Profiler,
+årsresultat och spel läggs ovanpå vyn i webbläsarens historik, så bakåt
+stänger dem.
+
+| Adress | Visar |
+| --- | --- |
+| `#/` | Översikten |
+| `#/medaljliga`, `#/historik`, `#/utmarkelser`, `#/statistik`, `#/sangbok`, `#/spel` | Vyerna |
+| `#/sangbok/<id>` | En sång, t.ex. `#/sangbok/varat-pekkas` |
+| `#/deltagare/<namn>` | En profil, t.ex. `#/deltagare/viktor-jones` |
+| `#/ar/<år>` | Årets fullständiga resultat |
+| `#/spel/<år>` | Årets spel, t.ex. `#/spel/2024` |
+
+Äldre länkar som `#medals` leder fortfarande rätt.
+
 ### Struktur
 
 | Fil | Ansvar |
 | --- | --- |
-| `index.html` | All markup, de fem vyerna och modalen |
-| `src/scripts/app.js` | Hela applikationen: dataladdning, statistik, Elo, rendering |
+| `index.html` | All markup, de sju vyerna, spelscenen och modalen |
+| `src/scripts/app.js` | Hela applikationen: dataladdning, statistik, Elo, routing, rendering |
+| `src/scripts/trophy.js` | Pokalen i 3D på översikten |
 | `src/scripts/achievement-engine.js` | Beräknar vilka utmärkelser varje deltagare låst upp |
 | `src/data/achievements.js` | Definitioner av alla utmärkelser |
-| `src/styles/` | `main` (tokens/teman), `layout`, `components`, `animations`, `games`, `responsive` |
+| `src/styles/` | `main` (tokens/teman), `layout`, `components`, `animations`, `games` (arkaden och spelscenen), `game-hud` (spelens delade HUD), `responsive` |
 | `src/games/pinball/` | Flipperspelet: `physics` (2D-kollision), `table` (layout + banans grafik), `meshes` (3D), `index` (spelloop) |
 | `src/games/fishing/` | Fiskespelet: `species` (procedurella fiskar), `world` (sjö, vattenshader, båt), `audio` (syntetiskt ljud), `index` (spelloop) |
 | `src/games/clay/` | Drejspelet: `studio` (ateljé, matcaps, drejskiva), `audio` (syntetiskt ljud), `index` (lerfysik + spelloop) |
@@ -554,7 +604,7 @@ npm run lint     # ESLint
 | `src/games/shooting/` | Skyttespelet: `range` (fält, gevär, lerduvor), `grass` (instansierad äng med vind), `audio` (syntetiskt ljud), `index` (banor + spelloop) |
 | `src/games/pingis/` | Pingisspelet: `hall` (bygdegård, bord, figurer), `audio` (syntetiskt ljud), `index` (fysik, AI och spelloop) |
 | `src/games/painting/` | Målerispelet: `artworks` (motiven + färgblandning i RYB och Lab), `garden` (trädgården, staffli, målare), `audio` (syntetiskt ljud), `index` (spelloop och dom) |
-| `public/` | Statiska filer: `event.json`, `manifest.json`, ikoner, `og-image.png`, `photos/` |
+| `public/` | Statiska filer: `event.json`, `manifest.json`, ikoner, `brand/` (älgen), `og-image.png`, `games/` (affischbilder), `photos/` |
 
 Data hämtas från `competition-data.csv` vid sidladdning. Om filen inte går att
 läsa faller appen tillbaka på en inbäddad kopia i `app.js`, så sidan visar alltid
