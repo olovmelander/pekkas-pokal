@@ -20,7 +20,7 @@ export class Sfx {
       if (!AC) return;
       this.ctx = new AC();
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.34;
+      this.master.gain.value = this.muted ? 0 : 0.34;
       const comp = this.ctx.createDynamicsCompressor();
       comp.threshold.value = -16;
       comp.ratio.value = 5;
@@ -28,6 +28,12 @@ export class Sfx {
       this.ambient();
     }
     if (this.ctx.state === 'suspended') this.ctx.resume();
+  }
+
+  /** Mute everything, the wind bed included — not just the next effect. */
+  setMuted(m) {
+    this.muted = m;
+    if (this.master) this.master.gain.setTargetAtTime(m ? 0 : 0.34, this.ctx.currentTime, 0.05);
   }
 
   tone(freq, dur, type = 'sine', gain = 0.5, sweep = 0, delay = 0) {
@@ -119,6 +125,55 @@ export class Sfx {
   match() {
     this.tone(880, 0.09, 'triangle', 0.3);
     this.tone(1320, 0.12, 'triangle', 0.26, 0, 0.07);
+    this.tone(1760, 0.16, 'sine', 0.14, 0, 0.14);
+  }
+
+  /** The dollop lands and is stirred in: a wet squelch that turns. */
+  swirl() {
+    this.noiseHit(0.18, 0.2, 420, 1.6, 0.2);
+    this.noiseHit(0.32, 0.12, 900, 3, 0.28);
+  }
+
+  /** Warmer: a small rising step. Colder: a small falling one. */
+  warmer() {
+    this.tone(620, 0.07, 'sine', 0.12, 160, 0.22);
+  }
+
+  colder() {
+    this.tone(520, 0.08, 'sine', 0.1, -170, 0.22);
+  }
+
+  /** One of the judge's stars landing, pitched up the scale. */
+  star(i = 0) {
+    const f = [784, 988, 1319][i] || 1319;
+    this.tone(f, 0.22, 'triangle', 0.3);
+    this.tone(f * 2, 0.3, 'sine', 0.1, 0, 0.03);
+  }
+
+  /** The grade counting up. */
+  tick(pitch = 1) {
+    this.tone(1400 * pitch, 0.025, 'square', 0.04);
+  }
+
+  /** The clock in the last ten seconds. */
+  clock(urgent = false) {
+    this.tone(urgent ? 1500 : 1150, 0.035, 'triangle', urgent ? 0.14 : 0.08);
+  }
+
+  /** A streak of matched colours, climbing with its length. */
+  streak(n) {
+    const base = 520 * 2 ** (Math.min(n, 8) / 12);
+    [0, 4, 7, 12].forEach((st, i) => this.tone(base * 2 ** (st / 12), 0.12, 'triangle', 0.2, 0, i * 0.055));
+  }
+
+  /** Bristles dragged across linen, once per batch of strokes. */
+  bristle() {
+    this.noiseHit(0.09, 0.16, 1800 + Math.random() * 900, 1.1);
+  }
+
+  /** The palette won't take another drop of that. */
+  bump() {
+    this.tone(160, 0.08, 'triangle', 0.18, -40);
   }
 
   /** Wiping the palette clean. */
@@ -130,6 +185,14 @@ export class Sfx {
   slip() {
     this.noiseHit(0.2, 0.3, 3200, 0.8);
     this.tone(520, 0.14, 'triangle', 0.22, 260);
+  }
+
+  /** Pens down: a hand bell rung across the lawn. */
+  bell() {
+    [0, 0.34].forEach((d) => {
+      this.tone(1480, 0.7, 'sine', 0.22, 0, d);
+      this.tone(2220, 0.5, 'sine', 0.08, 0, d);
+    });
   }
 
   /** Mikael Hägglund clears his throat before delivering the verdict. */

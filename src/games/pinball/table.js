@@ -444,7 +444,7 @@ export function buildColliders(world, hooks = {}) {
   refs.flippers.left = world.addFlipper(
     new Flipper(lp, L.flipperY, L.flipperLength, L.flipperRest, L.flipperRest + L.flipperSwing, {
       radius: 0.46,
-      onHit: (v) => hooks.onFlipper && hooks.onFlipper('left', v)
+      onHit: (v, b) => hooks.onFlipper && hooks.onFlipper('left', v, b)
     })
   );
   refs.flippers.right = world.addFlipper(
@@ -456,7 +456,7 @@ export function buildColliders(world, hooks = {}) {
       Math.PI - L.flipperRest - L.flipperSwing,
       {
         radius: 0.46,
-        onHit: (v) => hooks.onFlipper && hooks.onFlipper('right', v)
+        onHit: (v, b) => hooks.onFlipper && hooks.onFlipper('right', v, b)
       }
     )
   );

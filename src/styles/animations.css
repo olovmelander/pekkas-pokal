@@ -1,11 +1,11 @@
 /* ==========================================================================
-   Pekkas Pokal — Animations
+   Pekkas Pokal — Animationer
    ========================================================================== */
 
 @keyframes view-in {
   from {
     opacity: 0;
-    transform: translateY(14px);
+    transform: translateY(12px);
   }
   to {
     opacity: 1;
@@ -19,7 +19,31 @@
     transform: translateY(0);
   }
   50% {
-    transform: translateY(-6px);
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes mark-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+}
+
+@keyframes halo-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 1;
   }
 }
 
@@ -28,46 +52,31 @@
     transform: translateX(-120%);
   }
   100% {
-    transform: translateX(420%);
+    transform: translateX(320%);
   }
 }
 
 @keyframes pulse-dot {
   0% {
-    box-shadow: 0 0 0 0 rgba(242, 193, 78, 0.5);
+    box-shadow: 0 0 0 0 rgba(233, 191, 92, 0.55);
   }
   70% {
-    box-shadow: 0 0 0 9px rgba(242, 193, 78, 0);
+    box-shadow: 0 0 0 9px rgba(233, 191, 92, 0);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(242, 193, 78, 0);
+    box-shadow: 0 0 0 0 rgba(233, 191, 92, 0);
   }
 }
 
-@keyframes drift-a {
-  from {
-    transform: translate(0, 0) scale(1);
+@keyframes pin-pulse {
+  0% {
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45), 0 0 0 0 rgba(143, 179, 217, 0.55);
   }
-  to {
-    transform: translate(-6vw, 5vh) scale(1.15);
+  70% {
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45), 0 0 0 14px rgba(143, 179, 217, 0);
   }
-}
-
-@keyframes drift-b {
-  from {
-    transform: translate(0, 0) scale(1);
-  }
-  to {
-    transform: translate(7vw, -4vh) scale(1.1);
-  }
-}
-
-@keyframes drift-c {
-  from {
-    transform: translate(0, 0) scale(1);
-  }
-  to {
-    transform: translate(-5vw, -6vh) scale(1.2);
+  100% {
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45), 0 0 0 0 rgba(143, 179, 217, 0);
   }
 }
 
@@ -86,17 +95,23 @@
   0% {
     transform: translateX(-120%);
   }
-  55%,
+  45%,
   100% {
     transform: translateX(120%);
   }
 }
 
-/* Scroll reveal */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Inglidning vid scroll */
 .reveal {
   opacity: 0;
-  transform: translateY(18px);
-  transition: opacity 0.7s var(--ease-out), transform 0.7s var(--ease-out);
+  transform: translateY(16px);
+  transition: opacity 0.8s var(--ease-out), transform 0.8s var(--ease-out);
 }
 
 .reveal.in {
@@ -104,13 +119,13 @@
   transform: none;
 }
 
-/* Staggered children (set --stagger-i inline) */
+/* Förskjutna barn (sätt --stagger-i inline) */
 .stagger {
   animation: view-in 0.6s var(--ease-out) both;
-  animation-delay: calc(var(--stagger-i, 0) * 60ms);
+  animation-delay: calc(var(--stagger-i, 0) * 50ms);
 }
 
-/* ---------- Reduced motion ---------- */
+/* ---------- Reducerad rörelse ---------- */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

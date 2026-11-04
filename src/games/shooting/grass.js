@@ -12,8 +12,12 @@
  *    slow gust travelling across the field, which is what stops it
  *    reading as a mechanical shimmer
  *  - blades bend quadratically from a planted base, so the roots stay put
- *  - no shadow casting or receiving on the grass: that is the expensive
- *    part, and at this density it buys nothing
+ *  - no shadow CASTING from the grass: that is the expensive part, and at
+ *    this density it buys nothing (it does receive the sun's shadows)
+ *  - backlit translucency, the look that makes golden hour golden: with
+ *    the sun low in front of the shooter, blades seen against it glow
+ *    warm at the tips. It costs one dot product per vertex — the term is
+ *    computed in the vertex shader and only added in the fragment
  *
  * Density falls off with distance from the shooting station, so the frame
  * is dense where the camera actually looks and cheap out at the treeline.
@@ -83,7 +87,7 @@ function bladeGeometry() {
  * Scatter blades over a disc, densest near the station.
  * `rand` is the caller's seeded RNG so the field is stable between runs.
  */
-export function buildGrass(rand, count = 23000, inner = 0.3, outer = 30) {
+export function buildGrass(rand, { count = 23000, inner = 0.3, outer = 30, sunDir, sunColor } = {}) {
   const geo = bladeGeometry();
 
   const material = new THREE.MeshLambertMaterial({
@@ -91,14 +95,20 @@ export function buildGrass(rand, count = 23000, inner = 0.3, outer = 30) {
     side: THREE.DoubleSide
   });
 
-  const uniforms = { uTime: { value: 0 } };
+  const uniforms = {
+    uTime: { value: 0 },
+    uSunDir: { value: sunDir.clone() },
+    uSunColor: { value: new THREE.Color(sunColor) }
+  };
   material.onBeforeCompile = (shader) => {
-    shader.uniforms.uTime = uniforms.uTime;
+    Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `
         #include <common>
         uniform float uTime;
+        uniform vec3 uSunDir;
         attribute float aHeight;
+        varying float vTrans;
       `)
       .replace('#include <begin_vertex>', `
         #include <begin_vertex>
@@ -115,6 +125,25 @@ export function buildGrass(rand, count = 23000, inner = 0.3, outer = 30) {
         transformed.x += w * bend * 0.20;
         transformed.z += w * bend * 0.11;
         transformed.y -= abs(w) * bend * 0.035;
+      `)
+      .replace('#include <fog_vertex>', `
+        #include <fog_vertex>
+        // Translucency: how directly this blade stands between eye and sun.
+        // Tips transmit, roots don't (they're shaded by the sward anyway).
+        vec4 gWorld = modelMatrix * instanceMatrix * vec4(transformed, 1.0);
+        vec3 gView = normalize(gWorld.xyz - cameraPosition);
+        float back = max(dot(gView, uSunDir), 0.0);
+        vTrans = back * back * back * aHeight * aHeight;
+      `);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `
+        #include <common>
+        uniform vec3 uSunColor;
+        varying float vTrans;
+      `)
+      .replace('#include <opaque_fragment>', `
+        outgoingLight += diffuseColor.rgb * uSunColor * vTrans * 1.6;
+        #include <opaque_fragment>
       `);
   };
   material.customProgramCacheKey = () => 'pp-grass';

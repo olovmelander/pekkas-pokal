@@ -15,28 +15,37 @@
  * original: COLOUR. You mix each colour from red, yellow, blue, white and
  * black on a real subtractive palette, then lay it down. Get the hue and
  * value right and Hägglund is kind. Get them wrong and he is not.
+ *
+ * Module map: artworks.js holds the motifs and the colour science,
+ * canvasart.js turns colours into brushwork, palette.js is the palette in
+ * your hand, garden.js the world, hud.js the markup, audio.js the sound.
+ * This file is the evening itself: the camera, the flow and the scoring.
  */
 
 import * as THREE from 'three';
 import { Sfx } from './audio.js';
-import { mulberry, buildGarden, buildSky, buildEasel, buildPainter, buildPalette } from './garden.js';
 import {
-  ARTWORKS, mixPigments, colourDistance, hexToRgb, rgbToCss,
-  paintReference, paintPlayerBase, paintSelection, paintIdMap
+  mulberry, buildGarden, animateGarden, buildSky, buildEasel, buildBrush, buildPainter, buildJudge
+} from './garden.js';
+import {
+  ARTWORKS, mixPigments, colourDistance, hexToRgb, rgbToCss, paintIdMap,
+  mixAdvice, accuracy, MATCH_DE, MAX_DROPS, PIGMENT_WORD
 } from './artworks.js';
+import { ART_W, ART_H, LiveCanvas, renderPainting, analyse } from './canvasart.js';
+import { Palette, PIGMENTS } from './palette.js';
+import { buildHud, starsHtml, grade1, fmt, esc } from './hud.js';
+
+/** Fill the whole stage on desktop; the HUD lays itself out per aspect. */
+export const layout = 'full';
 
 const HIGHSCORE_KEY = 'pp-maleri-highscore';
+const BEST_KEY = 'pp-maleri-best';
+const GALLERY_KEY = 'pp-maleri-gallery';
+const GALLERY_MAX = 24;
 const WORKS_PER_GAME = 3;
 const ROUND_SECONDS = 95;
-
-/** The pigments on the palette, in the order they sit around the rim. */
-const PIGMENTS = [
-  { key: 'r', name: 'Krapplack', css: '#c0242c' },
-  { key: 'y', name: 'Kadmiumgul', css: '#e8b419' },
-  { key: 'b', name: 'Ultramarin', css: '#22459b' },
-  { key: 'w', name: 'Titanvit', css: '#f4f2ea' },
-  { key: 'k', name: 'Benswart', css: '#1b1815' }
-];
+/** Seconds stuck on one region before the palette points at a pigment. */
+const TIP_AFTER = 5;
 
 /**
  * Mikael Hägglund's verdicts, by grade. He was invited as the culture
@@ -51,134 +60,118 @@ const VERDICTS = [
   { at: 0, say: 'Det här är inte konst. Det är en olycka i en färghandel.' }
 ];
 
+/** Stars sit on the same lines as his verdicts: godkänt, stark, essensen. */
+const STARS_AT = [6.0, 7.5, 9.0];
+const starsFor = (g) => STARS_AT.filter((s) => g >= s).length;
+
+/* Easel geometry, shared by the build and the camera framing. */
+const CANVAS_W = 1.12;
+const CANVAS_H = 1.22;
+const EASEL_Z = -0.55;
+const CANVAS_C = new THREE.Vector3(0, 0.98 + CANVAS_H / 2, EASEL_Z + 0.06);
+/** What the easel shot keeps in frame: the canvas and its stretcher. */
+const FRAME_W = CANVAS_W + 0.12;
+const FRAME_H = CANVAS_H + 0.14;
+
 /**
- * Frame delta, clamped at BOTH ends. Only clamping the top looks harmless
- * until a queued rAF fires with a timestamp older than the one stashed on
- * visibilitychange: dt goes negative and every countdown runs backwards.
+ * Longest step the simulation takes in one frame. The delta is clamped at
+ * BOTH ends: a frame timestamp that predates the timer's last reset (shader
+ * compilation can block the main thread for seconds) gives a negative delta,
+ * and every countdown would run backwards.
  */
-function clampDt(ms) {
-  return Math.max(0, Math.min(0.05, ms / 1000));
-}
+const MAX_STEP = 0.1;
 
-/* ------------------------------------------------------------------- HUD */
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 
-function buildHud(root) {
-  root.innerHTML = `
-    <div class="fg-vignette"></div>
-    <div class="pb-hud">
-      <div class="pb-top">
-        <div class="pb-score-wrap">
-          <div class="pb-score" id="ml-score">0</div>
-          <div class="pb-hi">REKORD <span id="ml-hi">0</span></div>
-        </div>
-        <div class="pb-meta">
-          <div class="fg-depth" id="ml-time">1:35</div>
-          <div class="fg-cast" id="ml-work"></div>
-        </div>
-      </div>
-      <div class="fk-opponent" id="ml-title"></div>
-      <div class="ml-ref" id="ml-ref" hidden><span>FÖRLAGA</span></div>
-      <div class="fg-zone" id="ml-callout"></div>
-      <div class="fg-phase" id="ml-phase"></div>
-      <div class="pb-toast" id="ml-toast"></div>
-      <div class="fg-pops" id="ml-pops"></div>
+/** localStorage that survives private mode and a full disk. */
+const store = {
+  get(key, fallback) {
+    try {
+      const v = localStorage.getItem(key);
+      return v == null ? fallback : JSON.parse(v);
+    } catch (e) {
+      return fallback;
+    }
+  },
+  set(key, value) {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch (e) {
+      /* private mode or full: the evening still counts, it just isn't kept */
+    }
+  }
+};
 
-      <div class="ml-mix" id="ml-mix" hidden>
-        <div class="ml-region" id="ml-region">Välj en yta</div>
-        <div class="ml-swatches">
-          <div class="ml-swatch"><i id="ml-target"></i><span>MÅL</span></div>
-          <div class="ml-swatch"><i id="ml-mixed"></i><span>DIN</span></div>
-        </div>
-        <div class="ml-meter"><i id="ml-meter-fill"></i></div>
-      </div>
+const packRgb = (c) => (c ? c.reduce((h, v) => (h << 8) | Math.round(v * 255), 0) : -1);
+/** Every region in the colour the master gave it. */
+const targetsOf = (w) => w.regions.map((rg) => hexToRgb(rg.color));
+/** Pixel height of a canvas `px` wide, at the easel's proportions. */
+const tall = (px) => Math.round((px * ART_H) / ART_W);
+const unpackRgb = (h) => (h >= 0 ? hexToRgb(h) : null);
 
-      <div class="ml-pigments" id="ml-pigments" hidden></div>
-
-      <div class="cl-tools show" id="ml-tools" hidden>
-        <button class="cl-tool" id="ml-wipe">TORKA</button>
-        <button class="cl-tool primary" id="ml-apply">MÅLA</button>
-      </div>
-    </div>
-
-    <div class="pb-overlay" id="ml-overlay">
-      <div class="pb-panel">
-        <h2 id="ml-otitle">Pekkas Måleri</h2>
-        <p id="ml-otext">Trädgården på Terrassvägen 47, 7 augusti 2021. Dra en lapp ur hatten, måla av mästerverket — och låt Mikael Hägglund döma.</p>
-        <ul class="fg-steps" id="ml-steps">
-          <li><i style="--c:#7fd8e8"></i><b>Välj yta</b> Tryck på en yta i tavlan. Målfärgen visas.</li>
-          <li><i style="--c:#f2c14e"></i><b>Blanda</b> Tryck på pigmenten. Rött, gult och blått blandas som riktig färg — vitt ljusar upp, svart mörkar ner.</li>
-          <li><i style="--c:#5eead4"></i><b>Måla</b> När mätaren är grön: tryck MÅLA. Ju närmare färgen, desto mer poäng.</li>
-        </ul>
-        <div class="pb-scoreline" id="ml-scoreline" hidden></div>
-        <div class="fg-catchlist" id="ml-verdict" hidden></div>
-        <button class="pb-btn" id="ml-start">Dra en lapp ur hatten</button>
-      </div>
-    </div>
-
-    <button class="pb-info" id="ml-info" aria-label="Så spelar du">?</button>
-
-    <div class="pb-help" id="ml-help" hidden>
-      <div class="pb-help-card">
-        <h3>Så målar du</h3>
-        <p class="pb-help-sub">Pekkas Måleri · Terrassvägen 47, 2021</p>
-        <ul class="pb-help-list">
-          <li><i style="--c:#7fd8e8"></i><b>Ytorna</b> Tavlan är uppdelad i färgfält. Tryck på ett fält för att välja det — målfärgen dyker upp i rutan MÅL.</li>
-          <li><i style="--c:#f2c14e"></i><b>Paletten</b> Fem pigment. Rött + gult = orange, gult + blått = grönt, rött + blått = lila — subtraktivt, som riktig färg. Vitt ljusar, svart mörkar.</li>
-          <li><i style="--c:#5eead4"></i><b>Mätaren</b> Visar hur nära din blandning ligger målet. Grönt = träff.</li>
-          <li><i style="--c:#a78bfa"></i><b>TORKA</b> Torkar paletten ren så du kan börja om på en ny färg.</li>
-          <li><i style="--c:#f26d8d"></i><b>Tiden</b> 95 sekunder per verk. Ytor du inte hinner måla står kvar som bar duk och drar ner betyget.</li>
-          <li><i style="--c:#ffd166"></i><b>Domen</b> Mikael Hägglund sätter betyg 1–10 på varje verk, precis som 2021.</li>
-        </ul>
-        <p class="pb-help-tip">Tre verk per kväll. Skriet av Munch är verket som faktiskt vann 2021 — Olov Melanders tolkning.</p>
-        <div class="pb-help-keys">1–5 väljer pigment · mellanslag målar · W torkar paletten</div>
-        <button class="pb-btn" id="ml-help-close">Tillbaka till staffliet</button>
-      </div>
-    </div>
-
-    <button class="pb-mute" id="ml-mute" aria-label="Ljud på/av">
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M11 5 6 9H2v6h4l5 4V5Z"/><path class="pb-wave" d="M15.5 8.5a5 5 0 0 1 0 7"/>
-      </svg>
-    </button>
-  `;
-  const q = (s) => root.querySelector(s);
+/**
+ * Screen layout per aspect. The numbers are mirrored into CSS variables, so
+ * the camera framing and the HUD can never disagree about where the free
+ * space for the easel is.
+ */
+function layoutFor(W, H) {
+  const wide = W / H >= 1.08 && W >= 640;
+  if (wide) {
+    const side = Math.round(clamp(W * 0.19, 180, 290));
+    const panel = Math.round(clamp(W * 0.25, 280, 380));
+    const top = 64;
+    const left = 16 + side + 14;
+    const right = 16 + panel + 14;
+    return {
+      wide, side, panel, top, sheet: 0,
+      card: Math.round(clamp(W * 0.44, 400, 620)),
+      free: { x: left, y: top, w: W - left - right, h: H - top - 14 }
+    };
+  }
+  const sheet = Math.round(clamp(H * 0.37, 250, 330));
+  const top = 58;
   return {
-    score: q('#ml-score'), hi: q('#ml-hi'), time: q('#ml-time'), work: q('#ml-work'),
-    title: q('#ml-title'), ref: q('#ml-ref'), callout: q('#ml-callout'), phase: q('#ml-phase'),
-    toast: q('#ml-toast'), pops: q('#ml-pops'),
-    mix: q('#ml-mix'), pigments: q('#ml-pigments'),
-    target: q('#ml-target'), mixed: q('#ml-mixed'),
-    meterFill: q('#ml-meter-fill'), region: q('#ml-region'),
-    tools: q('#ml-tools'), wipe: q('#ml-wipe'), apply: q('#ml-apply'),
-    overlay: q('#ml-overlay'), otitle: q('#ml-otitle'), otext: q('#ml-otext'),
-    steps: q('#ml-steps'), scoreline: q('#ml-scoreline'), verdict: q('#ml-verdict'),
-    start: q('#ml-start'), info: q('#ml-info'), help: q('#ml-help'),
-    helpClose: q('#ml-help-close'), mute: q('#ml-mute')
+    wide, side: 0, panel: 0, top, sheet,
+    card: W,
+    free: { x: 6, y: top, w: W - 12, h: H - sheet - top - 8 }
   };
 }
 
 /* ------------------------------------------------------------------- game */
 
 export async function createPainting(container) {
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const coarse = window.matchMedia('(pointer: coarse)').matches;
+  const box0 = container.getBoundingClientRect();
+  // Phones and small screens get a lighter garden and a smaller shadow map
+  const lowTier = coarse || Math.min(box0.width, box0.height) < 520;
+
   const canvasHost = document.createElement('div');
-  canvasHost.className = 'pb-canvas';
+  canvasHost.className = 'pb-canvas pm-canvas';
   container.appendChild(canvasHost);
 
   const hudHost = document.createElement('div');
-  hudHost.className = 'pb-ui fg-ui';
+  hudHost.className = 'pb-ui pm-ui';
   container.appendChild(hudHost);
   const hud = buildHud(hudHost);
+  hudHost.dataset.phase = 'idle';
 
   const sfx = new Sfx();
-  const rand = mulberry(870);
+  // The hat is shuffled differently every evening
+  const rand = mulberry((Date.now() ^ 0x2021) & 0x7fffffff);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, lowTier ? 1.75 : 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.12;
+  // Neutral, not ACES: this is a game about getting a colour exactly right,
+  // and ACES shifts hue and saturation on the way to the screen. Khronos'
+  // neutral curve keeps the canvas reading as the colour you mixed.
+  renderer.toneMapping = THREE.NeutralToneMapping;
+  renderer.toneMappingExposure = 1.02;
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // r187: PCF with a hardware-compared Vogel disk; radius sets the softness
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   canvasHost.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
@@ -186,21 +179,18 @@ export async function createPainting(container) {
   // the far spruces fade into a band that does not exist in the sky behind.
   scene.fog = new THREE.Fog(0xc9d9dd, 30, 78);
 
-  const camera = new THREE.PerspectiveCamera(44, 1, 0.1, 140);
-  camera.position.set(0, 1.95, 2.32);
-  const lookAt = new THREE.Vector3(0, 1.42, -0.55);
-  camera.lookAt(lookAt);
+  const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 140);
 
   scene.add(buildSky());
 
   /* Lights: one warm low sun casting everything, a cool sky fill, a bounce */
-  scene.add(new THREE.HemisphereLight(0xc6dcf4, 0x5a6a34, 0.9));
+  scene.add(new THREE.HemisphereLight(0xc6dcf4, 0x5a6a34, 0.95));
 
-  const sun = new THREE.DirectionalLight(0xfff0cf, 2.2);
+  const sun = new THREE.DirectionalLight(0xfff0cf, 2.25);
   sun.position.set(-8, 13, 6);
   sun.target.position.set(0, 1, -2);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(lowTier ? 1024 : 2048, lowTier ? 1024 : 2048);
   sun.shadow.camera.left = -11;
   sun.shadow.camera.right = 11;
   sun.shadow.camera.top = 10;
@@ -209,6 +199,9 @@ export async function createPainting(container) {
   sun.shadow.camera.far = 32;
   sun.shadow.bias = -0.0007;
   sun.shadow.normalBias = 0.02;
+  sun.shadow.radius = 3;
+  // Layer 1 holds the birch canopy that only exists as dappled shade
+  sun.shadow.camera.layers.enable(1);
   scene.add(sun, sun.target);
 
   const bounce = new THREE.DirectionalLight(0x9cb060, 0.32);
@@ -221,63 +214,111 @@ export async function createPainting(container) {
   rim.position.set(5, 5, -12);
   scene.add(rim);
 
+  /*
+   * Reflections for the one physically based surface in the garden, the
+   * wet paint: a tiny scene of the same sky over a lawn-coloured ground,
+   * prefiltered once. Fresh oil picks up the sky; bare linen does not.
+   */
+  let envRT = null;
+  {
+    const envScene = new THREE.Scene();
+    const sky = buildSky();
+    envScene.add(sky);
+    const ground = new THREE.Mesh(
+      new THREE.CircleGeometry(50, 16),
+      new THREE.MeshBasicMaterial({ color: 0x4d6a2c })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -1;
+    envScene.add(ground);
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    envRT = pmrem.fromScene(envScene, 0.04);
+    pmrem.dispose();
+    envScene.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) {
+        if (o.material.map) o.material.map.dispose();
+        o.material.dispose();
+      }
+    });
+    scene.environment = envRT.texture;
+  }
+
   /* World */
-  const garden = buildGarden();
+  const garden = buildGarden({ lowTier });
   scene.add(garden.group);
 
-  /* The player's canvas, as a texture on the easel */
-  const CW = 700;
-  const CH = 762;
-  const artCv = document.createElement('canvas');
-  artCv.width = CW;
-  artCv.height = CH;
-  const artCtx = artCv.getContext('2d');
-  const baseCv = document.createElement('canvas');
-  baseCv.width = CW;
-  baseCv.height = CH;
-  const baseCtx = baseCv.getContext('2d');
-  const artTex = new THREE.CanvasTexture(artCv);
+  /* ---- The player's canvas ------------------------------------------- */
+
+  const live = new LiveCanvas(ART_W, ART_H);
+  const maxAniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  const artTex = new THREE.CanvasTexture(live.art);
   artTex.colorSpace = THREE.SRGBColorSpace;
-  artTex.anisotropy = 8;
-  const easel = buildEasel(new THREE.MeshLambertMaterial({ map: artTex }), 1.12, 1.22);
-  easel.position.set(0, 0, -0.55);
+  artTex.anisotropy = maxAniso;
+  const surfTex = new THREE.CanvasTexture(live.surface);
+  surfTex.colorSpace = THREE.NoColorSpace;
+  surfTex.anisotropy = maxAniso;
+  const selTex = new THREE.CanvasTexture(live.select);
+  selTex.colorSpace = THREE.NoColorSpace;
+  selTex.generateMipmaps = false;
+  selTex.minFilter = THREE.LinearFilter;
+
+  /*
+   * The canvas is the only PBR material in the scene. The surface image is
+   * both its bump map (R, paint height) and roughness map (G), so impasto
+   * catches the low sun and fresh paint is glossier than bare linen.
+   * The selection is drawn by the shader from a half-resolution mask: a
+   * warm tint inside the region and a glowing outline found by comparing
+   * each texel with its neighbours — no per-frame canvas redraw, no upload.
+   */
+  const selUniforms = { uPulse: { value: 0 } };
+  const artMat = new THREE.MeshStandardMaterial({
+    map: artTex, bumpMap: surfTex, bumpScale: 1.6, roughnessMap: surfTex,
+    roughness: 1, metalness: 0, envMapIntensity: 0.55
+  });
+  artMat.onBeforeCompile = (shader) => {
+    shader.uniforms.uSelMap = { value: selTex };
+    shader.uniforms.uSelTexel = { value: new THREE.Vector2(2 / ART_W, 2 / ART_H) };
+    shader.uniforms.uPulse = selUniforms.uPulse;
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform sampler2D uSelMap;\nuniform vec2 uSelTexel;\nuniform float uPulse;')
+      .replace('#include <map_fragment>', `#include <map_fragment>
+        vec4 pmSel = texture2D( uSelMap, vMapUv );
+        vec2 pmT = uSelTexel * 1.6;
+        float pmAvg = 0.25 * ( texture2D( uSelMap, vMapUv + vec2( pmT.x, 0.0 ) ).r + texture2D( uSelMap, vMapUv - vec2( pmT.x, 0.0 ) ).r
+          + texture2D( uSelMap, vMapUv + vec2( 0.0, pmT.y ) ).r + texture2D( uSelMap, vMapUv - vec2( 0.0, pmT.y ) ).r );
+        float pmEdge = clamp( abs( pmSel.r - pmAvg ) * 5.0, 0.0, 1.0 );
+        diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 1.0, 0.84, 0.48 ), pmSel.r * ( 0.12 + 0.14 * uPulse ) );
+        diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 1.0, 0.97, 0.9 ), pmSel.g * 0.16 );`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        totalEmissiveRadiance += vec3( 1.0, 0.68, 0.22 ) * pmEdge * ( 0.5 + 0.5 * uPulse );`);
+  };
+  artMat.customProgramCacheKey = () => 'pm-art';
+
+  const easel = buildEasel(artMat, CANVAS_W, CANVAS_H);
+  easel.position.set(0, 0, EASEL_Z);
   scene.add(easel);
   const artMesh = easel.userData.canvas;
 
-  // The id-map lives offscreen: tapping the canvas reads a pixel from it
+  const brush = buildBrush();
+  easel.add(brush.group);
+  // Handle out toward the right hand and the viewer, bristles on the canvas
+  const brushDir = new THREE.Vector3(0.42, -0.5, 0.76).normalize();
+  brush.group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), brushDir);
+  const brushState = { on: 0, vis: 0, x: 0.5, y: 0.5, tx: 0.5, ty: 0.5, sound: 0 };
+
+  // The id-map lives offscreen: tapping the canvas reads pixels from it
   // rather than doing point-in-polygon against curved paths.
   const idCv = document.createElement('canvas');
-  idCv.width = CW;
-  idCv.height = CH;
+  idCv.width = ART_W;
+  idCv.height = ART_H;
   const idCtx = idCv.getContext('2d', { willReadFrequently: true });
 
-  /* The reference, pinned in the HUD like the phone everyone painted from */
-  const refCv = document.createElement('canvas');
-  refCv.width = 280;
-  refCv.height = 305;
-  refCv.className = 'ml-ref-canvas';
-  const refCtx = refCv.getContext('2d');
-  hud.ref.appendChild(refCv);
+  /* ---- The rest of the field ------------------------------------------ */
 
-  /* The palette in the player's hands */
-  const palCv = document.createElement('canvas');
-  palCv.width = 640;
-  palCv.height = 344;
-  const palCtx = palCv.getContext('2d');
-  const palTex = new THREE.CanvasTexture(palCv);
-  palTex.colorSpace = THREE.SRGBColorSpace;
-  const palette = buildPalette(new THREE.MeshBasicMaterial({ map: palTex, transparent: true }));
-  palette.position.set(-0.62, 0.94, 0.94);
-  palette.rotation.set(-1.02, 0.5, 0.12);
-  palette.scale.setScalar(0.44);
-  scene.add(palette);
-
-  /* The others, at their own easels down the lawn */
   /*
    * The rest of the field, staged so they actually land inside the frame.
-   * The first version had them at x ±3 and z ≈ 0 — which is fifty-odd
-   * degrees off axis at this focal length, i.e. entirely off screen. Depth
-   * is what buys you width: at z −5 the frame is nine metres across.
+   * Depth is what buys you width: at z −5 the frame is nine metres across.
    */
   const FIELD = [
     { name: 'Per Olsson', shirt: 0x6b4a2e, beret: true, x: -3.4, z: -4.6, ry: 0.42, side: -1 },
@@ -302,54 +343,66 @@ export async function createPainting(container) {
       p.z - fz * 0.72 - fx * p.side * 0.44
     );
     fig.group.rotation.y = p.ry - p.side * 0.5;
-    fig.group.traverse((o) => {
-      if (o.isMesh) o.castShadow = true;
-    });
     scene.add(fig.group);
-    const theirEasel = buildEasel(new THREE.MeshLambertMaterial({ color: 0xd8cfba }), 0.78, 0.6);
+    const theirEasel = buildEasel(null, 0.78, 0.6);
     theirEasel.position.set(p.x, 0, p.z);
     theirEasel.rotation.y = p.ry + Math.PI;
     theirEasel.scale.setScalar(0.88);
     scene.add(theirEasel);
-    // We see the back of their canvas, so it gets the stretcher bars
-    [0.66, -0.66].forEach((tilt) => {
-      const bar = new THREE.Mesh(
-        new THREE.BoxGeometry(0.62, 0.035, 0.02),
-        new THREE.MeshLambertMaterial({ color: 0xa8804a })
-      );
-      bar.position.set(p.x, 1.14, p.z + 0.03);
-      bar.rotation.set(0, p.ry + Math.PI, tilt);
-      scene.add(bar);
-    });
     return { ...p, fig, phase: rand() * 6 };
   });
+
+  /* Mikael Hägglund, strolling between the easels until he is needed */
+  const judge = buildJudge();
+  const JUDGE_HOME = { x: 1.75, z: -3.4, ry: -0.9 };
+  // Beside the easel, level with the canvas, so he never stands in front of it
+  const JUDGE_SPOT = { x: 1.22, z: -0.5 };
+  judge.group.position.set(JUDGE_HOME.x, 0, JUDGE_HOME.z);
+  judge.group.rotation.y = JUDGE_HOME.ry;
+  scene.add(judge.group);
+  const judgeState = { mode: 'home', t: 0, fromX: JUDGE_HOME.x, fromZ: JUDGE_HOME.z, toX: JUDGE_HOME.x, toZ: JUDGE_HOME.z, ry: JUDGE_HOME.ry, mood: 0 };
+
+  /* ---- Palette ---------------------------------------------------------- */
+
+  const palette = new Palette(hud.palette, { reducedMotion: reduced });
 
   /* ---- State ----------------------------------------------------------- */
 
   const state = {
-    phase: 'idle', // idle | draw | paint | judging | between | over
+    phase: 'idle', // idle | draw | paint | judging | reveal | over
     workNo: 1,
     score: 0,
     timeLeft: ROUND_SECONDS,
     selected: -1,
-    grades: [],
+    hover: -1,
+    streak: 0,
+    bestStreak: 0,
+    hits: 0,
+    regionTime: 0,
+    lastSecond: -1,
+    results: [],
     lastToast: 0,
-    timers: []
+    timers: [],
+    matchedNow: false,
+    returnCard: 'start'
   };
 
-  const drops = { r: 0, y: 0, b: 0, w: 0, k: 0 };
+  let drops = { r: 0, y: 0, b: 0, w: 0, k: 0 };
+  let history = [];
   let mixed = mixPigments(drops);
   let work = ARTWORKS[0];
   let painted = [];
+  let paintedDE = [];
   let bag = [];
+  let refImage = null;
+  /** Little timed animations (the grade counting up) run off the frame loop. */
+  const tweens = [];
+  let hatHop = 0;
 
-  let high = 0;
-  try {
-    high = parseInt(localStorage.getItem(HIGHSCORE_KEY) || '0', 10) || 0;
-  } catch (e) {
-    high = 0;
-  }
-  const fmt = (n) => Math.round(n).toLocaleString('sv-SE');
+  let high = Number(store.get(HIGHSCORE_KEY, 0)) || 0;
+  let bests = store.get(BEST_KEY, {}) || {};
+  let gallery = store.get(GALLERY_KEY, []);
+  if (!Array.isArray(gallery)) gallery = [];
   hud.hi.textContent = fmt(high);
 
   const later = (fn, ms) => {
@@ -358,373 +411,933 @@ export async function createPainting(container) {
     return id;
   };
 
+  /* ---- Layout & camera -------------------------------------------------- */
+
+  const view = { w: 1, h: 1, lay: layoutFor(1, 1) };
+
+  /** A camera shot: where it stands, what it looks at, lens, lens shift. */
+  function shotParams(name, t = 0) {
+    const { w: W, h: H, lay } = view;
+    const { wide } = lay;
+    if (name === 'easel') {
+      const r = lay.free;
+      const fov = wide ? 32 : 44;
+      const tan = Math.tan(THREE.MathUtils.degToRad(fov / 2));
+      const ppu = Math.min((r.h * 0.95) / FRAME_H, (r.w * 0.95) / FRAME_W);
+      const d = H / (2 * tan * ppu);
+      const pitch = 0.075;
+      return {
+        pos: new THREE.Vector3(CANVAS_C.x, CANVAS_C.y + Math.sin(pitch) * d, CANVAS_C.z + Math.cos(pitch) * d),
+        tgt: CANVAS_C.clone(), fov,
+        ox: W / 2 - (r.x + r.w / 2), oy: H / 2 - (r.y + r.h / 2)
+      };
+    }
+    if (name === 'judge') {
+      // The canvas and Hägglund beside it, in the space the verdict card
+      // leaves free: the left of a wide screen, the top of a tall one
+      const free = wide
+        ? { x: 0, y: lay.top, w: W - lay.card - 28, h: H - lay.top }
+        : { x: 0, y: lay.top - 10, w: W, h: H * 0.3 - lay.top + 16 };
+      const fov = wide ? 36 : 46;
+      const tan = Math.tan(THREE.MathUtils.degToRad(fov / 2));
+      const ppu = Math.min((free.h * 0.86) / 2.35, (free.w * 0.86) / 2.3);
+      const d = H / (2 * tan * ppu);
+      const tgt = new THREE.Vector3(0.45, 1.15, -0.5);
+      const dir = new THREE.Vector3(0.62, 0.22, 2.0).normalize();
+      return {
+        pos: tgt.clone().addScaledVector(dir, d), tgt, fov,
+        ox: W / 2 - (free.x + free.w / 2), oy: H / 2 - (free.y + free.h / 2)
+      };
+    }
+    // 'wide': the whole garden, drifting slowly round the easel
+    const a = 0.46 + (reduced ? 0 : Math.sin(t * 0.07) * 0.2);
+    const R = wide ? 6.4 : 8.6;
+    const c = new THREE.Vector3(0.2, 1.2, -3.0);
+    return {
+      pos: new THREE.Vector3(
+        c.x + Math.sin(a) * R, 2.35 + (reduced ? 0 : Math.sin(t * 0.11) * 0.15), c.z + Math.cos(a) * R
+      ),
+      tgt: new THREE.Vector3(-0.1, 1.35, -3.2),
+      fov: wide ? 44 : 56,
+      ox: wide ? -W * 0.15 : 0,
+      oy: wide ? 0 : H * 0.17
+    };
+  }
+
+  const rig = { name: 'wide', t: 1, dur: 1, from: null };
+  const cur = { pos: new THREE.Vector3(), tgt: new THREE.Vector3(), fov: 40, ox: 0, oy: 0 };
+
+  function setShot(name, dur = 1.4) {
+    rig.from = { pos: cur.pos.clone(), tgt: cur.tgt.clone(), fov: cur.fov, ox: cur.ox, oy: cur.oy };
+    rig.name = name;
+    rig.t = 0;
+    rig.dur = reduced ? Math.min(dur, 0.01) : Math.max(0.001, dur);
+    if (dur <= 0) rig.t = 1;
+  }
+
+  function updateCamera(dt, t) {
+    const to = shotParams(rig.name, t);
+    if (rig.t < 1 && rig.from) {
+      rig.t = Math.min(1, rig.t + dt / rig.dur);
+      const k = easeInOut(rig.t);
+      cur.pos.lerpVectors(rig.from.pos, to.pos, k);
+      // A shallow arc between shots, so a cut becomes a move
+      if (!reduced) cur.pos.y += Math.sin(k * Math.PI) * 0.35;
+      cur.tgt.lerpVectors(rig.from.tgt, to.tgt, k);
+      cur.fov = rig.from.fov + (to.fov - rig.from.fov) * k;
+      cur.ox = rig.from.ox + (to.ox - rig.from.ox) * k;
+      cur.oy = rig.from.oy + (to.oy - rig.from.oy) * k;
+    } else {
+      cur.pos.copy(to.pos);
+      cur.tgt.copy(to.tgt);
+      cur.fov = to.fov;
+      cur.ox = to.ox;
+      cur.oy = to.oy;
+    }
+    camera.position.copy(cur.pos);
+    // The easel shot breathes very slightly; a locked-off camera reads as a UI
+    if (!reduced && rig.name === 'easel') {
+      camera.position.x += Math.sin(t * 0.5) * 0.006;
+      camera.position.y += Math.sin(t * 0.37) * 0.004;
+    }
+    camera.lookAt(cur.tgt);
+    camera.fov = cur.fov;
+    camera.setViewOffset(view.w, view.h, cur.ox, cur.oy, view.w, view.h);
+  }
+
+  function resize() {
+    const rect = container.getBoundingClientRect();
+    const w = Math.max(1, Math.floor(rect.width));
+    const h = Math.max(1, Math.floor(rect.height));
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    view.w = w;
+    view.h = h;
+    view.lay = layoutFor(w, h);
+    const L = view.lay;
+    hudHost.classList.toggle('pm-wide', L.wide);
+    hudHost.classList.toggle('pm-tall', !L.wide);
+    const s = hudHost.style;
+    s.setProperty('--pm-side', `${L.side}px`);
+    s.setProperty('--pm-panel', `${L.panel}px`);
+    s.setProperty('--pm-sheet', `${L.sheet}px`);
+    s.setProperty('--pm-card', `${L.card}px`);
+    s.setProperty('--pm-fx', `${L.free.x + L.free.w / 2}px`);
+    s.setProperty('--pm-fy', `${L.free.y + L.free.h / 2}px`);
+    s.setProperty('--pm-fh', `${L.free.h}px`);
+    const pr = hud.palette.getBoundingClientRect();
+    palette.resize(pr.width, pr.height, window.devicePixelRatio || 1);
+    sizeRefCanvases();
+    if (rig.t >= 1) setShot(rig.name, 0);
+  }
+
   /* ---- HUD helpers ----------------------------------------------------- */
 
-  function toast(msg, big = false) {
+  function toast(msg, ms = 1500) {
     hud.toast.textContent = msg;
-    hud.toast.className = `pb-toast show${big ? ' big' : ''}`;
+    hud.toast.classList.add('show');
     clearTimeout(state.lastToast);
-    state.lastToast = setTimeout(() => {
-      hud.toast.className = 'pb-toast';
-    }, big ? 2200 : 1200);
+    state.lastToast = setTimeout(() => hud.toast.classList.remove('show'), ms);
   }
 
-  function setPhaseLabel(txt) {
-    hud.phase.textContent = txt;
-    hud.phase.classList.toggle('show', !!txt);
-  }
-
-  function callout(txt) {
+  function callout(txt, cls = '') {
     hud.callout.textContent = txt;
-    hud.callout.classList.remove('show');
+    hud.callout.className = 'pm-callout';
     void hud.callout.offsetWidth;
-    hud.callout.classList.add('show');
+    hud.callout.className = `pm-callout show ${cls}`;
   }
 
   const projected = new THREE.Vector3();
-  function popScore(text, world) {
+  function popAt(text, world, cls = '') {
     projected.copy(world).project(camera);
     if (projected.z > 1) return;
     const el = document.createElement('div');
-    el.className = 'fg-pop';
+    el.className = `pm-pop ${cls}`;
     el.textContent = text;
     el.style.left = `${(projected.x * 0.5 + 0.5) * 100}%`;
     el.style.top = `${(-projected.y * 0.5 + 0.5) * 100}%`;
     hud.pops.appendChild(el);
-    later(() => el.remove(), 1100);
+    later(() => el.remove(), 1300);
   }
 
-  function addScore(n, world, label) {
-    state.score += n;
-    hud.score.textContent = fmt(state.score);
+  function setScore(n) {
+    state.score = n;
+    hud.score.textContent = fmt(n);
     hud.score.classList.remove('bump');
     void hud.score.offsetWidth;
     hud.score.classList.add('bump');
-    if (world) popScore(label || `+${fmt(n)}`, world);
   }
 
-  /* ---- Palette rendering ----------------------------------------------- */
+  /** Canvas 0..1 coordinates → a point on the easel in world space. */
+  const canvasPoint = (u, v, out = new THREE.Vector3()) => {
+    out.set((u - 0.5) * CANVAS_W, (0.5 - v) * CANVAS_H, 0.01);
+    return artMesh.localToWorld(out);
+  };
 
-  // Where each pigment well sits on the palette texture, in pixels
-  const WELLS = PIGMENTS.map((p, i) => {
-    const a = -0.95 + (i / (PIGMENTS.length - 1)) * 1.9;
-    return { ...p, x: 320 + Math.sin(a) * 232, y: 118 - Math.cos(a) * 62 };
-  });
-  const WELL_R = 34;
+  function renderStreak() {
+    const s = state.streak;
+    hud.streak.classList.toggle('show', s >= 2);
+    if (s >= 2) hud.streak.innerHTML = `SVIT ×${s} <em>poäng ×${(1 + 0.25 * Math.min(s - 1, 6)).toFixed(2).replace('.', ',')}</em>`;
+  }
 
-  function paintPalette() {
-    const W = palCv.width;
-    const H = palCv.height;
-    palCtx.clearRect(0, 0, W, H);
+  function renderClock() {
+    const s = Math.max(0, Math.ceil(state.timeLeft));
+    hud.time.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    const frac = clamp(state.timeLeft / ROUND_SECONDS, 0, 1);
+    const C = 2 * Math.PI * 19;
+    hud.clockArc.style.strokeDasharray = `${(C * frac).toFixed(1)} ${C.toFixed(1)}`;
+    hud.clock.classList.toggle('low', s <= 15);
+  }
 
-    // The board: a kidney shape with a thumb hole
-    palCtx.save();
-    palCtx.beginPath();
-    palCtx.ellipse(W / 2, H * 0.52, W * 0.47, H * 0.42, 0, 0, Math.PI * 2);
-    palCtx.closePath();
-    const woodGrad = palCtx.createLinearGradient(0, 0, 0, H);
-    woodGrad.addColorStop(0, '#c9a068');
-    woodGrad.addColorStop(1, '#a37c47');
-    palCtx.fillStyle = woodGrad;
-    palCtx.fill();
-    palCtx.strokeStyle = 'rgba(70,46,20,0.55)';
-    palCtx.lineWidth = 5;
-    palCtx.stroke();
-    // Thumb hole
-    palCtx.globalCompositeOperation = 'destination-out';
-    palCtx.beginPath();
-    palCtx.ellipse(W * 0.17, H * 0.72, 30, 22, -0.3, 0, Math.PI * 2);
-    palCtx.fill();
-    palCtx.globalCompositeOperation = 'source-over';
-    palCtx.restore();
+  /* ---- Reference --------------------------------------------------------- */
 
-    // Pigment wells
-    WELLS.forEach((wl, i) => {
-      palCtx.beginPath();
-      palCtx.arc(wl.x, wl.y, WELL_R, 0, Math.PI * 2);
-      palCtx.fillStyle = wl.css;
-      palCtx.fill();
-      palCtx.lineWidth = 3;
-      palCtx.strokeStyle = 'rgba(40,26,10,0.5)';
-      palCtx.stroke();
-      // A dab of highlight so it reads as wet paint
-      palCtx.beginPath();
-      palCtx.ellipse(wl.x - 10, wl.y - 12, 11, 7, -0.5, 0, Math.PI * 2);
-      palCtx.fillStyle = 'rgba(255,255,255,0.28)';
-      palCtx.fill();
-      palCtx.fillStyle = 'rgba(30,20,8,0.75)';
-      palCtx.font = '700 15px Inter, sans-serif';
-      palCtx.textAlign = 'center';
-      palCtx.fillText(String(i + 1), wl.x, wl.y + WELL_R + 17);
+  function sizeRefCanvases() {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const big = Math.round(clamp(view.lay.side || 240, 160, 300) * dpr);
+    const bh = tall(big);
+    [hud.refCv, hud.refSel].forEach((c) => {
+      if (c.width !== big) {
+        c.width = big;
+        c.height = bh;
+      }
     });
-
-    // The pool of mixed paint in the middle of the board
-    const total = drops.r + drops.y + drops.b + drops.w + drops.k;
-    if (total > 0) {
-      const r = Math.min(66, 22 + total * 4);
-      palCtx.save();
-      palCtx.beginPath();
-      palCtx.ellipse(W * 0.53, H * 0.68, r * 1.25, r * 0.8, 0.15, 0, Math.PI * 2);
-      palCtx.closePath();
-      palCtx.fillStyle = rgbToCss(mixed);
-      palCtx.fill();
-      palCtx.strokeStyle = 'rgba(0,0,0,0.22)';
-      palCtx.lineWidth = 3;
-      palCtx.stroke();
-      palCtx.beginPath();
-      palCtx.ellipse(W * 0.53 - r * 0.5, H * 0.68 - r * 0.3, r * 0.3, r * 0.16, -0.4, 0, Math.PI * 2);
-      palCtx.fillStyle = 'rgba(255,255,255,0.2)';
-      palCtx.fill();
-      palCtx.restore();
-    }
-    palTex.needsUpdate = true;
+    const mini = Math.round(60 * dpr);
+    const mh = tall(mini);
+    [hud.miniCv, hud.miniSel].forEach((c) => {
+      if (c.width !== mini) {
+        c.width = mini;
+        c.height = mh;
+      }
+    });
+    if (refImage) drawRefImages();
   }
 
-  function renderMixHud() {
-    hud.target.style.background = state.selected >= 0
-      ? rgbToCss(hexToRgb(work.regions[state.selected].color))
-      : 'transparent';
-    hud.mixed.style.background = rgbToCss(mixed);
-    let pct = 0;
-    if (state.selected >= 0) {
-      const d = colourDistance(mixed, hexToRgb(work.regions[state.selected].color));
-      pct = Math.max(0, 1 - d / 55);
-    }
-    hud.meterFill.style.width = `${(pct * 100).toFixed(0)}%`;
-    hud.meterFill.style.background = pct > 0.86 ? '#3ddc7b' : pct > 0.6 ? '#f2c14e' : '#f26d8d';
-    hud.region.textContent = state.selected >= 0
-      ? work.regions[state.selected].name
-      : 'Välj en yta i tavlan';
+  function drawRefImages() {
+    [hud.refCv, hud.miniCv].forEach((c) => {
+      const ctx = c.getContext('2d');
+      ctx.clearRect(0, 0, c.width, c.height);
+      ctx.drawImage(refImage, 0, 0, c.width, c.height);
+    });
+    drawRefSelection();
   }
 
-  /* ---- Canvas rendering ------------------------------------------------ */
+  /** On the reference, the selected region glows and everything else dims. */
+  const selScratch = document.createElement('canvas');
+  function drawRefSelection() {
+    [hud.refSel, hud.miniSel].forEach((c) => {
+      const ctx = c.getContext('2d');
+      ctx.clearRect(0, 0, c.width, c.height);
+      const i = state.selected;
+      if (i < 0 || state.phase !== 'paint') return;
+      const w = c.width;
+      const h = c.height;
+      selScratch.width = w;
+      selScratch.height = h;
+      const s = selScratch.getContext('2d');
+      s.fillStyle = '#fff';
+      s.beginPath();
+      work.regions[i].path(s, w, h);
+      s.fill();
+      s.globalCompositeOperation = 'destination-out';
+      for (let j = i + 1; j < work.regions.length; j++) {
+        s.beginPath();
+        work.regions[j].path(s, w, h);
+        s.fill();
+      }
+      s.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = 'rgba(8,6,4,0.5)';
+      ctx.fillRect(0, 0, w, h);
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.drawImage(selScratch, 0, 0);
+      // The halo: the mask's own shadow, with the mask cut back out of it
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.save();
+      ctx.shadowColor = 'rgba(255,205,96,1)';
+      ctx.shadowBlur = Math.max(3, w * 0.025);
+      ctx.drawImage(selScratch, 0, 0);
+      ctx.restore();
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.drawImage(selScratch, 0, 0);
+      ctx.globalCompositeOperation = 'source-over';
+    });
+  }
 
-  /*
-   * The canvas is drawn in two layers. The base — weave, laid paint,
-   * brushwork, the drawing — is expensive enough that redoing it sixty
-   * times a second would cost more than the whole 3D scene, and it only
-   * changes when a region is painted or a new work comes out of the hat.
-   * The pulsing selection is the only thing that moves, so that alone is
-   * composited on top each frame.
+  function renderDots() {
+    hud.dots.innerHTML = work.regions.map((rg, i) => {
+      const p = painted[i];
+      const cls = p ? (paintedDE[i] < MATCH_DE ? 'hit' : 'done') : i === state.selected ? 'sel' : '';
+      const bg = p ? ` style="--c:${rgbToCss(p)}"` : '';
+      return `<button class="pm-dot ${cls}" data-i="${i}"${bg} title="${esc(rg.name)}" aria-label="${esc(rg.name)}"></button>`;
+    }).join('');
+    const done = painted.filter(Boolean).length;
+    hud.count.textContent = `${done}/${work.regions.length}`;
+  }
+
+  /* ---- Mixing HUD -------------------------------------------------------- */
+
+  const total = () => drops.r + drops.y + drops.b + drops.w + drops.k;
+
+  let deltaTimer = 0;
+  function renderMix(prevDE = null) {
+    const sel = state.selected;
+    const target = sel >= 0 ? hexToRgb(work.regions[sel].color) : null;
+    hud.target.style.background = target ? rgbToCss(target) : 'transparent';
+    hud.mixed.style.background = total() ? rgbToCss(mixed) : 'transparent';
+    hud.mixed.classList.toggle('empty', !total());
+    hud.region.textContent = sel >= 0 ? work.regions[sel].name : 'Välj en yta i tavlan';
+    const advice = target ? mixAdvice(drops, target) : null;
+    const has = !!advice && total() > 0;
+    const acc = has ? accuracy(advice.dE) : 0;
+    const match = has && advice.dE < MATCH_DE;
+    hud.meterFill.style.width = `${((1 - acc) * 100).toFixed(1)}%`;
+    hud.meterMark.style.left = `${(acc * 100).toFixed(1)}%`;
+    hud.meter.dataset.zone = !has ? 'none' : match ? 'hot' : acc > 0.62 ? 'warm' : 'cold';
+    hud.chip.classList.toggle('match', match);
+    hud.apply.classList.toggle('ready', match);
+    if (prevDE != null && has) {
+      const d = prevDE - advice.dE;
+      if (Math.abs(d) > 0.35 && !match) {
+        hud.delta.textContent = d > 0 ? '▲ varmare' : '▼ kallare';
+        hud.delta.className = `pm-delta show ${d > 0 ? 'warm' : 'cold'}`;
+        clearTimeout(deltaTimer);
+        deltaTimer = setTimeout(() => {
+          hud.delta.className = 'pm-delta';
+        }, 1100);
+        if (d > 0) sfx.warmer();
+        else sfx.colder();
+      }
+    }
+    state.advice = advice;
+    updateTip();
+  }
+
+  /**
+   * The hint under the meter. It always says which way the mix is off —
+   * too light, too grey, wrong hue — and only after a few seconds stuck on
+   * a region does it (and the palette) name the drop to add. Learning to
+   * read the direction is the game; being rescued is the safety net.
    */
-  let artT = 0;
-  function rebuildBase() {
-    paintPlayerBase(baseCtx, work, CW, CH, painted);
-  }
-  function repaint() {
-    artCtx.clearRect(0, 0, CW, CH);
-    artCtx.drawImage(baseCv, 0, 0);
-    paintSelection(artCtx, work, CW, CH, painted, state.selected, artT);
-    artTex.needsUpdate = true;
-  }
-
-  function loadWork(w) {
-    work = w;
-    painted = work.regions.map(() => null);
-    state.selected = -1;
-    paintReference(refCtx, work, refCv.width, refCv.height);
-    paintIdMap(idCtx, work, CW, CH);
-    rebuildBase();
-    repaint();
-    hud.work.textContent = `VERK ${state.workNo}/${WORKS_PER_GAME}`;
-    hud.title.textContent = `${work.title} · ${work.artist}`;
+  function updateTip() {
+    const a = state.advice;
+    const stuck = state.phase === 'paint' && !!a && !!a.tip && state.regionTime > TIP_AFTER;
+    palette.setTip(stuck && a.tip !== 'wipe' ? a.tip : null);
+    hud.wipe.classList.toggle('nudge', stuck && a.tip === 'wipe');
+    let txt;
+    if (!a) txt = 'Tryck på en yta i tavlan';
+    else if (!total()) txt = stuck ? `Droppa pigment · börja med ${PIGMENT_WORD[a.tip]}` : 'Droppa pigment på paletten';
+    else if (!a.tip) txt = a.axis;
+    else if (!stuck) txt = a.axis;
+    else txt = a.tip === 'wipe' ? `${a.axis} · torka och börja om` : `${a.axis} · mer ${PIGMENT_WORD[a.tip]}`;
+    hud.hint.textContent = txt;
   }
 
-  /* ---- Mixing ---------------------------------------------------------- */
+  function currentDE() {
+    if (state.selected < 0 || !total()) return null;
+    return colourDistance(mixed, hexToRgb(work.regions[state.selected].color));
+  }
+
+  function setDrops(next) {
+    drops = { ...next };
+    mixed = mixPigments(drops);
+  }
 
   function addDrop(key) {
     if (state.phase !== 'paint') return;
-    drops[key] = Math.min(12, drops[key] + 1);
-    mixed = mixPigments(drops);
-    const before = state.matchedNow;
-    sfx.drop(PIGMENTS.findIndex((p) => p.key === key));
-    if (state.selected >= 0) {
-      const d = colourDistance(mixed, hexToRgb(work.regions[state.selected].color));
-      state.matchedNow = d < 8;
-      if (state.matchedNow && !before) sfx.match();
+    const pi = PIGMENTS.findIndex((p) => p.key === key);
+    if (drops[key] >= MAX_DROPS) {
+      sfx.bump();
+      toast(`Paletten tar inte mer ${PIGMENTS[pi].name.toLowerCase()} — torka eller ångra`);
+      return;
     }
-    paintPalette();
-    renderPigments();
-    renderMixHud();
+    const before = currentDE();
+    history.push({ ...drops });
+    if (history.length > 60) history.shift();
+    setDrops({ ...drops, [key]: drops[key] + 1 });
+    palette.addDrop(key, drops);
+    sfx.drop(pi);
+    sfx.swirl();
+    const after = currentDE();
+    if (after != null && after < MATCH_DE && !(before != null && before < MATCH_DE)) {
+      sfx.match();
+      hud.chip.classList.remove('ping');
+      void hud.chip.offsetWidth;
+      hud.chip.classList.add('ping');
+    }
+    renderMix(before);
+  }
+
+  function undo() {
+    if (state.phase !== 'paint' || !history.length) return;
+    const before = currentDE();
+    setDrops(history.pop());
+    palette.setDrops(drops);
+    sfx.scrape();
+    renderMix(before);
   }
 
   function wipe() {
-    if (state.phase !== 'paint') return;
-    PIGMENTS.forEach((p) => {
-      drops[p.key] = 0;
-    });
-    mixed = mixPigments(drops);
-    state.matchedNow = false;
+    if (state.phase !== 'paint' || !total()) return;
+    history.push({ ...drops });
+    setDrops({ r: 0, y: 0, b: 0, w: 0, k: 0 });
+    palette.wipe();
     sfx.scrape();
-    paintPalette();
-    renderPigments();
-    renderMixHud();
+    renderMix();
   }
+
+  /** Tapping a dab on the palette rim mixes that colour up again. */
+  function loadDab(dabDrops) {
+    if (state.phase !== 'paint') return;
+    const before = currentDE();
+    history.push({ ...drops });
+    setDrops(dabDrops);
+    palette.setDrops(drops);
+    sfx.swirl();
+    renderMix(before);
+  }
+
+  /* ---- Selecting -------------------------------------------------------- */
+
+  function select(i) {
+    if (i === state.selected) return;
+    state.selected = i;
+    state.regionTime = 0;
+    live.setSelection(i, state.hover);
+    selTex.needsUpdate = true;
+    drawRefSelection();
+    renderDots();
+    renderMix();
+  }
+
+  function nextUnpainted(from, dir = 1) {
+    const n = work.regions.length;
+    for (let k = 1; k <= n; k++) {
+      const j = (((from + dir * k) % n) + n) % n;
+      if (!painted[j]) return j;
+    }
+    return -1;
+  }
+
+  /**
+   * Which region is under a canvas point. The id-map is antialiased like
+   * any canvas fill, so a pixel right on a boundary can hold a blend of two
+   * ids — which is a THIRD, wrong id. A 3×3 vote settles it.
+   */
+  function regionAt(u, v) {
+    const x = clamp(Math.floor(u * ART_W), 1, ART_W - 2);
+    const y = clamp(Math.floor(v * ART_H), 1, ART_H - 2);
+    const d = idCtx.getImageData(x - 1, y - 1, 3, 3).data;
+    const votes = new Map();
+    for (let k = 0; k < 36; k += 4) votes.set(d[k], (votes.get(d[k]) || 0) + 1);
+    const centre = d[16];
+    let best = centre;
+    if ((votes.get(centre) || 0) < 3) {
+      let n = 0;
+      votes.forEach((c, id) => {
+        if (c > n) {
+          n = c;
+          best = id;
+        }
+      });
+    }
+    return best > 0 && best <= work.regions.length ? best - 1 : -1;
+  }
+
+  /* ---- Painting --------------------------------------------------------- */
 
   function applyPaint() {
     if (state.phase !== 'paint' || state.selected < 0) return;
-    const total = drops.r + drops.y + drops.b + drops.w + drops.k;
-    if (total <= 0) {
-      toast('Paletten är tom — blanda något först.');
+    if (!total()) {
+      toast('Paletten är tom — droppa lite pigment först');
       return;
     }
     const idx = state.selected;
     const target = hexToRgb(work.regions[idx].color);
     const d = colourDistance(mixed, target);
+    const acc = accuracy(d);
+    const hit = d < MATCH_DE;
     painted[idx] = mixed.slice();
+    paintedDE[idx] = d;
+
+    // A streak is consecutive regions nailed on their one and only coat
+    if (hit) {
+      state.streak++;
+      state.hits++;
+      state.bestStreak = Math.max(state.bestStreak, state.streak);
+    } else {
+      state.streak = 0;
+    }
+    const mult = hit ? 1 + 0.25 * Math.min(state.streak - 1, 6) : 1;
     // ΔE under about 6 is a colour nobody would call wrong; past 55 it is
     // simply a different colour, so that is where the points run out.
-    const acc = Math.max(0, 1 - d / 55);
-    const pts = Math.round(120 + acc * acc * 680);
-    addScore(pts, artMesh.position, acc > 0.9 ? `TRÄFF +${fmt(pts)}` : `+${fmt(pts)}`);
-    sfx.stroke(acc);
-    if (acc > 0.9) callout('PRICKFÄRG!');
+    const pts = Math.round((120 + acc * acc * 680) * mult);
+    setScore(state.score + pts);
+    const an = analyse(work).regions[idx];
+    const at = canvasPoint(an.cx, an.cy);
+    popAt(`+${fmt(pts)}`, at, hit ? 'hit' : acc < 0.6 ? 'miss' : '');
+    if (hit && state.streak >= 2) {
+      callout(`SVIT ×${state.streak}`, 'streak');
+      sfx.streak(state.streak);
+    } else if (hit) {
+      callout('PRICKFÄRG!', 'hit');
+    }
+    renderStreak();
 
-    // Move on to the next unpainted region so the player keeps flowing
-    const next = painted.findIndex((p) => p === null);
-    state.selected = next;
-    state.matchedNow = false;
-    rebuildBase();
-    repaint();
-    renderMixHud();
-    if (next < 0) later(finishWork, 500);
+    live.begin(idx, mixed, reduced ? 0.01 : 0.62);
+    brushState.on = 1;
+    brushState.x = an.cx;
+    brushState.y = an.cy;
+    brush.tipMat.color.setRGB(mixed[0], mixed[1], mixed[2], THREE.SRGBColorSpace);
+    sfx.stroke(acc);
+    palette.addDab(mixed, drops);
+
+    const next = nextUnpainted(idx, 1);
+    state.selected = -1;
+    if (next >= 0) select(next);
+    else {
+      live.setSelection(-1, -1);
+      selTex.needsUpdate = true;
+      renderDots();
+      renderMix();
+      later(() => finishWork('done'), reduced ? 200 : 900);
+    }
   }
 
-  /* ---- Flow ------------------------------------------------------------ */
+  /* ---- Flow ------------------------------------------------------------- */
+
+  function loadWork(w) {
+    work = w;
+    painted = work.regions.map(() => null);
+    paintedDE = work.regions.map(() => Infinity);
+    state.selected = -1;
+    state.hover = -1;
+    paintIdMap(idCtx, work, ART_W, ART_H);
+    live.load(work, painted);
+    artTex.needsUpdate = true;
+    surfTex.needsUpdate = true;
+    selTex.needsUpdate = true;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const rw = Math.round(300 * dpr);
+    refImage = renderPainting(work, targetsOf(work), rw, tall(rw), { museum: true });
+    drawRefImages();
+    hud.refTitle.textContent = work.title;
+    hud.refArtist.textContent = `${work.artist}, ${work.year}`;
+    hud.work.textContent = `VERK ${state.workNo}/${WORKS_PER_GAME}`;
+    palette.clearDabs();
+    renderDots();
+  }
+
+  function setPhase(p) {
+    state.phase = p;
+    hudHost.dataset.phase = p;
+  }
 
   function drawSlip() {
-    state.phase = 'draw';
+    setPhase('draw');
     sfx.slip();
+    hatHop = 1;
     const w = bag.pop();
     loadWork(w);
-    hud.mix.hidden = true;
-    hud.pigments.hidden = true;
-    hud.tools.hidden = true;
-    hud.ref.hidden = true;
-    callout(`${w.title.toUpperCase()}`);
-    toast(`${w.artist}, ${w.year}. ${w.note}`, true);
-    setPhaseLabel('LAPPEN UR HATTEN');
+    state.timeLeft = ROUND_SECONDS;
+    renderClock();
+    const b = bests[w.id];
+    hud.slipArtist.textContent = w.artist;
+    hud.slipTitle.textContent = w.title;
+    hud.slipNote.textContent = `${w.year} · ${w.note}`;
+    hud.slipBest.innerHTML = b
+      ? `Ditt bästa ${starsHtml(b.s, 'sm')} <b>${grade1(b.g)}</b>`
+      : 'Första gången du drar den här lappen';
+    hud.showCard('slip');
+    setShot('easel', 2.1);
+    judgeGoHome();
     later(() => {
-      if (state.phase === 'draw') beginPaint();
-    }, 2100);
+      // state.hold lets a test (or a slow reader) keep the slip up
+      if (state.phase === 'draw' && !state.hold) beginPaint();
+    }, 3400);
   }
 
   function beginPaint() {
-    state.phase = 'paint';
+    if (state.phase !== 'draw') return;
+    hud.showCard(null);
+    setPhase('paint');
     state.timeLeft = ROUND_SECONDS;
-    state.selected = 0;
-    wipe();
-    hud.mix.hidden = false;
-    hud.pigments.hidden = false;
-    hud.tools.hidden = false;
-    hud.ref.hidden = false;
-    setPhaseLabel('BLANDA FÄRGEN — TRYCK PÅ EN YTA');
-    later(() => setPhaseLabel(''), 2600);
-    repaint();
-    renderMixHud();
+    state.streak = 0;
+    state.bestStreak = 0;
+    state.hits = 0;
+    state.lastSecond = -1;
+    history = [];
+    setDrops({ r: 0, y: 0, b: 0, w: 0, k: 0 });
+    palette.wipe();
+    renderStreak();
+    renderClock();
+    state.selected = -1;
+    select(0);
+    callout('BLANDA FÄRGEN', 'soft');
   }
 
-  function finishWork() {
+  function finishWork(reason) {
     if (state.phase !== 'paint') return;
-    state.phase = 'judging';
-    hud.mix.hidden = true;
-    hud.pigments.hidden = true;
-    hud.tools.hidden = true;
-    hud.ref.hidden = true;
-    sfx.gavel();
+    setPhase('judging');
+    live.finish();
+    brushState.on = 0;
+    artTex.needsUpdate = true;
+    surfTex.needsUpdate = true;
+    live.setSelection(-1, -1);
+    selTex.needsUpdate = true;
+    palette.setTip(null);
+    if (reason === 'time') {
+      sfx.bell();
+      callout('PENSLARNA NER!', 'big');
+    } else {
+      sfx.gavel();
+      callout('KLART!', 'big');
+    }
 
     // The verdict: colour accuracy over every region, with bare canvas
     // counted as the miss it is.
     let sum = 0;
     work.regions.forEach((rg, i) => {
-      if (!painted[i]) return;
-      const d = colourDistance(painted[i], hexToRgb(rg.color));
-      sum += Math.max(0, 1 - d / 55);
+      if (painted[i]) sum += accuracy(paintedDE[i]);
     });
     const quality = sum / work.regions.length;
     const grade = Math.max(1, Math.min(10, Math.round(quality * 10.4 * 10) / 10));
-    state.grades.push({ title: work.title, grade });
+    const stars = starsFor(grade);
     const verdict = VERDICTS.find((v) => grade >= v.at) || VERDICTS[VERDICTS.length - 1];
-    const bonus = Math.round(grade * 220 + state.timeLeft * 6);
-    addScore(bonus, null);
-
-    setPhaseLabel('');
-    hud.otitle.textContent = `${work.title} — ${grade.toFixed(1)}/10`;
-    hud.otext.textContent = `Mikael Hägglund: ”${verdict.say}” +${fmt(bonus)} poäng.`;
-    hud.steps.hidden = true;
-    hud.scoreline.hidden = false;
-    hud.scoreline.innerHTML = `<span>${fmt(state.score)}</span><small>poäng totalt</small>`;
-    hud.verdict.hidden = false;
-    hud.verdict.innerHTML = state.grades
-      .map((g) => `<b>${g.title}</b><span>${g.grade.toFixed(1)}/10</span>`)
-      .join('');
-
-    if (grade >= 7.5) sfx.applause(grade >= 9);
-
-    if (state.workNo >= WORKS_PER_GAME) {
-      later(gameOver, 900);
-      return;
+    const bonus = Math.round(grade * 220 + Math.max(0, state.timeLeft) * 6);
+    // Banked now, shown when the grade has counted up: skipping the verdict
+    // must not cost the bonus (or the record)
+    state.score += bonus;
+    const prev = bests[work.id];
+    const pb = !prev || grade > prev.g;
+    if (pb) {
+      bests = { ...bests, [work.id]: { g: grade, s: Math.max(stars, prev ? prev.s : 0) } };
+      store.set(BEST_KEY, bests);
     }
-    state.workNo++;
-    state.phase = 'between';
-    hud.start.textContent = 'Dra nästa lapp';
-    later(() => hud.overlay.classList.add('show'), 700);
+    const result = {
+      work, grade, stars, verdict, bonus, pb, first: !prev,
+      painted: painted.slice(), de: paintedDE.slice(),
+      hits: state.hits, bestStreak: state.bestStreak, timeLeft: Math.max(0, state.timeLeft)
+    };
+    state.results.push(result);
+    // Every finished painting goes on the wall at home
+    gallery.unshift({
+      id: work.id, c: painted.map(packRgb), g: grade, s: stars,
+      d: new Date().toISOString().slice(0, 10)
+    });
+    gallery = gallery.slice(0, GALLERY_MAX);
+    store.set(GALLERY_KEY, gallery);
+
+    // Hägglund walks over while the camera turns to watch him
+    setShot('judge', 1.7);
+    judgeWalk(JUDGE_SPOT.x, JUDGE_SPOT.z, 'inspect');
+    judgeState.mood = grade >= 7.5 ? 1 : grade < 4.5 ? -1 : 0;
+    later(() => showReveal(result), reduced ? 400 : 2000);
   }
 
-  function gameOver() {
-    state.phase = 'over';
+  function showReveal(r) {
+    setPhase('reveal');
+    // If he is still on his way over, the verdict waits until he arrives
+    if (judgeState.mode === 'walk') judgeState.then = 'verdict';
+    else {
+      judgeState.mode = 'verdict';
+      judgeState.t = 0;
+    }
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const pw = Math.round(clamp(view.lay.wide ? (view.lay.card - 70) / 2 : (view.w - 60) / 2, 120, 280) * dpr);
+    const ph = tall(pw);
+    hud.rvNo.textContent = `${state.workNo}/${WORKS_PER_GAME}`;
+    hud.rvTitle.textContent = r.work.title;
+    hud.rvYours.replaceChildren(renderPainting(r.work, r.painted, pw, ph));
+    hud.rvOrig.replaceChildren(renderPainting(r.work, targetsOf(r.work), pw, ph, { museum: true }));
+    hud.rvOrigCap.textContent = `${r.work.artist}, ${r.work.year}`;
+    hud.rvGrade.textContent = '0,0';
+    hud.rvStars.innerHTML = starsHtml(0, 'big');
+    hud.rvPb.hidden = true;
+    hud.rvQuote.textContent = `”${r.verdict.say}”`;
+    hud.rvQuote.parentElement.classList.remove('show');
+    hud.rvChips.innerHTML = r.work.regions.map((rg, i) => {
+      const p = r.painted[i];
+      const cls = !p ? 'bare' : r.de[i] < MATCH_DE ? 'hit' : accuracy(r.de[i]) > 0.62 ? 'near' : 'miss';
+      const mine = p ? rgbToCss(p) : 'transparent';
+      return `<i class="${cls}" style="--t:${rgbToCss(hexToRgb(rg.color))};--y:${mine}" title="${esc(rg.name)}${p ? ` · ΔE ${r.de[i].toFixed(1)}` : ' · bar duk'}"></i>`;
+    }).join('');
+    const tl = Math.ceil(r.timeLeft);
+    hud.rvStats.innerHTML = `
+      <span><b>${r.hits}</b>/${r.work.regions.length} prickade</span>
+      <span>Bästa svit <b>×${r.bestStreak}</b></span>
+      <span>Tid kvar <b>${Math.floor(tl / 60)}:${String(tl % 60).padStart(2, '0')}</b></span>
+      <span class="pm-bonus">+${fmt(r.bonus)} poäng</span>`;
+    hud.rvNextTxt.textContent = state.workNo < WORKS_PER_GAME ? 'Dra nästa lapp' : 'Kvällens resultat';
+    hud.showCard('reveal');
+
+    // The grade counts up, then the stars land one at a time
+    const count = reduced ? 0.01 : 1.1;
+    tweens.push({
+      t: 0, dur: count, last: -1,
+      step(k) {
+        const g = r.grade * (1 - (1 - k) ** 2);
+        hud.rvGrade.textContent = grade1(g);
+        const tick = Math.floor(g * 2);
+        if (tick !== this.last) {
+          this.last = tick;
+          sfx.tick(0.8 + g / 12);
+        }
+      },
+      done() {
+        hud.rvGrade.textContent = grade1(r.grade);
+        setScore(state.score);
+        for (let i = 0; i < r.stars; i++) {
+          later(() => {
+            hud.rvStars.innerHTML = starsHtml(i + 1, 'big');
+            sfx.star(i);
+          }, reduced ? 0 : 160 + i * 260);
+        }
+        later(() => {
+          hud.rvQuote.parentElement.classList.add('show');
+          if (r.pb) {
+            hud.rvPb.hidden = false;
+            hud.rvPb.textContent = r.first ? 'Första gången!' : 'Personbästa!';
+          }
+          if (r.grade >= 7.5) sfx.applause(r.grade >= 9);
+          if (r.grade >= 9) confetti(36);
+        }, reduced ? 0 : 200 + r.stars * 260);
+      }
+    });
+  }
+
+  function nextFromReveal() {
+    if (state.phase !== 'reveal') return;
+    if (state.workNo < WORKS_PER_GAME) {
+      state.workNo++;
+      drawSlip();
+    } else {
+      showFinal();
+    }
+  }
+
+  function showFinal() {
+    setPhase('over');
+    const res = state.results;
+    const avg = res.reduce((a, r) => a + r.grade, 0) / res.length;
+    const best = res.reduce((a, r) => (r.grade > a.grade ? r : a), res[0]);
     const isHigh = state.score > high;
     if (isHigh) {
       high = state.score;
-      try {
-        localStorage.setItem(HIGHSCORE_KEY, String(Math.round(high)));
-      } catch (e) {
-        /* private mode */
-      }
+      store.set(HIGHSCORE_KEY, Math.round(high));
       hud.hi.textContent = fmt(high);
     }
-    const best = state.grades.reduce((a, g) => (g.grade > a.grade ? g : a), state.grades[0]);
-    const avg = state.grades.reduce((a, g) => a + g.grade, 0) / state.grades.length;
+    hud.fnTitle.textContent = avg >= 8 ? 'Pokalen är din!' : avg >= 6 ? 'Hedersamt genomfört' : 'Hägglund är inte imponerad';
+    hud.fnText.textContent = avg >= 8
+      ? `Snittbetyg ${grade1(avg)}. Bäst: ${best.work.title}. Precis som Olov Melander 2021 — du fångade essensen.`
+      : `Snittbetyg ${grade1(avg)}. Bäst: ${best.work.title}. Olov tog hem 2021 med Skriet. Ta en öl och försök igen.`;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const pw = Math.round(clamp(view.lay.wide ? 190 : (view.w - 70) / 3, 90, 220) * dpr);
+    const ph = tall(pw);
+    hud.fnWall.replaceChildren(...res.map((r) => {
+      const fig = document.createElement('figure');
+      const gilt = document.createElement('div');
+      gilt.className = 'pm-gilt';
+      gilt.appendChild(renderPainting(r.work, r.painted, pw, ph));
+      const cap = document.createElement('figcaption');
+      cap.innerHTML = `<b>${esc(r.work.title)}</b>${starsHtml(r.stars, 'sm')}<span>${grade1(r.grade)}</span>`;
+      fig.append(gilt, cap);
+      return fig;
+    }));
+    hud.fnScore.textContent = fmt(state.score);
+    hud.score.textContent = fmt(state.score);
+    hud.fnSub.textContent = isHigh ? 'poäng · nytt rekord!' : `poäng · rekord ${fmt(high)}`;
+    hud.root.classList.toggle('pm-record', isHigh);
+    state.returnCard = 'final';
+    hud.showCard('final');
+    setShot('wide', 2.2);
+    judgeGoHome();
     sfx.fanfare();
-    hud.otitle.textContent = avg >= 8
-      ? 'Pokalen är din!'
-      : avg >= 6
-        ? 'Hedersamt genomfört'
-        : 'Hägglund är inte imponerad';
-    hud.otext.textContent = avg >= 8
-      ? `Snittbetyg ${avg.toFixed(1)}. Bäst: ${best.title}. Precis som Olov Melander 2021 — du fångade essensen.`
-      : `Snittbetyg ${avg.toFixed(1)}. Bäst: ${best.title}. Olov tog hem 2021 med Skriet. Ta en öl och försök igen.`;
-    hud.steps.hidden = true;
-    hud.scoreline.hidden = false;
-    hud.scoreline.innerHTML = `<span>${fmt(state.score)}</span><small>poäng · rekord ${fmt(high)}</small>`;
-    hud.verdict.hidden = false;
-    hud.verdict.innerHTML = state.grades
-      .map((g) => `<b>${g.title}</b><span>${g.grade.toFixed(1)}/10</span>`)
-      .join('');
-    hud.start.textContent = 'Måla igen';
-    hud.overlay.classList.add('show');
+    if (avg >= 8 || isHigh) confetti(60);
   }
 
   function startGame() {
     sfx.resume();
-    hud.overlay.classList.remove('show');
-    if (state.phase === 'between') {
-      drawSlip();
-      return;
-    }
     state.score = 0;
     state.workNo = 1;
-    state.grades = [];
+    state.results = [];
     hud.score.textContent = '0';
-    hud.steps.hidden = false;
-    hud.scoreline.hidden = true;
-    hud.verdict.hidden = true;
+    hud.root.classList.remove('pm-record');
     // A fresh hat: Skriet is always in it, because it is the one that won
     bag = ARTWORKS.filter((w) => w.id !== 'skriet')
-      .sort(() => rand() - 0.5)
+      .map((w) => [rand(), w]).sort((a, b) => a[0] - b[0]).map(([, w]) => w)
       .slice(0, WORKS_PER_GAME - 1)
       .concat(ARTWORKS.find((w) => w.id === 'skriet'));
+    // Skriet comes out of the hat at a random point in the evening
+    const at = Math.floor(rand() * WORKS_PER_GAME);
+    const sk = bag.pop();
+    bag.splice(at, 0, sk);
     drawSlip();
+  }
+
+  /* ---- Start screen & gallery ------------------------------------------- */
+
+  const thumbCache = new Map();
+  function originalThumb(w, px) {
+    const key = `${w.id}:${px}`;
+    if (!thumbCache.has(key)) {
+      thumbCache.set(key, renderPainting(w, targetsOf(w), px, tall(px), { museum: true, lit: false }));
+    }
+    return thumbCache.get(key);
+  }
+
+  function renderStart() {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const px = Math.round(46 * dpr);
+    hud.bests.replaceChildren(...ARTWORKS.map((w) => {
+      const b = bests[w.id];
+      const el = document.createElement('div');
+      el.className = `pm-best${b ? '' : ' none'}`;
+      const img = document.createElement('div');
+      img.className = 'pm-best-img';
+      const c = document.createElement('canvas');
+      c.width = px;
+      c.height = tall(px);
+      c.getContext('2d').drawImage(originalThumb(w, px), 0, 0);
+      img.appendChild(c);
+      const t = document.createElement('div');
+      t.className = 'pm-best-txt';
+      t.innerHTML = `<b>${esc(w.title)}</b>${b ? `${starsHtml(b.s, 'sm')}<span>${grade1(b.g)}</span>` : '<span>ej målad</span>'}`;
+      el.append(img, t);
+      return el;
+    }));
+    hud.galleryN.textContent = gallery.length ? `(${gallery.length})` : '';
+    hud.openGallery.disabled = !gallery.length;
+  }
+
+  function openGallery() {
+    if (!gallery.length) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const pw = Math.round((view.lay.wide ? 150 : (view.w - 64) / 2) * dpr);
+    const ph = tall(pw);
+    const items = gallery.map((g, idx) => {
+      const w = ARTWORKS.find((a) => a.id === g.id);
+      if (!w) return null;
+      const fig = document.createElement('figure');
+      fig.className = 'pm-gal';
+      fig.innerHTML = `<button class="pm-gilt" data-idx="${idx}" aria-label="Visa ${esc(w.title)} större"></button>
+        <figcaption><b>${esc(w.title)}</b>${starsHtml(g.s, 'sm')}<span>${grade1(g.g)} · ${esc(g.d)}</span></figcaption>`;
+      return { fig, w, g };
+    }).filter(Boolean);
+    hud.galleryGrid.replaceChildren(...items.map((it) => it.fig));
+    hud.showCard('gallery');
+    // Paint them one per tick so opening the gallery never stalls a frame
+    items.forEach((it, i) => {
+      later(() => {
+        const btn = it.fig.querySelector('.pm-gilt');
+        if (btn) btn.appendChild(renderPainting(it.w, it.g.c.map(unpackRgb), pw, ph));
+      }, 30 + i * 24);
+    });
+  }
+
+  function zoomGallery(idx) {
+    const g = gallery[idx];
+    const w = g && ARTWORKS.find((a) => a.id === g.id);
+    if (!w) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const pw = Math.round(clamp(Math.min(view.w - 48, (view.h - 200) * (ART_W / ART_H)), 200, 520) * dpr);
+    hud.zoomImg.replaceChildren(renderPainting(w, g.c.map(unpackRgb), pw, tall(pw)));
+    hud.zoomCap.innerHTML = `<b>${esc(w.title)}</b> efter ${esc(w.artist)} ${starsHtml(g.s, 'sm')} <span>${grade1(g.g)} · ${esc(g.d)}</span>`;
+    hud.showCard('zoom');
+  }
+
+  /* ---- Celebration ------------------------------------------------------ */
+
+  function confetti(n) {
+    if (reduced) return;
+    const cols = ['#f2c14e', '#2e5f9e', '#d8394d', '#e9e4d6', '#5eead4'];
+    for (let i = 0; i < n; i++) {
+      const el = document.createElement('i');
+      el.className = 'pm-confetti';
+      el.style.left = `${Math.random() * 100}%`;
+      el.style.background = cols[i % cols.length];
+      el.style.setProperty('--dx', `${(Math.random() - 0.5) * 160}px`);
+      el.style.setProperty('--r', `${(Math.random() - 0.5) * 900}deg`);
+      el.style.animationDelay = `${Math.random() * 0.6}s`;
+      el.style.animationDuration = `${2.2 + Math.random() * 1.4}s`;
+      hud.pops.appendChild(el);
+      later(() => el.remove(), 4400);
+    }
+  }
+
+  /* ---- The judge -------------------------------------------------------- */
+
+  function judgeWalk(x, z, then) {
+    const p = judge.group.position;
+    judgeState.mode = 'walk';
+    judgeState.t = 0;
+    judgeState.fromX = p.x;
+    judgeState.fromZ = p.z;
+    judgeState.toX = x;
+    judgeState.toZ = z;
+    judgeState.then = then;
+  }
+
+  function judgeGoHome() {
+    const p = judge.group.position;
+    if (Math.hypot(p.x - JUDGE_HOME.x, p.z - JUDGE_HOME.z) > 0.05) judgeWalk(JUDGE_HOME.x, JUDGE_HOME.z, 'home');
+  }
+
+  const turnTo = (cur0, target, k) => {
+    let d = target - cur0;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    return cur0 + d * k;
+  };
+
+  function animateJudge(dt, t) {
+    const js = judgeState;
+    const g = judge.group;
+    const { head, armR } = judge.refs;
+    js.t += dt;
+    let face = js.ry;
+    head.rotation.set(0, 0, 0);
+    armR.rotation.set(0, 0, 0);
+    g.position.y = 0;
+    if (js.mode === 'walk') {
+      const dist = Math.hypot(js.toX - js.fromX, js.toZ - js.fromZ);
+      const dur = Math.max(0.6, dist / 1.6);
+      const k = Math.min(1, js.t / dur);
+      const e = easeInOut(k);
+      g.position.x = js.fromX + (js.toX - js.fromX) * e;
+      g.position.z = js.fromZ + (js.toZ - js.fromZ) * e;
+      g.position.y = Math.abs(Math.sin(js.t * 9)) * 0.025 * Math.sin(k * Math.PI);
+      face = Math.atan2(js.toX - js.fromX, js.toZ - js.fromZ);
+      if (k >= 1) {
+        js.mode = js.then;
+        js.t = 0;
+      }
+    } else if (js.mode === 'inspect') {
+      // Looking at the canvas, head on one side, pen to the chin
+      face = Math.atan2(CANVAS_C.x - g.position.x, CANVAS_C.z - g.position.z);
+      head.rotation.z = Math.sin(t * 0.8) * 0.12 + 0.1;
+      head.rotation.x = 0.12;
+      armR.rotation.x = -1.9;
+      armR.rotation.z = 0.35;
+    } else if (js.mode === 'verdict') {
+      // Turns to deliver it: nods if he liked it, shakes his head if not
+      face = Math.atan2(camera.position.x - g.position.x, camera.position.z - g.position.z) * 0.7
+        + Math.atan2(CANVAS_C.x - g.position.x, CANVAS_C.z - g.position.z) * 0.3;
+      const k = Math.min(1, js.t / 2.4);
+      const fade = Math.sin(k * Math.PI);
+      if (js.mood > 0) {
+        head.rotation.x = Math.sin(js.t * 7) * 0.16 * fade;
+        armR.rotation.x = -0.9 * fade;
+      } else if (js.mood < 0) {
+        head.rotation.y = Math.sin(js.t * 8) * 0.32 * fade;
+      } else {
+        head.rotation.z = 0.18 * fade;
+        armR.rotation.x = -0.5 * fade;
+      }
+    } else {
+      face = JUDGE_HOME.ry;
+      head.rotation.y = reduced ? 0 : Math.sin(t * 0.35) * 0.5;
+    }
+    js.ry = turnTo(js.ry, face, 1 - Math.exp(-dt * 6));
+    g.rotation.y = js.ry;
   }
 
   /* ---- Input ------------------------------------------------------------ */
@@ -733,47 +1346,101 @@ export async function createPainting(container) {
   const ray = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
 
+  function canvasUv(e) {
+    const rect = canvasHost.getBoundingClientRect();
+    ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -(((e.clientY - rect.top) / rect.height) * 2 - 1));
+    ray.setFromCamera(ndc, camera);
+    const hit = ray.intersectObject(artMesh, false)[0];
+    return hit ? { u: hit.uv.x, v: 1 - hit.uv.y } : null;
+  }
+
   function onPointerDown(e) {
     sfx.resume();
-    if (helpOpen || e.target.closest('.pb-overlay, .pb-mute, .pb-info, .pb-help, .cl-tools, .ml-pigments')) return;
-    if (state.phase !== 'paint') return;
-    const rect = canvasHost.getBoundingClientRect();
-    ndc.set(
-      ((e.clientX - rect.left) / rect.width) * 2 - 1,
-      -(((e.clientY - rect.top) / rect.height) * 2 - 1)
-    );
-    ray.setFromCamera(ndc, camera);
+    if (helpOpen || state.phase !== 'paint') return;
+    const uv = canvasUv(e);
+    if (!uv) return;
+    const id = regionAt(uv.u, uv.v);
+    if (id < 0) return;
+    if (painted[id]) {
+      toast(`${work.regions[id].name} är redan målad`, 1000);
+      return;
+    }
+    select(id);
+  }
 
-    const artHit = ray.intersectObject(artMesh, false)[0];
-    if (artHit) {
-      // Read the id-map rather than testing the curves: one pixel lookup,
-      // and it can never disagree with what was drawn.
-      const px = Math.floor(artHit.uv.x * CW);
-      const py = Math.floor((1 - artHit.uv.y) * CH);
-      const id = idCtx.getImageData(px, py, 1, 1).data[0];
-      if (id > 0 && !painted[id - 1]) {
-        state.selected = id - 1;
-        state.matchedNow = false;
-        repaint();
-        renderMixHud();
-      }
+  function onPointerMove(e) {
+    if (e.pointerType !== 'mouse' || state.phase !== 'paint') return;
+    const uv = canvasUv(e);
+    const id = uv ? regionAt(uv.u, uv.v) : -1;
+    const h = id >= 0 && !painted[id] ? id : -1;
+    canvasHost.style.cursor = h >= 0 ? 'pointer' : '';
+    if (h !== state.hover) {
+      state.hover = h;
+      live.setSelection(state.selected, h);
+      selTex.needsUpdate = true;
     }
   }
 
+  function paletteXY(e) {
+    const r = hud.palette.getBoundingClientRect();
+    return [e.clientX - r.left, e.clientY - r.top];
+  }
+
+  function onPaletteDown(e) {
+    sfx.resume();
+    e.preventDefault();
+    const hit = palette.hit(...paletteXY(e));
+    if (!hit) return;
+    if (hit.type === 'pigment') addDrop(hit.key);
+    else if (hit.type === 'dab') loadDab(hit.drops);
+  }
+
+  function onPaletteMove(e) {
+    if (e.pointerType !== 'mouse') return;
+    const hit = palette.setHover(...paletteXY(e));
+    hud.palette.style.cursor = hit ? 'pointer' : '';
+  }
+
+  function onPaletteLeave() {
+    palette.setHover(null, null);
+  }
+
   function onKeyDown(e) {
+    if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return;
     const n = parseInt(e.key, 10);
     if (n >= 1 && n <= PIGMENTS.length) {
       sfx.resume();
       addDrop(PIGMENTS[n - 1].key);
-    } else if (e.key === ' ') {
+    } else if (e.key === ' ' || e.key === 'Enter') {
+      if (e.target && e.target.tagName === 'BUTTON' && e.key === 'Enter') return;
       e.preventDefault();
       sfx.resume();
       if (state.phase === 'paint') applyPaint();
-      else if (state.phase === 'idle' || state.phase === 'between' || state.phase === 'over') startGame();
+      else if (state.phase === 'draw') beginPaint();
+      else if (state.phase === 'reveal') nextFromReveal();
+      else if (state.phase === 'idle' && hud.overlay.dataset.card === 'start') startGame();
+      else if (state.phase === 'over' && hud.overlay.dataset.card === 'final') startGame();
     } else if (e.key === 'w' || e.key === 'W') {
       wipe();
-    } else if (e.key === '?' || (e.key === 'Escape' && helpOpen)) {
+    } else if (e.key === 'z' || e.key === 'Z' || e.key === 'Backspace') {
+      undo();
+    } else if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && state.phase === 'paint') {
+      const j = nextUnpainted(state.selected, e.key === 'ArrowRight' ? 1 : -1);
+      if (j >= 0) select(j);
+    } else if (e.key === '?') {
       setHelp(!helpOpen);
+    } else if (e.key === 'Escape') {
+      if (helpOpen) setHelp(false);
+      else if (hud.overlay.dataset.card === 'zoom') openGallery();
+      else if (hud.overlay.dataset.card === 'gallery') closeGallery();
+    }
+  }
+
+  function closeGallery() {
+    if (state.returnCard === 'final') hud.showCard('final');
+    else {
+      renderStart();
+      hud.showCard('start');
     }
   }
 
@@ -782,86 +1449,141 @@ export async function createPainting(container) {
     hud.help.hidden = !open;
   }
 
-  /* The pigment row. Each button shows how many drops are in the mix, so
-     you can see what you built the colour out of and undo it in your head. */
-  PIGMENTS.forEach((p, i) => {
-    const b = document.createElement('button');
-    b.className = 'ml-pigment';
-    b.style.setProperty('--c', p.css);
-    b.innerHTML = `<i></i><b>${p.name}</b><em id="ml-drop-${p.key}">0</em>`;
-    b.title = `${p.name} — tangent ${i + 1}`;
-    b.addEventListener('click', () => {
-      sfx.resume();
-      addDrop(p.key);
-    });
-    hud.pigments.appendChild(b);
+  const on = (el, ev, fn, opts) => el.addEventListener(ev, fn, opts);
+  on(hud.start, 'click', startGame);
+  on(hud.again, 'click', startGame);
+  on(hud.rvNext, 'click', nextFromReveal);
+  on(hud.overlay, 'click', (e) => {
+    // Anywhere on the screen puts the slip away and starts the clock — but
+    // not the very click on the button that drew it, still bubbling up here
+    if (state.phase === 'draw' && !e.target.closest('button')) beginPaint();
+    const g = e.target.closest('.pm-gallery .pm-gilt');
+    if (g) zoomGallery(Number(g.dataset.idx));
   });
-
-  function renderPigments() {
-    PIGMENTS.forEach((p) => {
-      const el = hud.pigments.querySelector(`#ml-drop-${p.key}`);
-      if (el) el.textContent = String(drops[p.key]);
-    });
-  }
-
-  hud.start.addEventListener('click', startGame);
-  hud.apply.addEventListener('click', applyPaint);
-  hud.wipe.addEventListener('click', wipe);
-  hud.info.addEventListener('click', () => setHelp(true));
-  hud.helpClose.addEventListener('click', () => setHelp(false));
-  hud.mute.addEventListener('click', () => {
-    sfx.muted = !sfx.muted;
+  on(hud.openGallery, 'click', () => {
+    state.returnCard = 'start';
+    openGallery();
+  });
+  on(hud.fnGallery, 'click', () => {
+    state.returnCard = 'final';
+    openGallery();
+  });
+  on(hud.galleryBack, 'click', closeGallery);
+  on(hud.zoomClose, 'click', openGallery);
+  on(hud.apply, 'click', applyPaint);
+  on(hud.wipe, 'click', wipe);
+  on(hud.undo, 'click', undo);
+  on(hud.mini, 'click', () => hud.root.classList.toggle('pm-ref-open'));
+  on(hud.ref, 'click', () => hud.root.classList.remove('pm-ref-open'));
+  on(hud.dots, 'click', (e) => {
+    const b = e.target.closest('.pm-dot');
+    if (!b || state.phase !== 'paint') return;
+    const i = Number(b.dataset.i);
+    if (!painted[i]) select(i);
+  });
+  on(hud.info, 'click', () => setHelp(true));
+  on(hud.helpClose, 'click', () => setHelp(false));
+  on(hud.mute, 'click', () => {
+    sfx.resume();
+    sfx.setMuted(!sfx.muted);
     hud.mute.classList.toggle('off', sfx.muted);
   });
-  canvasHost.addEventListener('pointerdown', onPointerDown);
+  on(hud.palette, 'pointerdown', onPaletteDown);
+  on(hud.palette, 'pointermove', onPaletteMove);
+  on(hud.palette, 'pointerleave', onPaletteLeave);
+  on(canvasHost, 'pointerdown', onPointerDown);
+  on(canvasHost, 'pointermove', onPointerMove);
   window.addEventListener('keydown', onKeyDown);
 
-  /* ---- Resize ----------------------------------------------------------- */
-
-  function resize() {
-    const rect = canvasHost.getBoundingClientRect();
-    const w = Math.max(1, Math.floor(rect.width));
-    const h = Math.max(1, Math.floor(rect.height));
-    renderer.setSize(w, h, false);
-    camera.aspect = w / h;
-    // A portrait phone needs a wider lens to hold the easel and the palette
-    camera.fov = camera.aspect < 0.62 ? 56 : 44;
-    camera.updateProjectionMatrix();
-  }
   const ro = new ResizeObserver(resize);
-  ro.observe(canvasHost);
+  ro.observe(container);
+  ro.observe(hud.palette);
   resize();
 
   /* ---- Loop ------------------------------------------------------------- */
 
+  const hatBaseY = garden.refs.hat.position.y;
+
   loadWork(ARTWORKS[0]);
-  paintPalette();
-  renderPigments();
-  renderMixHud();
-  hud.overlay.classList.add('show');
+  renderStart();
+  hud.showCard('start');
+  setShot('wide', 0);
+  renderClock();
+  renderMix();
 
   let raf = 0;
-  let last = performance.now();
   let running = true;
+  const timer = new THREE.Timer();
+  timer.connect(document);
+  const brushPos = new THREE.Vector3();
 
-  function tick(now) {
+  function tick() {
     raf = requestAnimationFrame(tick);
-    const dt = clampDt(now - last);
-    last = now;
+    // No rAF timestamp: update() reads performance.now(), the same clock the
+    // timer was started on, so the first delta cannot come out negative
+    timer.update();
+    const dt = Math.min(Math.max(timer.getDelta(), 0), MAX_STEP);
     if (!running) return;
-    const t = now / 1000;
-    artT = t;
+    const t = timer.getElapsed();
 
     if (!helpOpen && state.phase === 'paint') {
       state.timeLeft -= dt;
-      const s = Math.max(0, Math.ceil(state.timeLeft));
-      hud.time.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-      hud.time.style.color = s <= 15 ? '#f26d8d' : '';
-      if (state.timeLeft <= 0) finishWork();
-      if (state.selected >= 0) repaint();
+      state.regionTime += dt;
+      const s = Math.ceil(state.timeLeft);
+      if (s !== state.lastSecond) {
+        state.lastSecond = s;
+        renderClock();
+        if (s <= 10 && s > 0) sfx.clock(s <= 5);
+        updateTip();
+      }
+      if (state.timeLeft <= 0) finishWork('time');
+    }
+
+    // Paint going on: textures re-upload only while strokes are landing
+    const stroke = live.step(dt);
+    if (stroke) {
+      artTex.needsUpdate = true;
+      surfTex.needsUpdate = true;
+      brushState.tx = stroke.x;
+      brushState.ty = stroke.y;
+      brushState.sound -= dt;
+      if (brushState.sound <= 0 && !stroke.done) {
+        sfx.bristle();
+        brushState.sound = 0.11;
+      }
+      if (stroke.done) brushState.on = 0;
+    }
+    // The brush follows the strokes, and slides off when the region is laid
+    {
+      const b = brushState;
+      const k = 1 - Math.exp(-dt * 26);
+      b.x += (b.tx - b.x) * k;
+      b.y += (b.ty - b.y) * k;
+      b.vis += ((b.on ? 1 : 0) - b.vis) * (1 - Math.exp(-dt * (b.on ? 30 : 9)));
+      brush.group.visible = b.vis > 0.02;
+      if (brush.group.visible) {
+        brushPos.set((b.x - 0.5) * CANVAS_W, CANVAS_C.y + (0.5 - b.y) * CANVAS_H, 0.066);
+        brushPos.addScaledVector(brushDir, (1 - b.vis) * 0.5 + Math.abs(Math.sin(t * 22)) * 0.006);
+        brush.group.position.copy(brushPos);
+      }
+    }
+
+    palette.update(dt);
+    selUniforms.uPulse.value = 0.5 + 0.5 * Math.sin(t * 4.2);
+
+    for (let i = tweens.length - 1; i >= 0; i--) {
+      const tw = tweens[i];
+      tw.t += dt;
+      const k = Math.min(1, tw.t / tw.dur);
+      tw.step(k);
+      if (k >= 1) {
+        tweens.splice(i, 1);
+        tw.done();
+      }
     }
 
     // The garden keeps working whatever the player is doing
+    animateGarden(garden, t, reduced);
     painters.forEach((p, i) => {
       const swing = Math.sin(t * (1.1 + i * 0.18) + p.phase);
       p.fig.refs.armR.rotation.x = 0.62 + swing * 0.34;
@@ -869,15 +1591,20 @@ export async function createPainting(container) {
       p.fig.refs.head.rotation.y = Math.sin(t * 0.5 + p.phase) * 0.22;
       p.fig.group.position.y = Math.abs(Math.sin(t * 0.9 + p.phase)) * 0.006;
     });
-    garden.refs.hat.rotation.y = Math.sin(t * 0.3) * 0.05;
+    animateJudge(dt, t);
+    // The hat hops when a slip comes out of it
+    hatHop = Math.max(0, hatHop - dt * 1.6);
+    const { hat } = garden.refs;
+    hat.position.y = hatBaseY + Math.abs(Math.sin(hatHop * Math.PI * 3)) * 0.06 * hatHop;
+    hat.rotation.y = Math.sin(t * 0.3) * 0.05 + Math.sin(hatHop * 14) * 0.2 * hatHop;
 
+    updateCamera(dt, t);
     renderer.render(scene, camera);
   }
   raf = requestAnimationFrame(tick);
 
   const onVisibility = () => {
     running = !document.hidden;
-    last = performance.now();
   };
   document.addEventListener('visibilitychange', onVisibility);
 
@@ -887,10 +1614,14 @@ export async function createPainting(container) {
     state,
     scene,
     camera,
-    drops,
+    /** True once the camera has arrived at its current shot. */
+    settled: () => rig.t >= 1,
+    rig: () => ({ name: rig.name, t: rig.t, dur: rig.dur }),
+    drops: () => drops,
     startGame,
     beginPaint,
     finishWork,
+    nextFromReveal,
     work: () => work,
     works: () => ARTWORKS,
     painted: () => painted,
@@ -904,39 +1635,82 @@ export async function createPainting(container) {
     idCoverage() {
       const missing = [];
       ARTWORKS.forEach((w) => {
-        paintIdMap(idCtx, w, CW, CH);
-        const px = idCtx.getImageData(0, 0, CW, CH).data;
+        paintIdMap(idCtx, w, ART_W, ART_H);
+        const px = idCtx.getImageData(0, 0, ART_W, ART_H).data;
         const seen = new Set();
         for (let i = 0; i < px.length; i += 4) seen.add(px[i]);
         w.regions.forEach((rg, i) => {
           if (!seen.has(i + 1)) missing.push(`${w.id}:${rg.name}`);
         });
       });
-      paintIdMap(idCtx, work, CW, CH);
+      paintIdMap(idCtx, work, ART_W, ART_H);
       return { missing };
     },
     mixed: () => mixed,
     addDrop,
     wipe,
+    undo,
     applyPaint,
-    select(i) {
-      state.selected = i;
-      renderMixHud();
-      repaint();
+    select,
+    regionAt,
+    /** Load a recipe straight onto the palette. */
+    setDrops(d) {
+      setDrops({ r: 0, y: 0, b: 0, w: 0, k: 0, ...d });
+      palette.setDrops(drops);
+      renderMix();
     },
     /** Paint every region with the exact target colour — a perfect copy. */
     paintPerfect() {
       work.regions.forEach((rg, i) => {
         painted[i] = hexToRgb(rg.color);
+        paintedDE[i] = 0;
       });
       state.selected = -1;
-      rebuildBase();
-      repaint();
+      live.load(work, painted);
+      artTex.needsUpdate = true;
+      surfTex.needsUpdate = true;
+      renderDots();
+    },
+    /** Paint the first n regions in their target colour, skipping animation. */
+    paintSome(n) {
+      for (let i = 0; i < Math.min(n, work.regions.length); i++) {
+        painted[i] = hexToRgb(work.regions[i].color);
+        paintedDE[i] = 0;
+      }
+      live.load(work, painted);
+      artTex.needsUpdate = true;
+      surfTex.needsUpdate = true;
+      const j = nextUnpainted(-1, 1);
+      state.selected = -1;
+      if (j >= 0) select(j);
+      renderDots();
+    },
+    openGallery,
+    /** Client coordinates of a canvas point (0..1), for tap/click tests. */
+    screenOf(u, v) {
+      const p = canvasPoint(u, v).project(camera);
+      const r = canvasHost.getBoundingClientRect();
+      return { x: r.left + (p.x * 0.5 + 0.5) * r.width, y: r.top + (-p.y * 0.5 + 0.5) * r.height };
+    },
+    /** Client coordinates of a point inside region i's visible area (a
+        stroke position, so it is guaranteed to be on the region). */
+    regionScreen(i) {
+      const { strokes } = analyse(work).regions[i];
+      const s = strokes[Math.floor(strokes.length / 2)];
+      return this.screenOf(s.x, s.y);
+    },
+    /** Client coordinates of a pigment on the palette. */
+    wellScreen(key) {
+      const r = hud.palette.getBoundingClientRect();
+      const w = palette.wellPos(key);
+      return { x: r.left + w.x, y: r.top + w.y };
     },
     info() {
       return {
         drawCalls: renderer.info.render.calls,
-        triangles: renderer.info.render.triangles
+        triangles: renderer.info.render.triangles,
+        textures: renderer.info.memory.textures,
+        geometries: renderer.info.memory.geometries
       };
     }
   };
@@ -947,23 +1721,32 @@ export async function createPainting(container) {
     cancelAnimationFrame(raf);
     running = false;
     ro.disconnect();
+    timer.dispose();
     document.removeEventListener('visibilitychange', onVisibility);
-    canvasHost.removeEventListener('pointerdown', onPointerDown);
     window.removeEventListener('keydown', onKeyDown);
+    canvasHost.removeEventListener('pointerdown', onPointerDown);
+    canvasHost.removeEventListener('pointermove', onPointerMove);
     state.timers.forEach(clearTimeout);
     clearTimeout(state.lastToast);
+    clearTimeout(deltaTimer);
     delete window.__ppMaleri;
 
+    const textures = new Set([artTex, surfTex, selTex]);
     scene.traverse((o) => {
       if (o.geometry) o.geometry.dispose();
       if (o.material) {
         const mats = Array.isArray(o.material) ? o.material : [o.material];
         mats.forEach((m) => {
-          if (m.map) m.map.dispose();
+          ['map', 'alphaMap', 'bumpMap', 'roughnessMap'].forEach((k) => {
+            if (m[k]) textures.add(m[k]);
+          });
           m.dispose();
         });
       }
     });
+    textures.forEach((tx) => tx.dispose());
+    scene.environment = null;
+    if (envRT) envRT.dispose();
     renderer.dispose();
     renderer.forceContextLoss?.();
     sfx.close();

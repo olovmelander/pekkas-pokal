@@ -123,13 +123,131 @@ export function rgbToCss([r, g, b]) {
   return `rgb(${c(r)},${c(g)},${c(b)})`;
 }
 
-/** Same colour, pushed toward white (k > 0) or black (k < 0). */
-function shiftCss([r, g, b], k, alpha) {
-  const f = (v) => {
-    const x = k > 0 ? v + (1 - v) * k : v * (1 + k);
-    return Math.round(Math.max(0, Math.min(1, x)) * 255);
+/** ΔE under this is a colour nobody would call wrong: the meter's bullseye. */
+export const MATCH_DE = 8;
+/** Past this it is simply a different colour, and the points run out. */
+export const MISS_DE = 55;
+
+/** 0..1 closeness as the meter and the score both see it. */
+export const accuracy = (dE) => Math.max(0, 1 - dE / MISS_DE);
+
+/** Most drops of one pigment the palette will take. */
+export const MAX_DROPS = 12;
+
+/** How the advice names a pigment ("mer gult"). */
+export const PIGMENT_WORD = { r: 'rött', y: 'gult', b: 'blått', w: 'vitt', k: 'svart' };
+const KEYS = ['r', 'y', 'b', 'w', 'k'];
+
+/*
+ * Every recipe of up to sixteen drops that lands solidly inside the
+ * bullseye, per target colour. A mix depends only on the RATIOS of its
+ * drops (two of each is the same colour as one of each), so this short list
+ * covers every reachable match once scaled up. It is about twenty thousand
+ * mixes, so it is worked out once per colour and kept.
+ */
+const recipeCache = new Map();
+
+/** Every five-pigment recipe of at most `T` drops in total. */
+function eachRecipe(T, fn) {
+  const d = [0, 0, 0, 0, 0];
+  const step = (i, left) => {
+    if (i === 5) {
+      fn(d);
+      return;
+    }
+    for (let v = 0; v <= left; v++) {
+      d[i] = v;
+      step(i + 1, left - v);
+    }
   };
-  return `rgba(${f(r)},${f(g)},${f(b)},${alpha})`;
+  step(0, T);
+}
+function goodRecipes(target, T = 16) {
+  const key = target.map((v) => v.toFixed(4)).join(',');
+  if (recipeCache.has(key)) return recipeCache.get(key);
+  const [tl, ta, tb] = rgbToLab(target);
+  const all = [];
+  eachRecipe(T, ([r, y, b, w, k]) => {
+    if (r + y + b + w + k === 0) return;
+    const [l, aa, bb] = rgbToLab(mixPigments({ r, y, b, w, k }));
+    const dE = Math.hypot(l - tl, aa - ta, bb - tb);
+    if (dE < MATCH_DE) all.push([r, y, b, w, k, dE]);
+  });
+  // A few colours (the right-hand apostles' brown-grey) need more than
+  // sixteen drops; only those pay for the bigger search
+  if (!all.length && T < 24) return goodRecipes(target, T + 6);
+  // Prefer recipes comfortably inside the bullseye; keep the rest only if
+  // a colour has nothing better
+  const solid = all.filter((rc) => rc[5] < MATCH_DE * 0.85);
+  const out = solid.length ? solid : all;
+  recipeCache.set(key, out);
+  return out;
+}
+
+/**
+ * The fewest drops to ADD to what is on the palette to reach a match —
+ * you cannot take paint back out of a mix — or null when nothing on the
+ * palette's rim can save it any more and it is time to scrape.
+ */
+function nextDrop(drops, target) {
+  const cur = KEYS.map((k) => drops[k] || 0);
+  let best = null;
+  goodRecipes(target).forEach((rc) => {
+    for (let s = 1; s <= MAX_DROPS; s++) {
+      let over = false;
+      let under = false;
+      let add = 0;
+      for (let i = 0; i < 5; i++) {
+        const v = rc[i] * s;
+        if (v > MAX_DROPS) over = true;
+        if (v < cur[i]) under = true;
+        add += v - cur[i];
+      }
+      if (over) return;
+      if (under) continue;
+      if (!best || add < best.add) best = { add, rc, s };
+      return;
+    }
+  });
+  if (!best) return null;
+  let tip = null;
+  let gap = 0;
+  KEYS.forEach((k, i) => {
+    const d = best.rc[i] * best.s - cur[i];
+    if (d > gap) {
+      gap = d;
+      tip = k;
+    }
+  });
+  return tip;
+}
+
+/**
+ * What a painter standing next to you would say about the mix. The ΔE is
+ * split in LCh into lightness, chroma and hue, and the biggest of the three
+ * is put into words — too light, too grey, wrong hue — because a single
+ * closeness number says THAT you are off, never which way. `tip` is the
+ * next drop on the shortest road to a match, or 'wipe' when the mix has
+ * gone somewhere no amount of adding can bring back.
+ */
+export function mixAdvice(drops, target) {
+  const mix = mixPigments(drops);
+  const dE = colourDistance(mix, target);
+  // An empty palette is the colour of bare linen, which can be within a
+  // whisker of a pale target — but there is still nothing to paint with
+  const empty = !KEYS.some((k) => drops[k] > 0);
+  if (empty) return { dE, axis: '', tip: nextDrop(drops, target) || 'w' };
+  if (dE < MATCH_DE) return { dE, axis: 'Pricken — måla!', tip: null };
+  const [Lm, am, bm] = rgbToLab(mix);
+  const [Lt, at, bt] = rgbToLab(target);
+  const dL = Lm - Lt;
+  const dC = Math.hypot(am, bm) - Math.hypot(at, bt);
+  const dH = Math.sqrt(Math.max(0, dE * dE - dL * dL - dC * dC));
+  let axis;
+  if (Math.abs(dL) >= dH && Math.abs(dL) >= Math.abs(dC)) axis = dL > 0 ? 'För ljus' : 'För mörk';
+  else if (Math.abs(dC) >= dH) axis = dC < 0 ? 'För grå' : 'För skarp';
+  else axis = 'Fel kulör';
+  return { dE, axis, tip: nextDrop(drops, target) || 'wipe' };
 }
 
 /* ------------------------------------------------------- shape primitives */
@@ -1020,173 +1138,7 @@ export const ARTWORKS = [
   }
 ];
 
-/* --------------------------------------------------------------- painting */
-
-/*
- * The canvas surface. A flat fill reads as vector art, which is exactly what
- * a painting is not, so every filled region gets a weave underneath it and a
- * few directional strokes on top. Both are deterministic — the same region
- * looks the same every time it is drawn — so nothing crawls between frames.
- */
-
-let weaveCanvas = null;
-function weave() {
-  if (weaveCanvas) return weaveCanvas;
-  const N = 96;
-  const cv = document.createElement('canvas');
-  cv.width = N;
-  cv.height = N;
-  const c = cv.getContext('2d');
-  let s = 1337;
-  const rnd = () => {
-    s = (s * 1664525 + 1013904223) >>> 0;
-    return s / 4294967296;
-  };
-  for (let i = 0; i < 3200; i++) {
-    const x = rnd() * N;
-    const y = rnd() * N;
-    c.fillStyle = rnd() < 0.5 ? 'rgba(255,255,255,0.10)' : 'rgba(48,38,26,0.10)';
-    c.fillRect(x, y, 1.3, 1.3);
-  }
-  c.strokeStyle = 'rgba(70,56,38,0.05)';
-  c.lineWidth = 1;
-  for (let i = 0; i < N; i += 3) {
-    c.beginPath();
-    c.moveTo(i + 0.5, 0);
-    c.lineTo(i + 0.5, N);
-    c.moveTo(0, i + 0.5);
-    c.lineTo(N, i + 0.5);
-    c.stroke();
-  }
-  weaveCanvas = cv;
-  return cv;
-}
-
-/** Directional strokes inside a region, so the paint reads as laid on. */
-function brushwork(ctx, W, H, rg, seed, rgb) {
-  ctx.save();
-  ctx.beginPath();
-  rg.path(ctx, W, H);
-  ctx.clip();
-  let s = (seed * 2654435761) >>> 0;
-  const rnd = () => {
-    s = (s * 1664525 + 1013904223) >>> 0;
-    return s / 4294967296;
-  };
-  const angle = -0.5 + rnd() * 1.0;
-  const dx = Math.cos(angle);
-  const dy = Math.sin(angle);
-  ctx.lineCap = 'round';
-  for (let i = 0; i < 9; i++) {
-    const cx = rnd() * W;
-    const cy = rnd() * H;
-    const len = (0.18 + rnd() * 0.45) * W;
-    ctx.beginPath();
-    ctx.moveTo(cx - dx * len * 0.5, cy - dy * len * 0.5);
-    ctx.lineTo(cx + dx * len * 0.5, cy + dy * len * 0.5);
-    ctx.lineWidth = (0.012 + rnd() * 0.03) * W;
-    ctx.strokeStyle = shiftCss(rgb, i % 2 ? 0.2 : -0.16, 0.11);
-    ctx.stroke();
-  }
-  ctx.restore();
-}
-
-/** The old-varnish falloff that makes a museum photograph look like one. */
-function varnish(ctx, W, H) {
-  const g = ctx.createRadialGradient(W * 0.5, H * 0.46, W * 0.2, W * 0.5, H * 0.5, W * 0.82);
-  g.addColorStop(0, 'rgba(120,86,40,0)');
-  g.addColorStop(1, 'rgba(46,30,12,0.34)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, W, H);
-}
-
-/** The reference: every region in the colour it wants, plus the drawing. */
-export function paintReference(ctx, work, W, H) {
-  ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = '#efece3';
-  ctx.fillRect(0, 0, W, H);
-  work.regions.forEach((rg, i) => {
-    const rgb = hexToRgb(rg.color);
-    ctx.beginPath();
-    rg.path(ctx, W, H);
-    ctx.fillStyle = rgbToCss(rgb);
-    ctx.fill();
-    brushwork(ctx, W, H, rg, i + 1, rgb);
-  });
-  if (work.detail) work.detail(ctx, W, H);
-  ctx.save();
-  ctx.globalAlpha = 0.5;
-  ctx.fillStyle = ctx.createPattern(weave(), 'repeat');
-  ctx.fillRect(0, 0, W, H);
-  ctx.restore();
-  varnish(ctx, W, H);
-}
-
-/**
- * The player's canvas: painted regions in whatever they mixed, the rest bare
- * primed linen with the drawing showing through. Rebuilt only when something
- * actually changes — the pulsing selection is composited on top per frame.
- */
-export function paintPlayerBase(ctx, work, W, H, painted) {
-  ctx.clearRect(0, 0, W, H);
-  const g = ctx.createLinearGradient(0, 0, W, H);
-  g.addColorStop(0, '#f6f3e9');
-  g.addColorStop(1, '#e5dfcf');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, W, H);
-
-  work.regions.forEach((rg, i) => {
-    const got = painted[i];
-    if (!got) return;
-    ctx.beginPath();
-    rg.path(ctx, W, H);
-    ctx.fillStyle = rgbToCss(got);
-    ctx.fill();
-    brushwork(ctx, W, H, rg, i + 1, got);
-  });
-
-  // The outlines of everything still to do, so the drawing reads as a drawing
-  work.regions.forEach((rg, i) => {
-    ctx.beginPath();
-    rg.path(ctx, W, H);
-    ctx.lineWidth = Math.max(1.2, W * (painted[i] ? 0.0022 : 0.0038));
-    ctx.strokeStyle = painted[i] ? 'rgba(30,24,16,0.16)' : 'rgba(64,52,36,0.55)';
-    ctx.stroke();
-  });
-
-  if (work.detail) work.detail(ctx, W, H);
-
-  ctx.save();
-  ctx.globalAlpha = 0.55;
-  ctx.fillStyle = ctx.createPattern(weave(), 'repeat');
-  ctx.fillRect(0, 0, W, H);
-  ctx.restore();
-
-  // Stretcher shadow round the edge: the canvas is a physical object
-  const e = ctx.createLinearGradient(0, 0, 0, H);
-  e.addColorStop(0, 'rgba(60,46,28,0.16)');
-  e.addColorStop(0.12, 'rgba(60,46,28,0)');
-  e.addColorStop(0.9, 'rgba(60,46,28,0)');
-  e.addColorStop(1, 'rgba(60,46,28,0.13)');
-  ctx.fillStyle = e;
-  ctx.fillRect(0, 0, W, H);
-}
-
-/** The region about to be painted, pulsing so the target is unmistakable. */
-export function paintSelection(ctx, work, W, H, painted, selected, t) {
-  if (selected < 0 || selected >= work.regions.length || painted[selected]) return;
-  const pulse = 0.35 + Math.sin(t * 6) * 0.22;
-  const rg = work.regions[selected];
-  ctx.save();
-  ctx.beginPath();
-  rg.path(ctx, W, H);
-  ctx.fillStyle = `rgba(242,193,78,${pulse * 0.42})`;
-  ctx.fill();
-  ctx.lineWidth = Math.max(2.5, W * 0.008);
-  ctx.strokeStyle = `rgba(255,214,120,${0.5 + pulse})`;
-  ctx.stroke();
-  ctx.restore();
-}
+/* ----------------------------------------------------------------- id-map */
 
 /** The id-map used to turn a tap on the canvas into a region index. */
 export function paintIdMap(ctx, work, W, H) {

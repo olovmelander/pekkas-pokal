@@ -100,14 +100,25 @@ Table Tennis Touch och Rockstars Table Tennis.
 2021 är *Pekkas Måleri* — måleritävlingen i trädgården på Terrassvägen,
 där färgen blandas subtraktivt på en riktig palett.
 
+Alla spel kör på Three.js r187 och har egna adresser — `#/spel/2024` öppnar
+fisket direkt, och bakåtknappen stänger spelet.
+
 Att lägga till ett nytt års spel:
 
-1. Skapa modulen under `src/games/<spel>/index.js` och exportera en funktion
-   `createX(container, opts)` som returnerar `{ destroy() }`.
-2. Lägg till en rad i `GAMES` i [`src/scripts/app.js`](src/scripts/app.js) med
-   `year`, `title`, `tagline`, `icon` och sökvägen i `module`.
+1. Skapa modulen under `src/games/<spel>/index.js` och exportera
+   `default async function createX(container, opts)` som returnerar
+   `{ destroy() }`. `destroy` ska städa allt — spelet öppnas och stängs om
+   och om igen.
+2. Exportera `layout = 'full'` om spelet fyller hela scenen på liggande
+   skärmar. Utan den visas spelet i en centrerad porträttram på datorn.
+3. Spelets egna stilar läggs i `src/games/<spel>/style.css` — filen laddas
+   automatiskt när spelet öppnas, efter de delade HUD-stilarna i
+   [`src/styles/game-hud.css`](src/styles/game-hud.css).
+4. Lägg till en rad i `GAMES` i [`src/scripts/app.js`](src/scripts/app.js) med
+   `year`, `title`, `tagline`, `icon`, `colors` (affischens två toner),
+   `cover` (en stillbild i `public/games/`) och sökvägen i `module`.
 
-År utan spel visas automatiskt som "inte byggt än".
+År utan spel visas automatiskt under "Kommande".
 
 **Pekkas Fiske (2024)**
 
@@ -161,6 +172,22 @@ världen blir bokstavligen dovare ju längre ner man kommer. Ingen
 efterbehandling: ACES-tonemappning gör jobbet i stället, så telefonen
 behåller sin bildfrekvens.
 
+**Uppgraderingen.** Fisket fyller nu hela skärmen även på datorn: kameran
+ramar in nedstigningen olika för stående telefon och bred skärm, och
+sjöbäckenets klippväggar, tångruskor och fjärran stim syns vid sidorna.
+Fiskarna simmar med en riktig vågrörelse genom kroppen — hela sjön ritas med
+en instansierad mesh per art — med sprintar och glid, och mörten går i stim
+som vänder tillsammans. Under ytan bygger solstrålar från den brutna
+midnattssolen, plankton och bubblor från draget upp djupet, och dimman tar
+exakt vattnets färg så att allt långt bort smälter in; ovanför speglar sjön
+samma himmel, trädraden och den röda stugan med bryggan. Varje kast har ett
+uppdrag — lätt, mellan, svårt — som ger bonus och en stjärna, en utropare
+ropar dubbelnapp och trippel, och den sista fisken i luften faller i slow
+motion. Fångstdagboken minns varje art du fått upp, den största av varje och
+dina rekord, och den som når botten hittar något gyllene bredvid den sjunkna
+ekan. Fortfarande ingen efterbehandling: allt som glöder är sprites och ACES
+gör graderingen.
+
 **Pekkas Lerskulptur (2026)**
 
 Kvällen i keramikateljén, som i Barcelona: keramikern visar en form, du
@@ -176,25 +203,29 @@ drejar den — och keramikern dömer, precis som i verkligheten.
    keramikerns kommentar, och ställs på bänken.
 
 Tre alster per kväll: **Skålen** (honungsglasyr), **Vasen** (koboltglasyr)
-och **Amforan** (seladonglasyr). Poängen räknas på likhet i kvadrat plus
-tidsbonus, och rekordet sparas per enhet.
+och **Amforan** (seladonglasyr). Varje alster ger en till tre stjärnor
+(60/78/90 % likhet), och sex stjärnor på en kväll låser upp ett fjärde:
+**Pokalen** i guldlyster. Poängen räknas på likhet i kvadrat plus
+tidsbonus, och rekordet och personbästa per form sparas per enhet.
 
 **Teknik.** Leran är ett radiellt höjdfält lindat till ett lathe-nät som
-uppdateras på plats — drejränder och en svag spiral av fingermärken läggs
-på medan skivan snurrar. Skuggningen är en genererad **matcap**, samma
-trick som skulpteringsprogram använder för sin lerförhandsvisning: hela
-ljussättningen bakas in i en enda liten textur som slås upp per normal,
-så våta highlights kostar ingenting. Eftersom en matcap ignorerar
-scenens ljus kan krukan aldrig ta emot en riktig skugga — därför ligger
-en målad kontaktskugga under den, vilket är det som hindrar den från att
-sväva. Ateljén — kakelgolv, bågfönstret med Barcelona-silhuetten,
-hyllorna med brända krukor (slumpade lathe-profiler med glasyren bakad i
-vertexfärger, en draw call per hylla), verktygshyllan, hinken, lersäckarna
-och lerstänket på golvet — är helt procedurell, med samma ljushierarki som
-fäktsalen: kvällssolen genom fönstret är dominant och enda skuggkastare,
-en kall ovanifrånfill och en frontfill lyfter resten. Ljudet syntetiseras:
-drejskivans brum och lerans våta klafs är kontinuerliga WebAudio-lager
-som styrs av hur hårt händerna arbetar.
+uppdateras på plats — ihåligt, med rundad läpp, innervägg och botten.
+Ateljén ritas med fysikaliskt ljus: bakväggen är en riktig skuggkastare med
+ett välvt hål, så kvällssolen kommer in *bara* genom fönstret — strålen
+sveper över den våta leran från vänster och lägger en båge av ljus på
+golvet. Leran är ett fysikaliskt material med drejränder i en genererad
+normalkarta, och varje band har egen fukt: fingrarna lämnar skarpa, blöta
+ränder, svampen smälter bort dem och torkande lera tappar glansen. Ett
+färgat band mellan din vägg och målets visar live var leran ska tryckas in
+(varmt) eller dras ut (kallt), en hand syns där du arbetar — och rycker du
+för hårt slår leran. Trycker du KLAR skärs alstret loss och flyger in i
+ugnen, dörren slår igen och kontrollern klättrar till 1 240 °C med glöd,
+gnistor och värmedaller; ut kommer alstret glödande, svalnar till blank
+glasyr medan det plingar och hamnar till sist i fönstret mot Barcelonas
+skyline. Alla shaders kompileras bakom laddskärmen så inget hackar mitt i
+ett drag. Ljudet syntetiseras: drejskivans brum och lerans våta klafs är
+kontinuerliga WebAudio-lager som styrs av hur hårt händerna arbetar, och
+ugnen, trådsnittet och glasyrens pling har egna ljud.
 
 **Pekkas Fäktning (2023)**
 
@@ -217,7 +248,8 @@ fäktningens fraser:
 Varje fras startar med domarens »En garde — klara — kör!«, och varje tusch
 tänds i den riktiga målapparaten ovanför pisten: grön lampa och summer för
 dig, röd för motståndaren. Poäng: tusch 100, ripost 175, fint-tusch 150,
-parad 25, matchvinst 500 + 100 per tusch i marginal.
+parad 25, +50 per tusch i rad, matchvinst 500 + 100 per tusch i marginal och
+vit match (5–0) +300.
 
 **Teknik.** Fäktarna är ledade lågpolyfigurer — mask med galler, jacka
 med blank lamé, knickers, florett — som poseras helt i kod: gardvinklar
@@ -241,6 +273,22 @@ högdager, pisten hårdare, och de panelade väggarna har nog tonvariation
 för att mörkret ska ha form. Bakom fönstren ligger ett skymnings-Stockholm
 med Stadshusets tre kronor. Ljudet syntetiseras — paradens klingande
 klink, målapparatens hårda summer och publiksorlet.
+
+**Uppgraderingen.** Turneringen är nu hela 2023-fältet i ett riktigt
+slutspelsträd: du väljer vem av de fem utanför pallen du fäktas som, och
+Mikael, Rickard och Per Vikman väntar i kvartsfinal, semifinal och final.
+Medaljerna följer riktig fäktning, där båda förlorande semifinalisterna får
+brons, och bästa medalj sparas per fäktare. Fäktarna är nu ledade med
+inverterad kinematik — fötterna står kvar när kroppen sjunker in i utfallet,
+och klingan böjer sig i en båge när den träffar lamén — och varje pose
+fjädras, så att fraserna får tyngd och eftersving. Bakväggen har riktiga
+fönsteröppningar som kastar solfläckar över pisten, och solstrålarna räknas
+fram som en volym genom rummet, med damm som bara lyser där ljuset faktiskt
+faller. Varje tusch fryser världen ett ögonblick, kameran går in på
+träffpunkten, lampan blommar, lamén lyser i skyttens färg och publiken
+reagerar; det avgörande tuschet i varje match visas i slow motion. På dator
+spelar du med piltangenterna, mellanslag och F; på telefon med knappar för
+tummarna, och i stående läge står kameran bakom din axel.
 
 **Pekkas Lerduvor (2022)**
 
@@ -275,7 +323,7 @@ Grafiken vilar på tre saker som all utomhusrendering handlar om:
   kraftigt viktad inåt, för gräs ser tätt ut på håll men glest rakt
   ovanifrån, och närmast skjutplatsen är det nertrampat.
 - **Luftperspektiv.** Avstånd säljs med blekare och blåare färg, inte med
-  fler detaljer: dimman är samma dova blågrå ton som himlens horisontband
+  fler detaljer: dimman är samma dova varmgrå ton som himlens horisontband
   tonar in i, och den bortre granridån är förtintad mot den ovanpå det.
 - **Skuggor.** En skuggkastande sol med tajt ortografisk frustum runt
   stationen. Kontaktskuggor under graven, stenarna och gänget är det som
@@ -284,6 +332,21 @@ Grafiken vilar på tre saker som all utomhusrendering handlar om:
 Ljudet syntetiseras: skottets knall med ekot som rullar tillbaka från
 skogsbrynet, brytvapnets klick-klack vid omladdning, kastarens svisch,
 duvans spröda kross — och fågelsång med vindbädd däremellan.
+
+**Uppgraderingen.** Rundan börjar och slutar nu i ett vidvinkelpanorama
+bakom gänget på fikastolarna — med Pekkas Pokal på fikabordet, ladugården,
+flaggan och den låga augustisolen i samma bild — innan kameran flyger in
+till axeln. Himlen är egenbyggd: guldband mot solen, lila-grått från den,
+moln med guldkant, dimslöjor över skogskanten och svalor och myggdans som
+lyser i motljuset. Haglen har fått flygtid och tar svingen med sig, så den
+som stannar bössan skjuter bakom — och efter varje bom visar banan var
+svärmen gick: BAKOM, FÖRE, ÖVER eller UNDER, i meter. En kross ger hit-stop,
+en orange dammsky och riktiga skärvor som studsar i gräset, och guldduvan
+skjuts i slow motion. Ludvigs 3 400 följer med som spökstapel under poängen,
+och slutkortet räknar upp poängen, fyller i hela 25-kortet och delar ut
+brons (1 800), silver (2 800) eller guld — guld betyder att du slog Ludvig.
+Korsarna startar precis utanför bildkanten och deras fart följer bildens
+bredd, så en stående telefon ser samma passage som en datorskärm.
 
 **Pekkas Pingis (2019)**
 
@@ -367,7 +430,26 @@ och knä som egna pivoter — så en sving är en sving och inte en mesh som
 glider i sidled. Han studsar på fotbladen mellan slagen, lutar sig åt det
 håll han rör sig och följer bollen med blicken. Bollen har
 en tajt kontaktskugga (lärdomen från flipperbygget) så den står på bordet
-i stället för att sväva. Poängtavlan på väggen målas om efter varje boll.
+i stället för att sväva. Poängtavlan på väggen fäller sina siffror efter
+varje boll.
+
+**Uppgraderingen.** Olympia fyller nu hela skärmen: på en datorskärm ser
+kameran hela scenen med ridå, prosceniumbåge och publik längs väggarna medan
+bordet förblir motivet, och musen styr racketen rakt under pekaren. Det
+nylackade golvet speglar hallen, dammet glittrar i pendellampornas
+ljuskäglor och publiken lever — huvudena följer bollen, alla lutar sig fram
+i långa dueller, armarna åker upp när du vinner en boll och det blir
+knäpptyst på matchboll, när ljuset dras ihop kring bordet. Skruven syns:
+spåret bakom bollen, ringen där den studsar och studsmarkören lyser orange
+för topspin och lila för backspin, och racketens gummi glöder i den skruv du
+är på väg att slå. Smashar fryser bilden ett ögonblick, poängtavlan på
+scenväggen fäller sina siffror, och ett långt rally som du vinner spelas upp
+igen i slow motion från sidan. Varje motståndare presenteras med ett
+scoutingkort, varje vunnen match ger brons, silver eller guld efter
+marginalen, och rekord och längsta rally sparas lokalt. Den som slår Viktor
+Jones får konfetti från taket, en stående ovation och pokalen som stiger upp
+ur bordet. Botens fysik och svårighet är orörda — simuleringen ger exakt
+samma utfall som förut.
 
 **Pekkas Måleri (2021)**
 
@@ -447,30 +529,51 @@ nästa omålade yta strandar en enda begravd yta hela rundan.
 
 Duken renderas i två lager. Basen — väven, den lagda färgen, penseldragen,
 teckningen — är för dyr att rita om sextio gånger i sekunden och ändras
-bara när en yta målas, så den byggs om vid behov och den pulsande
-markeringen komponeras ovanpå per bildruta.
+bara när en yta målas, så den byggs om vid behov. Den pulsande markeringen
+och dess glödande kontur räknas fram i shadern ur id-kartan, så ingen
+textur laddas upp på nytt per bildruta.
 
 **Trädgården.** Himlen är en gradient på insidan av en kupol, inte en
 `scene.background`: en enda färg överallt är precis vad en utomhushimmel
 aldrig är. Granskogen ligger i tre led, vart och ett blekare och blåare än
 det förra — avstånd säljs med färg, inte med mer geometri. Skogen, häcken
 och vimplarna ritas som `InstancedMesh` med färg per instans; det är
-ritanropen, inte trianglarna, som en telefon-GPU tar slut på, och
-omskrivningen tog dem från 425 till 222 på dator och från 117 till 37 på
-mobil.
+ritanropen, inte trianglarna, som en telefon-GPU tar slut på. Med statiska
+grupper sammanslagna och publiken instansierad ligger trädgården nu på
+ungefär 67 ritanrop på dator (77 under domen), från 208.
+
+**Uppgraderingen.** Spelet fyller nu hela skärmen: på datorn hänger förlagan
+till vänster om staffliet och paletten står till höger, på telefonen är
+paletten ett ark längst ner. Färgen läggs med riktiga penseldrag vars
+riktning räknas ut ur ytans form – Munchs himmel får långa vågiga drag, Van
+Goghs virvlar spiraler – och duken har en höjdkarta som den låga solen faller
+snett över, så impasto, blank olja och linneväv genom tunn färg syns i
+ljuset. Paletten är ett trästycke med fem pigmentklickar där varje droppe
+flyger ner i blandningen och rörs in i spiraler, och mätaren säger varmare
+eller kallare och vad som är fel: för ljus, för grå, fel kulör. Står man
+still pekar paletten ut nästa droppe, beräknad som den kortaste vägen till en
+träff man faktiskt kan nå genom att bara lägga till färg. Pricka färgen
+flera ytor i rad för svit-multiplikator, och vid domen går Mikael Hägglund
+fram till staffliet medan din tolkning hängs bredvid originalet, betyget
+räknas upp och upp till tre stjärnor delas ut. Ditt bästa per verk och dina
+målningar sparas i ett galleri på enheten. Trädgården lever: granar och
+björkkronor vajar, vimplarna fladdrar, svalor flyger över häcken och en björk
+utanför bild kastar rörliga ljusfläckar på gräsmattan. Tonmappningen är
+Neutral i stället för ACES, så duken visar den färg man faktiskt blandat.
 
 **Kontroller i flipperspelet**
 
 | | Mobil | Dator |
 | --- | --- | --- |
-| Flippers | Vänster/höger halva av skärmen (fungerar samtidigt) | ←/→, A/D eller Z/M |
-| Avfyrare | Håll för kraft, släpp för att skjuta | Mellanslag |
+| Flippers | Vänster/höger halva av skärmen (fungerar samtidigt) | ←/→, A/D, Z/M eller Shift |
+| Avfyrare | Håll för kraft, släpp för att skjuta | Mellanslag, ↓ eller Enter |
 | Nudga | Knappen NUDGA | N |
-| Strategikort | ?-knappen uppe till höger | ? eller Esc för att stänga |
+| Strategikort | ?-knappen uppe till höger | ? — Esc stänger kortet |
 
 Släpp avfyraren när mätaren står i det turkosa fältet för en **skill shot** —
 och skjut vänster orbit inom tre sekunder för en **super skill shot** (15 000).
-Fyra nudgar för snabbt ger TILT och dödar flipprarna för den bollen.
+Fyra nudgar för snabbt ger TILT: flipprarna dör för den bollen och dess bonus
+går förlorad.
 
 **Bordet (à la Medieval Madness)**
 
@@ -527,6 +630,20 @@ Punktljus är candela och avtar med 1/d². I bordets skala (≈35 enheter över 
 intensitet i tiotal innan den lägger ut något ljus alls — allt ljus uttrycks
 därför som multiplar av `LAMP`.
 
+**Arkadhallen och punktmatrisen.** Flipperspelet fyller nu hela skärmen. På en
+bred skärm står maskinen i en mörk arkadhall med neonmatta och två
+grannmaskiner – Pekkas Fiske och Pekkas Pingis – och poäng, grenar och
+topplista ligger bredvid bordet i stället för ovanpå det. Backboxen har fått en
+riktig punktmatris på 128×32 med egen pixelfont. Där visas poängen,
+grenstarterna, jackpottar, multiball, bonusräkningen och TILT, och när ingen
+spelar rullar attraktionsläget medan lamporna jagar över bordet. Topplistan
+sparas på enheten under deltagarnas egna namn. Stora träffar fryser bollen ett
+ögonblick och en räddad boll dräneras i slow motion. Gnistor, bollspår och
+syntetiska ljud – den rullande kulan, solenoiderna och knackaren vid extraboll –
+ger bordet tyngd. På telefon visar bordet vilken skärmhalva som är vilken
+flipper, och ingen knapp är mindre än 44 pixlar. Bildupplösningen sänks
+automatiskt om bildfrekvensen faller under ungefär 45 bilder per sekund.
+
 ---
 
 ## Utveckling
@@ -538,23 +655,62 @@ npm run build    # produktionsbygge till dist/
 npm run lint     # ESLint
 ```
 
+### Formgivning
+
+Uttrycket är ett nordiskt pokalrum — en förgylld almanacka snarare än en
+instrumentpanel. Tre typsnitt med var sin uppgift: **Fraunces** för rubriker
+och siffror, **Schibsted Grotesk** för gränssnittet och **JetBrains Mono** för
+koordinater och små data. Guldet är den enda accentfärgen och ritas som
+polerad metall (`--metal-gold`, `--metal-silver`, `--metal-bronze`) — allt
+annat är varmt grått, så det som glänser betyder något: segrar, medaljer och
+det som går att klicka på. Mörkt tema är polarnatt, ljust tema är
+elfenbenspapper; sidan följer systemets val tills man själv byter.
+
+Översikten öppnar med pokalen i 3D ([`src/scripts/trophy.js`](src/scripts/trophy.js)):
+en svarvad guldpokal på en lackad sockel med varje års vinnare graverad på
+mässingsplåtar och föreningens älg etsad på kupan. Det som får metall att se
+ut som metall är vad den speglar, så pokalen står i en liten fotostudio —
+en mörk kupol med softboxar, ett varmt svep bakom kameran och ett studsljus
+från golvet — bakad till en PMREM-miljö. Pokalen laddas efter sidan, ritar
+bara när den syns och ersätter en SVG-pokal som redan står på plats, så
+inget hoppar och inget saknas utan WebGL. Bakom den ligger höjdkurvor —
+Höga kusten, dit koordinaterna i loggan pekar.
+
+### Adresser
+
+Varje vy, profil, år och spel har en egen adress som går att dela. Profiler,
+årsresultat och spel läggs ovanpå vyn i webbläsarens historik, så bakåt
+stänger dem.
+
+| Adress | Visar |
+| --- | --- |
+| `#/` | Översikten |
+| `#/medaljliga`, `#/historik`, `#/utmarkelser`, `#/statistik`, `#/sangbok`, `#/spel` | Vyerna |
+| `#/sangbok/<id>` | En sång, t.ex. `#/sangbok/varat-pekkas` |
+| `#/deltagare/<namn>` | En profil, t.ex. `#/deltagare/viktor-jones` |
+| `#/ar/<år>` | Årets fullständiga resultat |
+| `#/spel/<år>` | Årets spel, t.ex. `#/spel/2024` |
+
+Äldre länkar som `#medals` leder fortfarande rätt.
+
 ### Struktur
 
 | Fil | Ansvar |
 | --- | --- |
-| `index.html` | All markup, de fem vyerna och modalen |
-| `src/scripts/app.js` | Hela applikationen: dataladdning, statistik, Elo, rendering |
+| `index.html` | All markup, de sju vyerna, spelscenen och modalen |
+| `src/scripts/app.js` | Hela applikationen: dataladdning, statistik, Elo, routing, rendering |
+| `src/scripts/trophy.js` | Pokalen i 3D på översikten |
 | `src/scripts/achievement-engine.js` | Beräknar vilka utmärkelser varje deltagare låst upp |
 | `src/data/achievements.js` | Definitioner av alla utmärkelser |
-| `src/styles/` | `main` (tokens/teman), `layout`, `components`, `animations`, `games`, `responsive` |
-| `src/games/pinball/` | Flipperspelet: `physics` (2D-kollision), `table` (layout + banans grafik), `meshes` (3D), `index` (spelloop) |
-| `src/games/fishing/` | Fiskespelet: `species` (procedurella fiskar), `world` (sjö, vattenshader, båt), `audio` (syntetiskt ljud), `index` (spelloop) |
-| `src/games/clay/` | Drejspelet: `studio` (ateljé, matcaps, drejskiva), `audio` (syntetiskt ljud), `index` (lerfysik + spelloop) |
-| `src/games/fencing/` | Fäktspelet: `salle` (fäktsal, fäktare, texturer), `audio` (syntetiskt ljud), `index` (duell-AI + spelloop) |
-| `src/games/shooting/` | Skyttespelet: `range` (fält, gevär, lerduvor), `grass` (instansierad äng med vind), `audio` (syntetiskt ljud), `index` (banor + spelloop) |
-| `src/games/pingis/` | Pingisspelet: `hall` (bygdegård, bord, figurer), `audio` (syntetiskt ljud), `index` (fysik, AI och spelloop) |
-| `src/games/painting/` | Målerispelet: `artworks` (motiven + färgblandning i RYB och Lab), `garden` (trädgården, staffli, målare), `audio` (syntetiskt ljud), `index` (spelloop och dom) |
-| `public/` | Statiska filer: `event.json`, `manifest.json`, ikoner, `og-image.png`, `photos/` |
+| `src/styles/` | `main` (tokens/teman), `layout`, `components`, `animations`, `games` (arkaden och spelscenen), `game-hud` (spelens delade HUD), `responsive` |
+| `src/games/pinball/` | Flipperspelet: `physics` (2D-kollision), `table` (layout + banans grafik), `meshes` (3D), `room` (arkadhallen), `dmd` (punktmatrisen), `fx` (gnistor, bollspår), `audio` (syntetiskt ljud), `hud` (paneler), `scores` (topplistan), `index` (spelloop) |
+| `src/games/fishing/` | Fiskespelet: `species` (procedurella fiskar), `world` (sjö, vattenshader, båt), `fx` (stänk, bubblor, glimtar), `hud` (paneler, fångstdagbok), `progress` (uppdrag och rekord), `audio` (syntetiskt ljud), `index` (spelloop) |
+| `src/games/clay/` | Drejspelet: `studio` (ateljé, ugn, drejskiva), `clay` (krukans nät och material), `guide` (målets guider i 3D), `fx` (stänk, glöd, värmedaller), `hud` (paneler, dom, kvällens utställning), `audio` (syntetiskt ljud), `index` (lerfysik + spelloop) |
+| `src/games/fencing/` | Fäktspelet: `salle` (fäktsal, ljusvolymer, publik), `fencer` (IK-riggade fäktare), `fx` (gnistor, klingspår, konfetti), `hud` (paneler, slutspelsträd), `audio` (syntetiskt ljud), `index` (duell-AI + spelloop) |
+| `src/games/shooting/` | Skyttespelet: `range` (fält, lerduvor, gänget), `sky` (himmelsshader och moln), `gun` (bockbössan i PBR), `grass` (instansierad äng med vind), `fx` (skärvor, damm, haglsvärm), `hud` (25-kortet, spökstapeln, slutkortet), `audio` (syntetiskt ljud), `index` (banor + spelloop) |
+| `src/games/pingis/` | Pingisspelet: `hall` (bygdegård, bord, figurer), `crowd` (instansierad publik), `scoreboard` (fällbara siffror), `fx` (bollspår, ringar, gnistor), `post` (bloom, gradering, spegelgolv), `hud` (paneler, scoutingkort), `audio` (syntetiskt ljud), `index` (fysik, AI och spelloop) |
+| `src/games/painting/` | Målerispelet: `artworks` (motiven + färgblandning i RYB och Lab), `canvasart` (penseldrag och dukens höjdkarta), `palette` (paletten i 3D), `garden` (trädgården, staffli, målare, Hägglund), `hud` (paneler, dom, galleri), `audio` (syntetiskt ljud), `index` (spelloop och dom) |
+| `public/` | Statiska filer: `event.json`, `manifest.json`, ikoner, `brand/` (älgen), `og-image.png`, `games/` (affischbilder), `photos/` |
 
 Data hämtas från `competition-data.csv` vid sidladdning. Om filen inte går att
 läsa faller appen tillbaka på en inbäddad kopia i `app.js`, så sidan visar alltid

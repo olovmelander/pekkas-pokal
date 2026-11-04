@@ -1,37 +1,108 @@
 /* ==========================================================================
-   Pekkas Pokal — Responsive
+   Pekkas Pokal — Responsivt
    ========================================================================== */
 
-/* ---------- Tablet ---------- */
-@media (max-width: 1024px) {
-  .hero {
-    grid-template-columns: 1fr;
+/* ---------- Smal dator: menyn tätare ---------- */
+@media (max-width: 1180px) {
+  .nav-link {
+    padding: 0.5rem 0.55rem;
   }
 
-  .hero-champion {
-    min-height: 220px;
-  }
-
-  .hero-side {
-    flex-direction: row;
-  }
-
-  .hero-side > .card {
-    flex: 1;
+  .brand-sub {
+    display: none;
   }
 }
 
-/* ---------- Mobile ---------- */
-@media (max-width: 720px) {
+/* ---------- Surfplatta ---------- */
+@media (max-width: 1024px) {
+  .hero {
+    grid-template-columns: 1fr;
+    min-height: 0;
+    margin-top: 0;
+  }
+
+  .hero-stage {
+    order: -1;
+    min-height: 360px;
+    height: 46vh;
+    max-height: 440px;
+  }
+
+  .hero-copy {
+    padding-top: 0;
+  }
+
+  .ledger {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .ledger .kpi:nth-child(4)::before {
+    display: none;
+  }
+
+  .ledger .kpi:nth-child(n + 4) {
+    border-top: 1px solid var(--border);
+  }
+
+  .hero-band {
+    grid-template-columns: 1fr;
+  }
+
+  .tl-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'photo photo'
+      'main more'
+      'podium podium';
+  }
+
+  .tl-podium {
+    grid-auto-flow: column;
+    justify-content: start;
+    gap: var(--sp-4);
+    padding-top: var(--sp-3);
+    border-top: 1px solid var(--border);
+  }
+
+  .songbook {
+    grid-template-columns: 1fr;
+  }
+
+  .song-picker {
+    position: static;
+    display: flex;
+    gap: var(--sp-2);
+    max-height: none;
+    overflow-x: auto;
+    padding: 0 0 var(--sp-2);
+    scroll-snap-type: x mandatory;
+  }
+
+  .song-chip {
+    flex: 0 0 auto;
+    grid-template-columns: auto;
+    gap: 2px;
+    padding: var(--sp-2) var(--sp-4);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    scroll-snap-align: start;
+  }
+
+  .song-chip.active {
+    border-color: color-mix(in srgb, var(--gold) 50%, transparent);
+  }
+}
+
+/* ---------- Mobil ---------- */
+@media (max-width: 760px) {
   :root {
     --header-h: 60px;
   }
 
   .page {
-    padding: var(--sp-4) var(--sp-4) calc(var(--sp-8) + 68px);
+    padding: var(--sp-3) var(--gutter) calc(var(--sp-8) + 72px);
   }
 
-  /* Header: hide desktop nav, show tab bar */
   .top-nav {
     display: none;
   }
@@ -41,136 +112,250 @@
   }
 
   .site-footer {
-    padding-bottom: calc(84px + env(safe-area-inset-bottom));
-  }
-
-  .header-inner {
-    padding: 0 var(--sp-4);
+    padding-bottom: calc(96px + env(safe-area-inset-bottom));
   }
 
   .brand-mark {
-    width: 36px;
-    height: 36px;
+    width: 44px;
   }
 
-  /* Hero */
-  .hero-side {
-    flex-direction: column;
+  .brand-sub {
+    display: block;
   }
 
-  .hero-champion {
-    padding: var(--sp-5);
-    min-height: 200px;
+  .view-head {
+    margin: var(--sp-4) 0 var(--sp-6);
   }
 
-  .hero-trophy {
-    width: 180px;
-    height: 180px;
-    right: -40px;
-    bottom: -40px;
+  .hero-stage {
+    height: 40vh;
+    min-height: 300px;
   }
 
-  .count-seg {
-    min-width: 0;
+  .champion-medals {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--sp-2);
+  }
+
+  .cm-item {
+    gap: var(--sp-2);
+  }
+
+  .cm-item .medal-disc {
+    width: 22px;
+    height: 22px;
+    font-size: 0.75rem;
+  }
+
+  .cm-num {
+    font-size: var(--text-lg);
+  }
+
+  .cm-label {
+    letter-spacing: 0.08em;
+  }
+
+  .hero-coords {
+    display: none;
+  }
+
+  .hero-actions .btn {
     flex: 1;
   }
 
-  .countdown {
-    width: 100%;
+  .ledger {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  /* Cards a touch tighter */
+  .ledger .kpi:nth-child(4)::before {
+    display: block;
+  }
+
+  .ledger .kpi:nth-child(odd)::before {
+    display: none;
+  }
+
+  .ledger .kpi:nth-child(n + 3) {
+    border-top: 1px solid var(--border);
+  }
+
+  .kpi {
+    padding: var(--sp-4) var(--sp-3);
+  }
+
   .card {
-    padding: var(--sp-4);
     border-radius: var(--r-md);
-  }
-
-  .kpi-grid {
-    grid-template-columns: repeat(2, 1fr);
   }
 
   .chart-wrap,
   .chart-wrap.tall {
-    height: 250px;
+    height: 260px;
   }
 
   #map {
-    height: 320px;
+    height: 340px;
   }
 
-  /* Podium tighter */
+  .grid-2 {
+    gap: var(--sp-4);
+  }
+
+  /* Pallen */
   .podium {
     gap: var(--sp-2);
   }
 
-  .podium-avatar {
-    width: 52px;
-    height: 52px;
-    font-size: 1rem;
+  .podium-1 .podium-block {
+    height: 120px;
   }
 
-  .podium-1 .podium-block { height: 110px; }
-  .podium-2 .podium-block { height: 80px; }
-  .podium-3 .podium-block { height: 60px; }
+  .podium-2 .podium-block {
+    height: 90px;
+  }
+
+  .podium-3 .podium-block {
+    height: 66px;
+  }
+
+  .podium-name {
+    font-size: var(--text-md);
+  }
+
+  .podium-1 .podium-name {
+    font-size: var(--text-lg);
+  }
 
   .podium-medals {
-    white-space: normal;
+    flex-direction: column;
+    gap: 2px;
+    align-items: center;
   }
 
-  /* Timeline */
-  .timeline {
-    padding-left: 24px;
+  .medal-table .bar-col,
+  .medal-table .person-cell .avatar {
+    display: none;
   }
 
-  .tl-item::before {
-    left: -21px;
+  .medal-table th,
+  .medal-table td {
+    padding: var(--sp-3) 6px;
   }
 
-  /* Touch targets */
-  .chip {
-    padding: 0.5rem 0.95rem;
+  .rank-col {
+    width: 36px;
   }
 
-  .filter-actions {
-    justify-content: stretch;
+  .num-col {
+    width: 44px;
+    font-size: 0.98rem;
+  }
+
+  .medal-table th.num-col .medal-dot {
+    display: block;
+    margin: 0 auto 4px;
+  }
+
+  /* Deltagarkorten blir en karusell i stället för en lång stapel */
+  .competitor-grid {
+    grid-auto-flow: column;
+    grid-auto-columns: min(78%, 300px);
+    grid-template-columns: none;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    margin: 0 calc(var(--gutter) * -1);
+    padding: 2px var(--gutter) var(--sp-3);
+    scroll-padding: 0 var(--gutter);
+  }
+
+  .competitor-grid > .ccard {
+    scroll-snap-align: start;
+  }
+
+  /* Krönikan: årtalet ovanför kortet */
+  .tl-item {
+    grid-template-columns: 1fr;
+    gap: var(--sp-2);
+  }
+
+  .tl-item::before,
+  .tl-item::after {
+    display: none;
+  }
+
+  .tl-year-col {
+    justify-content: flex-start;
+    padding-top: var(--sp-4);
+  }
+
+  .tl-card {
+    margin-left: 0;
+    padding: var(--sp-4);
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      'photo'
+      'main'
+      'podium'
+      'more';
+  }
+
+  .tl-podium {
+    grid-auto-flow: row;
+  }
+
+  .tl-more {
+    justify-self: start;
+  }
+
+  .tl-item:hover .tl-card {
+    transform: none;
+  }
+
+  .tl-photo {
+    height: 160px;
+  }
+
+  /* Statistik */
+  .filter-group {
+    grid-template-columns: 1fr;
+    gap: var(--sp-2);
+  }
+
+  .filter-label {
+    padding: 0;
+  }
+
+  .filter-card .chip-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin: 0 calc(var(--sp-4) * -1);
+    padding: 2px var(--sp-4) 6px;
+  }
+
+  .filter-card .chip {
+    flex-shrink: 0;
   }
 
   .filter-actions .btn {
     width: 100%;
   }
 
-  /* Modal goes full-bleed sheet on phones */
-  .modal-backdrop {
-    padding: 0;
-    align-items: flex-end;
+  .ach-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .modal-panel {
-    width: 100%;
-    max-height: 92dvh;
-    padding: var(--sp-5) var(--sp-4) calc(var(--sp-6) + env(safe-area-inset-bottom));
-    border-radius: var(--r-lg) var(--r-lg) 0 0;
-    transform: translateY(100%);
+  .ach-summary .kpi:nth-child(3)::before {
+    display: none;
   }
 
-  .pf-avatar {
-    width: 50px;
-    height: 50px;
+  .ach-summary .kpi:nth-child(n + 3) {
+    border-top: 1px solid var(--border);
   }
 
-  .pf-stats {
-    grid-template-columns: repeat(3, 1fr);
-  }
-
-  .pf-rivals {
-    gap: var(--sp-4);
-  }
-
-  /* Head to head stacks */
   .h2h-pickers {
     flex-direction: column;
     align-items: stretch;
-    gap: var(--sp-3);
+    gap: var(--sp-2);
   }
 
   .h2h-vs {
@@ -182,23 +367,69 @@
     max-height: none;
   }
 
-  .tl-photo {
-    width: calc(100% + var(--sp-4) * 2);
-    margin-left: calc(var(--sp-4) * -1);
-    margin-right: calc(var(--sp-4) * -1);
-    height: 150px;
+  /* Modalen blir ett ark nerifrån på telefoner */
+  .modal-backdrop {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .modal-panel {
+    width: 100%;
+    max-height: 92dvh;
+    padding: var(--sp-5) var(--sp-4) calc(var(--sp-6) + env(safe-area-inset-bottom));
+    border-radius: var(--r-xl) var(--r-xl) 0 0;
+    transform: translateY(100%);
+  }
+
+  .modal-panel::before {
+    content: '';
+    display: block;
+    width: 40px;
+    height: 4px;
+    margin: -6px auto var(--sp-3);
+    border-radius: 2px;
+    background: var(--border-strong);
+  }
+
+  .pf-avatar {
+    width: 54px;
+    height: 54px;
+  }
+
+  .pf-stats {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .pf-stats .pf-stat:nth-child(4) {
+    border-left: none;
+  }
+
+  .pf-stats .pf-stat:nth-child(n + 4) {
+    border-top: 1px solid var(--border);
+  }
+
+  .pf-rivals {
+    grid-template-columns: 1fr;
+    gap: var(--sp-4);
+  }
+
+  .song-sheet {
+    transform: none;
+  }
+
+  .song-sheet:hover {
+    transform: none;
   }
 }
 
-/* ---------- Small phones ---------- */
+/* ---------- Små telefoner ---------- */
 @media (max-width: 380px) {
-  .kpi-grid {
-    grid-template-columns: 1fr 1fr;
-    gap: var(--sp-2);
-  }
-
   .brand-sub {
     display: none;
+  }
+
+  .count-num {
+    font-size: 2.2rem;
   }
 
   .ccard-stats {
@@ -206,7 +437,7 @@
   }
 }
 
-/* ---------- Hover devices only: card lift ---------- */
+/* ---------- Bara enheter med hovring: kort lyfter ---------- */
 @media (hover: hover) and (pointer: fine) {
   .card:hover {
     box-shadow: var(--shadow-2);
@@ -214,15 +445,13 @@
 
   .chart-card:hover,
   .map-card:hover {
-    transform: translateY(-2px);
+    border-color: var(--border-strong);
   }
 }
 
-/* ---------- Large screens ---------- */
-@media (min-width: 1440px) {
-  .page,
-  .header-inner,
-  .site-footer {
-    max-width: 1320px;
+/* ---------- Stora skärmar ---------- */
+@media (min-width: 1600px) {
+  :root {
+    --page-max: 1360px;
   }
 }
