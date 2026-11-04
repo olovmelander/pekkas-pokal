@@ -454,6 +454,9 @@ export async function createClay(container) {
   composer.addPass(haze);
   const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.3, 0.55, 0.88);
   composer.addPass(bloom);
+  // UnrealBloomPass always draws into half-float targets of its own: skip it
+  // where the GPU cannot render to those (the rest of the chain still runs)
+  bloom.enabled = gfx.floatRT;
   composer.addPass(new OutputPass());
   // ?gfx=safe, eller vakten nedan: rita direkt utan efterbehandling
   let usePost = !gfx.safe;

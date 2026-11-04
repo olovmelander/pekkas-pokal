@@ -250,6 +250,9 @@ export async function createFencing(container) {
   addSanitize(composer);
   const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.5, 0.55, 1.0);
   composer.addPass(bloom);
+  // UnrealBloomPass always draws into half-float targets of its own: skip it
+  // where the GPU cannot render to those (the rest of the chain still runs)
+  bloom.enabled = gfx.floatRT;
   composer.addPass(new OutputPass());
   let usePost = !gfx.safe;
 

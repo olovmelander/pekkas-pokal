@@ -486,8 +486,8 @@ pendellampor med fejkvolymetriska koner och målade ljuspölar över bordet,
 en enda skuggkastande nyckelljuskälla, en låg fyllnad från spelarsidan så
 motståndarens ansikte läses i stället för att bli siluett, månljus och
 granar i fönstren, scen med ridå, publik på scenkanten, fikabord och
-Pekkas-vimplar. Motståndaren är ledad — huvud med ansikte, axel, armbåge
-och knä som egna pivoter — så en sving är en sving och inte en mesh som
+Pekkas-vimplar. Motståndaren kommer ur spelens gemensamma
+personsystem (se nedan), så en sving är en sving och inte en mesh som
 glider i sidled. Han studsar på fotbladen mellan slagen, lutar sig åt det
 håll han rör sig och följer bollen med blicken. Bollen har
 en tajt kontaktskugga (lärdomen från flipperbygget) så den står på bordet
@@ -511,6 +511,22 @@ marginalen, och rekord och längsta rally sparas lokalt. Den som slår Viktor
 Jones får konfetti från taket, en stående ovation och pokalen som stiger upp
 ur bordet. Botens fysik och svårighet är orörda — simuleringen ger exakt
 samma utfall som förut.
+
+**Andra uppgraderingen.** Motståndarna är nu tre av kompisarna på riktigt:
+Henrik, Rickard och Viktor Jones, byggda med samma personsystem som i alla
+andra spel och klädda i Anundsjö IF:s röda tröja, med kanter i brons, silver
+och guld efter 2019 års pall. Det som animeras är racketen: den går genom
+bakåtsving, den verkliga träffpunkten och genomsvingen, med rätt gummi mot
+nätet på forehand och backhand, och armen följer med inverterad kinematik.
+Fötterna står kvar och tar steg när han förflyttar sig, servebollen kastas upp
+ur vänsterhanden, och ansiktet svarar på poängen: ett leende och en knuten näve
+när han vinner, en rynkad panna när han förlorar. I publiken sitter de andra
+deltagarna – de följer bollen, lutar sig fram i långa dueller, blir knäpptysta
+på matchboll och reser sig för mästaren. Grafiken är dessutom härdad för
+riktiga grafikkort: glöden runt små ljuspunkter blinkar inte längre när
+kameran rör sig, golvspegeln är mjukare och stabilare, och shaders kompileras
+innan första bilden ritas.
+
 
 **Pekkas Måleri (2021)**
 
@@ -799,7 +815,7 @@ stänger dem.
 | `src/games/clay/` | Drejspelet: `studio` (ateljé, ugn, drejskiva), `clay` (krukans nät och material), `keramiker` (keramikern och domen), `guide` (målets guider i 3D), `fx` (stänk, glöd, värmedaller), `hud` (paneler, dom, kvällens utställning), `audio` (syntetiskt ljud), `index` (lerfysik + spelloop) |
 | `src/games/fencing/` | Fäktspelet: `salle` (fäktsal, ljusvolymer, publik), `fencer` (fäktarna, domaren och masken på personsystemet), `fx` (gnistor, klingspår, konfetti), `hud` (paneler, slutspelsträd), `audio` (syntetiskt ljud), `index` (duell-AI + spelloop) |
 | `src/games/shooting/` | Skyttespelet: `range` (fält, lerduvor), `gang` (2022 års gäng på fikastolarna), `sky` (himmelsshader och moln), `gun` (bockbössan i PBR), `grass` (instansierad äng med vind), `fx` (skärvor, damm, haglsvärm), `hud` (25-kortet, spökstapeln, slutkortet), `audio` (syntetiskt ljud), `index` (banor + spelloop) |
-| `src/games/pingis/` | Pingisspelet: `hall` (bygdegård, bord, figurer), `crowd` (instansierad publik), `scoreboard` (fällbara siffror), `fx` (bollspår, ringar, gnistor), `post` (bloom, gradering, spegelgolv), `hud` (paneler, scoutingkort), `audio` (syntetiskt ljud), `index` (fysik, AI och spelloop) |
+| `src/games/pingis/` | Pingisspelet: `hall` (bygdegård, bord), `foe` (motståndaren och racketen), `crowd` (publiken på personsystemet), `scoreboard` (fällbara siffror), `fx` (bollspår, ringar, gnistor), `post` (bloom, gradering, spegelgolv), `hud` (paneler, scoutingkort), `audio` (syntetiskt ljud), `index` (fysik, AI och spelloop) |
 | `src/games/painting/` | Målerispelet: `artworks` (motiven + färgblandning i RYB och Lab), `canvasart` (penseldrag och dukens höjdkarta), `palette` (paletten i 3D), `garden` (trädgården, stafflier), `cast` (Hägglund och 2021 års målare), `hud` (paneler, dom, galleri), `audio` (syntetiskt ljud), `index` (spelloop och dom) |
 | `public/` | Statiska filer: `event.json`, `manifest.json`, ikoner, `brand/` (älgen), `og-image.png`, `games/` (affischbilder), `photos/` |
 
