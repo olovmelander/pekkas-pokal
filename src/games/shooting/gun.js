@@ -209,7 +209,7 @@ export function buildShotgun({ envMap, glow, star }) {
      side, palm up and in; the right hand wraps the pistol grip, palm
      facing in (−x), its +Y running up the grip toward the tang. */
   const forendGrip = new THREE.Object3D();
-  forendGrip.position.set(0, -0.042, -0.4);
+  forendGrip.position.set(0, -0.042, -0.44);
   forendGrip.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(
     new THREE.Vector3(0.86, -0.5, 0), new THREE.Vector3(0, 0, -1), new THREE.Vector3(0.5, 0.86, 0)
   ));

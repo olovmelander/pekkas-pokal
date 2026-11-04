@@ -978,7 +978,8 @@
 .pm-ui.pm-wide .pm-overlay[data-card='start'] {
   justify-content: flex-start;
   padding-left: max(24px, 5vw);
-  background: linear-gradient(90deg, rgba(10, 8, 6, 0.84) 0%, rgba(10, 8, 6, 0.5) 38%, rgba(10, 8, 6, 0) 62%);
+  /* Just enough shade behind the card to lift it; the garden is the poster */
+  background: linear-gradient(90deg, rgba(10, 8, 6, 0.58) 0%, rgba(10, 8, 6, 0.3) 30%, rgba(10, 8, 6, 0) 52%);
 }
 
 .pm-ui.pm-tall .pm-overlay[data-card='start'],

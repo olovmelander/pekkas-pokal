@@ -711,9 +711,10 @@ function buildKiln(metal) {
   // Controller box on the right pillar, and its armoured cable to the wall
   steel.add(new THREE.BoxGeometry(0.3, 0.42, 0.08), 0x1e1d22, [0.6, 1.45, 0.73]);
   steel.add(new THREE.CylinderGeometry(0.025, 0.025, 1.3, 6), 0x2a2a2e, [0.78, 0.9, 0.2], [0.6, 0, 0.12]);
-  // Bolts along the bands, and a peephole plug in each side
+  // Bolts along the bands (flat heads: a tiny metal dome is a speck that
+  // twinkles on a real GPU), and a peephole plug in each side
   [-0.74, 0.74].forEach((x) => [0.84, 1.47].forEach((y) => [-0.45, 0, 0.45].forEach((z) => {
-    steel.add(new THREE.SphereGeometry(0.022, 6, 4), 0xc8c7cc, [x + Math.sign(x) * 0.02, y, z]);
+    steel.add(new THREE.CylinderGeometry(0.02, 0.02, 0.016, 6), 0x9c9ba1, [x + Math.sign(x) * 0.016, y, z], [0, 0, Math.PI / 2]);
   })));
   [-0.76, 0.76].forEach((x) => steel.add(new THREE.CylinderGeometry(0.05, 0.05, 0.06, 8), 0xd9d2c4, [x, 1.4, -0.2], [0, 0, Math.PI / 2]));
   // A hand-painted warning plate on the right pillar: HOT
@@ -891,7 +892,8 @@ export function buildStudio() {
     for (let d = 0; d < 3; d++) {
       const a = -0.5 + d * 0.5 + (i % 3) * 0.1;
       const len = 0.08 + ((i * 3 + d) % 4) * 0.05;
-      glossy.add(new THREE.CapsuleGeometry(0.012, len, 2, 5), gc,
+      // (matte batch: a tiny glossy capsule is exactly the kind of speck that twinkles)
+      wood.add(new THREE.CapsuleGeometry(0.012, len, 2, 5), gc,
         [bx + Math.sin(a) * 0.212, 0.42 - len / 2 - 0.01, bz + Math.cos(a) * 0.212]);
     }
   });

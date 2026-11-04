@@ -72,7 +72,7 @@ function vertexColourMaterial() {
  * off their Lambert materials, so groups are still authored the readable
  * way — one Mesh per part — and only collapsed once they are assembled.
  */
-function bake(root, { skip = [], castShadow = true, receiveShadow = false } = {}) {
+function bake(root, { skip = [], castShadow = true, receiveShadow = false, grainUv = false } = {}) {
   root.updateMatrixWorld(true);
   const inv = root.matrixWorld.clone().invert();
   const rel = new THREE.Matrix4();
@@ -82,7 +82,9 @@ function bake(root, { skip = [], castShadow = true, receiveShadow = false } = {}
     if (skip.includes(o)) return;
     if (o.isMesh && !o.isInstancedMesh) {
       rel.multiplyMatrices(inv, o.matrixWorld);
-      const g = o.geometry.clone().applyMatrix4(rel);
+      const g = o.geometry.clone();
+      if (grainUv) grainUvs(g);
+      g.applyMatrix4(rel);
       // An already-baked part keeps its vertex colours (tinted by its
       // material), so baked groups can be baked again into a bigger one
       const own = o.material.vertexColors && g.attributes.color;
@@ -95,7 +97,7 @@ function bake(root, { skip = [], castShadow = true, receiveShadow = false } = {}
         cols[i + 2] = c.b * (src ? src.getZ(v) : 1);
       }
       Object.keys(g.attributes).forEach((n) => {
-        if (n !== 'position' && n !== 'normal') g.deleteAttribute(n);
+        if (n !== 'position' && n !== 'normal' && !(grainUv && n === 'uv')) g.deleteAttribute(n);
       });
       g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
       geos.push(g);
@@ -118,6 +120,85 @@ function bake(root, { skip = [], castShadow = true, receiveShadow = false } = {}
   mesh.receiveShadow = receiveShadow;
   root.add(mesh);
   return mesh;
+}
+
+/**
+ * Wood-grain UVs for a part, in metres of its own shape: u runs along the
+ * part's longest side, so the grain follows a leg or a rail the way it
+ * would in a sawn plank, and v across whichever face the vertex is on.
+ */
+function grainUvs(g) {
+  g.computeBoundingBox();
+  const size = g.boundingBox.getSize(new THREE.Vector3()).toArray();
+  const long = size.indexOf(Math.max(...size));
+  const p = g.attributes.position;
+  const n = g.attributes.normal;
+  const uv = new Float32Array(p.count * 2);
+  const v = [0, 0, 0];
+  const nv = [0, 0, 0];
+  for (let i = 0; i < p.count; i++) {
+    v[0] = p.getX(i);
+    v[1] = p.getY(i);
+    v[2] = p.getZ(i);
+    nv[0] = Math.abs(n.getX(i));
+    nv[1] = Math.abs(n.getY(i));
+    nv[2] = Math.abs(n.getZ(i));
+    const d = nv.indexOf(Math.max(...nv));
+    const along = d === long ? (long + 1) % 3 : long;
+    const across = [0, 1, 2].find((k) => k !== along && k !== d);
+    uv[i * 2] = v[along] * 2.2;
+    uv[i * 2 + 1] = v[across] * 2.2 + d * 0.31;
+  }
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+}
+
+/** Pine: fine wavy grain, pores and the odd knot, as a light multiplier. */
+let grainTexture = null;
+function woodGrain() {
+  if (grainTexture && !grainTexture.userData.disposed) return grainTexture;
+  const N = 256;
+  const cv = document.createElement('canvas');
+  cv.width = N;
+  cv.height = N;
+  const ctx = cv.getContext('2d');
+  const r = mulberry(77);
+  ctx.fillStyle = '#f2f0ee';
+  ctx.fillRect(0, 0, N, N);
+  for (let i = 0; i < 64; i++) {
+    const y0 = r() * N;
+    const ph = r() * 6;
+    ctx.strokeStyle = `rgba(92,58,24,${0.06 + r() * 0.14})`;
+    ctx.lineWidth = 0.6 + r() * 1.8;
+    ctx.beginPath();
+    for (let x = -8; x <= N + 8; x += 8) {
+      const y = y0 + Math.sin(x * 0.0245 + ph) * 3.2 + Math.sin(x * 0.07 + ph * 2) * 1.1;
+      if (x < 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(70,40,14,0.1)';
+  for (let i = 0; i < 700; i++) ctx.fillRect(r() * N, r() * N, 2 + r() * 4, 1);
+  for (let i = 0; i < 2; i++) {
+    const x = r() * N;
+    const y = r() * N;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, 7);
+    g.addColorStop(0, 'rgba(80,46,16,0.55)');
+    g.addColorStop(1, 'rgba(80,46,16,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(x, y, 12, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  grainTexture = new THREE.CanvasTexture(cv);
+  grainTexture.colorSpace = THREE.SRGBColorSpace;
+  grainTexture.wrapS = THREE.RepeatWrapping;
+  grainTexture.wrapT = THREE.RepeatWrapping;
+  grainTexture.anisotropy = 4;
+  grainTexture.addEventListener('dispose', () => {
+    grainTexture.userData.disposed = true;
+  });
+  return grainTexture;
 }
 
 /* ------------------------------------------------------------------- wind */
@@ -555,12 +636,12 @@ export function buildGarden({ lowTier = false } = {}) {
       const z = -8.75 + rand() * 0.4;
       const color = cols[Math.floor(rand() * cols.length)];
       stems.push({ pos: [x, 0, z], scale: [s, h, s], color: 0x3f6a2a });
-      heads.push({ pos: [x, h, z], scale: [s * 0.8, s * 0.8, s * 0.8], color });
+      heads.push({ pos: [x, h, z], scale: [s * 0.95, s * 0.95, s * 0.95], color });
     }
     const rf = mulberry(8128);
     const spikes = [];
     const lupins = [0x7b5aa8, 0xd77aa8, 0xeee8e0, 0x6a72c0, 0x9a62b8];
-    for (let i = 0; i < (lowTier ? 18 : 40); i++) {
+    for (let i = 0; i < (lowTier ? 30 : 64); i++) {
       const x = -12.5 + rf() * 25;
       const z = -8.95 + rf() * 0.35;
       const h = 0.3 + rf() * 0.25;
@@ -600,7 +681,7 @@ export function buildGarden({ lowTier = false } = {}) {
     // The head swings exactly as its stem's top does (the sway is in each
     // instance's own units, so the amplitude is divided by the size ratio;
     // no instance is rotated, or the sway would point another way)
-    const headMat = windify(lambert(0xffffff, { vertexColors: true, side: THREE.DoubleSide }), wind, { ...wcfg, base: -1e3, span: 1e-3, amp: 0.55 / 0.8, key: 'head' });
+    const headMat = windify(lambert(0xffffff, { vertexColors: true, side: THREE.DoubleSide }), wind, { ...wcfg, base: -1e3, span: 1e-3, amp: 0.55 / 0.95, key: 'head' });
     const headMesh = instanced(headGeo, heads, headMat);
     // Lupin spikes: a lumpy cone of florets, paler toward the tip
     const spikeGeo = new THREE.ConeGeometry(1, 4, 7, 6);
@@ -1161,7 +1242,11 @@ export function animateGarden(garden, t, still) {
  */
 export function buildEasel(artMaterial, w = 1.5, h = 1.15) {
   const g = new THREE.Group();
-  const wood = 0xa8804a;
+  const wood = 0xb8905a;
+  // The player's easel is seen up close for the whole evening: its wood is
+  // its own mesh with a grain texture. Far off in the field, colour is enough.
+  const woodG = artMaterial ? new THREE.Group() : g;
+  if (artMaterial) g.add(woodG);
 
   // Three legs, all BEHIND the canvas plane. An A-frame carries the canvas
   // on a tray at its front; legs crossing in front of the picture is the
@@ -1173,15 +1258,15 @@ export function buildEasel(artMaterial, w = 1.5, h = 1.15) {
     leg.position.set(x, legLen / 2 - 0.02, z);
     leg.rotation.z = tilt;
     leg.rotation.x = z < -0.3 ? -0.3 : 0.05;
-    g.add(leg);
+    woodG.add(leg);
   });
   // Tray the canvas rests on, with the brushes, a rag and the tubes on it
   const tray = new THREE.Mesh(new THREE.BoxGeometry(w + 0.14, 0.05, 0.14), lambert(wood));
   tray.position.set(0, 0.95, -0.02);
-  g.add(tray);
+  woodG.add(tray);
   const lip = new THREE.Mesh(new THREE.BoxGeometry(w + 0.14, 0.045, 0.028), lambert(wood));
   lip.position.set(0, 0.99, 0.045);
-  g.add(lip);
+  woodG.add(lip);
   if (artMaterial) {
     [[-0.3, 0.14], [-0.21, -0.1], [0.34, 0.05]].forEach(([bx, rot], i) => {
       const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.011, 0.26, 5), lambert(0xc9a05a));
@@ -1212,7 +1297,7 @@ export function buildEasel(artMaterial, w = 1.5, h = 1.15) {
 
   const frame = new THREE.Mesh(new THREE.BoxGeometry(w + 0.09, h + 0.09, 0.05), lambert(0xc4a878));
   frame.position.set(0, 0.98 + h / 2, 0.01);
-  g.add(frame);
+  woodG.add(frame);
 
   // A box, not a plane: the canvas is a stretched object with a visible
   // edge, and a zero-thickness quad at this distance reads as a decal.
@@ -1220,7 +1305,11 @@ export function buildEasel(artMaterial, w = 1.5, h = 1.15) {
   stretched.position.set(0, 0.98 + h / 2, 0.045);
   g.add(stretched);
 
-  bake(g, { receiveShadow: !artMaterial });
+  if (artMaterial) {
+    bake(g, { skip: [woodG] });
+    const wm = bake(woodG, { grainUv: true, receiveShadow: true });
+    wm.material = new THREE.MeshStandardMaterial({ vertexColors: true, map: woodGrain(), roughness: 0.68, metalness: 0 });
+  } else bake(g, { receiveShadow: true });
 
   let canvas = null;
   if (artMaterial) {

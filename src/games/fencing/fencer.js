@@ -372,6 +372,11 @@ export class Fencer {
     // Foil space → fist space: +x along the blade, +y the way it bows
     this.foilQ = frameQuat(new THREE.Vector3(1, 0, 0), BLADE_L, new THREE.Vector3(0, 1, 0), BOW_L, new THREE.Quaternion());
     this.foilBaseQ = new THREE.Quaternion();
+    // The weapon arm's last targets, re-solved after person.update()
+    this.wGrip = new THREE.Vector3();
+    this.wDir = new THREE.Vector3(1, 0, 0);
+    this.wPole = new THREE.Vector3();
+    this.wValid = false;
     this.foilHolder = new THREE.Group();
     this.foilHolder.add(this.foil);
     this.bladeL = new THREE.Vector3().copy(BLADE_L);
@@ -547,6 +552,9 @@ export class Fencer {
         root.rotation.y = lerp(duelYaw, easeYaw, k);
       }
     }
+    // Only a pure stance can be re-solved after update(): a blend between
+    // the two is a slerp of both solves
+    this.wValid = relax < 0.001 || relax > 0.999;
     this._setBend(p[P.bend] * (1 - relax));
     const { lame } = person.materials;
     if (lame) lame.emissiveIntensity = p[P.flash] * 1.6;
@@ -686,6 +694,11 @@ export class Fencer {
    */
   _weapon(grip, dir, pole) {
     const { person } = this;
+    if (grip !== this.wGrip) {
+      this.wGrip.copy(grip);
+      this.wDir.copy(dir);
+      this.wPole.copy(pole);
+    }
     const b = person.bones;
     const sock = this.sock.position;
     const bladeW = this.V().copy(dir).normalize();
@@ -703,7 +716,7 @@ export class Fencer {
       const yW = this.V().copy(bladeW).multiplyScalar(this.cosYB).addScaledVector(u, this.sinYB);
       frameQuat(this.bladeL, bladeW, UP_L, yW, q);
       wrist.copy(sock).applyQuaternion(q).negate().add(grip);
-      person.ikArm(this.hand, wrist, pole, q);
+      this.short = person.ikArm(this.hand, wrist, pole, q);
     };
     solve(null);
     const elbow = b[`forearm${this.hand}`].getWorldPosition(this.V());
@@ -793,6 +806,14 @@ export class Fencer {
     }
     person.lookAt(this.look, this.lookWeight);
     person.update(dt, t);
+    // update() breathes the spine and turns the chest with the look-at,
+    // which carries the whole arm with it: solve the weapon arm once more
+    // on top, so the point stays exactly where the pose aimed it
+    if (this.wValid) {
+      const up = person.bones[`upperArm${this.hand}`];
+      up.parent.updateWorldMatrix(true, false);
+      this._weapon(this.wGrip, this.wDir, this.wPole);
+    }
     this._placeMask();
     this.group.updateMatrixWorld(true);
   }
@@ -1296,12 +1317,19 @@ export class Animator {
   contact(p, ctx, line) {
     const a2 = this.aim(p, ctx, line);
     const st = BLADE_START + this.f.gripOff;
-    const bx = a2.handX + Math.cos(a2.a) * st;
-    const by = a2.handY + Math.sin(a2.a) * st;
-    const d = Math.hypot(a2.tx - bx, a2.ty - by);
-    const kb = bendFor(d);
+    // The blade leaves the bell along its START tangent (fa), not along
+    // the line to the target: solve the two together (converges in a few
+    // rounds — the bell is only ten centimetres out from the grip)
+    let fa = a2.a;
+    let kb = 0;
+    for (let i = 0; i < 4; i++) {
+      const bx = a2.handX + Math.cos(fa) * st;
+      const by = a2.handY + Math.sin(fa) * st;
+      kb = bendFor(Math.hypot(a2.tx - bx, a2.ty - by));
+      fa = Math.atan2(a2.ty - by, a2.tx - bx) - (kb * BLADE) / 2;
+    }
     p[P.bend] = kb;
-    p[P.fa] = a2.a - (kb * BLADE) / 2;
+    p[P.fa] = fa;
   }
 
   /** Writes this frame's target pose and springs the real pose to it. */

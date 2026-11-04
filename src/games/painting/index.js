@@ -432,6 +432,8 @@ export async function createPainting(container) {
   /* ---- Layout & camera -------------------------------------------------- */
 
   const view = { w: 1, h: 1, lay: layoutFor(1, 1) };
+  /** The camera rig: the shot it is on, how far into the move, seconds on it. */
+  const rig = { name: 'wide', t: 1, dur: 1, from: null, since: 0 };
 
   /** A camera shot: where it stands, what it looks at, lens, lens shift. */
   function shotParams(name, t = 0) {
@@ -462,8 +464,12 @@ export async function createPainting(container) {
       const d = H / (2 * tan * ppu);
       const tgt = new THREE.Vector3(0.45, 1.15, -0.5);
       const dir = new THREE.Vector3(0.62, 0.22, 2.0).normalize();
+      // Once he has arrived, the camera leans in on him, slowly
+      const push = reduced ? 0 : 0.08 * (1 - Math.exp(-Math.max(0, rig.since - 2.2) / 5));
+      tgt.x += push * 1.6;
+      tgt.y += push * 0.9;
       return {
-        pos: tgt.clone().addScaledVector(dir, d), tgt, fov,
+        pos: tgt.clone().addScaledVector(dir, d * (1 - push)), tgt, fov,
         ox: W / 2 - (free.x + free.w / 2), oy: H / 2 - (free.y + free.h / 2)
       };
     }
@@ -482,7 +488,6 @@ export async function createPainting(container) {
     };
   }
 
-  const rig = { name: 'wide', t: 1, dur: 1, from: null };
   let peekShot = null;
   const cur = { pos: new THREE.Vector3(), tgt: new THREE.Vector3(), fov: 40, ox: 0, oy: 0 };
 
@@ -490,11 +495,13 @@ export async function createPainting(container) {
     rig.from = { pos: cur.pos.clone(), tgt: cur.tgt.clone(), fov: cur.fov, ox: cur.ox, oy: cur.oy };
     rig.name = name;
     rig.t = 0;
+    rig.since = 0;
     rig.dur = reduced ? Math.min(dur, 0.01) : Math.max(0.001, dur);
     if (dur <= 0) rig.t = 1;
   }
 
   function updateCamera(dt, t) {
+    rig.since += dt;
     const to = shotParams(rig.name, t);
     if (rig.t < 1 && rig.from) {
       rig.t = Math.min(1, rig.t + dt / rig.dur);
@@ -744,7 +751,10 @@ export async function createPainting(container) {
    */
   function updateTip() {
     const a = state.advice;
-    const stuck = state.phase === 'paint' && !!a && !!a.tip && state.regionTime > TIP_AFTER;
+    // A first evening ever: the palette points at the next drop almost at
+    // once on the first canvas, so nobody stands there not knowing what to tap
+    const after = state.firstEvening && state.workNo === 1 ? 1.2 : TIP_AFTER;
+    const stuck = state.phase === 'paint' && !!a && !!a.tip && state.regionTime > after;
     palette.setTip(stuck && a.tip !== 'wipe' ? a.tip : null);
     hud.wipe.classList.toggle('nudge', stuck && a.tip === 'wipe');
     let txt;
@@ -1018,6 +1028,10 @@ export async function createPainting(container) {
       sfx.gavel();
       callout('KLART!', 'big');
     }
+    // While he walks over and looks, the garden holds its breath
+    later(() => {
+      if (state.phase === 'judging') callout('Hägglund granskar …', 'soft judge');
+    }, reduced ? 0 : 1100);
 
     // The verdict: colour accuracy over every region, with bare canvas
     // counted as the miss it is.
@@ -1182,6 +1196,7 @@ export async function createPainting(container) {
 
   function startGame() {
     sfx.resume();
+    state.firstEvening = !Object.keys(bests).length && !gallery.length;
     state.score = 0;
     state.workNo = 1;
     state.results = [];

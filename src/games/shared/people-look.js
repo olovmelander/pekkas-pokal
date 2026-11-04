@@ -37,7 +37,7 @@ export const PARTICIPANTS = {
     outfit: { topColor: 0xcfc5b2, bottom: 'shorts', bottomColor: 0x1c1d22 } }),
   // Tall and slim, neat short hair. The painting game's culture critic: the
   // polo neck is his default outfit.
-  'Mikael Hägglund': P({ height: 1.9, build: 'slim', skin: 'light', hair: ['crop', 'lightBrown'], eyes: 'grayBlue',
+  'Mikael Hägglund': P({ height: 1.87, build: 'slim', skin: 'light', hair: ['crop', 'lightBrown'], eyes: 'grayBlue',
     face: { jaw: 0.94, nose: 1.04, noseLen: 1.05, chin: 1.02, headL: 1.0, cheek: 0.96, brow: 1.04 },
     outfit: { top: 'poloNeck', topColor: 0x1f2026, bottom: 'trousers', bottomColor: 0x8f8268, shoes: 'leather' } }),
   'Viktor Jones': P({ height: 1.8, build: 'average', skin: 'fair', hair: ['crop', 'brown'], facialHair: 'fullBeard', glasses: 'round', glassesColor: 0x1a1614, eyes: 'brown',

@@ -23,8 +23,9 @@
  *   scene.add(judge.root);
  *   // every frame, in this order:
  *   judge.setPose(POSES.walk(phase), 0.25);  // blend toward the pose (1 = snap)
- *   judge.lookAt(camera.position);           // head/neck/eyes, eased (null releases)
- *   judge.update(dt, t);                     // breathing, blinks, saccades, expression easing
+ *   judge.lookAt(camera.position);           // eyes lead, head follows, chest helps (null releases)
+ *   judge.update(dt, t);                     // breathing, blinks, saccades, secondary motion, face
+ *   // …or let the person animate itself: judge.blendTo((t) => POSES.idle(t, undefined, judge.look.seed), 0.6)
  *
  *   // Game outfits on top of the person's own look (garment colours reset
  *   // when the garment type changes; pass topColor etc. to choose):
@@ -73,14 +74,21 @@
  *                  // holdL, holdR (the current grip's object frame, see hold()),
  *                  // headTop (crown), face (in front of the eyes)
  *     height, triangles, materials { skin, cloth, gloss, lame? }, look (resolved spec),
- *     setPose(pose, blend = 1),
+ *     setPose(pose, blend = 1),     // also ends a blendTo
+ *     blendTo(pose | (t) => pose, seconds = 0.4)   // eased transition driven by update(); a function
+ *                  // keeps animating afterwards (until the next setPose); person.blending while easing
  *     ikArm(side 'L'|'R', target, pole?, handWorldQuat?) → metres out of reach (0 = reached)
  *     ikLeg(side, target, pole?, footWorldQuat?)        → idem
  *     lookAt(point|null, weight = 1),
  *     setExpression(name | { smile: .5, focus: .5 }, amount = 1),   // EXPRESSION_NAMES:
  *                  // neutral smile grin shout frown focus surprised
  *     blink(), talk(0..1)  // talk flaps the jaw irregularly until talk(0)
- *     update(dt, t),       // once per frame AFTER posing/IK (also drives lids, eyes, forearm roll)
+ *     update(dt, t),       // once per frame AFTER posing/IK: breathing, a little personal sway,
+ *                          //   secondary motion (chest and head lag the root's acceleration and
+ *                          //   turns, then settle), look-at (eyes lead with micro-saccades, the head
+ *                          //   follows on a spring, the chest takes a share of big turns, big gaze
+ *                          //   shifts blink), talking (phrases, pauses, varied syllables, nods),
+ *                          //   lids, eyes, grip transitions, forearm roll
  *     attach(object, boneOrSocket, { position, rotation, quaternion, scale } | Matrix4),
  *     hold(object, side, grip, opts), release(side), setGrip(side, grip, opts), gripOf(side),
  *     holdWith(side, object, opts)   // see "Hands and holding"
@@ -140,11 +148,18 @@
  *
  * ── Pose library (POSES.name(t, out?) → pose; mixPoses, mirrorPose) ────────
  *
- *   stand, idle(t), sit, sitCup(t), sitRod(t), sitClap(t), sitCheer(t), cheer(t), clap(t),
+ *   stand, idle(t, out, seed), sit, sitCup(t), sitRod(t), sitClap(t), sitCheer(t), cheer(t), clap(t),
  *   point (right hand; mirrorPose for the left), handsOnHips, armsCrossed, ready(t) (athletic
- *   stance), explain(t) (talking gesture), holdNotebook(t), walk(phase).
+ *   stance), explain(t) (talking gesture), holdNotebook(t), walk(phase, out, style), stroll(phase),
+ *   brisk(phase).
+ *   idle: contrapposto weight shifts every 6–10 s (feet planted, free knee soft), sway and an
+ *     occasional fidget (look round, shoulder roll, hand rub, onto the toes). Pass the person's
+ *     seed (person.look.seed) so a group never moves in unison.
+ *   walk: leg IK with heel strike, roll over the foot and toe-off, pelvis turn/tilt/shift, a
+ *     vertical bob, counter-rotating shoulders, arm swing with a bent elbow and a steadied head.
+ *     style 'stroll' | 'walk' | 'brisk' or 0..1. Move the root WALK_STRIDES[style] × height/1.8
+ *     forward per 2π of phase (WALK_STRIDE = WALK_STRIDES.walk) and the planted foot stays put.
  *   Seated: the seat is SEAT_HEIGHT × height/1.8 up, centred SEAT_BACK behind the root.
- *   Walking: move the root WALK_STRIDE × height/1.8 forward per 2π of phase.
  *   Games may also write bone.rotation directly between setPose and update; update()
  *   layers breathing and look-at on top without drifting.
  *
@@ -153,10 +168,15 @@
  *   const crowd = createCrowd({ seats: [{ position, rotationY, pose: 'sit'|'stand', cup? }],
  *                               names: PARTICIPANT_NAMES, seed, hats: 0.12, castShadow: true });
  *   scene.add(crowd.root);
- *   crowd.react('cheer' | 'clap' | 'ovation' | 'idle', seconds = 2.2);  // one-shot
- *   crowd.setMood('idle' | 'clap' | 'cheer' | 'ovation');               // between reactions
+ *   crowd.react('cheer' | 'clap' | 'polite' | 'groan' | 'ovation' | 'idle', seconds = 2.2);  // one-shot
+ *        // groan: hands to the head, then a slump (head in hands), then back; the rest sink back
+ *   crowd.setMood('idle' | 'clap' | 'polite' | 'cheer' | 'ovation');               // between reactions
+ *   crowd.setLean(amount);   // 0 … 1 leaning in (elbows on knees); −0.3 leans back; eased per member
  *   crowd.lookAt(ball.position | null);  crowd.update(dt, t);  crowd.drawCalls;  crowd.dispose();
- *   Typically 2–5 draw calls for any number of spectators (one per pose variant in use).
+ *   Typically 2–5 draw calls for any number of spectators (one per pose variant in use). Each
+ *   member has their own delay, lean depth and lag, slump depth and clap rate. Mesh names stay
+ *   crowd:<sit|stand>:<idle|cup|clapIn|clapOut|cheer|fist|fistL|groan|polite>; cups are held
+ *   in the 'cup' grip.
  */
 import * as THREE from 'three';
 import {

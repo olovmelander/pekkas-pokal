@@ -329,17 +329,12 @@ export function buildGang({ rand }) {
       p.chest[0] -= m.lean * 0.5;
       p.spine[2] += Math.sin(tt * 0.31) * 0.015;
     } else {
-      p = POSES.idle(tt * 0.8, m.pose);
+      // Standing: his own seeded weight shifts and fidgets, never in step with anyone
+      p = POSES.idle(t, m.pose, m.person.look.seed);
     }
-    if (m.cup && m.seated) {
-      p.gripR = 0.85;
-      // Head back a touch for the sip
-      if (!mode) p.head[0] -= smoothstep(0.3, 1, m.sip) * 0.22;
-    }
-    if (m.board) {
-      p.gripL = 0.55;
-      p.gripR = 0.8;
-    }
+    // (The held mug, board and pencil shape their own fingers via hold())
+    // Head back a touch for the sip
+    if (m.cup && m.seated && !mode) p.head[0] -= smoothstep(0.3, 1, m.sip) * 0.22;
     m.pose = p;
     return mode;
   }

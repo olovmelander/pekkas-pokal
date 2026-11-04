@@ -80,7 +80,7 @@ export function headField(F) {
     // Upper lip with a cupid's bow, fuller lower lip
     d = smin(d, ell(x, y, z, 0, my + 0.0051, 0.0868, 0.0182, 0.0052, 0.0076 * F.lips), 0.0035);
     d = smin(d, ell(ax, y, z, 0.0052, my + 0.0063, 0.0866, 0.0075, 0.0043, 0.0071 * F.lips), 0.003);
-    d = smin(d, ell(x, y, z, 0, my - 0.0064, 0.0852, 0.0162, 0.007 * F.lips, 0.009 * F.lips), 0.0036);
+    d = smin(d, ell(x, y, z, 0, my - 0.0066, 0.0855, 0.0165, 0.0076 * F.lips, 0.0093 * F.lips), 0.0036);
     // Nose: a soft, short bridge, a round button tip, two small wings
     if (F.sockets !== false) d = smin(d, cap(x, y, z, 0, 0.008, 0.0842, 0, -0.022, 0.1015 + nl, 0.0058, 0.0082 * nose), 0.007);
     else d = smin(d, cap(x, y, z, 0, -0.006, 0.084, 0, -0.022, 0.094, 0.005, 0.0075), 0.008);
@@ -437,13 +437,18 @@ function headTint(p, ctx, n) {
   let g = 1;
   let bl = 1;
   // Warm cheeks, nose and lips; cooler, darker under the jaw
-  const cheek = gauss(ax - 0.046, 0.02) * gauss(y + 0.03, 0.02) * sstep(0.03, 0.07, z) * ctx.face.blush;
-  r += cheek * 0.03;
-  g -= cheek * 0.06;
-  bl -= cheek * 0.06;
-  const nose = gauss(ax, 0.012) * gauss(y + 0.04, 0.012) * sstep(0.09, 0.105, z);
-  g -= nose * 0.05;
-  bl -= nose * 0.05;
+  // A vinyl toy's painted blush: warm, soft-edged apples of the cheeks
+  const cheek = gauss(ax - 0.045, 0.018) * gauss(y + 0.035, 0.013) * sstep(0.03, 0.07, z) * ctx.face.blush;
+  r += cheek * 0.035;
+  g -= cheek * 0.085;
+  bl -= cheek * 0.075;
+  const nose = gauss(ax, 0.012) * gauss(y + 0.03, 0.014) * sstep(0.088, 0.1, z);
+  g -= nose * 0.06;
+  bl -= nose * 0.055;
+  // A cooler, slightly darker jaw and chin where a beard grows
+  const jawCool = (ctx.look.facialHair && !ctx.crowd ? 1 : 0) * sstep(-0.05, -0.075, y) * sstep(0.0, 0.04, z) * 0.04;
+  r -= jawCool;
+  g -= jawCool * 0.6;
   const my0 = FACE.mouthY;
   const lipX = 1 - sstep(0.016, 0.024, ax);
   const upper = lipX * sstep(my0 + 0.0095, my0 + 0.0065, y) * sstep(my0 - 0.0005, my0 + 0.001, y);
@@ -817,7 +822,7 @@ function periodic(keys) {
 }
 
 const HAIRLINE = periodic([
-  [0, 40.5], [22, 41.5], [40, 38.5], [55, 28], [65, 12], [72, -3], [78, -8], [83, -2], [90, 15], [101, 20], [113, 10],
+  [0, 40.5], [22, 41.5], [40, 38.5], [55, 28], [65, 15], [72, 2], [78, -3], [84, 2], [92, 14], [101, 17.5], [113, 8],
   [125, -14], [145, -35], [180, -43]
 ]);
 const HAIRLINE_HIGH = periodic([
@@ -861,23 +866,23 @@ function slerpDir(a, b, t) {
 export const HAIR_STYLES = {
   bald: null,
   buzz: { h: 0.0022, side: 0.0019, ramp: 0.05, crown: [0, 0.9, -0.43], groove: 0.0002, buzz: true },
-  crop: { h: 0.0098, side: 0.0047, ramp: 0.13, crown: [0, 0.9, -0.43], groove: 0.0015, front: 0.0045 },
+  crop: { h: 0.0098, side: 0.0047, ramp: 0.075, crown: [0, 0.9, -0.43], groove: 0.0015, front: 0.0045 },
   tousled: { h: 0.0138, side: 0.0068, ramp: 0.08, crown: [0.1, 0.92, -0.38], groove: 0.0012, noise: 0.0035, fringe: 0.006, front: 0.003 },
-  sidePart: { h: 0.0152, side: 0.0066, ramp: 0.085, crown: [0.3, 0.9, -0.3], groove: 0.0018, part: 34, front: 0.0068 },
+  sidePart: { h: 0.0152, side: 0.0066, ramp: 0.055, crown: [0.3, 0.9, -0.3], groove: 0.0018, part: 34, front: 0.0068 },
   sweptBack: { h: 0.0142, side: 0.0064, ramp: 0.06, crown: [0, 0.85, -0.52], groove: 0.0024, quiff: 0.0095, front: 0.0068 },
   curly: { h: 0.02, side: 0.0145, ramp: 0.07, crown: [0, 0.9, -0.43], groove: 0, curls: 0.0055, front: 0.004 },
   long: { h: 0.0105, side: 0.0115, ramp: 0.05, crown: [0, 0.82, -0.57], groove: 0.0012, long: true, front: 0.003, part: 0 },
   bun: { h: 0.0068, side: 0.0052, ramp: 0.05, crown: [0, 0.82, -0.57], groove: 0.0016, bun: true },
   balding: { h: 0.0048, side: 0.0045, ramp: 0.08, crown: [0, 0.9, -0.43], groove: 0.0006, balding: true },
   // Short, a little unruly on top
-  messy: { h: 0.0135, side: 0.005, ramp: 0.075, crown: [0.05, 0.92, -0.38], groove: 0.002, noise: 0.0042, clumps: 0.0048, front: 0.0045, tufts: 3.2, jag: 3.4 },
+  messy: { h: 0.0135, side: 0.005, ramp: 0.05, crown: [0.05, 0.92, -0.38], groove: 0.002, noise: 0.0042, clumps: 0.0048, front: 0.0045, tufts: 3.2, jag: 3.4 },
   // Medium length, wavy, tucked behind the ears and over the collar at the back
   wavy: {
-    h: 0.0165, side: 0.0105, ramp: 0.06, crown: [0.12, 0.85, -0.5], groove: 0.002, noise: 0.003, clumps: 0.004, front: 0.006,
+    h: 0.0165, side: 0.0105, ramp: 0.045, crown: [0.12, 0.85, -0.5], groove: 0.002, noise: 0.003, clumps: 0.004, front: 0.006,
     part: 24, waves: 0.0035, lower: 9, fringe: 0.0035
   },
   // A neat short cut with the temples receding
-  receding: { h: 0.0086, side: 0.0042, ramp: 0.11, crown: [0, 0.9, -0.43], groove: 0.0014, front: 0.0028, recede: 9 }
+  receding: { h: 0.0086, side: 0.0042, ramp: 0.065, crown: [0, 0.9, -0.43], groove: 0.0014, front: 0.0028, recede: 9 }
 };
 export const HAIR_STYLE_NAMES = Object.keys(HAIR_STYLES);
 
@@ -1055,7 +1060,9 @@ function buildLongHair(b, ctx, st) {
       field.surf(d[0], d[1], d[2], sp);
       field.normal(sp[0], sp[1], sp[2], nrm);
       const hang = sstep(0.45, 1.0, v);
-      const thick = (layer ? 0.0 : 0.009) * pinch * (1 - 0.5 * hang) + 0.003;
+      // Locks: the curtain ripples into a few soft clumps towards the ends
+      const lock = res.high ? Math.sin(u * Math.PI * 9 + 0.6) * sstep(0.35, 0.9, v) : 0;
+      const thick = (layer ? 0.0 : 0.009) * pinch * (1 - 0.5 * hang) + 0.003 + 0.0025 * Math.max(0, lock) * (layer ? 0.3 : 1);
       const out = st.side * 0.55 + thick;
       let x = sp[0] + nrm[0] * out;
       let z = sp[2] + nrm[2] * out;
@@ -1063,13 +1070,15 @@ function buildLongHair(b, ctx, st) {
       if (v > 0.6) {
         // Below the skull the hair falls straight, flaring over the shoulders
         const k = (v - 0.6) / 0.4;
-        y -= k * 0.13;
+        // Uneven ends, longer at the back
+        y -= k * (0.12 + 0.012 * Math.cos(psi - Math.PI) + (res.high ? 0.008 * lock : 0));
         const flare = 1 + k * 0.12;
         x *= flare;
         z = z * flare - k * 0.012;
       }
       const tipFade = v > 0.95 ? 0.7 : 1;
-      pts.push({ p: toModel([x, y, z]), region: REGION.HAIR, tint: [0.92 * tipFade, 0.92 * tipFade, 0.92 * tipFade], mat: MAT.SKIN, v, y });
+      const tone = 0.92 * tipFade * (1 + 0.08 * lock) * (layer ? 0.82 : 1);
+      pts.push({ p: toModel([x, y, z]), region: REGION.HAIR, tint: [tone, tone, tone], mat: MAT.SKIN, v, y });
     }
   }
   emitGrid(b, {
@@ -1257,7 +1266,7 @@ export function buildGlasses(b, ctx, kind, opts = {}) {
   // Pushed up onto the head: the whole pair turns back about the ear axis
   // and lifts clear of the hair
   const up = opts.up || 0;
-  const lift = opts.lift || 0;
+  let lift = opts.lift || 0;
   const cu = Math.cos(up);
   const su = Math.sin(up);
   const xf = (p) => {
@@ -1274,6 +1283,15 @@ export function buildGlasses(b, ctx, kind, opts = {}) {
   for (const x of [0.015, 0.03, 0.045]) zFront = Math.max(zFront, field.faceZ(x, 0.0));
   zFront = Math.max(zFront + 0.006, zEye + 0.011);
   const cy = FACE.eyeY + (sun ? 0.002 : 0.001);
+  if (up) {
+    // Lift the pair clear of the scalp along its new direction, plus the hair
+    const rg = Math.hypot(cy, zFront);
+    const dy = cy * cu + zFront * su;
+    const dz = -cy * su + zFront * cu;
+    const sp2 = [0, 0, 0];
+    field.surf(0, dy, dz, sp2);
+    lift = Math.hypot(...sp2) - rg + (opts.clear || 0);
+  }
   const round = kind === 'round';
   // Frames grow with the eyes they frame
   const ek = Math.sqrt(FACE.eyeR / 0.0146);
@@ -1353,6 +1371,24 @@ export function buildGlasses(b, ctx, kind, opts = {}) {
     const x0 = s * (Math.abs(cxL) + hw * (sun ? 1.08 : 1));
     const steps = high ? 7 : 3;
     const yHinge = cy + (sun ? 0.009 : 0.006);
+    if (up) {
+      // Pushed up: the arms run straight back over the hair from the hinges
+      const h0 = xf([Math.abs(x0), yHinge, zFront - Math.abs(x0) * 0.12]);
+      for (let i = 0; i <= steps; i++) {
+        const u = i / steps;
+        const z = lerp(h0[2], h0[2] - 0.085, u);
+        const y = h0[1] - 0.016 * u * u;
+        let x = Math.abs(h0[0]) * (1 - 0.1 * u);
+        for (let k = 0; k < 40; k++) {
+          if (field.sdf(x, y, z) > 0.002 + (opts.clear || 0)) break;
+          x += 0.0012;
+        }
+        if (i === 0) x = Math.abs(h0[0]);
+        path.push(new THREE.Vector3(...ctx.toModel([s * x, y, z])));
+      }
+      sweep(b, { path, radius: rr * 0.75 * ctx.scale, cols: high ? 4 : 3, region: REGION.FIXED, tint: frame, mat: MAT.GLOSS, weight: w, flat: 0.7 });
+      continue;
+    }
     for (let i = 0; i <= steps; i++) {
       const u = i / steps;
       // Back along the side of the head, over the root of the ear, then a
@@ -1379,8 +1415,8 @@ export function buildGlasses(b, ctx, kind, opts = {}) {
 /** Sunglasses pushed up onto the hair (spec.shades === 'up'). */
 export function buildShadesUp(b, ctx) {
   const st = HAIR_STYLES[ctx.look.hair];
-  const hairH = st ? st.h + (st.front || 0) + (st.quiff || 0) * 0.6 : 0;
-  buildGlasses(b, ctx, 'sun', { up: 0.86, lift: ctx.hairUnder + hairH + 0.0045, tint: [0.03, 0.03, 0.035] });
+  const hairH = st ? st.h + (st.front || 0) * 0.5 : 0;
+  buildGlasses(b, ctx, 'sun', { up: 1.0, clear: ctx.hairUnder + hairH * 0.85 + 0.003, tint: [0.03, 0.03, 0.035] });
 }
 
 /* ------------------------------------------------------------ headwear */
