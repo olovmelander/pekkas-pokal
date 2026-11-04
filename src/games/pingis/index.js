@@ -281,6 +281,18 @@ export async function createPingis(container) {
   faceFill.position.set(0.5, 2.2, 6);
   scene.add(faceFill);
 
+  // A back light from the stage lip, high over his shoulders: it rims the
+  // opponent's head, shoulders and bat arm in warm light so he stands out
+  // from the people behind him — the broadcast look. A cone, not a sun,
+  // so the floor and the table do not wash out. Not on phones: one more
+  // light in every shader for a figure a few hundred pixels tall.
+  if (!low) {
+    const rim = new THREE.SpotLight(0xffc48a, 16, 9, 0.5, 0.7, 2);
+    rim.position.set(0.3, 3.5, -4.5);
+    rim.target.position.set(0, 1.2, -2.1);
+    scene.add(rim, rim.target);
+  }
+
   /* World */
   const glow = glowTexture();
   const hall = buildHall(glow, { tier, pixelRatio, profile: gfx });
@@ -546,6 +558,8 @@ export async function createPingis(container) {
   let simT = 0; // simulation clock (stops for hit-stop, help and replays)
   let pointSimT = 0; // simT when the last point was decided (replay anchor)
   let touchHints = coarse ? 3 : Infinity; // a finger gets the hint for its first points
+  let ghostServes = 0; // serves a finger has played itself
+  let ghostSeen = false; // …two of them, and the ghost finger has done its job
   /* Balance runs play thousands of matches headless. The whole loop is
      dt-driven, so the only thing standing between a match and running in
      milliseconds is the frame we never look at. */
@@ -807,10 +821,15 @@ export async function createPingis(container) {
     renderPts();
     hud.phase(myServe() ? `DIN SERVE — ${hud.serveHint}` : `${first()} servar…`);
     onBeginPoint();
+    // A finger's first serves get a ghost finger showing the gesture
+    if (renderOn) hud.ghost(coarse && myServe() && touchHints >= 0 && !ghostSeen);
   }
 
   function playerServe() {
     if (state.phase !== 'serve' || !myServe()) return;
+    if (renderOn) hud.ghost(false);
+    if (dragging) ghostServes++;
+    if (ghostServes >= 2) ghostSeen = true;
     sfx.toss();
     const power = Math.min(1, 0.4 + Math.hypot(me.dragVX, me.dragVY) * 0.16);
     const spin = THREE.MathUtils.clamp(-me.dragVY * 0.34, -0.9, 0.9);
@@ -1083,6 +1102,8 @@ export async function createPingis(container) {
   /* ---- Feedback hooks (visual and audio only — never touch the rules) -- */
 
   const tmpC = new THREE.Color();
+  const hitGlowC = new THREE.Color();
+  let hitGlow = 0;
   const tmpV = new THREE.Vector3();
   const flatQ = new THREE.Quaternion();
   const net = { x: 0, amp: 0, t: 0 };
@@ -1127,7 +1148,13 @@ export async function createPingis(container) {
     const arrow = side > 0.22 ? ' →' : side < -0.22 ? ' ←' : '';
     const strength = Math.abs(spin) > 0.7 ? '+' : '';
     popScore(`${word}${strength}${arrow}`, tmpV.set(me.x, PADDLE_Y + 0.25, HITZ), 'pg-spinpop', spinCss(spin, side));
-    if (power > 0.82 && !smash) sfx.swish(0.18);
+    if (power > 0.82 && !smash) {
+      sfx.swish(0.18);
+      fovPunch = Math.max(fovPunch, 1.6); // a drive you can feel in the lens
+    }
+    // The rubber flares in the spin colour at contact, then cools
+    spinColor(spin, side, hitGlowC);
+    hitGlow = smash ? 1.4 : 0.6 + power * 0.5;
     if (smash) onSmash(true);
   }
 
@@ -1240,6 +1267,7 @@ export async function createPingis(container) {
     hud.hideIntro();
     hud.replay(false);
     hud.showKeys(false);
+    hud.ghost(false);
   }
 
   function showMenu() {
@@ -1551,6 +1579,7 @@ export async function createPingis(container) {
       return;
     }
     dragging = true;
+    hud.ghost(false);
     lastPX = e.clientX;
     lastPY = e.clientY;
     lastPT = e.timeStamp || performance.now();
@@ -2104,6 +2133,11 @@ export async function createPingis(container) {
     const flick = Math.min(1, Math.hypot(preSpin, preSide) * 1.3);
     spinColor(preSpin, preSide, rubber.emissive);
     rubber.emissiveIntensity = flick * 0.55;
+    if (hitGlow > 0.01) {
+      hitGlow *= Math.exp(-dt * (replaying ? 3 : 7));
+      rubber.emissive.lerp(hitGlowC, Math.min(1, hitGlow));
+      rubber.emissiveIntensity = Math.max(rubber.emissiveIntensity, hitGlow * 0.6);
+    }
     myPaddle.localToWorld(bladeA.set(0, 0.03, 0));
     myPaddle.localToWorld(bladeB.set(0, 0.21, 0));
     swooshMe.sample(bladeA, bladeB, dt);

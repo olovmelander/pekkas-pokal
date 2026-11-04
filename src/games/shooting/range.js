@@ -479,7 +479,7 @@ export function buildRange(rand, { envMap, lite = false } = {}) {
   berm.closePath();
   const bermGeo = new THREE.ExtrudeGeometry(berm, { depth: 4.4, bevelEnabled: false, curveSegments: 6 });
   bermGeo.translate(0, 0, -2.2);
-  props.put(bermGeo, 0x76803e, { at: [0, -0.02, -15.92], rot: [0, -Math.PI / 2, 0], darken: 0.25 });
+  props.put(bermGeo, 0x8c9446, { at: [0, -0.02, -15.92], rot: [0, -Math.PI / 2, 0], darken: 0.25 });
   props.put(box(0.04, 0.9, 0.7), 0x6a4a2c, { at: [1.83, 0.45, -17.6] });
   props.put(box(0.03, 0.06, 0.06), 0xb9bec4, { at: [1.86, 0.48, -17.35] });
   [-2.05, 2.05].forEach((x) => {
@@ -487,6 +487,35 @@ export function buildRange(rand, { envMap, lite = false } = {}) {
       props.put(cyl(0.028, 0.028, 0.4, 6), k % 2 ? 0xf2efe6 : 0xc8312c, { at: [x, 0.2 + k * 0.4, -15.9] });
     }
   });
+  // The high tower the incomers are thrown from (index.js TOWER_TOP): four
+  // splayed legs with X-braces, a platform with a rail, and the trapper's
+  // hut with its open front
+  {
+    const TX = 9;
+    const TZ = -60;
+    const WOOD = 0x7d6c58;
+    const legH = 8.1;
+    [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sz]) => {
+      props.put(box(0.18, legH + 0.1, 0.18), WOOD, {
+        at: [TX + sx * 1.25, legH / 2, TZ + sz * 1.25], rot: [-sz * 0.05, 0, sx * 0.05], darken: 0.25
+      });
+    });
+    for (let k = 0; k < 3; k++) {
+      const y = 1.5 + k * 2.3;
+      const w = 2.7 - k * 0.2;
+      [-1, 1].forEach((d) => {
+        props.put(box(0.07, 3.2, 0.07), WOOD, { at: [TX, y + 1, TZ + 1.3 - k * 0.07], rot: [0, 0, d * 0.72] });
+        props.put(box(0.07, 3.2, 0.07), WOOD, { at: [TX + 1.3 - k * 0.07, y + 1, TZ], rot: [d * 0.72, 0, 0] });
+      });
+      props.put(box(w, 0.08, 0.08), WOOD, { at: [TX, y, TZ + 1.3 - k * 0.07] });
+    }
+    props.put(box(3.0, 0.14, 3.0), 0x6a5a48, { at: [TX, legH, TZ] });
+    props.put(box(2.2, 1.7, 1.8), 0x5d6b52, { at: [TX, legH + 0.92, TZ - 0.4], darken: 0.2 });
+    props.put(box(2.5, 0.1, 2.3), 0x3a3d40, { at: [TX, legH + 1.84, TZ - 0.4], rot: [0.08, 0, 0] });
+    props.put(box(1.5, 0.5, 0.06), 0x111411, { at: [TX, legH + 0.95, TZ + 0.53] });
+    props.put(box(3.0, 0.06, 0.06), WOOD, { at: [TX, legH + 0.9, TZ + 1.47] });
+    [-1.47, 1.47].forEach((x) => props.put(box(0.06, 0.06, 3.0), WOOD, { at: [TX + x, legH + 0.9, TZ] }));
+  }
   // Fika table at the end of the gang's row: thermos, cups and a plate of bullar
   const [tx, tz] = FIKA_TABLE;
   props.put(box(0.9, 0.04, 0.6), 0xd8d2c2, { at: [tx, 0.72, tz] });
@@ -522,7 +551,7 @@ export function buildRange(rand, { envMap, lite = false } = {}) {
     if (Math.abs(fx) < 1.4 && Math.abs(fz) < 1.8) continue;
     const h = 0.28 + rand() * 0.2;
     const lean = [(rand() - 0.5) * 0.5, 0, (rand() - 0.5) * 0.5];
-    flowers.put(cyl(0.006, 0.01, h, 3), 0x5c7434, { at: [fx, h / 2, fz] });
+    flowers.put(cyl(0.006, 0.01, h, 3), 0x7c9a48, { at: [fx, h / 2, fz] });
     const kind = rand();
     if (kind < 0.6) {
       const [eye, tip] = STARS[Math.floor(rand() * STARS.length)];

@@ -67,8 +67,14 @@ const MEDALS = [
 
 const SERIES = [
   { name: 'Serie 1 — Uppvärmningen', singles: 8, doubles: 0, speed: 0.85, brief: 'Åtta lugna duvor från graven. Hitta svingen.' },
-  { name: 'Serie 2 — Korsarna', singles: 8, doubles: 0, speed: 1.1, crossers: true, brief: 'Snabbare nu, och från sidorna. Sving igenom duvan!' },
-  { name: 'Serie 3 — Finalen', singles: 4, doubles: 2, speed: 1.25, crossers: true, brief: 'Fyra singlar och två dubbléer. Ett skott per duva i dubbléerna.' }
+  {
+    name: 'Serie 2 — Korsarna', singles: 8, doubles: 0, speed: 1.1, crossers: true, incomers: [2, 6],
+    brief: 'Snabbare nu, från sidorna — och två rakt mot dig från tornet. Sving igenom duvan!'
+  },
+  {
+    name: 'Serie 3 — Finalen', singles: 4, doubles: 2, speed: 1.25, crossers: true, incomers: [1],
+    brief: 'Fyra singlar, en från tornet, och två dubbléer. Ett skott per duva i dubbléerna.'
+  }
 ];
 
 /* Ballistics, tuned to feel like a 12-bore at 25–45 m */
@@ -79,6 +85,9 @@ const CLAY_R = 0.37;
 const MAX_SWING = 1.4; // rad/s — clamp on how much lead a flick can carry
 const GRAVITY = 9.8;
 const WIND = new THREE.Vector3(1.3, 0.05, 0.25); // a westerly breeze, m/s
+
+/** The high tower at the forest edge the incomers are thrown from (range.js builds it). */
+const TOWER_TOP = new THREE.Vector3(9, 8.9, -60);
 
 const ORANGE = new THREE.Color(0xff6a1c);
 const GOLD = new THREE.Color(0xf2c14e);
@@ -703,6 +712,7 @@ export async function createShooting(container) {
     clay.seen = false;
     clay.offT = 0;
     clay.shotAt = false;
+    clay.incomer = false;
     const m = clay.mesh;
     m.visible = true;
     m.scale.setScalar(state.isGold ? 0.62 : 1);
@@ -711,7 +721,22 @@ export async function createShooting(container) {
     m.material.emissive.set(state.isGold ? 0x5a3c00 : 0x6b2400);
 
     const speed = s.speed * (state.isGold ? 1.5 : 1) * (0.92 + rand() * 0.16);
-    if (s.crossers && (side !== 0 || rand() < 0.6)) {
+    if (side === 0 && !state.isGold && s.incomers && s.incomers.includes(state.throwNo)) {
+      // Incomer from the tower: aimed to pass a few metres up and to one
+      // side of the station, so it grows out of the treeline toward you
+      // and climbs out of the top of the frame if you let it.
+      clay.incomer = true;
+      m.position.copy(TOWER_TOP);
+      const T = 3.3 / speed;
+      tmpV.set((rand() - 0.5) * 7, 6.5 + rand() * 2.5, 2);
+      clay.vel.set((tmpV.x - m.position.x) / T, (tmpV.y - m.position.y) / T + 0.5 * GRAVITY * T, (tmpV.z - m.position.z) / T);
+      for (let i = 0; i < 6; i++) {
+        soft.spawn({
+          pos: m.position, vel: tmpV2.set((rand() - 0.5) * 2, rand(), 1 + rand() * 2),
+          life: 1 + rand(), size: 0.4, size1: 1.4, color: new THREE.Color(0x9a8a70), alpha: 0.25, drag: 1.6, wind: 0.6
+        });
+      }
+    } else if (s.crossers && (side !== 0 || rand() < 0.6)) {
       // Crosser from the field edge. Launch it from just outside the
       // frame and scale its pace to the frame, so a phone in portrait
       // sees the same crossing a desktop does — not a clay that lands
@@ -752,7 +777,9 @@ export async function createShooting(container) {
     else clays[1].active = false;
     if (state.firstPull) {
       state.firstPull = false;
-      hint('aim', touch ? 'Följ duvan med fingret — släpp för att skjuta' : 'Följ duvan med musen — klicka för att skjuta');
+      hint('aim', touch ? 'Följ duvan med siktet ovanför fingret — släpp för att skjuta' : 'Följ duvan med musen — klicka för att skjuta');
+    } else if (clays[0].incomer) {
+      hint('incomer', 'Från tornet! Den kommer rakt mot dig — skjut innan den drar förbi över huvudet.');
     }
   }
 
@@ -789,7 +816,12 @@ export async function createShooting(container) {
     }, 450);
   }
 
-  function smash(clay) {
+  /**
+   * A broken bird. `q` is where in the pattern it was (0 = dead centre,
+   * 1 = the fringe): a centre hit turns a clay to a puff of smoke, a
+   * fringe hit only chips it into a few big pieces. Same points either way.
+   */
+  function smash(clay, q = 0.5) {
     clay.active = false;
     const m = clay.mesh;
     m.visible = false;
@@ -798,7 +830,8 @@ export async function createShooting(container) {
     markBox(clay, true);
     renderScore();
     renderStreak();
-    popScore(clay.gold ? `GULDDUVAN +${fmt(pts)}` : `KROSS +${fmt(pts)}`, at, clay.gold ? 'gold' : '');
+    const word = q < 0.32 ? 'RÖKBOLL' : 'KROSS';
+    popScore(clay.gold ? `GULDDUVAN +${fmt(pts)}` : `${word} +${fmt(pts)}`, at, clay.gold ? 'gold' : q < 0.32 ? 'smoke' : '');
     sfx.shatter(clay.gold);
     sfx.streak(state.streak);
     // Hit-stop: a few frames of near-freeze sell the impact more than any
@@ -806,7 +839,7 @@ export async function createShooting(container) {
     hitStopT = Math.max(hitStopT, clay.gold ? 0.12 : 0.065);
     shakeP = Math.max(shakeP, clay.gold ? 1.2 : 0.55);
     if (navigator.vibrate) navigator.vibrate(clay.gold ? 60 : 25);
-    breakFx(clay, at);
+    breakFx(clay, at, q);
     if (clay.gold) {
       flashScreen('gold');
       callout('GULDDUVAN!', 'gold');
@@ -838,19 +871,28 @@ export async function createShooting(container) {
   }
 
   /** Dust, chips, the 3D shards and a hot core — the money shot. */
-  function breakFx(clay, at) {
+  function breakFx(clay, at, q = 0.5) {
     const color = clay.gold ? GOLD : ORANGE;
-    shards.burst(at, clay.vel, color, clay.gold ? 18 : 15, fxRand, clay.gold ? 1.3 : 1);
+    const smoke = !clay.gold && q < 0.32;
+    const chip = !clay.gold && q > 0.72;
+    if (chip) {
+      // A fringe hit: two or three big pieces carry on along the line
+      shards.burst(at, clay.vel, color, 3, fxRand, 0.45, 2.1, 0.85);
+      shards.burst(at, clay.vel, color, 7, fxRand, 0.8);
+    } else {
+      shards.burst(at, clay.vel, color, clay.gold ? 18 : smoke ? 9 : 15, fxRand, clay.gold ? 1.3 : smoke ? 1.2 : 1, smoke ? 0.6 : 1);
+    }
     // The cloud a clay leaves: a dense orange core that billows and drifts
     const dust = clay.gold ? new THREE.Color(0xd08a1c) : new THREE.Color(0xe0682a);
-    for (let i = 0; i < 34; i++) {
+    const puffs = smoke ? 52 : chip ? 16 : 34;
+    for (let i = 0; i < puffs; i++) {
       const a = fxRand() * Math.PI * 2;
       const e = (fxRand() - 0.35) * 1.4;
       const sp = 1 + fxRand() * 5;
       soft.spawn({
         pos: at,
         vel: tmpV.set(Math.cos(a) * sp, e * sp * 0.7, Math.sin(a) * sp).addScaledVector(clay.vel, 0.3),
-        life: 1.4 + fxRand() * 1.6, size: 0.6, size1: 2.4 + fxRand() * 2.2,
+        life: 1.4 + fxRand() * 1.6, size: 0.6, size1: (2.4 + fxRand() * 2.2) * (smoke ? 1.35 : 1),
         color: dust.clone().offsetHSL((fxRand() - 0.5) * 0.03, -0.05, (fxRand() - 0.6) * 0.2),
         alpha: 0.78, drag: 2.2, grav: -0.12, wind: 1
       });
@@ -901,6 +943,11 @@ export async function createShooting(container) {
   /** A shot that broke nothing: reset the streak and teach the lead. */
   function missShot(rec) {
     sfx.miss();
+    // Inside about twice the pattern's reach: tell them it was close
+    if (rec && rec.ang < rec.r * 1.9) {
+      sfx.nearMiss();
+      popScore('NÄRA!', rec.at, 'near');
+    }
     if (state.streak >= 2) toast('Bom — streaken bruten');
     state.streak = 0;
     renderStreak();
@@ -1065,7 +1112,7 @@ export async function createShooting(container) {
       const live = p.records.filter((r) => r.clay.active);
       const hits = live.filter((r) => r.hit);
       if (hits.length) {
-        hits.forEach((r) => smash(r.clay));
+        hits.forEach((r) => smash(r.clay, r.ang / r.r));
       } else if (live.length) {
         missShot(live.slice().sort((a, b) => a.ang / a.r - b.ang / b.r)[0]);
       }
@@ -1528,7 +1575,7 @@ export async function createShooting(container) {
       } else if (clay.seen) {
         clay.offT += dt;
       }
-      if (m.position.y < 0.2 || m.position.z < -140 || clay.offT > 0.6) {
+      if (m.position.y < 0.2 || m.position.z < -140 || m.position.z > 1.5 || clay.offT > 0.6) {
         escape(clay);
         sfx.miss();
       }

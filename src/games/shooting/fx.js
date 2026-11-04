@@ -279,8 +279,11 @@ export class Shards {
     this.zero = zero;
   }
 
-  /** Throw `count` chips from `origin`, inheriting part of the clay's velocity. */
-  burst(origin, clayVel, color, count, rand, power = 1) {
+  /**
+   * Throw `count` chips from `origin`, inheriting `keep` of the clay's
+   * velocity; `size` scales the chips (big pieces for a fringe hit).
+   */
+  burst(origin, clayVel, color, count, rand, power = 1, size = 1, keep = 0.55) {
     for (let k = 0; k < count; k++) {
       const it = this.items[this.next];
       this.mesh.setColorAt(this.next, color);
@@ -292,10 +295,10 @@ export class Shards {
       it.p.copy(origin);
       const a = rand() * Math.PI * 2;
       const out = (2.5 + rand() * 5.5) * power;
-      it.v.set(Math.cos(a) * out, (1 + rand() * 4.5) * power, Math.sin(a) * out).addScaledVector(clayVel, 0.55);
+      it.v.set(Math.cos(a) * out, (1 + rand() * 4.5) * power, Math.sin(a) * out).addScaledVector(clayVel, keep);
       it.q.setFromEuler(new THREE.Euler(rand() * 6, rand() * 6, rand() * 6));
       it.w.set(rand() - 0.5, rand() - 0.5, rand() - 0.5).normalize().multiplyScalar(8 + rand() * 16);
-      const s = 0.9 + rand() * 1.1;
+      const s = (0.9 + rand() * 1.1) * size;
       it.s.set(s * (0.8 + rand() * 0.5), s, s * (0.8 + rand() * 0.5));
     }
     this.mesh.instanceColor.needsUpdate = true;

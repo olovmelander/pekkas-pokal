@@ -21,7 +21,7 @@ import { guardRenderer, postTarget, addSanitize, RenderWatchdog, gfxNotice, prec
 import { World, Ball, clamp } from './physics.js';
 import { L, buildColliders, createPlayfieldCanvas } from './table.js';
 import {
-  CAB, headTop, buildTable, buildCabinet, buildGlass, createMaterials, machineEnvironment
+  CAB, headTop, buildTable, buildCabinet, buildGlass, createMaterials, machineEnvironment, bakeStatic
 } from './meshes.js';
 import { Dmd, fmtScore } from './dmd.js';
 import { Sfx } from './audio.js';
@@ -95,6 +95,21 @@ export async function createPinball(container, opts = {}) {
   };
 
   const sfx = new Sfx();
+
+  /**
+   * Haptics on phones: a tick per flip, a thud per bumper, patterns for the
+   * big moments. The mute button silences these too — it is the "be quiet"
+   * switch, and a phone buzzing in a meeting is not quiet.
+   */
+  const canBuzz = touch && typeof navigator.vibrate === 'function';
+  const buzz = (pattern) => {
+    if (!canBuzz || sfx.muted) return;
+    try {
+      navigator.vibrate(pattern);
+    } catch (e) {
+      /* some browsers throw outside a gesture */
+    }
+  };
 
   /* ---- Renderer ---- */
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -214,6 +229,7 @@ export async function createPinball(container, opts = {}) {
   /* ---- Cabinet with its DMD, the glass, and the room around it ---- */
   const dmd = new Dmd(THREE, { calm: reduceMotion });
   const cab = buildCabinet(THREE, materials, logo, dmd.material);
+  bakeStatic(THREE, mergeGeometries, cab.group);
   scene.add(cab.group);
   const glass = buildGlass(THREE);
   scene.add(glass);
@@ -567,7 +583,7 @@ export async function createPinball(container, opts = {}) {
   const kick = { p: new THREE.Vector3(), v: new THREE.Vector3() };
   const shake = { t: 99, dur: 0, mag: 0, dirX: 0 };
   function jolt(mag, dirX = 0) {
-    if (navigator.vibrate) navigator.vibrate(mag > 1 ? [40, 40, 60] : 25);
+    buzz(mag > 1 ? [40, 40, 60] : 25);
     if (reduceMotion) return;
     shake.t = 0;
     shake.dur = 0.42;
@@ -607,6 +623,21 @@ export async function createPinball(container, opts = {}) {
     lampFx.t = 0;
     lampFx.dur = reduceMotion ? Math.min(dur, 0.8) : dur;
     lampFx.color.set(color);
+  }
+
+  /**
+   * Flasher punch: the domes on the wall tops fire, and the GI lamp beside
+   * each takes the hit as a burst of coloured light (driveLamps applies it,
+   * so no light is ever added or removed mid-game).
+   */
+  const FLASHER_GI = { left: 3, right: 7 };
+  function fireFlasher(which = 'both', strength = 1) {
+    refs.flashers.forEach((f) => {
+      if (which === 'both' || which === f.id) {
+        f.t = 0;
+        f.k = reduceMotion ? Math.min(strength, 0.6) : strength;
+      }
+    });
   }
 
   /* ---- Gameplay hooks ---- */
@@ -665,6 +696,7 @@ export async function createPinball(container, opts = {}) {
       award(150, p.x, p.y, 'sm');
       state.perBall.bumps++;
       sfx.bumper();
+      buzz(12);
       flash(b.trophy, b.light, 4.6, b.base);
       b.group.scale.setScalar(1.18);
       fx.flash(p.x, 1.3, -p.y, 0xffd27a, 5.5, 0.2);
@@ -720,6 +752,7 @@ export async function createPinball(container, opts = {}) {
         state.gate.hits = 0;
         state.gate.until = now + 9000;
         sfx.gateDown();
+        fireFlasher('both', 0.9);
         flash(null, refs.castle.lamp, 3.2, 0.6);
         lampShow('chase', 0xf2c14e, 1);
         say(['PORTEN NERE', 'STORMA BORGEN!'], { prio: 2, flash: true, dur: 2 });
@@ -731,6 +764,7 @@ export async function createPinball(container, opts = {}) {
       if (v < 1) return;
       addScore(60);
       sfx.sling();
+      buzz(9);
       // Real sling rubber never throws twice the same way
       if (ball) ball.vx += (Math.random() - 0.5) * 2.5;
       const mesh = side === 'left' ? refs.leftSling : refs.rightSling;
@@ -814,6 +848,8 @@ export async function createPinball(container, opts = {}) {
         const pts = award(25000, jx, jy, 'big');
         sfx.jackpot();
         dmd.jackpot(pts);
+        fireFlasher('both', 1.3);
+        buzz([30, 40, 30, 40, 90]);
         hitStop(90);
         punch(1);
         lampShow('strobe', 0xf2c14e, 1.6);
@@ -936,6 +972,7 @@ export async function createPinball(container, opts = {}) {
         const pts = award(15000, op[0], op[1], 'big');
         sfx.modeWin();
         hitStop(90);
+        fireFlasher('both', 1.1);
         dmd.skillShot(pts, true);
         lampShow('strobe', 0x5eead4, 1.2);
         return;
@@ -983,7 +1020,9 @@ export async function createPinball(container, opts = {}) {
     // Fiske needs the trophy, so the trolls stay down for that one
     if (next.id !== 'fiske') later(raiseTrolls, 900);
     sfx.modeStart();
-    dmd.modeStart(next.name, next.year, next.hint, next.time);
+    fireFlasher('both', 1);
+    buzz([20, 30, 40]);
+    dmd.modeStart(next.name, next.year, next.hint, next.time, next.id);
     lampShow('chase', 0x7c8cf8, 1.8);
     setGI(0x7c8cf8, 1.2 * LAMP);
     renderGrenar();
@@ -996,7 +1035,9 @@ export async function createPinball(container, opts = {}) {
     state.modeDone.add(m.def.id);
     const pts = addScore(15000);
     sfx.modeWin();
-    dmd.modeWin(m.def.name, pts);
+    dmd.modeWin(m.def.name, pts, m.def.id);
+    fireFlasher('both', 1.2);
+    buzz([30, 30, 30, 30, 70]);
     hitStop(110);
     punch(0.8);
     lampShow('strobe', 0xf2c14e, 1.6);
@@ -1009,6 +1050,7 @@ export async function createPinball(container, opts = {}) {
       later(() => {
         sfx.extraBall();
         dmd.extraBall();
+        fireFlasher('both', 1);
       }, 1500);
     }
   }
@@ -1054,7 +1096,9 @@ export async function createPinball(container, opts = {}) {
     state.mbSaveUntil = performance.now() + 60000;
     later(raiseTrolls, 1200);
     sfx.multiball();
-    say(['FINALEN', 'ALLA BOLLAR · ALLT ×5'], { prio: 3, flash: true, border: true, dur: 3 });
+    fireFlasher('both', 1.4);
+    buzz([40, 40, 40, 40, 120]);
+    dmd.modeStart('FINALEN', 2025, 'ALLA BOLLAR · ALLT ×5', 60, 'finalen');
     lampShow('strobe', 0xffe08a, 2.4);
     setGI(0xffe08a, 1.7 * LAMP);
     bloom.strength = 0.6;
@@ -1080,6 +1124,8 @@ export async function createPinball(container, opts = {}) {
       bm.ring.material.emissiveIntensity = 0.95;
     });
     sfx.lock();
+    fireFlasher('left', 1);
+    buzz([25, 40, 25]);
     dmd.lock(state.locked);
     fx.flash(L.jackpot.x, 1.5, -L.jackpot.y, 0x7c8cf8, 7, 0.4);
     updateStatus();
@@ -1098,6 +1144,8 @@ export async function createPinball(container, opts = {}) {
     sfx.multiball();
     jolt(1.4, 0);
     punch(1.4);
+    fireFlasher('both', 1.4);
+    slowMo(0.45, 0.25);
     dmd.multiball();
     lampShow('chase', 0xf2c14e, 2.6);
     bloom.strength = 0.54;
@@ -1147,6 +1195,7 @@ export async function createPinball(container, opts = {}) {
     award(3000, p0[0], p0[1]);
     state.perBall.ramps++;
     sfx.ramp();
+    fireFlasher(side, 0.55);
     comboShot();
     modeEvent(side === 'left' ? 'leftRamp' : 'rightRamp');
     dmd.ramp(side === 'left' ? 'KUNGSVÄGEN' : 'VALLGRAVEN');
@@ -1282,9 +1331,12 @@ export async function createPinball(container, opts = {}) {
       later(() => hud.zones.classList.remove('show'), 3500);
     }
 
+    buzz(14 + Math.round(p * 16));
     if (p >= SKILL_ZONE[0] && p <= SKILL_ZONE[1]) {
       const pts = addScore(5000);
       sfx.complete();
+      fireFlasher('right', 0.9);
+      pop('SKILL SHOT!', 4.4, 26, 'big');
       dmd.skillShot(pts);
       lampShow('chase', 0x5eead4, 1);
     }
@@ -1318,6 +1370,9 @@ export async function createPinball(container, opts = {}) {
       state.ballSaveUntil = 0;
       sfx.save();
       dmd.ballSave();
+      fireFlasher('both', 0.7);
+      buzz([20, 30, 20, 30, 50]);
+      pop('BOLL RÄDDAD!', L.centerX, 5.2, 'save');
       lampShow('chase', 0x3ddc7b, 1.2);
       placeInLane();
       // Below the skill-shot band: a rescued ball is not a free skill shot
@@ -1329,6 +1384,7 @@ export async function createPinball(container, opts = {}) {
     }
 
     sfx.drain();
+    buzz([70, 50, 140]);
     state.phase = 'between';
     hud.nudge.hidden = true;
     lowerTrolls();
@@ -1519,6 +1575,7 @@ export async function createPinball(container, opts = {}) {
       f.pressed = pressed;
       if (pressed) {
         sfx.flipperUp();
+        buzz(7);
         hud.zones.classList.remove('show');
       } else {
         sfx.flipperDown();
@@ -1645,6 +1702,7 @@ export async function createPinball(container, opts = {}) {
       flipL.pressed = false;
       flipR.pressed = false;
       jolt(2.2, 0);
+      buzz(260);
       dmd.tilt();
       sfx.tilt();
       setGI(0x301010, 0.35 * LAMP);
@@ -1905,6 +1963,8 @@ export async function createPinball(container, opts = {}) {
       ins.pool.material.opacity = Math.min(0.85, ins.light.intensity * 0.62);
     });
 
+    driveMatrix(now, attract, strobeOn);
+
     // General illumination
     if (attract) {
       const ph = (t * 0.12) % 3;
@@ -1938,6 +1998,87 @@ export async function createPinball(container, opts = {}) {
           lamp.intensity = gi.intensity * (flick ? 0.75 : 1);
         }
       });
+    }
+
+    // Attract: the flashers answer each other every few seconds
+    if (attract && Math.floor(t / 3.1) !== attractFlash) {
+      attractFlash = Math.floor(t / 3.1);
+      fireFlasher(attractFlash % 2 ? 'left' : 'right', 0.7);
+    }
+    // Flashers, and the punch they put into the GI lamp beside them
+    refs.flashers.forEach((f) => {
+      f.t += dt;
+      const e = f.t < 0.6 ? Math.exp(-f.t * 8) * (f.k || 1) : 0;
+      const show = strobeOn && lampFx.kind === 'strobe' && lampFx.t < lampFx.dur ? 0.6 : 0;
+      const hit = Math.max(e, show);
+      f.mat.emissiveIntensity = 0.16 + hit * 3.4;
+      const lamp = giLamps[FLASHER_GI[f.id]];
+      if (lamp && hit > 0.01) {
+        lamp.color.lerp(f.color, Math.min(1, hit * 1.4));
+        lamp.intensity += hit * 6 * LAMP;
+      }
+    });
+
+    // The plastics glow with the GI string under them, and the bulbs show it
+    const g0 = giLamps[0];
+    refs.plastics.emissive.copy(g0.color);
+    refs.plastics.emissiveIntensity = clamp(0.36 * (g0.intensity / GI_INTENSITY), 0.05, 0.6);
+    materials.bulb.color.copy(g0.color).multiplyScalar(clamp(0.55 + 0.4 * (g0.intensity / GI_INTENSITY), 0.2, 0.92));
+  }
+
+  /**
+   * The lamp matrix: grenar row, P-O-K-A-L letters, locks, bonus ×,
+   * kickback and inlanes. Solid when collected, blinking when it is the shot
+   * to make, running patterns in attract.
+   */
+  let attractFlash = -1;
+  function driveMatrix(now, attract, strobeOn) {
+    const lm = refs.lamps;
+    const t = now / 1000;
+    const fast = Math.floor(now / 120) % 2 === 0 ? 1 : 0.12;
+    const slow = Math.floor(now / 320) % 2 === 0 ? 1 : 0.1;
+    if (attract) {
+      const pat = Math.floor(t / 4) % 3;
+      lm.defs.forEach((d, i) => {
+        let v;
+        if (pat === 0) v = Math.max(0, Math.sin(t * 5 - d.y * 0.55)) ** 2;
+        else if (pat === 1) v = (i + Math.floor(t * 7)) % 5 === 0 ? 1 : 0.04;
+        else v = Math.max(0, Math.sin(t * 4 + d.x * 0.8)) ** 2;
+        lm.set(d.id, v);
+      });
+    } else {
+      const next = MODES.find((m) => !state.modeDone.has(m.id));
+      MODES.forEach((m, i) => {
+        let v = 0;
+        if (state.modeDone.has(m.id)) v = 1;
+        else if (state.mode && state.mode.def.id === m.id) v = fast;
+        else if (!state.mode && next === m) v = state.modeStartLit ? slow : 0.22;
+        lm.set(`gren${i}`, v);
+      });
+      const wiz = state.mode && state.mode.wizard;
+      lm.set('gren5', wiz ? fast : state.finalenDone ? 1 : !next && state.modeStartLit ? slow : 0);
+      const skytte = state.mode && state.mode.def.id === 'skytte';
+      L.targets.forEach((_, i) => {
+        lm.set(`pokal${i}`, state.pokal[i] ? 1 : skytte && i === state.mode.progress ? fast : 0);
+      });
+      for (let i = 0; i < 2; i++) {
+        lm.set(`lock${i}`, state.locked > i || state.multiball ? 1 : state.lockLit && i === state.locked ? fast : 0);
+      }
+      [2, 3, 4, 5, 6].forEach((n) => lm.set(`bx${n}`, state.bonusX >= n ? 1 : 0));
+      lm.set('kickback', state.kickback ? 1 : 0);
+      lm.set('inL', state.inlanes.left ? 1 : 0);
+      lm.set('inR', state.inlanes.right ? 1 : 0);
+    }
+    // Lamp shows run over the matrix too
+    if (lampFx.t < lampFx.dur) {
+      if (lampFx.kind === 'strobe') {
+        lm.defs.forEach((d) => lm.set(d.id, strobeOn ? 1 : 0, lampFx.color));
+      } else {
+        const head = (lampFx.t * (lampFx.kind === 'wave' ? 26 : 40)) % 34 - 2;
+        lm.defs.forEach((d) => {
+          if (Math.abs(d.y - head) < 1.6) lm.set(d.id, 1, lampFx.color);
+        });
+      }
     }
   }
 
@@ -2207,6 +2348,7 @@ export async function createPinball(container, opts = {}) {
     }
 
     driveLamps(now, dtRaw);
+    refs.lamps.update(dtRaw);
 
     // Spinner blade keeps turning and slows down, like real spinner inertia
     if (refs.spinner) {

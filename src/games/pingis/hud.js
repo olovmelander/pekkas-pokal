@@ -51,6 +51,7 @@ export function buildHud(root, { mouse }) {
       <div class="pb-toast" id="pg-toast"></div>
       <div class="fg-pops" id="pg-pops"></div>
       <div class="pg-keys${mouse ? '' : ' touch'}" id="pg-keys">${keysHint}</div>
+      <div class="pg-ghost" id="pg-ghost" aria-hidden="true"><i class="pg-ghost-dot"></i><small>dra · släpp med en flick uppåt</small></div>
     </div>
 
     <div class="pg-replay" id="pg-replay" aria-hidden="true">
@@ -99,7 +100,8 @@ export function buildHud(root, { mouse }) {
     mp: q('#pg-mp'), mpWho: q('#pg-mp-who'), rally: q('#pg-rally'), rallyN: q('#pg-rally-n'),
     rallyWord: q('#pg-rally-word'), keys: q('#pg-keys'), callout: q('#pg-callout'), phase: q('#pg-phase'),
     toast: q('#pg-toast'), pops: q('#pg-pops'), replay: q('#pg-replay'), intro: q('#pg-intro'),
-    overlay: q('#pg-overlay'), panel: q('#pg-panel'), help: q('#pg-help'), mute: q('#pg-mute')
+    overlay: q('#pg-overlay'), panel: q('#pg-panel'), help: q('#pg-help'), mute: q('#pg-mute'),
+    ghost: q('#pg-ghost')
   };
   const timers = new Set();
   const later = (fn, ms) => {
@@ -162,6 +164,10 @@ export function buildHud(root, { mouse }) {
     },
     showKeys(on) {
       el.keys.classList.toggle('show', on);
+    },
+    /** A ghost finger that shows a first-time touch player the serve. */
+    ghost(on) {
+      el.ghost.classList.toggle('show', on);
     },
     showBug(on) {
       el.bug.classList.toggle('show', on);

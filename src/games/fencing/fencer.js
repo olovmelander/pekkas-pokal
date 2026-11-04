@@ -734,6 +734,13 @@ export class Fencer {
       const ph = sock.getWorldPosition(_v2).add(_v3.set(out * 0.05 * s, -0.16 * s, 0.03 * s).applyQuaternion(_q2));
       pos = _v3.copy(ph).lerp(pw, k);
       _q.slerpQuaternions(_q2, _q, k);
+      // Chin first: on its way the mask's crown leans out in front of the
+      // face, then rolls back over the forehead into place
+      const roll = Math.sin(Math.PI * k);
+      if (roll > 1e-3) {
+        _q.multiply(_q2.setFromAxisAngle(_v2.set(1, 0, 0), 0.75 * roll));
+        pos.add(_v2.set(0, 0, 0.05 * s * roll).applyQuaternion(_q));
+      }
     }
     this.mask.position.copy(this.group.worldToLocal(pos));
     this.mask.quaternion.copy(_q);
@@ -918,19 +925,27 @@ const ACTIONS = {
   },
 
   salute(a, out, ctx, k) {
-    // Mask in the rear hand: blade up before the face, sweep down towards
-    // the opponent, then the mask goes on and down into guard
+    // The salute as it is done on a real piste: standing tall on the
+    // en-garde line, heels together, mask in the rear hand. The bell comes
+    // up to the chin with the blade vertical, then the arm sweeps down and
+    // out towards the opponent. The mask goes on chin first, and only then
+    // the front foot steps out into en garde.
     a.guardPose(out, ctx);
     const { s } = a.f;
-    const up = smooth(clamp(k / 0.36, 0, 1)) * (1 - smooth(clamp((k - 0.48) / 0.18, 0, 1)));
-    const down = smooth(clamp((k - 0.48) / 0.18, 0, 1)) * (1 - smooth(clamp((k - 0.8) / 0.18, 0, 1)));
-    out[P.hx] += (0.14 * s - out[P.hx]) * up + (0.42 * s - out[P.hx]) * down;
-    out[P.hy] += (0.0 - out[P.hy]) * up + (-0.24 * s - out[P.hy]) * down;
-    out[P.fa] += (Math.PI / 2 - out[P.fa]) * up + (-0.6 - out[P.fa]) * down;
+    const up = smooth(clamp(k / 0.28, 0, 1)) * (1 - smooth(clamp((k - 0.4) / 0.14, 0, 1)));
+    const down = smooth(clamp((k - 0.4) / 0.14, 0, 1)) * (1 - smooth(clamp((k - 0.66) / 0.14, 0, 1)));
+    const stand = 1 - smooth(clamp((k - 0.8) / 0.16, 0, 1));
+    out[P.hx] += (0.14 * s - out[P.hx]) * up + (0.44 * s - out[P.hx]) * down;
+    out[P.hy] += (0.0 - out[P.hy]) * up + (-0.26 * s - out[P.hy]) * down;
+    out[P.fa] += (Math.PI / 2 - out[P.fa]) * up + (-0.62 - out[P.fa]) * down;
     out[P.fyaw] += 0.12 * up;
-    out[P.py] += 0.1 * (up + down) * s;
-    out[P.nod] += 0.08 * up;
-    out[P.mask] = k < 0.62 ? 0 : 1;
+    // Upright, the front heel at the rear instep (a right angle)
+    out[P.py] = lerp(out[P.py], 0.9 * s, stand);
+    out[P.lean] = lerp(out[P.lean], -0.02, stand);
+    out[P.ffx] = lerp(out[P.ffx], a.ox + 0.06 * s, stand);
+    out[P.bfx] = lerp(out[P.bfx], a.ox - 0.06 * s, stand);
+    out[P.nod] += 0.08 * up - 0.05 * down;
+    out[P.mask] = k < 0.6 ? 0 : 1;
     return 12;
   },
 

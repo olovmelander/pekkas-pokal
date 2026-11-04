@@ -193,6 +193,12 @@ export class Sfx {
     this.tone(220, 0.24, 'sine', 0.18, -90);
   }
 
+  /** So close: the pattern's fringe hissing past the clay. */
+  nearMiss() {
+    this.noiseHit(0.16, 0.22, 5200, 2.2, 0.02, 'bandpass', 0.25, 2200);
+    this.tone(660, 0.12, 'sine', 0.06, -180, 0.05);
+  }
+
   /** The shooter's call — a short barked vowel, then the trap's click. */
   pull() {
     if (!this.ctx || this.muted) return;

@@ -579,7 +579,7 @@ void main() {
     float n = texture2D(uNoise, vec2(b.x * 1.3 + uTime * 0.012, b.z * 0.9 - uTime * 0.02)).r;
     float n2 = texture2D(uNoise, vec2(b.x * 3.1 - uTime * 0.02, b.y * 2.0 + b.z * 2.2)).g;
     // Densest near the window, thinning out towards the floor
-    float fade = pow(max(1.0 - b.z, 1e-4), 1.6) * smoothstep(0.0, 0.9, wp.y);
+    float fade = pow(max(1.0 - b.z, 1e-4), 1.6) * smoothstep(0.1, 1.4, wp.y);
     acc += edge * fade * (0.55 + 0.55 * n + 0.25 * n2);
   }
   float glow = acc / float(SAMPLES) * min(len, 4.0);
@@ -1207,7 +1207,7 @@ class ScoreBox {
       // Lit lamps hum a little, as the real ones do through a camera
       const target = on ? 7 + Math.sin(t * 50) * 0.4 : 0.05;
       m.emissiveIntensity += (target - m.emissiveIntensity) * Math.min(1, dt * (on ? 30 : 8));
-      lightI += on ? 4 : 0;
+      lightI += on ? 2.8 : 0;
     });
     this.light.intensity += (lightI - this.light.intensity) * Math.min(1, dt * 14);
   }
@@ -1280,7 +1280,7 @@ export function buildSalle({ glow, high, crowdNames = [] }) {
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(32, 24),
     new THREE.MeshStandardMaterial({
-      map: parquet, roughness: 0.52, metalness: 0, bumpMap: parquet, bumpScale: 0.6, envMapIntensity: 0.9
+      map: parquet, roughness: 0.58, metalness: 0, bumpMap: parquet, bumpScale: 0.6, envMapIntensity: 0.9
     })
   );
   floor.rotation.x = -Math.PI / 2;
@@ -1291,7 +1291,9 @@ export function buildSalle({ glow, high, crowdNames = [] }) {
   /* ---- Piste ---- */
   const piste = new THREE.Mesh(
     new THREE.BoxGeometry(14, 0.035, 1.8),
-    new THREE.MeshStandardMaterial({ map: keep(pisteTexture()), roughness: 0.42, metalness: 0.55 })
+    // Brushed, not polished: the low sun behind the fencers would otherwise
+    // mirror straight into the camera and drown their footwork in glare
+    new THREE.MeshStandardMaterial({ map: keep(pisteTexture()), roughness: 0.6, metalness: 0.38 })
   );
   piste.position.y = 0.0175;
   piste.receiveShadow = true;

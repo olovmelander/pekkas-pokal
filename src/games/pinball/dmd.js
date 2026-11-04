@@ -83,6 +83,45 @@ const ICONS = {
   ],
   ball: ['..XXX..', '.XXXXX.', 'XX+XXXX', 'XXXXXXX', 'XXXXXXX', '.XXXXX.', '..XXX..'],
   lock: ['.XXX.', 'X...X', 'X...X', 'XXXXX', 'XX.XX', 'XX.XX', 'XXXXX'],
+  kart: [
+    '.....XX.......',
+    '....XXXX......',
+    '..XXXXXXXXXX..',
+    '.XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXXX',
+    '.XX+X....X+XX.',
+    '.XXXX....XXXX.',
+    '..XX......XX..'
+  ],
+  fish: [
+    '......XXXX.....',
+    '....XXXXXXX...X',
+    '..XXXXXXXXXX.XX',
+    '.X.XXXXXXXXXXX.',
+    'XXXXXXXXXXXXXX.',
+    '..XXXXXXXXXX.XX',
+    '....XXXXXXX...X',
+    '......XXXX.....'
+  ],
+  paddle: [
+    '.XXXX.',
+    'XXXXXX',
+    'XXXXXX',
+    'XXXXXX',
+    '.XXXX.',
+    '..XX..',
+    '..XX..',
+    '..XX..'
+  ],
+  clay: ['..XXXXX..', '.X+XXX+X.', 'XXXXXXXXX', '.XXXXXXX.'],
+  crown: [
+    'X....X....X',
+    'XX..XXX..XX',
+    'XXX.XXX.XXX',
+    'XXXXXXXXXXX',
+    'XXXXXXXXXXX',
+    '+XXXXXXXXX+'
+  ],
   castle: [
     'X.X.........X.X',
     'XXX...X.X...XXX',
@@ -212,6 +251,86 @@ export class Dmd {
     for (let j = 0; j < h; j++) {
       this.px(x, y + j, v);
       this.px(x + w - 1, y + j, v);
+    }
+  }
+
+  line(x0, y0, x1, y1, v = 255) {
+    const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
+    for (let i = 0; i <= n; i++) this.px(x0 + ((x1 - x0) * i) / n, y0 + ((y1 - y0) * i) / n, v);
+  }
+
+  circle(cx, cy, r, v = 255) {
+    const n = Math.max(12, Math.round(r * 7));
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      this.px(cx + Math.cos(a) * r, cy + Math.sin(a) * r, v);
+    }
+  }
+
+  /**
+   * A one-second picture for each gren, played before its title card:
+   * the kart tearing across, the five rings, a rally over the net, a clay
+   * shattering in the sights, a fish jumping, the crown for Finalen.
+   */
+  modeAnim(id, t) {
+    const k = Math.min(1, t);
+    if (id === 'gokart') {
+      // Chequered flags at either end, the kart with speed lines behind
+      for (let y = 0; y < 32; y += 4) {
+        for (let x = 0; x < 8; x += 4) {
+          if (((x + y) / 4) % 2 === 0) {
+            this.rect(x, y, 4, 4, 140);
+            this.rect(124 - x, y, 4, 4, 140);
+          }
+        }
+      }
+      const x = -30 + k * 150;
+      this.icon('kart', x, 10, 255, 2);
+      for (let i = 0; i < 4; i++) this.line(x - 6 - i * 7, 14 + i * 2, x - 18 - i * 7, 14 + i * 2, 150);
+      this.line(0, 29, 127, 29, 90);
+    } else if (id === 'femkamp') {
+      const n = Math.min(5, Math.floor(k * 6.5));
+      const pos = [[44, 11], [64, 11], [84, 11], [54, 19], [74, 19]];
+      for (let i = 0; i < n; i++) this.circle(pos[i][0], pos[i][1], 8, i === n - 1 ? 255 : 190);
+    } else if (id === 'pingis') {
+      this.icon('paddle', 6, 12, 220, 2);
+      this.icon('paddle', 110, 12, 220, 2);
+      this.line(64, 18, 64, 31, 150);
+      this.line(18, 31, 110, 31, 110);
+      const ph = (t * 1.6) % 1;
+      const dir = Math.floor(t * 1.6) % 2 ? -1 : 1;
+      const bx = 64 + dir * (ph * 2 - 1) * 42;
+      const by = 28 - Math.sin(ph * Math.PI) * 22;
+      this.rect(bx - 1, by - 1, 3, 3, 255);
+    } else if (id === 'skytte') {
+      const cx = 30 + k * 60;
+      const cy = 20 - Math.sin(k * Math.PI) * 12;
+      if (k < 0.85) {
+        this.icon('clay', cx - 4, cy - 2, 255);
+        const hx = 64 + (cx - 64) * Math.min(1, k * 1.4);
+        const hy = 16 + (cy - 16) * Math.min(1, k * 1.4);
+        this.circle(hx, hy, 7, 200);
+        this.line(hx - 11, hy, hx - 4, hy, 200);
+        this.line(hx + 4, hy, hx + 11, hy, 200);
+        this.line(hx, hy - 9, hx, hy - 4, 200);
+        this.line(hx, hy + 4, hx, hy + 9, 200);
+      } else {
+        const r = (k - 0.85) * 120;
+        for (let a = 0; a < 10; a++) {
+          const ang = a * 0.63 + 0.3;
+          this.rect(cx + Math.cos(ang) * r, cy + Math.sin(ang) * r * 0.6, 2, 2, 255);
+        }
+      }
+    } else if (id === 'fiske') {
+      for (let x = 0; x < 128; x++) this.px(x, 27 + Math.sin(x * 0.25 + t * 6) * 1.5, 150);
+      const fx = 26 + k * 70;
+      const fy = 26 - Math.sin(k * Math.PI) * 22;
+      this.icon('fish', fx, fy - 4, 255);
+      if (k > 0.85) this.sparkle(10, 200);
+    } else {
+      this.icon('crown', 64 - 11, 4, 255, 2);
+      this.burst(t * 0.6, 120);
+      this.sparkle(12);
     }
   }
 
@@ -458,22 +577,35 @@ export class Dmd {
     }, 3, 3);
   }
 
-  modeStart(name, year, task, secs) {
+  modeStart(name, year, task, secs, id = '') {
+    const intro = id ? 1.1 : 0;
     this.show((d, t) => {
-      if (t < 1.4) {
-        d.text(`GREN '${String(year).slice(2)}`, 64, 1, { align: 'center', v: 170 });
+      if (t < intro) {
+        d.modeAnim(id, t / intro);
+        return;
+      }
+      const tt = t - intro;
+      if (tt < 1.4) {
+        d.text(id === 'finalen' ? 'WIZARD MODE' : `GREN '${String(year).slice(2)}`, 64, 1, { align: 'center', v: 170 });
         d.text(name, 64, 11, { s: d.measure(name, 3) <= 120 ? 3 : 2, align: 'center' });
-        if (t < 0.35 && Math.floor(t * 14) % 2) d.invert();
+        if (tt < 0.35 && Math.floor(tt * 14) % 2) d.invert();
         return;
       }
       d.stack([task, `${secs} SEKUNDER`], { maxS: 1 });
-      d.border(t, 140);
-    }, 3, 3);
+      d.border(tt, 140);
+    }, 3 + intro, 3);
   }
 
-  modeWin(name, pts) {
+  modeWin(name, pts, id = '') {
     this.show((d, t) => {
       d.stack([name, 'KLAR!', `+${fmtScore(pts)}`], { maxS: 2 });
+      // The gren's own icon hops at either side
+      const icon = { gokart: 'kart', fiske: 'fish', pingis: 'paddle', skytte: 'clay' }[id];
+      if (icon) {
+        const hop = Math.abs(Math.sin(t * 6)) * 6;
+        d.icon(icon, 3, 16 - hop, 220);
+        d.icon(icon, 125 - ICONS[icon][0].length, 16 - hop, 220);
+      }
       d.sparkle(10);
       d.border(t, 200, 70);
       if (t < 0.4 && Math.floor(t * 14) % 2) d.invert();

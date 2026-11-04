@@ -573,15 +573,44 @@ export function createPlayfieldCanvas(_participants = [], logo = null) {
   g.stroke();
   g.restore();
 
-  /* ---- Target banks: a letter in front of each target's face ---- */
-  g.font = '700 30px "Space Grotesk", Inter, sans-serif';
-  L.targets.forEach((t) => {
-    const off = 1.05;
-    const lx = t.x + Math.sin(t.a) * off;
-    const ly = t.y - Math.cos(t.a) * off;
-    g.fillStyle = 'rgba(255,224,150,.85)';
-    g.fillText(t.letter, toU(lx), toV(ly));
+  /* ---- Target banks: the letters are lamps now (meshes.js); the print
+     gives each bank a gold rail line to sit on ---- */
+  g.save();
+  g.strokeStyle = 'rgba(242,109,141,.45)';
+  g.lineWidth = 3;
+  [[0, 2], [3, 4]].forEach(([a, b]) => {
+    const ta = L.targets[a];
+    const tb = L.targets[b];
+    const off = 1.62;
+    g.beginPath();
+    g.moveTo(toU(ta.x + Math.sin(ta.a) * off), toV(ta.y - Math.cos(ta.a) * off));
+    g.lineTo(toU(tb.x + Math.sin(tb.a) * off), toV(tb.y - Math.cos(tb.a) * off));
+    g.stroke();
   });
+  g.restore();
+
+  /* ---- Lamp cluster over the flippers: grenar row and bonus row ---- */
+  g.save();
+  const plate = (y0, y1, color) => {
+    const x0 = toU(cx - 3.85);
+    const x1 = toU(cx + 3.85);
+    const r = unitsY(0.5);
+    g.beginPath();
+    g.roundRect(x0, toV(y1), x1 - x0, toV(y0) - toV(y1), r);
+    g.fillStyle = 'rgba(8,10,30,.42)';
+    g.fill();
+    g.strokeStyle = color;
+    g.lineWidth = 2;
+    g.stroke();
+  };
+  plate(9.12, 11.02, 'rgba(242,193,78,.4)');
+  g.fillStyle = 'rgba(214,224,255,.7)';
+  g.font = '700 12px Inter, sans-serif';
+  g.letterSpacing = '4px';
+  g.fillText('GRENAR', toU(cx - 3.35), toV(11.25));
+  g.fillText('BONUS ×', toU(cx + 3.15), toV(8.9));
+  g.letterSpacing = '0px';
+  g.restore();
 
   /* ---- Hero logo, centred in the lower playfield ---- */
   if (logo && logo.width) {
@@ -621,7 +650,8 @@ export function createPlayfieldCanvas(_participants = [], logo = null) {
   /* ---- Inlane / outlane labels ---- */
   g.fillStyle = 'rgba(255,214,120,.5)';
   [[-6.15, 'in'], [3.75, 'in']].forEach(([ax]) => {
-    for (let i = 0; i < 2; i++) {
+    // The upper chevron is a lamp now (meshes.js)
+    for (let i = 1; i < 2; i++) {
       const y = 11.6 - i * 1.2;
       g.beginPath();
       g.moveTo(toU(ax - 0.45), toV(y));

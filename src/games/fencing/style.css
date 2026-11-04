@@ -1046,6 +1046,14 @@
   .fen-big-score { font-size: 2.2rem; margin-top: 6px; }
   .fen-lead { font-size: 0.8rem; margin-top: 6px; }
   .fen-medal-big svg { width: 64px; height: 64px; }
+  /* Short landscape phones: the title in one screenful, chips on one row */
+  .fen[data-mode='title'] .fen-screen { padding-top: calc(var(--safe-t) + 8px); padding-bottom: calc(var(--safe-b) - 6px); }
+  .fen[data-mode='title'] .fen-panel { width: min(520px, 64%); padding: 6px 12px 4px; }
+  .fen[data-mode='title'] .fen-h { font-size: 2rem; }
+  .fen[data-mode='title'] .fen-label { margin: 10px 0 6px; }
+  .fen[data-mode='title'] .fen-chips { flex-wrap: nowrap; gap: 5px; }
+  .fen[data-mode='title'] button.fen-chip { padding: 0.4rem 0.62rem; font-size: 0.74rem; }
+  .fen-foot { margin-top: 6px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

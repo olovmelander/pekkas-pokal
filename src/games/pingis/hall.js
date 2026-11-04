@@ -126,7 +126,7 @@ export function tableTexture() {
     const y = rand() * h;
     const r = 14 + rand() * 46;
     const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-    const a = 0.024 + rand() * 0.04;
+    const a = 0.012 + rand() * 0.022; // a lived-in table, not a stained one
     g.addColorStop(0, rand() < 0.5 ? `rgba(255,255,255,${a})` : `rgba(6,24,44,${a})`);
     g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g;
@@ -885,7 +885,14 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1, profile = null 
   edgeCv[1].fillStyle = '#f3f6fb';
   edgeCv[1].fillRect(0, 0, 64, 5);
   const edgeMat = standard(0xffffff, 0.45, { map: srgbTexture(edgeCv[0]) });
-  const topMat = standard(0xffffff, 0.34, { map: tableTexture() });
+  // Competition lacquer: a clear coat over the blue, so the pendants and
+  // the room lie IN the table as soft reflections. Broad on purpose (a
+  // tight coat would turn each lamp into a tiny, blinking glint).
+  const topMat = tier === 'high'
+    ? new THREE.MeshPhysicalMaterial({
+      map: tableTexture(), roughness: 0.42, metalness: 0, clearcoat: 0.55, clearcoatRoughness: 0.2
+    })
+    : standard(0xffffff, 0.34, { map: tableTexture() });
   refs.tableTopMat = topMat;
   // The slab in the edge paint, the playing surface as its own plane: one
   // material per mesh, so the slab bakes in with the rest of the table.
@@ -1416,6 +1423,7 @@ export function buildPaddle(opts = {}) {
     [standard(0xe8dcc8, 0.6), red, black]
   );
   blade.rotation.x = Math.PI / 2; // flat faces look along ±z
+  blade.scale.x = 0.955; // a real blade is a touch taller than it is wide
   blade.position.y = 0.112; // clear of the hand, as a blade sits
   blade.castShadow = true;
   g.add(blade);

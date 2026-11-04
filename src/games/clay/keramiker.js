@@ -519,11 +519,11 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
       // Both forearms clear the apron by a couple of centimetres.
       bones.chest.getWorldQuaternion(qa);
       const C = (x, y, z, out) => bones.chest.localToWorld(out.set(x * s, y * s, z * s));
-      C(-0.05, -0.03, 0.285, target);
+      C(-0.05, 0.0, 0.29, target);
       basisQuat(v1.set(0, 0.6, 0.8).applyQuaternion(qa), v2.set(0.85, 0.45, 0.25).applyQuaternion(qa), handQ);
       C(0.6, -0.2, 0.35, pole);
       reachFor('L', target, handQ, pole, foldW);
-      C(0.06, -0.095, 0.205, target);
+      C(0.06, -0.065, 0.21, target);
       basisQuat(v1.set(0, 0, -1).applyQuaternion(qa), v2.set(-0.9, 0, 0.3).applyQuaternion(qa), handQ);
       C(-0.6, -0.25, 0.3, pole);
       reachFor('R', target, handQ, pole, foldW);

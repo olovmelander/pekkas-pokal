@@ -482,8 +482,8 @@ export async function createFencing(container) {
     // Intro: the salute, while the camera comes round from the opponent's mask
     state.phase = 'intro';
     state.phaseT = 0;
-    animMe.play('salute', 1.6);
-    animAi.play('salute', 1.6);
+    animMe.play('salute', 2.2);
+    animAi.play('salute', 2.2);
     [animAi, animMe].forEach((a) => {
       a.ox = 0;
       a.step = null;
@@ -1253,11 +1253,11 @@ export async function createFencing(container) {
       subject.j.torso.getWorldPosition(v3);
       const drift = Math.sin(t * 0.11) * 0.18;
       if (aspect < 0.9) {
-        const d = ph === 'title' ? 5.6 : 6.4;
+        const d = ph === 'title' ? 6.1 : 6.6;
         goal.look.set(v3.x, 0.92, 0);
         goal.pos.set(v3.x + 0.5 + drift, 1.3, d);
         goal.fov = 40;
-        goal.shift.set(0.5, ph === 'title' ? 0.29 : 0.25);
+        goal.shift.set(0.5, ph === 'title' ? 0.27 : 0.24);
       } else {
         // Closer on short landscape phones: the person fills the height
         const d = lerp(4.6, 3.9, smoothstep(1.6, 2.1, aspect));
@@ -1446,7 +1446,7 @@ export async function createFencing(container) {
     state.phaseT += dt;
     const ph = state.phase;
     if (ph === 'intro') {
-      if (state.phaseT >= 1.7) startReady();
+      if (state.phaseT >= 2.25) startReady();
     } else if (ph === 'ready') {
       const step = Math.floor(state.phaseT / 0.7);
       if (step > state.readyStep && step < 3) {
@@ -1738,6 +1738,16 @@ export async function createFencing(container) {
         pixelRatio,
         people: { me: me.name, foe: foe.name, meTris: me.triangles, foeTris: foe.triangles, crowdCalls: salle.crowd.drawCalls }
       };
+    },
+    /** Camera and where the fencers' feet and heads land on screen (framing checks). */
+    camInfo() {
+      const r = (v) => Math.round(v * 100) / 100;
+      const sc = (w) => project(w).slice(0, 2).map(r);
+      const out = { aspect: r(aspect), pos: camera.position.toArray().map(r), fov: r(camera.fov) };
+      [['me', me], ['foe', foe]].forEach(([n, f]) => {
+        out[n] = { feet: sc(f.group.localToWorld(new THREE.Vector3(0, 0, 0))), head: sc(f.j.head.getWorldPosition(new THREE.Vector3())) };
+      });
+      return out;
     },
     /** The animators (footwork, actions) for tests. */
     anims() {

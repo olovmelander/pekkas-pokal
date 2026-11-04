@@ -250,19 +250,19 @@ export function addBirch(G, rand, x, y0, z, h, o = {}) {
     }
   }
   // Crown: hanging clumps around the upper stem, biggest in the middle
-  const leaf = new THREE.Color(o.leaf || 0x83a040);
+  const leaf = new THREE.Color(o.leaf || 0x6c8a34);
   const n = o.clumps || 7;
   const crownC = new THREE.Vector3(...at(0.78));
-  const cw = h * (0.15 + rand() * 0.04);
+  const cw = h * (0.17 + rand() * 0.05);
   for (let k = 0; k < n; k++) {
     const f = 0.42 + (k / n) * 0.58;
     const [sx, sy, sz] = at(Math.min(1, f));
     const a = rand() * Math.PI * 2;
-    const out = cw * (0.35 + rand() * 0.55) * Math.sin(Math.PI * Math.min(0.95, f * 0.95));
-    const rr = cw * (0.3 + rand() * 0.18) * (1 - Math.abs(f - 0.7) * 0.6);
+    const out = cw * (0.45 + rand() * 0.6) * Math.sin(Math.PI * Math.min(0.95, f * 0.95));
+    const rr = cw * (0.22 + rand() * 0.14) * (1 - Math.abs(f - 0.7) * 0.6);
     const tint = leaf.clone().offsetHSL((rand() - 0.5) * 0.04, (rand() - 0.5) * 0.1, (rand() - 0.5) * 0.12);
     addClump(G, rand, sx + Math.cos(a) * out, sy - rr * 0.15, sz + Math.sin(a) * out, rr, {
-      tint, haze, centre: crownC, squash: 1.5, droop: 0.45, shade: 0.6, tipK: 0.6
+      tint, haze, centre: crownC, squash: 1.5, droop: 0.5, shade: 0.65, tipK: 0.4
     });
   }
 }
@@ -446,7 +446,7 @@ export function buildForest(rand, { lite = false } = {}) {
   /* Birches in front of the spruce, in loose groups */
   const birchAt = (bx, bz, haze, sz = 1) => {
     const h = (7 + rand() * 6) * sz;
-    addBirch(edge, rand, bx, -0.3, bz, h, { haze, clumps: lite ? 6 : 10 + Math.floor(rand() * 4) });
+    addBirch(edge, rand, bx, -0.3, bz, h, { haze, clumps: lite ? 8 : 13 + Math.floor(rand() * 5) });
   };
   for (let i = 0; i < (lite ? 12 : 22); i++) {
     const gx = -150 + rand() * 300;
@@ -506,7 +506,7 @@ export function buildForest(rand, { lite = false } = {}) {
       x += (lite ? 7 : 4.6) * (0.5 + rand());
     }
     [[-26, 52], [-19, 60], [-31, 66], [22, 58], [30, 49], [37, 63], [8, 74]].forEach(([bx, bz]) => {
-      addBirch(back, rand, bx, -0.3, bz, 7 + rand() * 4, { haze: 0.15, clumps: lite ? 5 : 7 });
+      addBirch(back, rand, bx, -0.3, bz, 7 + rand() * 4, { haze: 0.15, clumps: lite ? 8 : 13 });
     });
   }
   emit(back, -5);
@@ -515,7 +515,7 @@ export function buildForest(rand, { lite = false } = {}) {
   const field = new Growth();
   // A big old birch pair by the barn, a spruce group on the right
   [[-41, -58, 1.35], [-37, -61, 1.1], [24, -60, 1.2], [29, -66, 1], [55, -64, 1.15]].forEach(([bx, bz, s]) => {
-    addBirch(field, rand, bx, -0.2, bz, (9 + rand() * 3) * s, { haze: 0.04, clumps: lite ? 8 : 16 });
+    addBirch(field, rand, bx, -0.2, bz, (9 + rand() * 3) * s, { haze: 0.04, clumps: lite ? 10 : 20 });
   });
   [[36, -74, 12], [40, -78, 15], [33, -80, 9], [-58, -76, 13], [-62, -72, 10], [70, -86, 14]].forEach(([sx, sz, h]) => {
     addSpruce(field, rand, sx, -0.3, sz, h, {
@@ -547,6 +547,7 @@ export function buildForest(rand, { lite = false } = {}) {
     const bz = Math.sin(a) * r - 8;
     if (bz > -4 && Math.abs(bx) < 9) continue; // keep the vista's foreground open
     if (Math.abs(bx) < 4 && bz < -12 && bz > -22) continue; // and the trap house
+    if (Math.abs(bx) < 10 && bz > -1 && bz < 16) continue; // and the reaction shot's frame
     const tint = new THREE.Color(NEAR_BUSH[i % NEAR_BUSH.length]).offsetHSL((rand() - 0.5) * 0.03, 0, (rand() - 0.5) * 0.08);
     const bw = 0.6 + rand() * 0.8;
     const centre = new THREE.Vector3(bx, bw * 0.5, bz);
@@ -564,6 +565,7 @@ export function buildForest(rand, { lite = false } = {}) {
     const x = Math.cos(a) * r;
     const z = Math.sin(a) * r - 6;
     if (Math.abs(x) < 3 && z < -13 && z > -21) continue;
+    if (Math.abs(x) < 10 && z > -1 && z < 16) continue;
     addBoulder(near, rand, x, z, 0.3 + rand() * 0.8);
   }
   emit(near, 0, true);

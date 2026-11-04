@@ -62,30 +62,29 @@ export function headField(F) {
   const my = FACE.mouthY;
   const nl = 0.006 * (F.noseLen - 1);
   const sdf = (x, y, z) => {
-    // Cranium and the block of the face
-    let d = ell(x, y, z, 0, 0.022, -0.016, 0.08 * F.headW, 0.1, 0.099 * F.headL);
-    d = smin(d, ell(x, y, z, 0, 0.045, 0.03, 0.062 * F.headW, 0.05, 0.055), 0.03);
-    d = smin(d, ell(x, y, z, 0, -0.022, 0.036, 0.065 * F.cheek, 0.075, 0.06), 0.035);
-    d = smin(d, ell(x, y, z, 0, -0.06 - 0.01 * (F.jaw - 1), 0.02, 0.052 * F.jaw ** 1.5, 0.04 * F.jaw, 0.062), 0.025);
-    d = smin(d, ell(x, y, z, 0, -0.085, 0.066 + 0.004 * (F.chin - 1), 0.026 * F.chin, 0.0205, 0.023 * F.chin), 0.018);
-    d = smin(d, ell(x, y, z, 0, 0.029, 0.072, 0.06, 0.014 * F.brow, 0.02), 0.012);
-    // Cheekbones and the soft pads below them
-    d = smin(d, ell(x, y, z, 0.047, -0.009, 0.051, 0.026, 0.015, 0.024), 0.012);
-    d = smin(d, ell(x, y, z, -0.047, -0.009, 0.051, 0.026, 0.015, 0.024), 0.012);
-    d = smin(d, ell(x, y, z, 0.034, -0.034, 0.059, 0.028, 0.026, 0.026), 0.017);
-    d = smin(d, ell(x, y, z, -0.034, -0.034, 0.059, 0.028, 0.026, 0.026), 0.017);
+    // Cranium and the block of the face: a broad, round skull over a
+    // compact lower face (the toy proportions read friendly at any size)
+    const ax = Math.abs(x);
+    let d = ell(x, y, z, 0, 0.02, -0.016, 0.0835 * F.headW, 0.097, 0.097 * F.headL);
+    d = smin(d, ell(x, y, z, 0, 0.042, 0.026, 0.064 * F.headW, 0.05, 0.056), 0.03);
+    d = smin(d, ell(x, y, z, 0, -0.024, 0.034, 0.067 * F.cheek, 0.07, 0.06), 0.036);
+    d = smin(d, ell(x, y, z, 0, -0.057 - 0.008 * (F.jaw - 1), 0.02, 0.053 * F.jaw ** 1.5, 0.038 * F.jaw, 0.062), 0.026);
+    d = smin(d, ell(x, y, z, 0, -0.0815, 0.064 + 0.004 * (F.chin - 1), 0.0255 * F.chin, 0.0192, 0.0225 * F.chin), 0.019);
+    // Brow ridge: soft, a little stronger over the outer eye
+    d = smin(d, ell(x, y, z, 0, 0.0305, 0.07, 0.062, 0.0125 * F.brow, 0.0195), 0.013);
+    // Cheekbones and the full, soft pads below them
+    d = smin(d, ell(ax, y, z, 0.049, -0.011, 0.05, 0.025, 0.015, 0.023), 0.016);
+    d = smin(d, ell(ax, y, z, 0.036, -0.036, 0.057, 0.0305, 0.0275, 0.027), 0.022);
     // The mouth mound and the lips
-    d = smin(d, ell(x, y, z, 0, my + 0.002, 0.07, 0.03, 0.025, 0.024), 0.016);
-    // Upper lip with a hint of a cupid's bow, fuller lower lip
-    d = smin(d, ell(x, y, z, 0, my + 0.0052, 0.0874, 0.0195, 0.0052, 0.0078 * F.lips), 0.0035);
-    d = smin(d, ell(x, y, z, 0.0055, my + 0.0062, 0.0872, 0.008, 0.0042, 0.0072 * F.lips), 0.003);
-    d = smin(d, ell(x, y, z, -0.0055, my + 0.0062, 0.0872, 0.008, 0.0042, 0.0072 * F.lips), 0.003);
-    d = smin(d, ell(x, y, z, 0, my - 0.0062, 0.0856, 0.0172, 0.0066 * F.lips, 0.0088 * F.lips), 0.0035);
-    // Nose: a narrow bridge, a round tip, two wings
-    d = smin(d, cap(x, y, z, 0, 0.012, 0.0862, 0, -0.021, 0.104 + nl, 0.0064, 0.0086 * nose), 0.006);
-    d = smin(d, sph(x, y, z, 0, -0.0265 - 0.004 * (nose - 1), 0.1022 + nl + 0.006 * (nose - 1), 0.0116 * nose ** 1.4), 0.005);
-    d = smin(d, sph(x, y, z, 0.0112 * nose, -0.0335, 0.0905, 0.0082 * nose), 0.0055);
-    d = smin(d, sph(x, y, z, -0.0112 * nose, -0.0335, 0.0905, 0.0082 * nose), 0.0055);
+    d = smin(d, ell(x, y, z, 0, my + 0.002, 0.069, 0.029, 0.024, 0.024), 0.016);
+    // Upper lip with a cupid's bow, fuller lower lip
+    d = smin(d, ell(x, y, z, 0, my + 0.0051, 0.0868, 0.0182, 0.0052, 0.0076 * F.lips), 0.0035);
+    d = smin(d, ell(ax, y, z, 0.0052, my + 0.0063, 0.0866, 0.0075, 0.0043, 0.0071 * F.lips), 0.003);
+    d = smin(d, ell(x, y, z, 0, my - 0.0064, 0.0852, 0.0162, 0.007 * F.lips, 0.009 * F.lips), 0.0036);
+    // Nose: a soft, short bridge, a round button tip, two small wings
+    d = smin(d, cap(x, y, z, 0, 0.008, 0.0842, 0, -0.022, 0.1015 + nl, 0.0058, 0.0082 * nose), 0.007);
+    d = smin(d, sph(x, y, z, 0, -0.0272 - 0.004 * (nose - 1), 0.0998 + nl + 0.006 * (nose - 1), 0.0108 * nose ** 1.4), 0.0055);
+    d = smin(d, sph(ax, y, z, 0.0108 * nose, -0.0338, 0.0893, 0.0078 * nose), 0.0055);
     // Eye sockets, just bigger than the lids so the lids frame the eye
     if (F.sockets !== false) {
       d = smax(d, -sph(x, y, z, ex, ey, ez, FACE.eyeR + 0.0019), 0.004);
@@ -553,13 +552,13 @@ export function buildEyes(b, ctx) {
     }
     // Rings by angle from the front: pupil, iris, limbus, sclera
     const { iris } = look;
-    const IR = 0.66; // iris angular radius (rad)
-    const PR = 0.26;
+    const IR = 0.73; // iris angular radius (rad): a big iris reads warm and alive
+    const PR = 0.29;
     const ringsDef = [
-      [0, 'p'], [PR, 'p'], [PR, 'i0'], [IR * 0.62, 'i1'], [IR * 0.9, 'i2'], [IR, 'l'], [IR, 's'], [0.95, 's'],
+      [0, 'p'], [PR * 0.8, 'p'], [PR, 'p'], [PR, 'i0'], [IR * 0.6, 'i1'], [IR * 0.86, 'i2'], [IR, 'l'], [IR, 's0'], [0.98, 's'],
       [1.4, 's2'], [2.2, 's3'], [Math.PI, 's3']
     ];
-    const cols = 12;
+    const cols = 16;
     const pts = [];
     for (const [a, kind] of ringsDef) {
       for (let j = 0; j < cols; j++) {
@@ -569,15 +568,20 @@ export function buildEyes(b, ctx) {
         const rr = R * (1 + bulge);
         const lp = [Math.sin(a) * Math.cos(ph) * rr, Math.sin(a) * Math.sin(ph) * rr, Math.cos(a) * rr];
         let tint;
-        const swirl = 1 + 0.12 * Math.sin(ph * 7 + a * 20);
-        if (kind === 'p') tint = [0.015, 0.012, 0.012];
-        else if (kind === 'i0') tint = iris.map((v) => v * 1.25 * swirl);
-        else if (kind === 'i1') tint = iris.map((v) => v * 1.05 * swirl);
-        else if (kind === 'i2') tint = iris.map((v) => v * 0.8 * swirl);
-        else if (kind === 'l') tint = iris.map((v) => v * 0.35);
-        else if (kind === 's') tint = [0.95, 0.93, 0.9];
-        else if (kind === 's2') tint = [0.9, 0.85, 0.82];
-        else tint = [0.6, 0.45, 0.42];
+        // Radial fibres: alternate columns a touch lighter and warmer; light
+        // falls from above, so the lower iris glows and the top sits in the lid's shade
+        const swirl = 1 + 0.14 * Math.sin(ph * 8 + a * 9) * (j % 2 ? 1 : -0.6);
+        const lowGlow = 1 + 0.22 * Math.max(0, -Math.sin(ph)) - 0.12 * Math.max(0, Math.sin(ph));
+        const warm = (v, k, w) => [v[0] * k * (1 + w), v[1] * k * (1 + w * 0.5), v[2] * k];
+        if (kind === 'p') tint = [0.012, 0.01, 0.012];
+        else if (kind === 'i0') tint = warm(iris, 1.35 * swirl * lowGlow, 0.25);
+        else if (kind === 'i1') tint = warm(iris, 1.12 * swirl * lowGlow, 0.08);
+        else if (kind === 'i2') tint = iris.map((v) => v * 0.85 * swirl * lowGlow);
+        else if (kind === 'l') tint = iris.map((v) => v * 0.28);
+        else if (kind === 's0') tint = [0.8, 0.79, 0.78];
+        else if (kind === 's') tint = [0.93, 0.92, 0.9];
+        else if (kind === 's2') tint = [0.9, 0.84, 0.81];
+        else tint = [0.62, 0.46, 0.43];
         pts.push({ p: toModel([c[0] + lp[0], c[1] + lp[1], c[2] + lp[2]]), region: REGION.FIXED, tint, mat: MAT.GLOSS, a });
       }
     }
@@ -589,21 +593,25 @@ export function buildEyes(b, ctx) {
       pts, rows: ringsDef.length, cols, normalFn: nf, center: new THREE.Vector3(...toModel(c)), poles: [0, ringsDef.length - 1],
       weight: () => [[`eye${S}`, 1]]
     });
-    // A crisp painted catch-light, up and to the viewer's left, on the cornea
-    const cl = new THREE.Vector3(-0.36, 0.2, 0.9).normalize().multiplyScalar(R * 1.05);
-    addBlob(b, {
-      c: toModel([c[0] + cl.x, c[1] + cl.y, c[2] + cl.z]), r: [0.0016, 0.0016, 0.0007].map((v) => v * ctx.scale), n: [2, 2],
-      cols: 5, rows: 3, region: REGION.FIXED, tint: [1.5, 1.5, 1.45], mat: MAT.GLOSS, weight: () => [[`eye${S}`, 1]],
-      warp: (p) => {
-        // Lay the dot flat on the cornea: squash along the eye's surface normal
-        const o = toModel([c[0] + cl.x, c[1] + cl.y, c[2] + cl.z]);
-        const n = cl.clone().normalize();
-        const d = new THREE.Vector3(p[0] - o[0], p[1] - o[1], p[2] - o[2]);
-        const along = d.dot(n);
-        d.addScaledVector(n, -along * 0.6);
-        return [o[0] + d.x, o[1] + d.y, o[2] + d.z];
-      }
-    });
+    // Crisp painted catch-lights on the cornea: a main one up and to the
+    // viewer's left, a small one low on the other side. They stay on the
+    // eye (weighted to it), like a toy's printed highlights. Kept below the
+    // bloom threshold so they never flare.
+    for (const [dir, rad, k] of [[[-0.34, 0.3, 0.89], 0.0021, 1.25], [[0.3, -0.26, 0.92], 0.0009, 1.05]]) {
+      const cl = new THREE.Vector3(...dir).normalize().multiplyScalar(R * 1.068);
+      const o = toModel([c[0] + cl.x, c[1] + cl.y, c[2] + cl.z]);
+      const n = cl.clone().normalize();
+      addBlob(b, {
+        c: o, r: [rad, rad * 1.1, rad * 0.4].map((v) => v * ctx.scale), n: [2, 2],
+        cols: 6, rows: 3, region: REGION.FIXED, tint: [k, k, k * 0.97], mat: MAT.GLOSS, weight: () => [[`eye${S}`, 1]],
+        warp: (p) => {
+          // Lay the dot flat on the cornea: squash along the eye's surface normal
+          const dd = new THREE.Vector3(p[0] - o[0], p[1] - o[1], p[2] - o[2]);
+          dd.addScaledVector(n, -dd.dot(n) * 0.6);
+          return [o[0] + dd.x, o[1] + dd.y, o[2] + dd.z];
+        }
+      });
+    }
     buildLid(b, ctx, s, c, true);
     buildLid(b, ctx, s, c, false);
   }
@@ -617,33 +625,40 @@ function buildLid(b, ctx, s, c, upper) {
   const { toModel } = ctx;
   const S = s > 0 ? 'L' : 'R';
   const R = FACE.eyeR;
-  const rOut = R + (upper ? 0.0013 : 0.0009);
+  // The upper lid is a thick, soft fold with a dark lash line along its
+  // edge (it frames the eye from any distance); the lower lid is thinner
+  const rOut = R + (upper ? 0.0021 : 0.0011);
   const rIn = R + 0.0003;
-  const cols = 8;
-  const azMax = 1.3;
+  const cols = 10;
+  const azMax = 1.32;
   // Rows from the lid edge into the head: [elevation offset from edge, radius, tint key]
   const edgeE = upper ? LID_CLOSED_UP : LID_CLOSED_LO;
   const dir = upper ? 1 : -1;
-  const rowsDef = [
-    [0, rIn, 'lash'], [0.012, (rIn + rOut) / 2 + 0.0004, 'lash'], [0.05, rOut, 'rim'], [0.35, rOut, 'lid'],
-    [0.95, rOut, 'lid'], [1.75, rOut * 0.98, 'lid']
-  ];
+  const rowsDef = upper
+    ? [[0, rIn, 'lash'], [0.016, rOut + 0.0005, 'lash'], [0.085, rOut + 0.0003, 'liner'], [0.16, rOut, 'rim'], [0.38, rOut, 'lid'],
+      [0.95, rOut, 'lid'], [1.75, rOut * 0.98, 'lid']]
+    : [[0, rIn, 'lash'], [0.014, (rIn + rOut) / 2 + 0.0003, 'lash'], [0.06, rOut, 'rim'], [0.35, rOut, 'lid'],
+      [0.95, rOut, 'lid'], [1.75, rOut * 0.98, 'lid']];
   const skin = ctx.skinTintLid;
   const pts = [];
-  for (const [de, rr, key] of rowsDef) {
+  for (const [de, rr0, key] of rowsDef) {
     for (let j = 0; j < cols; j++) {
       const az = lerp(-azMax, azMax, j / (cols - 1));
-      // Almond: the edge sits a little lower towards the corners when open
-      const e = edgeE + dir * de;
+      const outer = sstep(0.2, 1.1, az * s);
+      // Almond: the upper edge dips towards the corners, the lower one rises
+      const e = edgeE + dir * de - dir * (upper ? 0.085 : 0.06) * az * az;
+      // The lash line thickens and flicks out a little at the outer corner
+      const rr = rr0 + (upper && key !== 'lid' ? 0.0007 * outer : 0);
       const lp = [Math.sin(az) * Math.cos(e) * rr, Math.sin(e) * rr, Math.cos(az) * Math.cos(e) * rr];
       let tint = skin;
-      if (key === 'lash') tint = upper ? [0.07, 0.05, 0.045] : [skin[0] * 0.75, skin[1] * 0.6, skin[2] * 0.58];
-      else if (key === 'rim') tint = [skin[0] * 0.92, skin[1] * 0.82, skin[2] * 0.8];
+      if (key === 'lash') tint = upper ? [0.045, 0.032, 0.03] : [skin[0] * 0.8, skin[1] * 0.64, skin[2] * 0.62];
+      else if (key === 'liner') tint = [0.075 + 0.03 * (1 - outer), 0.055 + 0.02 * (1 - outer), 0.05 + 0.018 * (1 - outer)];
+      else if (key === 'rim') tint = [skin[0] * 0.9, skin[1] * 0.8, skin[2] * 0.78];
       const fade = upper ? 1 - 0.1 * gauss(de - 0.3, 0.2) : 1;
       pts.push({
         p: toModel([c[0] + lp[0], c[1] + lp[1], c[2] + lp[2]]),
-        region: key === 'lash' && upper ? REGION.FIXED : REGION.SKIN,
-        tint: key === 'lash' && upper ? tint : tint.map((v) => v * fade),
+        region: (key === 'lash' || key === 'liner') && upper ? REGION.FIXED : REGION.SKIN,
+        tint: (key === 'lash' || key === 'liner') && upper ? tint : tint.map((v) => v * fade),
         mat: MAT.SKIN
       });
     }
@@ -678,7 +693,7 @@ export function buildBrows(b, ctx) {
     const rad = [];
     for (let i = 0; i < n; i++) {
       const u = i / (n - 1);
-      const x = s * lerp(0.0125, 0.056, u);
+      const x = s * lerp(FACE.eyeX - 0.021, FACE.eyeX + 0.0235, u);
       const y = FACE.browY - 0.004 + 0.009 * Math.sin(Math.min(1, u * 1.25) * Math.PI * 0.62) - 0.008 * u * u + look.browArch * Math.sin(u * Math.PI) * 0.004;
       const z = field.faceZ(x, y);
       field.normal(x, y, z, nrm);
@@ -1169,8 +1184,10 @@ export function buildGlasses(b, ctx, kind, opts = {}) {
   zFront = Math.max(zFront + 0.006, zEye + 0.011);
   const cy = FACE.eyeY + (sun ? 0.002 : 0.001);
   const round = kind === 'round';
-  const hw = round ? 0.0185 : sun ? 0.0255 : 0.0245;
-  const hh = round ? 0.0185 : sun ? 0.0175 : 0.0165;
+  // Frames grow with the eyes they frame
+  const ek = Math.sqrt(FACE.eyeR / 0.0146);
+  const hw = (round ? 0.0185 : sun ? 0.0255 : 0.0245) * ek;
+  const hh = (round ? 0.0185 : sun ? 0.0175 : 0.0165) * ek;
   const rr = round ? 0.0016 : sun ? 0.0027 : 0.0019;
   const n = high ? 16 : 7;
   const w = () => [['head', 1]];
@@ -1189,7 +1206,7 @@ export function buildGlasses(b, ctx, kind, opts = {}) {
     return [X, Y, zFront - Math.abs(X) * 0.12];
   };
   const rim = (s) => {
-    const cx = s * (round ? 0.0322 : 0.0328);
+    const cx = s * (FACE.eyeX + (round ? 0 : 0.0006));
     const path = [];
     for (let i = 0; i < n; i++) path.push(new THREE.Vector3(...toModel(rimPt(cx, (i / n) * Math.PI * 2))));
     const thick = sun ? (u) => rr * (1 + 0.45 * Math.max(0, Math.sin(u * Math.PI * 2))) : rr;
