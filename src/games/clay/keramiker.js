@@ -285,7 +285,8 @@ export function createKeramiker({
     door: 0,
     doorGrip: false,
     doorAnchor: null,
-    thumbGrip: false,
+    gripR: null,
+    gripL: null,
     backing: false,
     chin: 0,
     expr: '',
@@ -680,11 +681,22 @@ export function createKeramiker({
     locomotion(dt);
     pose(dt, t);
     hands(dt, t, ctx);
-    // The thumbs-up: the shared hand library's own shape, eased in and out
-    const wantThumb = w.thumb > 0.35 && !st.doorGrip;
-    if (wantThumb !== st.thumbGrip) {
-      st.thumbGrip = wantThumb;
-      person.setGrip('R', wantThumb ? 'thumbsUp' : null, { blend: 0.22 });
+    // His right hand's shape from the shared hand library (people.js setGrip),
+    // eased in and out: a real thumbs-up, a pointing index, a fist under the
+    // chin or in the air; otherwise the pose's own relaxed fingers
+    let gripR = null;
+    if (w.thumb > 0.35) gripR = 'thumbsUp';
+    else if (w.point > 0.35) gripR = 'point';
+    else if (st.chin > 0.4 || w.armUp > 0.35 || w.cheer > 0.35) gripR = 'fist';
+    if (gripR !== st.gripR) {
+      st.gripR = gripR;
+      person.setGrip('R', gripR, { blend: 0.2 });
+    }
+    // ...and the left, when it is not on the kiln door
+    const gripL = st.doorGrip ? 'door' : w.cheer > 0.35 ? 'fist' : null;
+    if (gripL !== st.gripL) {
+      st.gripL = gripL;
+      if (gripL !== 'door') person.setGrip('L', gripL, { blend: 0.2 });
     }
     // Nods, shakes and tilts on top (people.update keeps them and adds look-at)
     if (plan.nod) bones.head.rotation.x += plan.nod;

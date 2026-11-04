@@ -120,7 +120,7 @@ const BLADE_R = 0.098;
 /* The shared hold('racket') grip is still being tuned tonight (it closed
    two fingers along the backhand); until it lands, the bat sits in our own
    shakehand frame above, with the pose's grip/point fingers. */
-const USE_SHARED_GRIP = false;
+const USE_SHARED_GRIP = true;
 
 /* The open, flat palm the rules ask for: palm (hand −X) up, the fingers
    forward and a little in, the thumb out to the side */
@@ -167,7 +167,7 @@ export class Foe {
       // the blade, +Z the red rubber); it is nudged so the blade sits where
       // the grip expects a blade of this radius, and toward the palm by the
       // half of the blade's thickness the grip's thinner one lacks.
-      p.hold(paddle, 'R', 'racket', {
+      p.hold(paddle, 'R', 'racket', window.__foeGrip || {
         handle: [0.034, 0.0245], blade: BLADE_R, blend: 0,
         offset: { position: [0, 0.05 + BLADE_R * 0.92 - BLADE_Y, 0.0035] }
       });

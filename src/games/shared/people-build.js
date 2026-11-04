@@ -1516,5 +1516,20 @@ export function buildTorsoExtras(b, ctx, sweepFn) {
         return [['hips', 1 - k], ['thighL', k * l], ['thighR', k * (1 - l)]];
       }
     });
+    if (high) {
+      // A wide patch pocket across the front of the skirt, a shade darker, with a centre seam
+      const py = 0.775;
+      const pz = front + 0.004 - 0.012 * sstep(0.92, 0.5, py) + 0.0068;
+      blob(b, {
+        c: [0, py, pz], r: [0.105, 0.048, 0.0035], n: [5, 5], cols: 10, rows: 4, region: REGION.ACCENT,
+        tint: (p) => mulTint([0.86, 0.86, 0.86], Math.abs(p[0]) < 0.003 ? 0.82 : p[1] > py + 0.04 ? 0.92 : 1), mat: MAT.CLOTH,
+        warp: (p) => [p[0], p[1], p[2] - (p[0] / 0.185) ** 2 * 0.045],
+        weight: (p) => {
+          const k = sstep(0.93, 0.68, p[1]);
+          const l = sstep(-0.07, 0.07, p[0]);
+          return [['hips', 1 - k], ['thighL', k * l], ['thighR', k * (1 - l)]];
+        }
+      });
+    }
   }
 }
