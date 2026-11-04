@@ -161,9 +161,10 @@
 import * as THREE from 'three';
 import {
   BONE_DEFS, A_POSE, POSES, applyPose, solveTwoBone, emptyPose, mixPoses, mirrorPose, SEAT_HEIGHT, SEAT_BACK, WALK_STRIDE,
+  WALK_STRIDES, BODY_BONES,
   HEAD_C, HEAD_SCALE, FACE
 } from './people-rig.js';
-import { REGION, MAT, noise3, rng } from './people-build.js';
+import { REGION, MAT, noise3, rng, sstep } from './people-build.js';
 import { LID_CLOSED_UP, LID_CLOSED_LO, HAIR_STYLE_NAMES } from './people-head.js';
 import { appearanceFor, resolveLook, PARTICIPANT_NAMES, SKIN_TONES, HAIR_COLORS, EYE_COLORS } from './people-look.js';
 import { buildPersonData, toBindPose, toGeometry, makeSkeleton } from './people-assemble.js';
@@ -173,7 +174,7 @@ import {
 } from './people-hands.js';
 
 export {
-  POSES, mixPoses, mirrorPose, emptyPose, SEAT_HEIGHT, SEAT_BACK, WALK_STRIDE, BONE_DEFS, A_POSE,
+  POSES, mixPoses, mirrorPose, emptyPose, SEAT_HEIGHT, SEAT_BACK, WALK_STRIDE, WALK_STRIDES, BONE_DEFS, A_POSE,
   appearanceFor, PARTICIPANT_NAMES, SKIN_TONES, HAIR_COLORS, EYE_COLORS, HAIR_STYLE_NAMES, createCrowd,
   GRIP_NAMES, HAND_BONES
 };
@@ -364,7 +365,19 @@ export function createPerson(specIn = {}) {
     talk: 0,
     talkV: 0,
     breathRate: 0.22 + r() * 0.06,
-    breathPhase: r() * 6.28
+    breathPhase: r() * 6.28,
+    // Eye → head → chest look-at: springs for the head and chest shares
+    headYaw: 0, headYawV: 0, headPitch: 0, headPitchV: 0, chestYaw: 0, chestYawV: 0, chestPitch: 0, chestPitchV: 0,
+    gazeBlinkT: 0, microT: 0, micro: [0, 0],
+    // Secondary motion: the upper body lags the root's acceleration
+    rootPrev: null, rootVel: new THREE.Vector3(), rootAcc: new THREE.Vector3(), rootYaw: 0, rootYawV: 0,
+    secX: 0, secXV: 0, secZ: 0, secZV: 0, secY: 0, secYV: 0,
+    // A little life of one's own (desynchronises groups on the same pose)
+    alive: [r() * 6.28, r() * 6.28, r() * 6.28, 0.8 + r() * 0.5],
+    // Talking rhythm
+    talkSeed: Math.floor(r() * 1e6), talkPhase: 0, talkNod: 0,
+    // blendTo
+    blendPose: null, blendT: 0, blendDur: 0, blendFrom: null, blendHips: new THREE.Vector3()
   };
   for (const n of Object.keys(EXPRESSIONS)) state.expr[n] = n === 'neutral' ? 1 : 0;
   const attached = new Set();
@@ -444,11 +457,37 @@ export function createPerson(specIn = {}) {
       if (blend < 1) {
         for (const L of layered) if (L.bone.quaternion.equals(L.written)) L.bone.quaternion.copy(L.base);
       }
+      state.blendPose = null;
       applyPose(bones, pose, blend, restPos, s, NO_HANDS);
       writeHand(hands.L, pose, blend);
       writeHand(hands.R, pose, blend);
       lastPose = pose;
       posedSinceUpdate = true;
+    },
+
+    /**
+     * Ease from the current posture into `pose` over `seconds` (smoothstep),
+     * driven by update() — no setPose calls needed meanwhile. `pose` may be
+     * a pose object or a function (t) → pose (e.g. (t) => POSES.idle(t, o, seed)),
+     * which keeps animating after the blend. The next setPose() takes over.
+     */
+    blendTo(pose, seconds = 0.4) {
+      if (!state.blendFrom) state.blendFrom = BODY_BONES.map(() => new THREE.Quaternion());
+      BODY_BONES.forEach((n, i) => state.blendFrom[i].copy(bones[n].quaternion));
+      // Start from the base pose, not from last frame's look-at/breathing layers
+      for (const L of layered) {
+        if (L.bone.quaternion.equals(L.written)) state.blendFrom[BODY_BONES.indexOf(L.bone.name)]?.copy(L.base);
+      }
+      state.blendHips.copy(bones.hips.position);
+      state.blendPose = pose;
+      state.blendT = 0;
+      state.blendDur = Math.max(1e-3, seconds);
+      for (const S of ['L', 'R']) if (!hands[S].solved) startHandBlend(hands[S], seconds);
+    },
+
+    /** True while blendTo is still easing. */
+    get blending() {
+      return !!state.blendPose && state.blendT < state.blendDur;
     },
 
     /**
@@ -606,45 +645,136 @@ export function createPerson(specIn = {}) {
       state.t = t ?? state.t + d;
       const k = (rate) => 1 - Math.exp(-rate * d);
 
+      /* blendTo: ease into the target pose (only when the game did not pose this frame) */
+      if (state.blendPose && !posedSinceUpdate) {
+        const pose = typeof state.blendPose === 'function' ? state.blendPose(state.t) : state.blendPose;
+        state.blendT += d;
+        const e = easeInOut(Math.min(1, state.blendT / state.blendDur));
+        applyPose(bones, pose, 1, restPos, s, NO_HANDS);
+        if (e < 1) {
+          BODY_BONES.forEach((n, i) => bones[n].quaternion.slerpQuaternions(state.blendFrom[i], bones[n].quaternion, e));
+          bones.hips.position.lerpVectors(state.blendHips, bones.hips.position, e);
+        }
+        writeHand(hands.L, pose, 1);
+        writeHand(hands.R, pose, 1);
+        lastPose = pose;
+        if (e >= 1 && typeof state.blendPose !== 'function') state.blendPose = null;
+      }
+
       /* Layered body motion: restore last frame's base unless the game re-posed */
       for (const L of layered) {
         if (L.bone.quaternion.equals(L.written)) L.bone.quaternion.copy(L.base);
         else L.base.copy(L.bone.quaternion);
       }
       const br = Math.sin(state.t * Math.PI * 2 * state.breathRate + state.breathPhase);
-      const breathe = (bone, x, z) => {
-        tmpQ.setFromEuler(tmpE.set(x, 0, z));
+      const breathe = (bone, x, z, y = 0) => {
+        tmpQ.setFromEuler(tmpE.set(x, y, z));
         bone.quaternion.multiply(tmpQ);
       };
       breathe(bones.spine, -0.006 * br, 0);
       breathe(bones.chest, -0.012 * br, 0);
       breathe(bones.shoulderL, 0, 0.012 * br);
       breathe(bones.shoulderR, 0, -0.012 * br);
+      // A little personal sway, so people on the same pose never move in unison
+      const al = state.alive;
+      const at = state.t * al[3];
+      breathe(bones.spine, 0, 0.007 * Math.sin(at * 0.53 + al[0]), 0.006 * Math.sin(at * 0.31 + al[1]));
+      breathe(bones.neck, 0.005 * Math.sin(at * 0.71 + al[2]), 0.004 * Math.sin(at * 0.43 + al[0]));
 
-      /* Look-at: neck 40 %, head 60 %, eased */
+      /* Secondary motion: the chest and head lag the root's acceleration, then settle */
+      if (d > 1e-4) {
+        root.getWorldPosition(tmpV);
+        root.getWorldQuaternion(tmpQ2);
+        const yawNow = Math.atan2(2 * (tmpQ2.w * tmpQ2.y + tmpQ2.x * tmpQ2.z), 1 - 2 * (tmpQ2.y * tmpQ2.y + tmpQ2.x * tmpQ2.x));
+        if (!state.rootPrev || state.rootPrev.distanceTo(tmpV) > 1.5) {
+          state.rootPrev = (state.rootPrev || new THREE.Vector3()).copy(tmpV);
+          state.rootVel.set(0, 0, 0);
+          state.rootAcc.set(0, 0, 0);
+          state.rootYaw = yawNow;
+          state.rootYawV = 0;
+        }
+        tmpV2.subVectors(tmpV, state.rootPrev).divideScalar(d);
+        state.rootPrev.copy(tmpV);
+        const acc = tmpV2.clone().sub(state.rootVel).divideScalar(d);
+        state.rootVel.copy(tmpV2);
+        state.rootAcc.lerp(acc.clampLength(0, 30), k(14));
+        let dy = yawNow - state.rootYaw;
+        dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+        state.rootYaw = yawNow;
+        const yawV = THREE.MathUtils.clamp(dy / d, -8, 8);
+        const yawA = (yawV - state.rootYawV) / d;
+        state.rootYawV = yawV;
+        // Into the person's frame: +z forward, +x their left
+        const la = acc.copy(state.rootAcc).applyQuaternion(tmpQ2.invert());
+        const spring = (x, v, target, w0, z) => {
+          const a = w0 * w0 * (target - x) - 2 * z * w0 * v;
+          const nv = v + a * d;
+          return [x + nv * d, nv];
+        };
+        const tx = THREE.MathUtils.clamp(-la.z * 0.011, -0.09, 0.09);
+        const tz = THREE.MathUtils.clamp(la.x * 0.009, -0.07, 0.07);
+        const ty = THREE.MathUtils.clamp(-yawA * 0.0035, -0.12, 0.12);
+        [state.secX, state.secXV] = spring(state.secX, state.secXV, tx, 9, 0.55);
+        [state.secZ, state.secZV] = spring(state.secZ, state.secZV, tz, 9, 0.55);
+        [state.secY, state.secYV] = spring(state.secY, state.secYV, ty, 8, 0.6);
+        if (Math.abs(state.secX) + Math.abs(state.secZ) + Math.abs(state.secY) > 1e-5) {
+          breathe(bones.chest, state.secX, state.secZ, state.secY * 0.5);
+          breathe(bones.head, -state.secX * 0.4 + state.secXV * 0.004, -state.secZ * 0.4, state.secY);
+        }
+      }
+
+      /* Look-at: the eyes lead, the head follows on a spring, the chest helps on big turns */
       state.lookW += (state.lookWTarget - state.lookW) * k(4);
+      let yawT = 0;
+      let pitchT = 0;
       if (state.look && state.lookW > 1e-3) {
         bones.chest.updateWorldMatrix(true, false);
-        bones.head.getWorldPosition(tmpV);
         tmpV.set(0, 0.11 * s, 0.05 * s).applyMatrix4(bones.head.matrixWorld);
         tmpV2.copy(state.look).sub(tmpV);
         bones.chest.getWorldQuaternion(tmpQ2);
         tmpV2.applyQuaternion(tmpQ2.invert());
-        const yaw = THREE.MathUtils.clamp(Math.atan2(tmpV2.x, Math.max(1e-4, tmpV2.z) + Math.max(0, -tmpV2.z) * 0.2), -1.25, 1.25);
-        const pitch = THREE.MathUtils.clamp(-Math.atan2(tmpV2.y, Math.hypot(tmpV2.x, tmpV2.z)), -0.6, 0.75);
-        state.lookYaw += (yaw - state.lookYaw) * k(7);
-        state.lookPitch += (pitch - state.lookPitch) * k(7);
-      } else {
-        state.lookYaw += (0 - state.lookYaw) * k(3);
-        state.lookPitch += (0 - state.lookPitch) * k(3);
+        yawT = THREE.MathUtils.clamp(Math.atan2(tmpV2.x, Math.max(1e-4, tmpV2.z) + Math.max(0, -tmpV2.z) * 0.2), -1.6, 1.6);
+        pitchT = THREE.MathUtils.clamp(-Math.atan2(tmpV2.y, Math.hypot(tmpV2.x, tmpV2.z)), -0.6, 0.75);
       }
       const w = state.lookW;
-      if (Math.abs(state.lookYaw * w) + Math.abs(state.lookPitch * w) > 1e-5) {
-        tmpQ.setFromEuler(tmpE.set(state.lookPitch * w * 0.4, state.lookYaw * w * 0.4, 0, 'YXZ'));
+      // The chest takes a share of big turns, the head the rest
+      const chestYawT = THREE.MathUtils.clamp(Math.sign(yawT) * Math.max(0, Math.abs(yawT) - 0.55) * 0.55, -0.4, 0.4);
+      const chestPitchT = pitchT * 0.12;
+      const crit = (x, v, target, w0) => {
+        // Critically damped spring, exact step
+        const y = x - target;
+        const e = Math.exp(-w0 * d);
+        const tmp = (v + w0 * y) * d;
+        return [target + (y + tmp) * e, (v - w0 * tmp) * e];
+      };
+      const prevHead = state.headYaw;
+      const headTarget = yawT - chestYawT;
+      if (Math.abs(headTarget - prevHead) > 0.6 && state.gazeBlinkT <= 0 && w > 0.5) {
+        // Big gaze shifts come with a blink
+        person.blink();
+        state.gazeBlinkT = 1.2;
+      }
+      state.gazeBlinkT -= d;
+      [state.headYaw, state.headYawV] = crit(state.headYaw, state.headYawV, headTarget, 7.5);
+      [state.headPitch, state.headPitchV] = crit(state.headPitch, state.headPitchV, pitchT - chestPitchT, 7.5);
+      [state.chestYaw, state.chestYawV] = crit(state.chestYaw, state.chestYawV, chestYawT, 4.5);
+      [state.chestPitch, state.chestPitchV] = crit(state.chestPitch, state.chestPitchV, chestPitchT, 4.5);
+      state.lookYaw = state.headYaw + state.chestYaw;
+      state.lookPitch = state.headPitch + state.chestPitch;
+      if (Math.abs(state.chestYaw * w) + Math.abs(state.chestPitch * w) > 1e-5) {
+        tmpQ.setFromEuler(tmpE.set(state.chestPitch * w * 0.6, state.chestYaw * w * 0.65, 0, 'YXZ'));
+        bones.chest.quaternion.premultiply(tmpQ);
+        tmpQ.setFromEuler(tmpE.set(state.chestPitch * w * 0.4, state.chestYaw * w * 0.35, 0, 'YXZ'));
+        bones.spine.quaternion.premultiply(tmpQ);
+      }
+      if (Math.abs(state.headYaw * w) + Math.abs(state.headPitch * w) > 1e-5) {
+        tmpQ.setFromEuler(tmpE.set(state.headPitch * w * 0.4, state.headYaw * w * 0.4, 0, 'YXZ'));
         bones.neck.quaternion.premultiply(tmpQ);
-        tmpQ.setFromEuler(tmpE.set(state.lookPitch * w * 0.6, state.lookYaw * w * 0.6, 0, 'YXZ'));
+        tmpQ.setFromEuler(tmpE.set(state.headPitch * w * 0.6, state.headYaw * w * 0.6, 0, 'YXZ'));
         bones.head.quaternion.premultiply(tmpQ);
       }
+      // Talking: the head nods on stressed syllables
+      if (state.talkNod > 1e-4) breathe(bones.head, state.talkNod * 0.035, 0);
       for (const L of layered) L.written.copy(L.bone.quaternion);
       // Hands: advance grip transitions (and write them if nobody posed this frame)
       for (const S of ['L', 'R']) {
@@ -684,12 +814,30 @@ export function createPerson(specIn = {}) {
         f.lidUp += (e.lidUp || 0) * wv;
         f.lidLo += (e.lidLo || 0) * wv;
       }
-      // Talking: a loose, irregular jaw
+      // Talking: phrases and pauses, syllables of varying rate and size,
+      // wide and round vowels, a brow lift and a nod on the stressed ones
       state.talkV += (state.talk - state.talkV) * k(8);
+      state.talkNod *= 1 - k(6);
       if (state.talkV > 1e-3) {
-        const n1 = Math.max(0, noise3(state.t * 7.5, 1.3, 0.7) * 0.5 + 0.5);
-        f.jaw += state.talkV * (0.04 + 0.14 * n1 * n1);
-        f.mouth[0] -= state.talkV * 0.001 * n1;
+        const ts = state.t;
+        const sd = state.talkSeed % 977;
+        const phrase = sstep(-0.45, -0.2, noise3(ts * 0.42, sd, 0.3));
+        const rate = 4.1 + 1.3 * noise3(ts * 0.6, sd, 2.1);
+        state.talkPhase += d * rate * Math.PI * 2;
+        const syl = Math.floor(state.talkPhase / (Math.PI * 2));
+        const hs = ((Math.imul(syl + sd * 131, 2654435761) >>> 0) % 1000) / 1000;
+        const amp = 0.35 + 0.65 * hs;
+        const open = Math.pow(Math.max(0, Math.sin(state.talkPhase)), 1.4);
+        const kTalk = state.talkV * phrase;
+        f.jaw += kTalk * (0.025 + 0.15 * amp * open);
+        const vowel = noise3(ts * 2.3, sd, 4.4);
+        f.mouth[0] += kTalk * 0.0018 * vowel - kTalk * 0.0008 * open;
+        f.mouth[2] += kTalk * 0.0012 * Math.max(0, -vowel);
+        f.lip += kTalk * 0.0009 * open;
+        if (hs > 0.82 && open > 0.6) {
+          f.brow[0] += kTalk * 0.0016 * open;
+          state.talkNod = Math.max(state.talkNod, kTalk * 0.6 * open);
+        }
       }
       const setFace = (name, dx, dy, dz) => {
         const rp = restPos[name];
@@ -711,11 +859,14 @@ export function createPerson(specIn = {}) {
 
       /* Eyes: look target (or ahead) plus saccades */
       state.saccT += d;
+      const fixating = state.look && state.lookW > 0.5;
       if (state.saccT > state.nextSacc) {
+        // Free gaze wanders; a fixation only trembles (micro-saccades)
         state.saccT = 0;
-        state.nextSacc = 0.35 + r() * 2.2;
-        state.sacc[0] = (r() - 0.5) * 0.16;
-        state.sacc[1] = (r() - 0.5) * 0.09;
+        state.nextSacc = fixating ? 0.25 + r() * 0.6 : 0.35 + r() * 2.2;
+        const amp = fixating ? 0.18 : 1;
+        state.sacc[0] = (r() - 0.5) * 0.16 * amp;
+        state.sacc[1] = (r() - 0.5) * 0.09 * amp;
       }
       let ey = 0;
       let ep = 0;

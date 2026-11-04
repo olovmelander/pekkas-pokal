@@ -502,6 +502,11 @@ export function buildTorso(b, ctx) {
     d -= 0.004 * gauss(y - 1.2, 0.17) * gauss(th - Math.PI, 0.18);
     d -= 0.006 * gauss(y - 0.84, 0.05) * gauss(th - Math.PI, 0.12);
     d -= 0.003 * gauss(y - 1.04, 0.06) * gauss(Math.abs(s) - 1, 0.35);
+    // Neck: the two neck muscles running down to the collarbones, and the
+    // trapezius sloping off the back of the neck into the shoulders
+    d += 0.0026 * gauss(y - 1.535, 0.035) * gauss(Math.abs(th > Math.PI ? th - 2 * Math.PI : th) - 0.75, 0.32);
+    d += 0.0016 * gauss(y - 1.548, 0.012) * gauss(th > Math.PI ? th - 2 * Math.PI : th, 0.2);
+    d += 0.004 * gauss(y - 1.47, 0.03) * gauss(Math.abs(s) - 0.55, 0.25) * Math.max(0, -c);
     return d * k;
   };
   const offAt = (y) => {
@@ -575,6 +580,8 @@ function shadeTorso(tint, y, th, region, outfit) {
   ao *= 1 + 0.25 * sstep(0.85, 0.8, y);
   ao *= 1 - 0.12 * gauss(y - 1.47, 0.03);
   if (region === REGION.SKIN && y > 1.47) ao *= 1 - 0.1 * sstep(1.5, 1.58, y) * Math.max(0, Math.cos(th));
+  // Side seams on shirts and tops: a fine shadow line down each flank
+  if (region === REGION.TOP && y < 1.36) ao *= 1 - 0.07 * gauss(side - 1, 0.035);
   // Fabric character: linen is slubby, knits a touch heathered
   const fab = outfit.topDef.fabric || (outfit.topDef.rib || outfit.topDef.hemBand ? 'knit' : null);
   if (region === REGION.TOP && fab === 'linen') ao *= 1 + 0.045 * noise3(y * 38, th * 5, 1.7) + 0.02 * noise3(y * 140, th * 22, 3.1);

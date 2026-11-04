@@ -346,7 +346,7 @@ export class Fencer {
     this.hb = new THREE.Vector3();
     // Scratch vectors for the per-frame solve (no garbage every frame)
     this.pool = Array.from({ length: 48 }, () => new THREE.Vector3());
-    this.qpool = Array.from({ length: 4 }, () => new THREE.Quaternion());
+    this.qpool = Array.from({ length: 8 }, () => new THREE.Quaternion());
     this.pi = 0;
     this.qi = 0;
 
@@ -371,6 +371,7 @@ export class Fencer {
     this.button = foil.button;
     // Foil space → fist space: +x along the blade, +y the way it bows
     this.foilQ = frameQuat(new THREE.Vector3(1, 0, 0), BLADE_L, new THREE.Vector3(0, 1, 0), BOW_L, new THREE.Quaternion());
+    this.foilBaseQ = new THREE.Quaternion();
     this.foilHolder = new THREE.Group();
     this.foilHolder.add(this.foil);
     this.bladeL = new THREE.Vector3().copy(BLADE_L);
@@ -433,7 +434,8 @@ export class Fencer {
     const H = this.hand;
     if (typeof p.hold === 'function') {
       // Grip frame: +Y pommel → blade, +Z the flat under the thumb (the way the blade bows)
-      this.foil.quaternion.setFromRotationMatrix(_m.makeBasis(_v.set(0, 1, 0), _v2.set(0, 0, 1), _v3.set(1, 0, 0)));
+      this.foilBaseQ.setFromRotationMatrix(_m.makeBasis(_v.set(0, 1, 0), _v2.set(0, 0, 1), _v3.set(1, 0, 0)));
+      this.foil.quaternion.copy(this.foilBaseQ);
       this.foil.position.set(0, GRIP_OFF, 0);
       this.foilHolder.position.set(0, 0, 0);
       p.hold(this.foilHolder, H, 'foil', { handle: [0.016, 0.012], blend: 0 });
@@ -442,6 +444,7 @@ export class Fencer {
       this.bladeL.set(0, 1, 0).applyQuaternion(anchor.quaternion).normalize();
       this.gripOff = GRIP_OFF;
     } else {
+      this.foilBaseQ.copy(this.foilQ);
       this.foil.quaternion.copy(this.foilQ);
       this.foil.position.set(0, 0, 0);
       p.attach(this.foilHolder, `grip${H}`);
@@ -706,6 +709,29 @@ export class Fencer {
     const elbow = b[`forearm${this.hand}`].getWorldPosition(this.V());
     const hand = b[`hand${this.hand}`].getWorldPosition(this.V());
     solve(elbow.sub(hand));
+    this._rollBow(q);
+  }
+
+  /**
+   * Turn the foil about its own blade so the bend always bows upwards in
+   * the blade's vertical plane, whatever the wrist's roll: a round blade
+   * shows no difference, and the point lands exactly where the Animator's
+   * contact() aimed it.
+   */
+  _rollBow(handQ) {
+    const base = this.foilBaseQ;
+    const hq = this.Q().copy(handQ).multiply(this.sock.quaternion);
+    const bladeH = this.V().set(1, 0, 0).applyQuaternion(base);
+    const bowH = this.V().set(0, 1, 0).applyQuaternion(base);
+    const bladeW = this.V().copy(bladeH).applyQuaternion(hq);
+    const want = this.V().set(0, 1, 0).addScaledVector(bladeW, -bladeW.y);
+    if (want.lengthSq() < 1e-6) {
+      this.foil.quaternion.copy(base);
+      return;
+    }
+    want.normalize().applyQuaternion(this.Q().copy(hq).invert());
+    const ang = Math.atan2(this.V().crossVectors(bowH, want).dot(bladeH), bowH.dot(want));
+    this.foil.quaternion.setFromAxisAngle(bladeH, ang).multiply(base);
   }
 
   /** Rear hand IK from fencer-frame finger/palm directions. */

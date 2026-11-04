@@ -296,8 +296,10 @@ function palmPen(palm, ch, k, r) {
  * Curl one finger until each segment rests on the object (or the palm).
  * spec: { start: [spread, f1, f2, f3], rate: [r1, r2, r3], max: [m1, m2, m3] }
  */
-function curlFinger(name, spec, shapes, palm, palmQ, hs, margin) {
+function curlFinger(name, spec, allShapes, palm, palmQ, hs, margin) {
   const D = DIGITS[name];
+  // spec.only: indices of the shapes this finger touches (e.g. the handle, not the blade)
+  const shapes = spec.only ? spec.only.map((i) => allShapes[i]).filter(Boolean) : allShapes;
   const a = spec.start.slice();
   const rate = spec.rate || [1, 1.15, 0.8];
   const max = spec.max || [1.6, 1.85, 1.35];
@@ -527,10 +529,11 @@ export const GRIPS = {
         { type: 'cyl', pos: [0, 0.05 + br * 0.92, 0], rot: [Math.PI / 2, 0, 0], r: br, h: 0.0035 }
       ],
       fingers: {
+        // Only the index lies along the back of the blade; the other three wrap the handle
         index: { start: [-0.16, 0.42, 0.18, 0.06], rate: [0.6, 0.35, 0.2], max: [0.9, 0.5, 0.3] },
-        middle: { start: [0.0, 0.5, 0.5, 0.25] },
-        ring: { start: [0.05, 0.5, 0.5, 0.25] },
-        pinky: { start: [0.12, 0.5, 0.5, 0.25] }
+        middle: { start: [0.02, 0.6, 0.7, 0.35], only: [0] },
+        ring: { start: [0.06, 0.6, 0.7, 0.35], only: [0] },
+        pinky: { start: [0.13, 0.6, 0.7, 0.35], only: [0] }
       },
       thumb: { guess: [0.0, 0.2, 0.5, 0.1, 0.05], target: [0, 0.052, ht + 0.0035 + 0.0085] },
       palm: 0.1
@@ -555,10 +558,11 @@ export const GRIPS = {
         { type: 'cyl', pos: [0, 0.068, 0], r: 0.032, h: 0.01 }
       ],
       fingers: {
-        index: { start: [-0.08, 0.3, 0.5, 0.25], rate: [0.7, 1.2, 0.8] },
-        middle: { start: [0.0, 0.5, 0.75, 0.4] },
-        ring: { start: [0.05, 0.6, 0.8, 0.4] },
-        pinky: { start: [0.12, 0.7, 0.9, 0.45] }
+        // Index and thumb manipulate near the guard; the other three are loose "aids"
+        index: { start: [-0.08, 0.3, 0.5, 0.25], rate: [0.7, 1.2, 0.8], only: [0] },
+        middle: { start: [0.0, 0.55, 0.75, 0.4], only: [0], rate: [1, 0.9, 0.6] },
+        ring: { start: [0.05, 0.6, 0.8, 0.4], only: [0], rate: [1, 0.9, 0.6] },
+        pinky: { start: [0.12, 0.7, 0.9, 0.45], only: [0], rate: [1, 0.9, 0.6] }
       },
       thumb: { guess: [0.0, 0.1, 0.35, 0.1, 0.05], target: [0, 0.03, ht + 0.0105] },
       palm: 0.08
@@ -597,8 +601,9 @@ export const GRIPS = {
         { type: 'cyl', pos: [0, 0, 0.012 + loop + 0.04], r: 0.04, h: 0.05 }
       ],
       fingers: {
-        index: { start: [-0.04, 0.4, 0.5, 0.3] },
-        middle: { start: [0.0, 0.45, 0.6, 0.3] },
+        // Index and middle hook through the loop; ring and little finger curl against the mug
+        index: { start: [-0.04, 0.35, 0.6, 0.3], rate: [0.5, 1.2, 0.8], only: [0] },
+        middle: { start: [0.0, 0.4, 0.7, 0.3], rate: [0.5, 1.2, 0.8], only: [0] },
         ring: { start: [0.06, 0.8, 1.1, 0.6] },
         pinky: { start: [0.14, 0.9, 1.2, 0.6] }
       },

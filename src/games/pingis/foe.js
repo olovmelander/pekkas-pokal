@@ -120,7 +120,6 @@ const BLADE_R = 0.098;
 /* The shared hold('racket') grip (people.js); the frame above and the
    pose's grip/point fingers are the fallback without it */
 const USE_SHARED_GRIP = true;
-const WRAP_PAIRS = [['middleR', 'ringR'], ['middleMidR', 'ringMidR'], ['middleTipR', 'ringTipR']];
 
 /* The open, flat palm the rules ask for: palm (hand −X) up, the fingers
    forward and a little in, the thumb out to the side */
@@ -167,11 +166,10 @@ export class Foe {
       // the blade, +Z the red rubber); it is nudged so the blade sits where
       // the grip expects a blade of this radius, and toward the palm by the
       // half of the blade's thickness the grip's thinner one lacks.
-      p.hold(paddle, 'R', 'racket', window.__foeGrip || {
+      p.hold(paddle, 'R', 'racket', {
         handle: [0.034, 0.0245], blade: BLADE_R, blend: 0,
         offset: { position: [0, 0.05 + BLADE_R * 0.92 - BLADE_Y, 0.0035] }
       });
-      this.wrapMiddle = !!(p.bones.middleR && p.bones.ringR);
       const anchor = p.sockets.holdR;
       this.paddleInHand = anchor.quaternion.clone().multiply(paddle.quaternion);
       this.bladeInHand = paddle.position.clone().applyQuaternion(anchor.quaternion).add(anchor.position);
@@ -350,12 +348,6 @@ export class Foe {
       this.reactPose(reacting, env, r.t, pose);
     }
     p.setPose(pose, jump ? 1 : 1 - Math.exp(-dt * 18));
-    if (this.wrapMiddle) {
-      // Only the index belongs on the backhand rubber: the shared racket
-      // grip leaves the middle finger lying there too (reported), so it
-      // takes the ring finger's wrap round the handle
-      for (const [m, r] of WRAP_PAIRS) bones[m].quaternion.copy(bones[r].quaternion);
-    }
 
     /* Feet: planted, and they step when the body has moved off them (the
        walk-on's feet are the walk cycle's own) */
@@ -390,7 +382,7 @@ export class Foe {
           look = at;
           lookW = 0.85;
         }
-      }
+      } else if (v.mode === 'play') this.balanceArm(v.stroke);
       p.lookAt(look, lookW);
     }
 
@@ -492,6 +484,29 @@ export class Foe {
       return blade;
     }
     return null;
+  }
+
+  /**
+   * The free arm balances the stroke: on a forehand it reaches out toward
+   * the ball on the backswing and pulls in to the hip as the bat comes
+   * through; on a backhand it stays out to the side, opening the chest.
+   */
+  balanceArm(stroke) {
+    const w = smoothstep(0.1, 0.45, stroke) * (1 - smoothstep(1.55, 1.95, stroke));
+    if (w <= 0.001) return;
+    const load = this.strokeLoad(stroke);
+    const fh = this.fhW;
+    const back = Math.max(0, -load);
+    const through = Math.max(0, load);
+    const x = 0.24 + fh * (back * 0.12 - through * 0.02) + (1 - fh) * 0.14;
+    const y = 1.06 + fh * back * 0.12 - through * 0.05;
+    const z = 0.3 + fh * (back * 0.16 - through * 0.2) - (1 - fh) * 0.06;
+    const p = this.person;
+    const { s } = this;
+    const hand = this._v.set(x * s, y * s, z * s).add(this.pos);
+    p.bones.handL.getWorldPosition(this._w);
+    this._w.lerp(hand, w * 0.85);
+    p.ikArm('L', this._w, null);
   }
 
   /** What the free hand is doing: a shape from the shared grip library, or null (the pose). */

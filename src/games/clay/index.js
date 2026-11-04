@@ -610,7 +610,7 @@ export async function createClay(container) {
         if (stars === 3) toast('Keramikern höjer ögonbrynen!', true);
         else if (stars === 2) toast('Nu liknar det något!');
         keramiker.cue('star', stars);
-        ghostFlash = 1;
+        ghostFlash = reduceMotion ? 0.3 : 1;
       }
       state.stars = stars;
     }

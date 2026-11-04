@@ -167,7 +167,11 @@ export function faceWeights(p, H, lip) {
     const dy = (y - my) * (y > my ? 0.8 : 1.15);
     const dz = (z - cz) * 0.8;
     const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
-    return 0.95 * (1 - sstep(0.003, 0.03, d)) * sstep(0.03, 0.06, z);
+    // From the lip line down the corners' pull ends sooner, so an open mouth
+    // drops round (an oval) rather than in a beak-like diamond. Both copies of
+    // the lip line get the same weights, so a closed mouth stays sealed.
+    const reach = y < my + 0.0008 || (lip !== undefined && y < my + 0.002) ? 0.021 : 0.03;
+    return 0.95 * (1 - sstep(0.003, reach, d)) * sstep(0.03, 0.06, z);
   };
   const mL = corner(1);
   const mR = corner(-1);
@@ -737,7 +741,7 @@ export function buildBrows(b, ctx) {
       field.normal(x, y, z, nrm);
       const off = 0.0004;
       path.push(new THREE.Vector3(...toModel([x + nrm[0] * off, y + nrm[1] * off, z + nrm[2] * off])));
-      rad.push(lerp(0.0026, 0.0014, u) * thick * (u < 0.12 ? 0.75 + u * 2 : 1));
+      rad.push(lerp(0.003, 0.0015, u) * thick * (u < 0.12 ? 0.75 + u * 2 : 1));
     }
     sweep(b, {
       path, radius: (u) => rad[Math.round(u * (n - 1))] * ctx.scale, cols: 5, region: REGION.HAIR, tint: look.browTint,
@@ -857,23 +861,23 @@ function slerpDir(a, b, t) {
 export const HAIR_STYLES = {
   bald: null,
   buzz: { h: 0.0022, side: 0.0019, ramp: 0.05, crown: [0, 0.9, -0.43], groove: 0.0002, buzz: true },
-  crop: { h: 0.0098, side: 0.0047, ramp: 0.13, crown: [0, 0.9, -0.43], groove: 0.0008, front: 0.0045 },
+  crop: { h: 0.0098, side: 0.0047, ramp: 0.13, crown: [0, 0.9, -0.43], groove: 0.0015, front: 0.0045 },
   tousled: { h: 0.0138, side: 0.0068, ramp: 0.08, crown: [0.1, 0.92, -0.38], groove: 0.0012, noise: 0.0035, fringe: 0.006, front: 0.003 },
-  sidePart: { h: 0.0152, side: 0.0066, ramp: 0.085, crown: [0.3, 0.9, -0.3], groove: 0.001, part: 34, front: 0.0068 },
+  sidePart: { h: 0.0152, side: 0.0066, ramp: 0.085, crown: [0.3, 0.9, -0.3], groove: 0.0018, part: 34, front: 0.0068 },
   sweptBack: { h: 0.0142, side: 0.0064, ramp: 0.06, crown: [0, 0.85, -0.52], groove: 0.0024, quiff: 0.0095, front: 0.0068 },
   curly: { h: 0.02, side: 0.0145, ramp: 0.07, crown: [0, 0.9, -0.43], groove: 0, curls: 0.0055, front: 0.004 },
   long: { h: 0.0105, side: 0.0115, ramp: 0.05, crown: [0, 0.82, -0.57], groove: 0.0012, long: true, front: 0.003, part: 0 },
   bun: { h: 0.0068, side: 0.0052, ramp: 0.05, crown: [0, 0.82, -0.57], groove: 0.0016, bun: true },
   balding: { h: 0.0048, side: 0.0045, ramp: 0.08, crown: [0, 0.9, -0.43], groove: 0.0006, balding: true },
   // Short, a little unruly on top
-  messy: { h: 0.0135, side: 0.005, ramp: 0.075, crown: [0.05, 0.92, -0.38], groove: 0.0013, noise: 0.0042, clumps: 0.0048, front: 0.0045, tufts: 3.2, jag: 3.4 },
+  messy: { h: 0.0135, side: 0.005, ramp: 0.075, crown: [0.05, 0.92, -0.38], groove: 0.002, noise: 0.0042, clumps: 0.0048, front: 0.0045, tufts: 3.2, jag: 3.4 },
   // Medium length, wavy, tucked behind the ears and over the collar at the back
   wavy: {
-    h: 0.0165, side: 0.0105, ramp: 0.06, crown: [0.12, 0.85, -0.5], groove: 0.0016, noise: 0.003, clumps: 0.004, front: 0.006,
+    h: 0.0165, side: 0.0105, ramp: 0.06, crown: [0.12, 0.85, -0.5], groove: 0.002, noise: 0.003, clumps: 0.004, front: 0.006,
     part: 24, waves: 0.0035, lower: 9, fringe: 0.0035
   },
   // A neat short cut with the temples receding
-  receding: { h: 0.0086, side: 0.0042, ramp: 0.11, crown: [0, 0.9, -0.43], groove: 0.0007, front: 0.0028, recede: 9 }
+  receding: { h: 0.0086, side: 0.0042, ramp: 0.11, crown: [0, 0.9, -0.43], groove: 0.0014, front: 0.0028, recede: 9 }
 };
 export const HAIR_STYLE_NAMES = Object.keys(HAIR_STYLES);
 
