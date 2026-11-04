@@ -1368,7 +1368,8 @@ export async function createShooting(container) {
   /**
    * The establishing shot: behind the gang, up and to the right — the whole
    * row on their fika chairs, Henrik and the trophy at the end, the
-   * station, the trap house, the barn and the low sun in one frame. On desktop the panel sits right, so the scene is shifted left
+   * station, the trap house, the barn and the low sun in one frame. On
+   * desktop the panel sits right, so the scene is shifted left
    * with a view offset; on a phone the panel is a bottom sheet, so the
    * horizon is lifted into the top of the frame instead.
    */

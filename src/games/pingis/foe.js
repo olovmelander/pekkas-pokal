@@ -114,7 +114,6 @@ export class Foe {
     this.pos = new THREE.Vector3();
     this.vx = 0;
     this.fhW = 1; // 1 forehand … 0 backhand, eased
-    this.contact = new THREE.Vector3();
     this.feet = ['L', 'R'].map((side) => ({
       side, plant: new THREE.Vector3(), from: new THREE.Vector3(), to: new THREE.Vector3(), t: 1, on: false
     }));
@@ -124,7 +123,6 @@ export class Foe {
     this.react = { kind: '', t: 9, dur: 0, power: 0 };
     this.modeT = 0;
     this.expr = '';
-    this.mood = '';
     this._v = new THREE.Vector3();
     this._w = new THREE.Vector3();
     this._q = new THREE.Quaternion();

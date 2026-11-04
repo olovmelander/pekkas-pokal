@@ -363,12 +363,14 @@ export class Fencer {
   /** Dress someone else in the whites (the opponent changes per round). */
   setPerson(name, sock) {
     if (this.person && this.name === name && this.sock === sock) return;
-    if (this.person) this.person.dispose();
     this.name = name;
     this.sock = sock;
+    // The new person first, then the old one goes: the shared materials and
+    // their shader programs stay alive, so nothing recompiles mid-game
     const p = createPerson(appearanceFor(name, {
       outfit: { top: 'fencing', bottom: 'knickers', accent: sock, shoes: 'sneakers', shoeColor: 0xe9e7e2 }
     }));
+    if (this.person) this.person.dispose();
     this.person = p;
     this.s = p.scale;
     this.group.add(p.root);

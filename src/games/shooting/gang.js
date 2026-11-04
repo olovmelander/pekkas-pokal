@@ -195,7 +195,7 @@ export function buildGang({ rand }) {
   group.add(chairMesh);
 
   // Idle gaze targets: the station, the trap house, the field
-  const SPOTS = [new THREE.Vector3(0, 1.3, 0), new THREE.Vector3(0, 1.2, -16), new THREE.Vector3(-6, 3, -30), new THREE.Vector3(5, 2.5, -26)];
+  const SPOTS = [[0, 1.3, 0], [0, 1.2, -16], [-6, 3, -30], [5, 2.5, -26]].map((p) => new THREE.Vector3(...p));
 
   let globalLook = null; // a point everyone watches (the camera) or null
   const tmp = new THREE.Vector3();

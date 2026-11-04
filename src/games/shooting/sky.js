@@ -156,7 +156,9 @@ export function buildSky() {
   dome.frustumCulled = false;
   // The last-resort sky: the same palette as plain vertex colours, for a GPU
   // that renders the dome black. Swapped in by the graphics watchdog.
-  const plain = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, depthWrite: false, fog: false });
+  const plain = new THREE.MeshBasicMaterial({
+    vertexColors: true, side: THREE.BackSide, depthWrite: false, fog: false
+  });
   return { dome, material, plain, uniforms };
 }
 

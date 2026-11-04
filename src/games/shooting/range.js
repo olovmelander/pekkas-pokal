@@ -300,7 +300,8 @@ function forestMass(rand, z, height, color, haze) {
 }
 
 /** Birches at the field edge: white stems, light crowns — a Swedish tell. */
-const BIRCH_SPOTS = [[24, -58], [31, -64], [38, -57], [46, -70], [55, -62], [-48, -66], [-56, -74], [16, -84], [-14, -92], [64, -80],
+const BIRCH_SPOTS = [[24, -58], [31, -64], [38, -57], [46, -70], [55, -62],
+  [-48, -66], [-56, -74], [16, -84], [-14, -92], [64, -80],
   // behind the station, where the reaction shot looks
   [-26, 52], [-19, 60], [-31, 66], [22, 58], [30, 49], [37, 63], [8, 74]];
 
@@ -579,9 +580,11 @@ export function buildRange(rand, { envMap } = {}) {
     const kind = rand();
     if (kind < 0.6) {
       const [eye, tip] = STARS[Math.floor(rand() * STARS.length)];
-      flowers.put(flowerHead(0.05 + rand() * 0.025, kind < 0.4 ? 8 : 5, eye, tip), null, { at: [fx, h, fz], rot: lean });
+      const head = flowerHead(0.05 + rand() * 0.025, kind < 0.4 ? 8 : 5, eye, tip);
+      flowers.put(head, null, { at: [fx, h, fz], rot: lean });
     } else if (kind < 0.8) {
-      flowers.put(new THREE.IcosahedronGeometry(0.03 + rand() * 0.012, 1), 0xc8507a, { at: [fx, h, fz], scale: [1, 1.15, 1], darken: 0.35 });
+      flowers.put(new THREE.IcosahedronGeometry(0.03 + rand() * 0.012, 1), 0xc8507a,
+        { at: [fx, h, fz], scale: [1, 1.15, 1], darken: 0.35 });
     } else {
       flowers.put(new THREE.ConeGeometry(0.026, 0.05, 6, 1, true), 0x6f62c8,
         { at: [fx, h - 0.02, fz], rot: [Math.PI + lean[0], 0, lean[2]], darken: 0.3 });

@@ -1518,7 +1518,8 @@ export async function createClay(container) {
       pieceMid.copy(fired.mesh.position);
       pieceMid.y += H * fired.mesh.scale.y * 0.5;
     }
-    keramiker.update(dt, t, {
+    // Fast-forwarded firing: he hurries too, so he still meets the piece at the banding wheel
+    keramiker.update(ph === 'fire' && state.fast ? dt * 2.5 : dt, t, {
       phase: ph,
       opened: ph === 'fire' && state.t >= FIRE.open,
       attention,
