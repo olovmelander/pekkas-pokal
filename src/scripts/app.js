@@ -134,6 +134,7 @@
     lastFocusBeforeGame: null,
     trophy: null,
     trophyLoading: false,
+    booted: false,
     tickerPaused: false,
     showSong: null
   };
@@ -2726,6 +2727,9 @@
 
     // Leaflet needs a size refresh when its container becomes visible
     if (id === 'overview' && App.map) setTimeout(() => App.map.invalidateSize(), 60);
+    // Pokalen byggs först när översikten faktiskt visas — en djuplänk till
+    // ett spel ska inte betala för den
+    if (id === 'overview' && App.booted) initTrophy();
 
     // Flytta fokus till vyns rubrik så skärmläsare hör att sidan bytts
     if (focus) {
@@ -2972,7 +2976,8 @@
       setTimeout(() => {
         loader.classList.add('hidden');
         positionNavIndicator();
-        initTrophy();
+        App.booted = true;
+        if (App.currentView === 'overview') initTrophy();
       }, 350);
     } catch (err) {
       console.error('Init failed:', err);
