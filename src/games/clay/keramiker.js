@@ -39,7 +39,6 @@ const LOOK = {
   facialHair: 'fullBeard',
   glasses: 'round',
   glassesColor: 0x1d1b1a,
-  headwear: { style: 'beret', color: 0x1f1f26 },
   eyes: 'brown',
   face: { jaw: 1.03, nose: 1.12, noseLen: 1.08, brow: 1.1, cheek: 1.06, chin: 0.98 },
   outfit: { top: 'apron', topColor: 0xe4dccb, accent: 0x3a5570, bottom: 'trousers', bottomColor: 0x2f3440, shoes: 'leather', shoeColor: 0x3b2618 }
@@ -115,6 +114,28 @@ function blobShadow(s) {
 }
 
 /**
+ * His black beret, our own rather than the shared hat (we want it big and
+ * soft, pulled down to one side the way a Catalan ceramicist wears it):
+ * a felt pancake turned on a lathe, with the little stalk on top.
+ */
+function buildBeret(s) {
+  const k = 1.15 * s; // the head is drawn 1.15× life size
+  const prof = [
+    [0.082, -0.05], [0.088, -0.047], [0.104, -0.036], [0.122, -0.02], [0.132, -0.006], [0.134, 0.006], [0.126, 0.019],
+    [0.106, 0.031], [0.072, 0.04], [0.032, 0.044], [0.0, 0.045]
+  ].map(([r, y]) => new THREE.Vector2(r * k, y * k));
+  const geo = new THREE.LatheGeometry(prof, 28);
+  const stalk = new THREE.CylinderGeometry(0.006 * k, 0.008 * k, 0.018 * k, 6);
+  stalk.translate(0, 0.05 * k, 0);
+  const felt = new THREE.MeshStandardMaterial({ color: 0x1d1d24, roughness: 0.92 });
+  const beret = new THREE.Mesh(geo, felt);
+  const nub = new THREE.Mesh(stalk, felt);
+  beret.add(nub);
+  beret.castShadow = true;
+  return beret;
+}
+
+/**
  * Slip on the apron: the potter wipes his hands on it all evening. Painted
  * into this person's own vertex colours (the materials stay shared): wherever
  * the apron's blue sits at hand height in front, it is smudged with clay.
@@ -167,6 +188,8 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
   const s = person.scale;
   const blob = blobShadow(s);
   root.add(blob.mesh);
+  const beret = buildBeret(s);
+  person.attach(beret, 'headTop', { position: [-0.006 * s, -0.028 * s, -0.004 * s], rotation: [-0.16, 0, -0.3] });
   root.position.copy(home);
   root.rotation.y = Math.atan2(wheel.x - home.x, wheel.z - home.z);
 
@@ -212,6 +235,8 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
   const pole = new THREE.Vector3();
   const handQ = new THREE.Quaternion();
   const eThumb = new THREE.Euler();
+  const ikPos = new THREE.Vector3();
+  const ikQ = new THREE.Quaternion();
   const qa = new THREE.Quaternion();
   const mBasis = new THREE.Matrix4();
   const ax = new THREE.Vector3();
@@ -238,6 +263,19 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
     if (st.talking === v) return;
     st.talking = v;
     person.talk(v);
+  }
+
+  /**
+   * Weighted IK: move the hand from where the pose put it toward `target`
+   * and turn it toward `goalQ` by the same eased weight, so an IK layer
+   * fades in and out without ever snapping the wrist.
+   */
+  function reachFor(side, target, goalQ, polePt, weight) {
+    const k = ease(weight);
+    const hand = bones[side === 'L' ? 'handL' : 'handR'];
+    hand.getWorldPosition(ikPos).lerp(target, k);
+    hand.getWorldQuaternion(ikQ).slerp(goalQ, k);
+    person.ikArm(side, ikPos, polePt, ikQ);
   }
 
   /* -------------------------------------------------------------- cues */
@@ -277,7 +315,7 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
 
     /* Where he faces when standing, and what he looks at */
     let lookTarget = null;
-    let lookWeight = 1;
+    const lookWeight = 1;
     let exprKey = 'neutral';
     let exprSpec = 'neutral';
     let talk = false;
@@ -464,12 +502,12 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
     }
     if (w.shrug > 1e-3) {
       const p = POSES.stand(t, L.shrug);
-      p.shoulderL = [0, 0, 0.26];
-      p.shoulderR = [0, 0, -0.26];
-      p.upperArmL = [0.1, -0.3, 0.32];
-      p.upperArmR = [0.1, 0.3, -0.32];
-      p.forearmL = [-1.35, 0, 0];
-      p.forearmR = [-1.35, 0, 0];
+      p.shoulderL = [0, 0, 0.3];
+      p.shoulderR = [0, 0, -0.3];
+      p.upperArmL = [0.05, -0.3, 0.26];
+      p.upperArmR = [0.05, 0.3, -0.26];
+      p.forearmL = [-1.6, 0, 0];
+      p.forearmR = [-1.6, 0, 0];
       p.handL = [0, 1.45, -0.2];
       p.handR = [0, -1.45, 0.2];
       p.gripL = 0.05;
@@ -497,53 +535,44 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
     /* IK: a hand on the banding wheel and a fist under the chin while he weighs it up */
     st.rim += ((lean ? 1 : 0) - st.rim) * k(5);
     st.chin += ((lean ? 1 : 0) - st.chin) * k(3.5);
-    if (st.rim > 0.01 || st.chin > 0.01) {
-      root.updateMatrixWorld(true);
-      if (st.rim > 0.01) {
-        // The rim point on his left, riding round with the wheel and back
-        const left = tmp2.set(Math.cos(root.rotation.y), 0, -Math.sin(root.rotation.y));
-        const toMe = tmp.subVectors(root.position, banding).setY(0).normalize();
-        const a = Math.atan2(toMe.x + left.x * 0.9, toMe.z + left.z * 0.9) + Math.sin(t * 1.3) * 0.18;
-        rimPt.set(banding.x + Math.sin(a) * bandingRadius * 0.92, banding.y + 0.05 * s, banding.z + Math.cos(a) * bandingRadius * 0.92);
-        bones.handL.getWorldPosition(tmp);
-        tmp.lerp(rimPt, ease(st.rim));
-        // Palm down, fingers toward the wheel's centre
-        const fingers = tmp2.subVectors(banding, rimPt).setY(-0.25).normalize();
-        basisQuat(ax.set(0, 1, 0), fingers.negate(), handQ);
-        bones.chest.localToWorld(pole.set(0.6 * s, -0.4 * s, -0.5 * s));
-        person.ikArm('L', tmp, pole, handQ);
-      }
-      if (st.chin > 0.01) {
-        // Knuckles under the chin, elbow down and forward
-        sockets.face.localToWorld(chinPt.set(0, -0.19 * s, -0.02 * s));
-        bones.handR.getWorldPosition(tmp);
-        tmp.lerp(chinPt, ease(st.chin));
-        bones.head.getWorldQuaternion(qa);
-        const up = tmp2.set(0.15, -1, 0.35).applyQuaternion(qa); // hand → elbow
-        basisQuat(ax.set(0.2, 0.25, -1).applyQuaternion(qa), up, handQ);
-        bones.chest.localToWorld(pole.set(-0.25 * s, -0.7 * s, 0.6 * s));
-        person.ikArm('R', tmp, pole, handQ);
-      }
+    const pointW = ctx.attention ? w.point : 0;
+    if (st.rim > 0.004 || st.chin > 0.004 || pointW > 0.004) root.updateMatrixWorld(true);
+    if (st.rim > 0.004) {
+      // The rim point on his left, riding round with the wheel and back
+      const left = tmp2.set(Math.cos(root.rotation.y), 0, -Math.sin(root.rotation.y));
+      const toMe = tmp.subVectors(root.position, banding).setY(0).normalize();
+      const a = Math.atan2(toMe.x + left.x * 0.9, toMe.z + left.z * 0.9) + Math.sin(t * 1.3) * 0.18;
+      rimPt.set(banding.x + Math.sin(a) * bandingRadius * 0.92, banding.y + 0.05 * s, banding.z + Math.cos(a) * bandingRadius * 0.92);
+      // Palm down, fingers toward the wheel's centre
+      const fingers = tmp2.subVectors(banding, rimPt).setY(-0.25).normalize();
+      basisQuat(ax.set(0, 1, 0), fingers.negate(), handQ);
+      bones.chest.localToWorld(pole.set(0.6 * s, -0.4 * s, -0.5 * s));
+      reachFor('L', rimPt, handQ, pole, st.rim);
+    }
+    if (st.chin > 0.004) {
+      // Knuckles under the chin, elbow down and forward
+      sockets.face.localToWorld(chinPt.set(0, -0.19 * s, -0.02 * s));
+      bones.head.getWorldQuaternion(qa);
+      const up = tmp2.set(0.15, -1, 0.35).applyQuaternion(qa); // hand → elbow
+      basisQuat(ax.set(0.2, 0.25, -1).applyQuaternion(qa), up, handQ);
+      bones.chest.localToWorld(pole.set(-0.25 * s, -0.7 * s, 0.6 * s));
+      reachFor('R', chinPt, handQ, pole, st.chin);
+    }
+    if (pointW > 0.004) {
+      // Point AT the lump: the posed arm is re-aimed along the line to it,
+      // fingers along the line, thumb up
+      bones.upperArmR.getWorldPosition(tmp2);
+      const reach = tmp.subVectors(ctx.attention, tmp2).normalize();
+      chinPt.copy(tmp2).addScaledVector(reach, 0.6 * s);
+      basisQuat(ax.set(0, 1, 0).cross(reach), az.copy(reach).negate(), handQ);
+      bones.chest.localToWorld(pole.set(-0.5 * s, -0.6 * s, -0.3 * s));
+      reachFor('R', chinPt, handQ, pole, pointW);
     }
 
     /* The thumb of the thumbs up: straight out of the fist's top */
     if (w.thumb > 0.01) {
       qa.setFromEuler(eThumb.set(-1.45, 0.1, 0.2));
       bones.thumbR.quaternion.slerp(qa, ease(w.thumb));
-    }
-
-    /* Point AT the lump: the posed arm is re-aimed with IK along the line to it */
-    if (w.point > 0.01 && ctx.attention) {
-      root.updateMatrixWorld(true);
-      bones.upperArmR.getWorldPosition(tmp2);
-      const reach = tmp.subVectors(ctx.attention, tmp2).normalize();
-      const aim = chinPt.copy(tmp2).addScaledVector(reach, 0.6 * s);
-      bones.handR.getWorldPosition(tmp);
-      tmp.lerp(aim, ease(w.point));
-      // Fingers along the line, thumb up
-      basisQuat(ax.set(0, 1, 0).cross(reach), az.copy(reach).negate(), handQ);
-      bones.chest.localToWorld(pole.set(-0.5 * s, -0.6 * s, -0.3 * s));
-      person.ikArm('R', tmp, pole, handQ);
     }
 
     /* Nods, shakes, tilts on top (people.update keeps them and adds look-at) */
@@ -580,6 +609,9 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
       st.verdict = null;
     },
     dispose() {
+      beret.geometry.dispose();
+      beret.children[0].geometry.dispose();
+      beret.material.dispose();
       root.remove(blob.mesh);
       blob.mesh.geometry.dispose();
       blob.mesh.material.dispose();

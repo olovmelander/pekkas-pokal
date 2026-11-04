@@ -47,30 +47,33 @@ const FIST = 0.08;
  * The field. `at` is where the painter stands, `face` how far they turn
  * from looking straight at the wide shot's camera (radians), `detail`
  * 'high' for the two the camera sees closest. The easel goes in front and
- * a little to the brush hand's side, canvas toward the painter — so from
- * the camera we see their faces over the backs of their canvases.
+ * a little to the brush hand's side, canvas toward the painter. Facing the
+ * camera put every painter behind their own canvas — four heads floating
+ * over four boards — so they turn: about −0.8 shows a three-quarter face
+ * with the easel off to one side, about +1.6 a profile with the canvas
+ * beyond them. Either way the whole figure and the brush on the canvas show.
  */
 const PAINTERS = [
   {
-    name: 'Per Olsson', at: [-1.35, -5.15], face: 1.0, detail: 'high',
+    name: 'Per Olsson', at: [-1.0, -4.75], face: -0.8, detail: 'high',
     // Per came as Hans Hedberg: the red beret (the bun tucked under it), and
     // a ceramicist's apron over a linen shirt
     look: { hair: { style: 'crop' }, headwear: { style: 'beret', color: 0xa8202c }, outfit: { top: 'apron', topColor: 0xe4dac6, accent: 0x6b4a2e, bottom: 'trousers', bottomColor: 0x4a4038, shoes: 'leather' } }
   },
   {
-    name: 'Olov Melander', at: [0.75, -6.45], face: -1.1, detail: 'high',
+    name: 'Olov Melander', at: [0.45, -5.8], face: 1.6, detail: 'high',
     look: { outfit: { top: 'shirt', topColor: 0x2f4f6e, bottom: 'trousers', bottomColor: 0x3a3f4a, shoes: 'leather' } }
   },
   {
-    name: 'Per Vikman', at: [-3.25, -6.9], face: 1.15, detail: 'low',
+    name: 'Per Vikman', at: [-3.6, -7.0], face: -0.9, detail: 'low',
     look: { outfit: { top: 'shirt', topColor: 0x7a2e2a, bottom: 'trousers', bottomColor: 0x5a5348, shoes: 'leather' } }
   },
   {
-    name: 'Henrik Lundqvist', at: [2.05, -8.15], face: -1.0, detail: 'low',
+    name: 'Henrik Lundqvist', at: [1.8, -8.1], face: 1.5, detail: 'low',
     look: { outfit: { top: 'sweater', topColor: 0x3f6a4a, bottom: 'trousers', bottomColor: 0x4a5a72 } }
   },
   {
-    name: 'Viktor Jones', at: [-1.55, -8.35], face: 1.2, detail: 'low',
+    name: 'Viktor Jones', at: [-1.2, -8.4], face: -0.75, detail: 'low',
     look: { outfit: { top: 'shirt', topColor: 0xe8e0cf, bottom: 'trousers', bottomColor: 0x2a2e38, shoes: 'leather' } }
   }
 ];
@@ -78,7 +81,7 @@ const PAINTERS = [
 /** Further back: the rest of the 2021 field, as one instanced crowd. */
 const BACK_ROW = {
   names: ['Tobias Lundqvist', 'Ludvig Ulenius', 'Erik Vallgren', 'Rickard Nilsson', 'Niklas Norberg'],
-  at: [[-4.9, -8.25], [3.9, -6.6], [-5.5, -5.3], [0.35, -8.6], [4.7, -4.3]]
+  at: [[-6.2, -7.8], [0.3, -8.6], [3.4, -7.4], [-5.6, -5.4], [4.4, -4.6]]
 };
 
 /** Where the wide shot's camera stands on average (index.js): the field faces it. */
@@ -446,6 +449,8 @@ class Judge {
     this.grade = 5;
     this.stroll = false;
     this.strollSpots = [];
+    /** What he looks at from home: only things his head can turn to. */
+    this.sights = [];
     this.strollNext = 6;
     this.viewing = null;
     this.glance = 0;
@@ -601,12 +606,11 @@ class Judge {
       // Home: looking round the field, now and then a note
       face = this.home.ry;
       this.glanceT -= dt;
-      if (this.glanceT <= 0 && ctx.painters.length) {
-        this.glanceT = 2.5 + Math.random() * 2.5;
-        this.glance = Math.floor(Math.random() * ctx.painters.length);
+      if (this.glanceT <= 0 && this.sights.length) {
+        this.glanceT = 2.2 + Math.random() * 2.8;
+        this.glance = (this.glance + 1 + Math.floor(Math.random() * (this.sights.length - 1))) % this.sights.length;
       }
-      const target = ctx.painters[this.glance % Math.max(1, ctx.painters.length)];
-      if (target) this.lookGoal.copy(target.canvasC);
+      if (this.sights.length) this.lookGoal.copy(this.sights[this.glance]);
       write = this.t % 9 > 6.5 ? 1 : 0;
       if (this.stroll && this.strollSpots.length && this.t > this.strollNext) {
         this.strollNext = 7 + Math.random() * 5;
@@ -626,6 +630,11 @@ class Judge {
 
     /* Pose: notebook in the left hand whatever else he is doing */
     const stand = POSES.holdNotebook(t, this.pose);
+    // The book up at the chest, where he can read it
+    stand.upperArmL[0] = -0.32;
+    stand.upperArmL[1] = -0.62;
+    stand.upperArmL[2] = 0.24;
+    stand.forearmL[0] = -1.72;
     const idle = POSES.idle(t * 0.7, this.poseB);
     for (const n of ['hips', 'spine', 'thighL', 'thighR', 'footL', 'footR']) {
       stand[n][0] = idle[n][0];
@@ -700,7 +709,7 @@ class Judge {
   updateBook() {
     const P = this.person;
     P.sockets.gripL.getWorldPosition(this.bookPos);
-    _e.set(-0.55, this.ry + 0.25, 0, 'YXZ');
+    _e.set(-0.8, this.ry + 0.25, 0, 'YXZ');
     _q.setFromEuler(_e);
     this.bookPos.addScaledVector(_v.set(0.06, 0.01, 0.02).applyQuaternion(_q), 1);
     this.bookMatrix.compose(this.bookPos, _q, _s);
@@ -730,7 +739,7 @@ export function buildCast({ lowTier = false, safe = false, reduced = false, home
 
   /* The back row: standing at their easels, one instanced draw */
   const seats = BACK_ROW.at.map(([x, z], i) => {
-    const face = Math.atan2(AUDIENCE.x - x, AUDIENCE.y - z) + (i % 2 ? -1.0 : 1.0);
+    const face = Math.atan2(AUDIENCE.x - x, AUDIENCE.y - z) + (i % 2 ? 1.6 : -0.9);
     return { position: new THREE.Vector3(x, 0, z), rotationY: face, pose: 'stand' };
   });
   const crowd = createCrowd({ seats, names: BACK_ROW.names, seed, castShadow: true, hats: 0 });
@@ -744,6 +753,11 @@ export function buildCast({ lowTier = false, safe = false, reduced = false, home
 
   const easels = buildFieldEasels([...painters.map((p) => p.easel), ...backEasels]);
   group.add(easels);
+
+  // From home he watches what is in front of him: your easel, the hat, and
+  // the painters within a natural turn of the head
+  const sights = [canvasC.clone(), new THREE.Vector3(-2.7, 0.95, -3.5), ...painters.map((p) => p.canvasC)];
+  judge.sights = sights.filter((v) => Math.abs(angleTo(home.ry, Math.atan2(v.x - home.x, v.z - home.z))) < 1.1);
 
   // Stroll spots: beside a painter, over the shoulder that has no easel
   judge.strollSpots = painters.slice(0, 2).map((p) => {

@@ -897,7 +897,7 @@ class Spectators {
   /** Lean every instance about its hips (seated) or its waist (standing). */
   applyLean() {
     for (const e of this.crowd.meshes) {
-      const mesh = e.mesh;
+      const { mesh } = e;
       if (!mesh.visible) continue;
       const pivot = mesh.name.includes(':stand:') ? 0.98 : 0.56;
       for (let i = 0; i < mesh.count; i++) {
@@ -1485,6 +1485,11 @@ export function buildSalle({ glow, high, crowdNames = [] }) {
     },
     setMoteScale(px) {
       motes.mat.uniforms.uScale.value = px;
+    },
+    /** Light shafts and dust on/off (the graphics watchdog's last step). */
+    setVolumes(on) {
+      shafts.mesh.visible = on;
+      motes.points.visible = on;
     },
     shaftMat: shafts.mat,
     dispose() {

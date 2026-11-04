@@ -195,32 +195,39 @@ function buildMask(mats) {
   };
   const R = [0.125, 0.162, 0.165];
   const C = [0, -0.012, -0.004];
-  // The mesh: front 210°, from the crown to below the chin
-  const grille = new THREE.SphereGeometry(1, 28, 16, Math.PI / 2 - 1.85, 3.7, 0.18, 2.42);
+  // The mesh: front 212°, from the crown to below the chin
+  const FRONT = 3.7;
+  const grille = new THREE.SphereGeometry(1, 28, 16, Math.PI / 2 - FRONT / 2, FRONT, 0, 2.6);
   grille.scale(R[0], R[1], R[2]).translate(C[0], C[1], C[2]);
   add(grille, mats.grille).renderOrder = 2;
-  // The back: padded white tongue and strap
-  const back = new THREE.SphereGeometry(1, 18, 12, Math.PI / 2 + 1.75, Math.PI * 2 - 3.5, 0.0, 2.05);
-  back.scale(R[0] * 1.04, R[1] * 1.03, R[2] * 1.04).translate(C[0], C[1], C[2]);
+  // The back: padded white tongue and strap, starting exactly where the
+  // mesh ends (overlapping shells of different tessellation cross each
+  // other in a sawtooth); a few millimetres proud, like the padded edge
+  const back = new THREE.SphereGeometry(1, 20, 12, Math.PI / 2 + FRONT / 2, Math.PI * 2 - FRONT, 0, 2.05);
+  back.scale(R[0] * 1.035, R[1] * 1.025, R[2] * 1.035).translate(C[0], C[1], C[2]);
   add(back, mats.pad);
-  // White rim around the face opening (a flattened torus around the bowl's edge)
-  const rim = new THREE.TorusGeometry(1, 0.075, 6, 32, 3.7);
-  rim.rotateZ(Math.PI / 2 - 1.85).rotateX(Math.PI / 2);
-  rim.scale(R[0] * 1.02, 0.12, R[2] * 1.02);
-  rim.translate(C[0], C[1] - R[1] * 0.78, C[2]);
+  // White padded edge along the bottom of the mesh (where the bib is sewn on)
+  const edgeT = 2.6; // the grille's lower edge, from the crown
+  const er = Math.sin(edgeT);
+  const ey = C[1] + Math.cos(edgeT) * R[1];
+  const rim = new THREE.TorusGeometry(1, 0.06, 6, 32, FRONT);
+  rim.rotateZ(Math.PI / 2 - FRONT / 2).rotateX(Math.PI / 2);
+  rim.scale(R[0] * er, 0.16, R[2] * er);
+  rim.translate(C[0], ey, C[2]);
   add(rim, mats.pad);
-  // The bib: a flared skirt under the chin, longer at the front
-  const bib = new THREE.CylinderGeometry(0.11, 0.135, 0.11, 18, 1, true);
+  // The bib: a flared lamé flap under the chin, hanging lower at the front
+  const bib = new THREE.CylinderGeometry(1, 1.3, 0.1, 20, 1, true, -1.9, 3.8);
   const pos = bib.attributes.position;
   for (let i = 0; i < pos.count; i++) {
     const z = pos.getZ(i);
     const y = pos.getY(i);
-    if (y < 0) pos.setY(i, y - Math.max(0, z) * 0.35); // the front hangs lower
+    if (y < 0) pos.setY(i, y - Math.max(0, z) * 0.03);
   }
+  bib.scale(R[0] * er * 1.02, 1, R[2] * er * 1.02);
   bib.computeVertexNormals();
-  bib.translate(0, -0.185, 0.012);
-  const bibMesh = add(bib, mats.pad);
-  bibMesh.material = mats.pad;
+  bib.translate(C[0], ey - 0.05, C[2]);
+  const bibMat = mats.pad;
+  const bibMesh = add(bib, bibMat);
   return { group: g, bib: bibMesh };
 }
 
@@ -350,10 +357,15 @@ export class Fencer {
     this.s = p.scale;
     this.group.add(p.root);
     p.attach(this.foil, `grip${this.hand}`, { quaternion: this.foilQ });
-    if (p.materials.lame) {
-      p.materials.lame.emissive.copy(this.flashColor);
-      p.materials.lame.emissiveIntensity = 0;
-      this.bib.material = p.materials.lame;
+    const { lame } = p.materials;
+    if (lame) {
+      // Lamé is woven metal: duller than a mirror, so the sun leaves a sheen
+      // rather than a hot glint that bloom would turn into a firefly
+      lame.roughness = 0.46;
+      lame.metalness = 0.62;
+      lame.emissive.copy(this.flashColor);
+      lame.emissiveIntensity = 0;
+      this.bib.material = lame;
     } else this.bib.material = this.mats.pad;
     this.lines = LINE_BASE.map((y) => y * this.s);
     this.front = TARGET_FRONT * this.s;
@@ -408,8 +420,9 @@ export class Fencer {
     w.set('hips', lean, TWIST, 0)
       .set('spine', 0.05, 0.1, 0.02)
       .set('chest', 0.01, 0.14, -0.02)
-      .set('neck', -0.04, -0.12, 0)
-      .set('head', nod - 0.04, -0.18, 0)
+      // The head is turned to the opponent by look-at; only a hint here
+      .set('neck', -0.04, -0.03, 0)
+      .set('head', nod - 0.04, -0.05, 0)
       .set('shoulderR', 0, 0.06, -0.03)
       .set('shoulderL', 0, -0.04, 0.04)
       .grips(1, rearGrip);
@@ -497,7 +510,7 @@ export class Fencer {
     /* Rear arm: carriage ↔ thrown back, or carrying / donning the mask */
     const rs = this._toFencer(b[`upperArm${this.rear}`].getWorldPosition(new THREE.Vector3()), new THREE.Vector3());
     const back = clamp(p[P.back], -0.35, 1);
-    const carriage = [-0.13, 0.3, -0.05];
+    const carriage = [-0.3, 0.25, -0.1];
     const thrown = [-0.58, -0.04, -0.07];
     const held = [0.04, -0.54, 0.05];
     const duelT = [0, 1, 2].map((i) => lerp(carriage[i], thrown[i], back));
@@ -677,12 +690,14 @@ export class Fencer {
     head.getWorldQuaternion(_q);
     let pos = pw;
     if (k < 1) {
-      // Carried: hanging from the rear fist by the strap, grille forward
+      // Carried: hanging upright from the rear fist by the strap, grille
+      // facing the way the fencer faces — upright whatever the wrist does,
+      // so on its way to the face it never tumbles
       const sock = person.sockets[`grip${this.rear}`];
       sock.updateWorldMatrix(true, false);
+      person.root.getWorldQuaternion(_q2);
       const out = this.rear === 'L' ? 1 : -1;
-      const ph = sock.localToWorld(_v2.set(out * 0.05 * s, -0.16 * s, 0.03 * s));
-      sock.getWorldQuaternion(_q2);
+      const ph = sock.getWorldPosition(_v2).add(_v3.set(out * 0.05 * s, -0.16 * s, 0.03 * s).applyQuaternion(_q2));
       pos = _v3.copy(ph).lerp(pw, k);
       _q.slerpQuaternions(_q2, _q, k);
     }
@@ -927,6 +942,7 @@ export class Animator {
     this.ox = 0; // footwork offset along the piste
     this.step = null; // { from, to, t, dur }
     this.flash = 0;
+    this.hold = -1; // target line while the point is in contact
     const ctx = { dist: 2.44, oppPx: 0, lines: LINE_BASE, front: TARGET_FRONT };
     this.guardPose(this.f.pose, ctx);
     this.f.pose[P.mask] = 1;
@@ -1027,17 +1043,27 @@ export class Animator {
     const g = GUARD_HAND[line];
     out[P.hx] = g[0] * s + ((dirX / len) * reach - g[0] * s) * arm;
     out[P.hy] = g[1] * s + ((dirY / len) * reach - g[1] * s) * arm;
-    const a2 = this.aim(out, ctx, line);
-    out[P.fa] = a2.a;
+    out[P.fa] = this.aim(out, ctx, line).a;
     // On contact the blade bows instead of passing through the target
     if (hold) {
-      const bx = a2.handX + Math.cos(a2.a) * BLADE_START;
-      const by = a2.handY + Math.sin(a2.a) * BLADE_START;
-      const d = Math.hypot(a2.tx - bx, a2.ty - by);
-      const kb = bendFor(d);
-      out[P.bend] = kb;
-      out[P.fa] = a2.a - (kb * BLADE) / 2;
+      this.contact(out, ctx, line);
+      this.hold = line;
     }
+  }
+
+  /**
+   * Bow the blade so its point lands exactly on the target line: the
+   * curvature that makes the blade span the distance from the bell to the
+   * target, and the pitch that puts the chord on it.
+   */
+  contact(p, ctx, line) {
+    const a2 = this.aim(p, ctx, line);
+    const bx = a2.handX + Math.cos(a2.a) * BLADE_START;
+    const by = a2.handY + Math.sin(a2.a) * BLADE_START;
+    const d = Math.hypot(a2.tx - bx, a2.ty - by);
+    const kb = bendFor(d);
+    p[P.bend] = kb;
+    p[P.fa] = a2.a - (kb * BLADE) / 2;
   }
 
   /** Writes this frame's target pose and springs the real pose to it. */
@@ -1047,6 +1073,7 @@ export class Animator {
     const out = this.target;
     const { act } = this;
     const k = this.dur > 0 ? this.t / this.dur : 1;
+    this.hold = -1;
 
     if (this.step) {
       const st = this.step;
@@ -1088,10 +1115,17 @@ export class Animator {
       // whole body settles into (or out of) the at-ease stance slowly
       const wi = i === P.ffx || i === P.bfx ? w * 0.85
         : i === P.fa || i === P.hy ? w * 1.15
-          : i === P.relax || i === P.cheer ? Math.min(w, 9) * 0.6 : w;
+          : i === P.relax || i === P.cheer ? Math.min(w, 9) : w;
       const r = springStep(p[i], v[i], out[i], wi, dt);
       p[i] = r[0];
       v[i] = r[1];
+    }
+    // In contact: bow the blade for where the body really is, not where
+    // the springs are taking it — the point lands on the lamé on the very
+    // frame the touch freezes
+    if (this.hold >= 0) {
+      this.contact(p, ctx, this.hold);
+      v[P.fa] = 0;
     }
     // Feet never sink into the floor, even when a spring overshoots
     p[P.ffy] = Math.max(ANKLE_H * this.f.s, p[P.ffy]);

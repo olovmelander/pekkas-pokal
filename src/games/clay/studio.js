@@ -559,13 +559,9 @@ function buildShaft(sunDir, length) {
     uniforms: { uColor: { value: new THREE.Color(1.0, 0.72, 0.42) }, uStrength: { value: 0.12 }, uTime: { value: 0 } },
     vertexShader: /* glsl */ `
       varying vec2 vUv;
-      varying vec3 vN;
-      varying vec3 vV;
       void main() {
         vUv = uv;
-        vec4 mv = modelViewMatrix * vec4(position, 1.0);
-        vV = normalize(-mv.xyz);
-        gl_Position = projectionMatrix * mv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
       }`,
     fragmentShader: /* glsl */ `
       uniform vec3 uColor;
@@ -573,9 +569,14 @@ function buildShaft(sunDir, length) {
       uniform float uTime;
       varying vec2 vUv;
       void main() {
-        float along = smoothstep(0.0, 0.12, vUv.y) * pow(1.0 - vUv.y, 1.6);
+        // Clamped: with MSAA a varying can be extrapolated a hair past 1.0,
+        // and pow() of a negative base is NaN on real GPUs
+        float v = clamp(vUv.y, 0.0, 1.0);
+        float along = smoothstep(0.0, 0.12, v) * pow(1.0 - v, 1.6);
         float streak = 0.75 + 0.25 * sin(vUv.x * 70.0 + uTime * 0.3) * sin(vUv.x * 23.0 - uTime * 0.17);
         gl_FragColor = vec4(uColor * along * streak * uStrength, 1.0);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
       }`,
     transparent: true,
     depthWrite: false,
@@ -643,56 +644,6 @@ function addShelfUnit(wood, gloss, x, z, ry, seed) {
   addShelfPots(gloss, mulberry(seed), 12, 2.6, [0.64, 1.49, 2.34, 3.14], m);
 }
 
-function addKeramikern(props) {
-  const guy = new THREE.Group();
-  const body = new Batch();
-  // Legs, shoes, trousers
-  [-0.13, 0.13].forEach((x) => {
-    body.add(new THREE.CylinderGeometry(0.1, 0.09, 0.82, 8), 0x2f3440, [x, 0.45, 0]);
-    body.add(new THREE.BoxGeometry(0.15, 0.08, 0.28), 0x2a1d16, [x, 0.04, 0.05]);
-  });
-  // Torso: shirt, then the clay-streaked apron over it
-  body.add(new THREE.CylinderGeometry(0.25, 0.23, 0.75, 10), 0xe7dfd0, [0, 1.25, 0]);
-  body.add(new THREE.CylinderGeometry(0.262, 0.27, 0.95, 10, 1, true, -1.1, 2.2), 0x3a5570, [0, 1.15, 0]);
-  body.add(new THREE.SphereGeometry(0.25, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), 0xe7dfd0, [0, 1.6, 0]);
-  body.add(new THREE.CylinderGeometry(0.08, 0.09, 0.12, 8), 0xd9a47c, [0, 1.72, 0]);
-  const bodyMesh = body.mesh(props);
-  bodyMesh.castShadow = true;
-  guy.add(bodyMesh);
-
-  const head = new THREE.Group();
-  const hb = new Batch();
-  hb.add(new THREE.SphereGeometry(0.2, 14, 10), 0xd9a47c, [0, 0, 0], [0, 0, 0], [1, 1.08, 1]);
-  hb.add(new THREE.SphereGeometry(0.045, 8, 6), 0xc98f68, [0, -0.01, 0.2]);
-  hb.add(new THREE.SphereGeometry(0.16, 10, 8), 0xb9b4ae, [0, -0.12, 0.07], [0, 0, 0], [1, 0.85, 0.8]);
-  hb.add(new THREE.CylinderGeometry(0.24, 0.2, 0.08, 14), 0x22222a, [0.02, 0.17, -0.02], [0.12, 0, -0.18]);
-  hb.add(new THREE.SphereGeometry(0.03, 6, 4), 0x22222a, [0.02, 0.23, -0.02]);
-  [-0.075, 0.075].forEach((x) => {
-    hb.add(new THREE.TorusGeometry(0.045, 0.008, 4, 12), 0x1d1b1a, [x, 0.03, 0.19]);
-  });
-  const headMesh = hb.mesh(props);
-  head.add(headMesh);
-  head.position.y = 1.98;
-  guy.add(head);
-
-  // Arms pivot at the shoulder so he can gesture
-  const arms = [-1, 1].map((s) => {
-    const pivot = new THREE.Group();
-    pivot.position.set(s * 0.3, 1.58, 0);
-    const ab = new Batch();
-    ab.add(new THREE.CapsuleGeometry(0.065, 0.36, 4, 8), 0xe7dfd0, [0, -0.22, 0]);
-    ab.add(new THREE.CapsuleGeometry(0.055, 0.3, 4, 8), 0xd9a47c, [0, -0.6, 0.0]);
-    ab.add(new THREE.SphereGeometry(0.07, 8, 6), 0xd9a47c, [0, -0.8, 0]);
-    const arm = ab.mesh(props);
-    arm.castShadow = true;
-    pivot.add(arm);
-    pivot.rotation.z = s * 0.08;
-    guy.add(pivot);
-    return pivot;
-  });
-  return { guy, head, armL: arms[0], armR: arms[1] };
-}
-
 /**
  * The kiln, front-loading, with a hinged door, a firebrick chamber that
  * glows, seams and a spy hole that leak light, a flue for the embers and
@@ -748,7 +699,9 @@ function buildKiln(metal) {
   const door = db.mesh(metal);
   door.castShadow = true;
   hinge.add(door);
-  const glowMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  // Lit from inside; a few millimetres off the steel, so it is pulled
+  // forward in depth rather than trusted to the depth buffer's precision
+  const glowMat = new THREE.MeshBasicMaterial({ color: 0x000000, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 });
   const spy = new THREE.Mesh(new THREE.CircleGeometry(0.045, 12), glowMat);
   spy.position.set(-0.52, 0.18, 0.068);
   hinge.add(spy);
@@ -762,7 +715,7 @@ function buildKiln(metal) {
   g.add(seamMesh);
 
   const led = ledDisplay();
-  const ledMat = new THREE.MeshBasicMaterial({ map: led.tex, toneMapped: false });
+  const ledMat = new THREE.MeshBasicMaterial({ map: led.tex, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 });
   const ledPlane = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.083), ledMat);
   ledPlane.position.set(0.6, 1.53, 0.775);
   g.add(ledPlane);
@@ -868,12 +821,6 @@ export function buildStudio() {
   kiln.group.rotation.y = -0.55;
   g.add(kiln.group);
 
-  /* Keramikern beside the reveal stand */
-  const judge = addKeramikern(props);
-  judge.guy.position.set(3.55, 0, 0.1);
-  judge.guy.rotation.y = -0.9;
-  g.add(judge.guy);
-
   /* Pendant lamp over the wheel: enamel shade, warm bulb */
   const lamp = new THREE.Group();
   const shadeBatch = new Batch();
@@ -946,7 +893,6 @@ export function buildStudio() {
     shaft,
     motes,
     kiln,
-    judge,
     reveal,
     banding,
     sill,
@@ -1011,8 +957,11 @@ export function buildWheel() {
   topSharp.receiveShadow = true;
   head.add(topSharp);
   // Motion blur: the smeared twin fades in over the sharp disc with speed
+  // 1.5 mm over the sharp disc: offset in depth so a 16-bit depth buffer
+  // cannot make the two flicker through each other
   const blurMat = new THREE.MeshStandardMaterial({
-    map: tops.blurred, roughness: 0.4, metalness: 0.6, transparent: true, opacity: 0, depthWrite: false
+    map: tops.blurred, roughness: 0.4, metalness: 0.6, transparent: true, opacity: 0, depthWrite: false,
+    polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4
   });
   const topBlur = new THREE.Mesh(topGeo, blurMat);
   topBlur.position.y = 0.0515;

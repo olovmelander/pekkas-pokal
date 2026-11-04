@@ -348,7 +348,7 @@ export async function createPainting(container) {
 
   // Mikael Hägglund waits by the trestle; beside your easel, level with the
   // canvas, is where he stands to judge it — never in front of it
-  const JUDGE_HOME = { x: 1.75, z: -3.4, ry: -0.9 };
+  const JUDGE_HOME = { x: 1.75, z: -3.4, ry: -1.1 };
   const JUDGE_SPOT = { x: 1.22, z: -0.5 };
   const cast = buildCast({
     lowTier, safe: gfx.safe, reduced, home: JUDGE_HOME, spot: JUDGE_SPOT, canvasC: CANVAS_C, seed: 2021

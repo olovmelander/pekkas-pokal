@@ -159,6 +159,16 @@ export function ringMaps(seed = 7) {
 /* ------------------------------------------------------------ materials */
 
 /**
+ * Ceiling on what the clay and glazes send to the screen (linear HDR).
+ * The wet film and the glaze are sharp mirrors; on the spinning, ringed
+ * wall a light's highlight lands on a different sub-pixel facet every frame,
+ * and unclamped those specks run to 20–50× white — bloom turns each into a
+ * twinkling firefly. Tone mapping already renders 4× as white, so nothing
+ * visible is lost.
+ */
+const SPEC_MAX = 4.0;
+
+/**
  * Teach a physical material the per-row aRW attribute: x scales the ring
  * normal map, y is "wet" (raw clay) or "glazed" (fired piece). Wet/glazed
  * bands get lower roughness, a clearcoat film and — for raw clay — the
@@ -169,13 +179,14 @@ function patchRW(mat, wetDark, wetRough) {
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uWetDark = { value: wetDark };
     sh.uniforms.uWetRough = { value: wetRough };
+    sh.uniforms.uSpecMax = { value: SPEC_MAX };
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec2 aRW;\nvarying vec2 vRW;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRW = aRW;');
     sh.fragmentShader = sh.fragmentShader
       .replace(
         '#include <common>',
-        '#include <common>\nvarying vec2 vRW;\nuniform float uWetDark;\nuniform float uWetRough;'
+        '#include <common>\nvarying vec2 vRW;\nuniform float uWetDark;\nuniform float uWetRough;\nuniform float uSpecMax;'
       )
       .replace(
         '#include <color_fragment>',
@@ -198,7 +209,8 @@ function patchRW(mat, wetDark, wetRough) {
           'material.clearcoat = clearcoat;',
           'material.clearcoat = clearcoat * vRW.y;'
         )
-      );
+      )
+      .replace('#include <opaque_fragment>', 'outgoingLight = min( outgoingLight, vec3( uSpecMax ) );\n#include <opaque_fragment>');
   };
   mat.customProgramCacheKey = () => `lr-rw-${wetDark}-${wetRough}`;
 }

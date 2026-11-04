@@ -1358,7 +1358,7 @@ export async function createShooting(container) {
   const vista = { pos: new THREE.Vector3(), q: new THREE.Quaternion(), fov: 50, ox: 0, oy: 0 };
   const fp = { pos: new THREE.Vector3(), q: new THREE.Quaternion(), fov: 50 };
   const reactPose = { pos: new THREE.Vector3(), q: new THREE.Quaternion(), fov: 40 };
-  const GANG_CENTRE = new THREE.Vector3(0.5, 0.98, 2.8);
+  const GANG_CENTRE = new THREE.Vector3(0.45, 0.98, 2.7);
   const REACT_DIR = new THREE.Vector3(0.24, 0.2, -1).normalize();
   const lookM = new THREE.Matrix4();
   const lookAt = new THREE.Vector3();
@@ -1426,7 +1426,7 @@ export async function createShooting(container) {
     const portrait = view.aspect < 0.9;
     reactPose.fov = portrait ? 52 : 38;
     const halfH = Math.tan(THREE.MathUtils.degToRad(reactPose.fov / 2)) * view.aspect;
-    const dist = THREE.MathUtils.clamp(2.9 / halfH, 3.8, 9.5);
+    const dist = THREE.MathUtils.clamp(2.9 / halfH, 3.8, 10);
     reactPose.pos.copy(GANG_CENTRE).addScaledVector(REACT_DIR, dist);
     reactPose.pos.x += Math.sin(t * 0.3) * 0.06;
     lookM.lookAt(reactPose.pos, GANG_CENTRE, THREE.Object3D.DEFAULT_UP);
@@ -1878,6 +1878,7 @@ export async function createShooting(container) {
         gangVisible: gang.group.visible,
         watchdog: { level: watchdog.level, last: lastCheck },
         programs: renderer.info.programs ? renderer.info.programs.length : 0,
+        frames: watchdog.frame,
         phase: state.phase
       };
     }

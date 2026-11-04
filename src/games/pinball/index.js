@@ -2397,7 +2397,16 @@ export async function createPinball(container, opts = {}) {
       o.visible = true;
     }
   });
-  await precompile(renderer, scene, camera);
+  // Compiled against the target the frame is really drawn into: three bakes
+  // tone mapping and output colour space into each program, and both differ
+  // between the screen and the composer's buffer. Compiled for the screen,
+  // every material would compile a second time — in one blocking burst — at
+  // the first composed frame. (compileAsync reads the target synchronously,
+  // so it can be put back straight away.)
+  renderer.setRenderTarget(usePost ? composer.readBuffer : null);
+  const compiling = precompile(renderer, scene, camera);
+  renderer.setRenderTarget(null);
+  await compiling;
   hidden.forEach((o) => {
     o.visible = false;
   });

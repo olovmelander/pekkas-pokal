@@ -38,6 +38,9 @@ export function mulberry(seed) {
   };
 }
 
+/** Where the fika table (and Pekkas Pokal on it) stands, at the end of the gang's row. */
+export const FIKA_TABLE = [3.25, 2.62];
+
 /* ---------------------------------------------------------------- helpers */
 
 /**
@@ -494,16 +497,17 @@ export function buildRange(rand, { envMap } = {}) {
   [-1.2, -0.4, 0.4, 1.2].forEach((x) => {
     props.put(new THREE.SphereGeometry(0.24, 6, 4), 0x9a8a63, { at: [x, 0.16, -15.65], scale: [1.25, 0.7, 0.85] });
   });
-  // Fika table beside the gang: thermos, cups and a plate of bullar
-  props.put(box(0.9, 0.04, 0.6), 0xd8d2c2, { at: [3.75, 0.72, 2.6] });
+  // Fika table at the end of the gang's row: thermos, cups and a plate of bullar
+  const [tx, tz] = FIKA_TABLE;
+  props.put(box(0.9, 0.04, 0.6), 0xd8d2c2, { at: [tx, 0.72, tz] });
   [[-0.4, -0.25], [0.4, -0.25], [-0.4, 0.25], [0.4, 0.25]].forEach(([x, z]) => {
-    props.put(cyl(0.015, 0.015, 0.72, 4), 0x9aa0a6, { at: [3.75 + x, 0.36, 2.6 + z] });
+    props.put(cyl(0.015, 0.015, 0.72, 4), 0x9aa0a6, { at: [tx + x, 0.36, tz + z] });
   });
-  props.put(cyl(0.065, 0.07, 0.32, 10), 0xc8312c, { at: [3.95, 0.9, 2.5] });
-  props.put(cyl(0.05, 0.05, 0.05, 10), 0x2a2a2a, { at: [3.95, 1.08, 2.5] });
-  props.put(cyl(0.11, 0.11, 0.015, 12), 0xf0ede4, { at: [3.6, 0.75, 2.7] });
-  [[3.55, 2.66], [3.63, 2.74], [3.66, 2.64]].forEach(([x, z]) => {
-    props.put(new THREE.SphereGeometry(0.04, 6, 4), 0xc08440, { at: [x, 0.78, z], scale: [1, 0.6, 1] });
+  props.put(cyl(0.065, 0.07, 0.32, 10), 0xc8312c, { at: [tx + 0.2, 0.9, tz - 0.1] });
+  props.put(cyl(0.05, 0.05, 0.05, 10), 0x2a2a2a, { at: [tx + 0.2, 1.08, tz - 0.1] });
+  props.put(cyl(0.11, 0.11, 0.015, 12), 0xf0ede4, { at: [tx - 0.15, 0.75, tz + 0.1] });
+  [[-0.2, 0.06], [-0.12, 0.14], [-0.09, 0.04]].forEach(([x, z]) => {
+    props.put(new THREE.SphereGeometry(0.04, 6, 4), 0xc08440, { at: [tx + x, 0.78, tz + z], scale: [1, 0.6, 1] });
   });
   // Flagpole by the barn, white with a gilded knob
   props.put(cyl(0.06, 0.09, 10, 6), 0xf2efe6, { at: [-20, 5, -41] });
@@ -704,7 +708,7 @@ export function buildRange(rand, { envMap } = {}) {
   const plinth = new THREE.Mesh(box(0.2, 0.08, 0.2), new THREE.MeshLambertMaterial({ color: 0x2a1c14 }));
   plinth.position.y = -0.04;
   trophy.add(plinth);
-  trophy.position.set(3.45, 0.82, 2.5);
+  trophy.position.set(FIKA_TABLE[0] - 0.3, 0.82, FIKA_TABLE[1] - 0.1);
   g.add(trophy);
 
   /* ---- Swallows over the field ---- */

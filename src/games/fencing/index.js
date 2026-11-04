@@ -166,12 +166,17 @@ export async function createFencing(container) {
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.info.autoReset = false; // count the whole frame, not just the last pass
   canvasHost.appendChild(renderer.domElement);
+  // Real GPUs are stricter than the test machine's software one (see shared/gfx.js)
+  const gfx = guardRenderer(renderer, container);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0e0b09);
   scene.fog = new THREE.Fog(0x1b140e, 16, 40);
 
-  const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 80);
+  // Near plane at 20 cm (the camera never comes closer to anything): depth
+  // precision goes with near/far, and the props on the walls and the
+  // scoring box need every bit of it on a 16-bit depth buffer
+  const camera = new THREE.PerspectiveCamera(36, 1, 0.2, 60);
 
   // Reflections: a pre-filtered stand-in of this very room
   const pmrem = new THREE.PMREMGenerator(renderer);
@@ -186,14 +191,18 @@ export async function createFencing(container) {
   pmrem.dispose();
 
   /* ---- World ---- */
+  let fencerName = load(KEY_FENCER, 'Olov Melander');
+  if (!PICKABLE.includes(fencerName)) fencerName = 'Olov Melander';
+  // The rest of the 2023 field watches from the benches
+  const watchers = () => PICKABLE.filter((n) => n !== fencerName);
   const glow = glowTexture();
-  const salle = buildSalle({ glow, high: hiQ });
+  const salle = buildSalle({ glow, high: hiQ, crowdNames: watchers() });
   scene.add(salle.group);
 
-  const me = new Fencer({ sock: 0xd9a531 });
-  const foe = new Fencer({ sock: OPPONENTS[0].sock, mirror: true });
-  me.group.position.x = -HOME;
-  foe.group.position.x = HOME;
+  const me = new Fencer({ name: fencerName, sock: MY_SOCK });
+  const foe = new Fencer({ name: OPPONENTS[0].name, sock: OPPONENTS[0].sock, mirror: true });
+  me.group.position.set(-HOME, PISTE_TOP, 0);
+  foe.group.position.set(HOME, PISTE_TOP, 0);
   scene.add(me.group, foe.group);
   [me, foe].forEach((f) => f.group.traverse((o) => {
     if (o.isMesh) o.receiveShadow = true;
@@ -233,13 +242,43 @@ export async function createFencing(container) {
 
   /* ---- Post: bloom on the lamps, windows, flames and sparks ---- */
   const rtSize = new THREE.Vector2();
-  const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, {
-    type: THREE.HalfFloatType, samples: hiQ ? 4 : 0
-  }));
+  // A target this GPU can really render to (half float + MSAA only where
+  // supported), and a NaN/HDR clamp before bloom so one broken pixel can
+  // never smear across the frame
+  const composer = new EffectComposer(renderer, postTarget(gfx, { samples: hiQ ? 4 : 0 }));
   composer.addPass(new RenderPass(scene, camera));
+  addSanitize(composer);
   const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.5, 0.55, 1.0);
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
+  let usePost = !gfx.safe;
+
+  /* ---- Black-frame watchdog: step down until the picture lives ---- */
+  const watchdog = new RenderWatchdog(
+    renderer,
+    [
+      // 1: draw straight to the screen, no composer
+      () => {
+        usePost = false;
+      },
+      // 2: no shadow maps
+      () => {
+        renderer.shadowMap.enabled = false;
+        scene.traverse((o) => {
+          if (o.material) [].concat(o.material).forEach((m) => (m.needsUpdate = true));
+        });
+      },
+      // 3: no reflections, no light volumes, no dust
+      () => {
+        scene.environment = null;
+        salle.setVolumes(false);
+        scene.traverse((o) => {
+          if (o.material) [].concat(o.material).forEach((m) => (m.needsUpdate = true));
+        });
+      }
+    ],
+    { onStep: () => gfxNotice(container, 'Grafiken förenklades för att fungera på den här enheten.') }
+  );
 
   /* ---- State ---------------------------------------------------------- */
 
@@ -262,8 +301,6 @@ export async function createFencing(container) {
   };
   const meS = { line: 1, pose: 'guard', t: 0, lungeLine: 1, isFeint: false, resolved: false };
   const ai = { pose: 'guard', t: 0, line: 1, shownLine: 1, timer: 2.5, willFeint: false, pendingRiposte: false };
-  let fencerName = load(KEY_FENCER, 'Olov Melander');
-  if (!PICKABLE.includes(fencerName)) fencerName = 'Olov Melander';
   let medals = load(KEY_MEDALS, {});
   let best = load(KEY_HIGH, 0);
   if (typeof best !== 'number') best = parseInt(best, 10) || 0;
@@ -362,14 +399,19 @@ export async function createFencing(container) {
     state.phaseT = 0;
     hud.setMode('title');
     hud.screen(titleScreen({ fencer: fencerName, best, medals, played }));
-    animMe.play('guard');
-    animAi.play('guard');
+    // Masks off, at ease: the two of you, waiting for the draw
+    foe.setPerson(OPPONENTS[0].name, OPPONENTS[0].sock);
+    animMe.play('ease');
+    animAi.play('ease');
+    me.setBaseExpression('smile');
+    foe.setBaseExpression('smile');
     salle.crowd.react('idle');
     salle.referee.signal('idle');
   }
 
   function startTournament() {
     sfx.resume();
+    salle.crowd.setNames(watchers());
     played = true;
     state.score = 0;
     state.round = 0;
@@ -383,12 +425,16 @@ export async function createFencing(container) {
     state.phase = 'bracket';
     state.phaseT = 0;
     hud.setMode('bracket');
-    foe.setSock(opp().sock);
+    // The next opponent steps up, mask in hand: you see who it is
+    foe.setPerson(opp().name, opp().sock);
     hud.screen(bracketScreen({
       bracket: state.bracket, round: state.round, results: state.results, opp: opp(), place: opp().place
     }));
-    animMe.play('guard');
-    animAi.play('guard');
+    animMe.play('ease');
+    animAi.play('ease');
+    me.setBaseExpression('neutral');
+    foe.setBaseExpression(['smile', 'focus', 'smile'][state.round]);
+    foe.express(['smile', 'focus', 'grin'][state.round], 0.7, 1.6);
   }
 
   function startBout() {
@@ -415,6 +461,8 @@ export async function createFencing(container) {
     animMe.ox = 0;
     hud.call(opp().name.toUpperCase(), 'name');
     hud.sub(`${ROUNDS[state.round]} · ${opp().title}`);
+    me.setBaseExpression('focus');
+    foe.setBaseExpression('focus');
     salle.crowd.react('clap');
     sfx.applause(1.6, 0.6);
     camCut = 'intro';
@@ -469,6 +517,8 @@ export async function createFencing(container) {
     (mine ? animAi : animMe).flash = 1;
     (mine ? animAi : animMe).impulse(P.lean, -2.4);
     (mine ? animAi : animMe).impulse(P.nod, -3);
+    (mine ? me : foe).express('grin', 1, 1.3);
+    (mine ? foe : me).express('frown', 1, 1.3);
     if (mine) {
       state.myTouches++;
       state.streak++;
@@ -562,6 +612,9 @@ export async function createFencing(container) {
     sampleRec(replay.t, rec.b, foe.pose);
     me.apply(me.pose);
     foe.apply(foe.pose);
+    aimHeads();
+    me.update(replay.t - prev);
+    foe.update(replay.t - prev);
     rec.events.forEach((e) => {
       if (e.t > prev && e.t <= replay.t) {
         if (e.type === 'touch') {
@@ -604,6 +657,8 @@ export async function createFencing(container) {
     hud.setMode('result');
     animMe.play(won ? 'win' : 'lose', 1);
     animAi.play(won ? 'lose' : 'win', 1);
+    me.setBaseExpression(won ? 'grin' : 'frown');
+    foe.setBaseExpression(won ? 'frown' : 'smile');
     salle.referee.signal('point', won ? -1 : 1);
     salle.crowd.react(won ? 'clap' : 'groan');
     if (won) {
@@ -650,6 +705,8 @@ export async function createFencing(container) {
     hud.sub(`${fencerName} · Stockholm 2023`, 'gold');
     animMe.play('champion', 1);
     animAi.play('lose', 1);
+    me.setBaseExpression('grin');
+    foe.setBaseExpression('smile');
     salle.crowd.react('stand');
     salle.referee.signal('point', -1);
     confetti.start(-HOME, 0);
@@ -676,6 +733,11 @@ export async function createFencing(container) {
     state.phase = 'final';
     state.phaseT = 0;
     hud.setMode('final');
+    animMe.play('ease');
+    animAi.play('ease');
+    me.setBaseExpression(medal ? 'smile' : 'neutral');
+    foe.setBaseExpression('smile');
+    salle.crowd.react(medal === 1 ? 'clap' : 'idle');
     hud.screen(finalScreen({
       medal, score: state.score, best, isBest, fencer: fencerName, results: state.results
     }));
@@ -703,6 +765,7 @@ export async function createFencing(container) {
         ai.pose = 'bitten';
         ai.t = 0;
         hud.call('DEN GICK PÅ FINTEN!', 'teal');
+        foe.express('surprised', 0.9, 0.8);
         hud.sub('STÖT NU!', 'teal');
         sfx.scrape();
         sfx.clink(0.5);
@@ -739,6 +802,7 @@ export async function createFencing(container) {
       ai.t = 0;
       meS.pose = 'stagger';
       meS.t = 0;
+      me.express('surprised', 0.8, 0.8);
       clash(tipMe, 0.9);
       sfx.stagger();
       hud.sub('PARERAD', 'red');
@@ -768,6 +832,7 @@ export async function createFencing(container) {
       meS.pose = 'parry';
       meS.t = 0;
       state.stats.parries++;
+      foe.express('surprised', 0.8, 0.9);
       // Sparks where the blades actually meet: a little short of the tip
       me.midWorld(v3).lerp(tipAi, 0.5);
       clash(v3, 1);
@@ -802,6 +867,7 @@ export async function createFencing(container) {
           ai.tele = state.tutorial && state.firstAttack ? o.telegraph * 1.7 : o.telegraph;
           if (state.firstAttack && state.tutorial) ai.willFeint = false;
           state.firstAttack = false;
+          foe.express('frown', 0.6, ai.tele);
           salle.crowd.react('tense');
           coach('read', `<b>Anfall i ${LINE_NAME[ai.line]}!</b> Välj samma linje för att parera.`, 2200);
         }
@@ -951,6 +1017,10 @@ export async function createFencing(container) {
     if (chip) {
       fencerName = chip.dataset.fencer;
       save(KEY_FENCER, fencerName);
+      // Dress the one you picked; the others take their places on the benches
+      me.setPerson(fencerName, MY_SOCK);
+      me.express('smile', 0.8, 1.2);
+      salle.crowd.setNames(watchers());
       el.panel.querySelectorAll('[data-fencer]').forEach((c) => c.classList.toggle('on', c === chip));
       sfx.resume();
       sfx.step();
@@ -1099,6 +1169,14 @@ export async function createFencing(container) {
       goal.look.y += 0.35;
       goal.look.x += ph === 'title' ? lerp(0, 1.6, k) : 0;
       goal.rate = 1.2;
+      if (ph === 'bracket' && aspect > 1.2) {
+        // Wide screens: the panel sits in the middle, so frame the next
+        // opponent beside it — mask in hand, looking at you
+        foe.j.head.getWorldPosition(v3);
+        goal.look.set(v3.x - 1.75, 1.25, 0);
+        goal.pos.set(v3.x - 2.1, 1.55, 4.6);
+        goal.fov = 34;
+      }
       if (ph === 'result') {
         const winner = state.results.length && state.results[state.results.length - 1].won ? me : foe;
         winner.j.torso.getWorldPosition(v3);
@@ -1274,7 +1352,7 @@ export async function createFencing(container) {
       // Where it is going to land, on you
       const covered = meS.line === ai.shownLine;
       me.j.torso.getWorldPosition(v3);
-      threat.position.set(v3.x + 0.24, LINE_Y[ai.shownLine], v3.z + 0.25);
+      threat.position.set(v3.x + 0.24, me.lineWorldY(ai.shownLine), v3.z + 0.25);
       threatMat.color.set(covered ? 0x7fe8ff : 0xff5a46);
       threatMat.opacity = 0.55 + Math.sin(t * 18) * 0.25;
       threat.scale.setScalar(0.3 + Math.sin(k * Math.PI) * 0.08);
@@ -1285,6 +1363,48 @@ export async function createFencing(container) {
       threatMat.opacity = Math.max(0, threatMat.opacity - dt * 6);
       hud.setThreat(-1, false);
     }
+  }
+
+  /* ---- Where everyone looks ------------------------------------------ */
+  const headMe = new THREE.Vector3();
+  const headFoe = new THREE.Vector3();
+  const floorMe = new THREE.Vector3();
+  const floorFoe = new THREE.Vector3();
+  const focus = new THREE.Vector3(0, 1.1, 0);
+
+  /** In the bout the fencers watch each other; at ease they find the camera. */
+  function aimHeads() {
+    const ph = state.phase;
+    me.j.head.getWorldPosition(headMe).y += 0.1;
+    foe.j.head.getWorldPosition(headFoe).y += 0.1;
+    floorMe.set(me.group.position.x + 0.5, 0, 0.9);
+    floorFoe.set(foe.group.position.x - 0.5, 0, 0.9);
+    let a = headFoe;
+    let b = headMe;
+    let wa = 1;
+    let wb = 1;
+    if (ph === 'title' || ph === 'final') {
+      a = camera.position;
+      b = camera.position;
+      wa = 0.7;
+      wb = 0.7;
+    } else if (ph === 'bracket') {
+      b = camera.position;
+      wa = 0.6;
+    } else if (ph === 'result') {
+      const won = state.results.length && state.results[state.results.length - 1].won;
+      a = won ? camera.position : floorMe;
+      b = won ? floorFoe : camera.position;
+      wa = won ? 0.8 : 0.6;
+      wb = won ? 0.6 : 0.8;
+    } else if (ph === 'ceremony') {
+      a = camera.position;
+      wa = 0.8;
+    }
+    me.look = a;
+    me.lookWeight = wa;
+    foe.look = b;
+    foe.lookWeight = wb;
   }
 
   let frozen = false; // test hook: hold the simulation, keep rendering
@@ -1303,8 +1423,8 @@ export async function createFencing(container) {
     }
 
     const ph = state.phase;
-    const ctxMe = { dist: HOME * 2, oppPx: foe.pose[P.px] };
-    const ctxAi = { dist: HOME * 2, oppPx: me.pose[P.px] };
+    const ctxMe = { dist: HOME * 2, oppPx: foe.pose[P.px], lines: foe.lines, front: foe.front };
+    const ctxAi = { dist: HOME * 2, oppPx: me.pose[P.px], lines: me.lines, front: me.front };
     let trailDt = dt;
 
     if (ph === 'replay') {
@@ -1321,11 +1441,11 @@ export async function createFencing(container) {
       animAi.update(dt, ctxAi);
       me.apply(me.pose);
       foe.apply(foe.pose);
+      aimHeads();
+      me.update(dt);
+      foe.update(dt);
       if (state.phase === 'ready' || state.phase === 'live' || state.phase === 'touch') record();
     }
-
-    me.group.updateMatrixWorld(true);
-    foe.group.updateMatrixWorld(true);
     // Trails only for strikes and beats — a salute should not leave a smear
     trailMe.gain = STRIKES.has(animMe.act) ? 1 : 0;
     trailAi.gain = STRIKES.has(animAi.act) ? 1 : 0;
@@ -1337,7 +1457,11 @@ export async function createFencing(container) {
     sparks.update(fxDt);
     flashes.update(fxDt);
     confetti.update(dt);
-    salle.update(t, ph === 'replay' ? realDt * 0.3 : dt);
+    // Heads in the salle follow the action: the blades, or the touch
+    if (ph === 'touch' && state.lastTouch) focus.copy(state.lastTouch.at);
+    else if (ph === 'replay') focus.copy(replay.at);
+    else focus.copy(tipMe).add(tipAi).multiplyScalar(0.5);
+    salle.update(t, ph === 'replay' ? realDt * 0.3 : dt, ph === 'title' || ph === 'final' ? null : focus);
     if (ph === 'ceremony' && Math.floor(state.phaseT * 3) % 2 === 0) salle.score.flash(0);
     else if (ph === 'ceremony') salle.score.clear();
 
@@ -1360,9 +1484,14 @@ export async function createFencing(container) {
       camera.updateProjectionMatrix();
     }
     renderer.info.reset();
-    composer.render();
+    drawFrame();
+    watchdog.afterFrame();
   }
-  raf = requestAnimationFrame(tick);
+
+  function drawFrame() {
+    if (usePost) composer.render();
+    else renderer.render(scene, camera);
+  }
 
   const onVisibility = () => {
     running = !document.hidden;
@@ -1375,6 +1504,28 @@ export async function createFencing(container) {
   document.addEventListener('visibilitychange', onVisibility);
 
   showTitle();
+  // Open on the at-ease pose (no springing in from en garde) and pose
+  // everyone once before the shaders compile
+  animMe.snap({ dist: HOME * 2, oppPx: 0, lines: foe.lines, front: foe.front });
+  animAi.snap({ dist: HOME * 2, oppPx: 0, lines: me.lines, front: me.front });
+  simulate(1 / 60);
+
+  // Compile every shader before the first frame without locking the GPU
+  // (Windows/Direct3D can reset the GPU on one long blocking compile).
+  // Hidden things — confetti, flashes, crowd poses not in use — come along.
+  const hidden = [];
+  scene.traverse((o) => {
+    if (!o.visible) {
+      hidden.push(o);
+      o.visible = true;
+    }
+  });
+  await precompile(renderer, scene, camera);
+  hidden.forEach((o) => {
+    o.visible = false;
+  });
+  last = performance.now();
+  raf = requestAnimationFrame(tick);
 
   /* Deterministic hooks for automated tests */
   window.__ppFakt = {
@@ -1433,7 +1584,10 @@ export async function createFencing(container) {
       camOverride = pos ? { pos: new THREE.Vector3(...pos), look: new THREE.Vector3(...look), fov } : null;
     },
     pickFencer(name) {
-      if (PICKABLE.includes(name)) fencerName = name;
+      if (!PICKABLE.includes(name)) return;
+      fencerName = name;
+      me.setPerson(name, MY_SOCK);
+      salle.crowd.setNames(watchers());
     },
     info() {
       return {
@@ -1441,8 +1595,26 @@ export async function createFencing(container) {
         drawCalls: renderer.info.render.calls,
         triangles: renderer.info.render.triangles,
         bloom: bloom.enabled,
-        pixelRatio
+        post: usePost,
+        shadows: renderer.shadowMap.enabled,
+        watchdog: watchdog.level,
+        pixelRatio,
+        people: { me: me.name, foe: foe.name, meTris: me.triangles, foeTris: foe.triangles, crowdCalls: salle.crowd.drawCalls }
       };
+    },
+    /** The two fencers (people, masks, foils) for close inspection in tests. */
+    fencers() {
+      return { me, foe };
+    },
+    /** Tip of a fencer's blade and the point it aims at (for reach checks). */
+    reach(mine = true) {
+      const f = mine ? me : foe;
+      const o = mine ? foe : me;
+      const tip = f.tipWorld(new THREE.Vector3());
+      // The opponent's pelvis, then his chest surface towards us
+      const pelvis = o.group.position.x + (mine ? -1 : 1) * o.pose[P.px];
+      const tx = pelvis + (mine ? -1 : 1) * o.front;
+      return { tip: tip.toArray(), targetX: tx, lines: o.lines.map((y) => y + PISTE_TOP), bend: f.pose[P.bend] };
     }
   };
 
@@ -1459,6 +1631,8 @@ export async function createFencing(container) {
     window.removeEventListener('keydown', onKeyDown);
     hud.dispose();
     if (window.__ppFakt) delete window.__ppFakt;
+    gfx.dispose();
+    watchdog.dispose();
 
     me.dispose();
     foe.dispose();

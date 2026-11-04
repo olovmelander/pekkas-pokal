@@ -163,7 +163,7 @@ export function buildBoat() {
   const hull = new Builder();
   const STRAKES = 6;
   const NU = 34;
-  const tmp = new THREE.Vector3();
+  const tmp = new THREE.Color();
 
   /* Outer skin: six lapped strakes a side. Each strake's lower edge stands
      out by the lap, so its edge catches the light like real clinker. */

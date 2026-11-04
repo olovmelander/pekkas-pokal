@@ -111,6 +111,8 @@ export class Pool {
     this.dirty = false;
     /** Applied to particles emitted without their own `grav`. */
     this.gravity = 0;
+    /** Particles that rise above this height die (bubbles pop at the surface). */
+    this.ceiling = Infinity;
   }
 
   /**
@@ -179,6 +181,7 @@ export class Pool {
       if (p.life <= 0) continue;
       alive = true;
       p.life -= dt;
+      if (this.pos[i * 3 + 1] > this.ceiling) p.life = 0;
       if (p.life <= 0) {
         this.alpha[i] = 0;
         this.pos[i * 3 + 1] = -9999;

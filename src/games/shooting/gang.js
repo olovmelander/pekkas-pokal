@@ -28,11 +28,11 @@ import { createPerson, appearanceFor, POSES, SEAT_HEIGHT, SEAT_BACK } from '../s
 /** Who sits where. x/z is the chair (root) position; yaw 0 faces the field (−z). */
 const SEATS = [
   {
-    name: 'Tobias Lundqvist', x: -1.95, z: 2.82, yaw: 0.16, cup: true, fabric: 0x2f6d4a,
+    name: 'Tobias Lundqvist', x: -1.7, z: 2.82, yaw: 0.16, cup: true, fabric: 0x2f6d4a,
     look: { outfit: { top: 'shirt' } }
   },
   {
-    name: 'Viktor Jones', x: -0.98, z: 2.95, yaw: 0.07, fabric: 0x2b4f86,
+    name: 'Viktor Jones', x: -0.85, z: 2.95, yaw: 0.07, fabric: 0x2b4f86,
     look: { headwear: { style: 'cap', color: 0x1f2328 } }
   },
   {
@@ -40,18 +40,18 @@ const SEATS = [
     look: { outfit: { top: 'sweater', topColor: 0x2f5f5c } }
   },
   {
-    name: 'Rickard Nilsson', x: 0.98, z: 2.97, yaw: -0.08, fabric: 0xa8832e,
+    name: 'Rickard Nilsson', x: 0.85, z: 2.97, yaw: -0.08, fabric: 0xa8832e,
     look: { headwear: { style: 'beanie', color: 0x2f4a32 }, outfit: { top: 'jacket', topColor: 0x4a5a3a, shoes: 'boots', shoeColor: 0x3a2a1e } }
   },
   {
-    name: 'Per Olsson', x: 1.95, z: 2.8, yaw: -0.2, cup: true, fabric: 0x6a5a8a,
+    name: 'Per Olsson', x: 1.7, z: 2.8, yaw: -0.2, cup: true, fabric: 0x6a5a8a,
     look: { outfit: { top: 'sweater' } }
   }
 ];
 
 /** Henrik arranged 2022 (with Ludvig) — so he keeps the score sheet. */
 const SCORER = {
-  name: 'Henrik Lundqvist', x: 3.05, z: 2.15,
+  name: 'Henrik Lundqvist', x: 2.5, z: 2.1,
   look: { outfit: { top: 'jacket', topColor: 0x3f5a3c, shoes: 'boots', shoeColor: 0x3a2a1e } }
 };
 

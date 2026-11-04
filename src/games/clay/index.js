@@ -38,6 +38,7 @@ import { mulberry, buildStudio, buildWheel, buildHand, buildSponge, buildEnvScen
 import { buildFx, HeatHazeShader } from './fx.js';
 import { buildGuide } from './guide.js';
 import { buildHud, drawDiff, silhouetteSvg, starsHtml } from './hud.js';
+import { createKeramiker } from './keramiker.js';
 
 export const layout = 'full';
 
@@ -130,6 +131,9 @@ const TITLES = [
 const KILN_SCALE = 0.36;
 const REVEAL_SCALE = 0.3;
 
+/* The reveal camera's approach to the banding wheel (keramikern stands on its far side) */
+const DIR_REVEAL = new THREE.Vector3(-0.42, 0.2, 1);
+
 /* Firing timeline, seconds from KLAR */
 const FIRE = { lift: 0.35, fly: 1.25, close: 1.65, heat: 3.95, open: 4.35, slide: 5.05, cool: 6.55 };
 
@@ -217,12 +221,29 @@ export async function createClay(container) {
     : 'Dra med musen mot leran — inåt trycker, utåt drar · håll G glättar · Enter bränner';
   const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-  /* Quality tier: phones get a lighter pixel ratio, no MSAA, smaller shadows */
+  /*
+   * Quality tier: phones get a lighter pixel ratio, no MSAA, smaller
+   * shadows. A low memory figure alone is no reason to drop MSAA — Chrome
+   * reports 4 GB on plenty of ordinary laptops — so it only trims the pixel
+   * ratio; the frame-time guard further down does the rest if needed.
+   */
   const smallScreen = Math.min(window.screen?.width || 1e4, window.screen?.height || 1e4) < 820;
-  const lowTier = (coarsePointer && smallScreen) || (navigator.deviceMemory && navigator.deviceMemory <= 4);
+  const mem = navigator.deviceMemory || 8;
+  const lowTier = (coarsePointer && smallScreen) || mem <= 2;
+  const maxRatio = lowTier || mem <= 4 ? 1.5 : 2;
 
-  const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, lowTier ? 1.5 : 2));
+  // ?gfx=safe renders straight to the canvas (see shared/gfx.js); that path
+  // has no composer MSAA, so the canvas gets its own antialiasing instead
+  const safeFlag = (() => {
+    try {
+      return (new URLSearchParams(location.search).get('gfx') || localStorage.getItem('pp-gfx')) === 'safe';
+    } catch (e) {
+      return false;
+    }
+  })();
+  const renderer = new THREE.WebGLRenderer({ antialias: safeFlag, powerPreference: 'high-performance' });
+  let baseRatio = Math.min(window.devicePixelRatio || 1, maxRatio);
+  renderer.setPixelRatio(baseRatio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
@@ -249,14 +270,22 @@ export async function createClay(container) {
   const wheel = buildWheel();
   scene.add(wheel.group);
 
-  /* Environment: the studio's own light, baked once through PMREM */
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  const envScene = buildEnvScene(studio.window);
-  const envRT = pmrem.fromScene(envScene, 0.035);
-  scene.environment = envRT.texture;
-  scene.environmentIntensity = 0.6;
-  disposeScene(envScene);
-  pmrem.dispose();
+  /*
+   * Environment: the studio's own light, baked once through PMREM. PMREM
+   * renders into half-float targets; a GPU that cannot draw into those
+   * would bake a black map, so it goes without one and gets a stronger
+   * sky fill instead (below).
+   */
+  let envRT = null;
+  if (gfx.floatRT) {
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const envScene = buildEnvScene(studio.window);
+    envRT = pmrem.fromScene(envScene, 0.035);
+    scene.environment = envRT.texture;
+    scene.environmentIntensity = 0.6;
+    disposeScene(envScene);
+    pmrem.dispose();
+  }
 
   /* ---- Lights: one dominant, a couple of fills, accents ---------------- */
 
@@ -279,7 +308,7 @@ export async function createClay(container) {
   scene.add(sun, sun.target);
 
   // FILLS: cool sky from above, warm front fill from the potter's side
-  const hemi = new THREE.HemisphereLight(0xa8b8d8, 0x5a3622, 0.38);
+  const hemi = new THREE.HemisphereLight(0xa8b8d8, 0x5a3622, envRT ? 0.38 : 0.85);
   scene.add(hemi);
   const front = new THREE.DirectionalLight(0xffe6c8, 0.7);
   front.position.set(3, 4, 9);
@@ -354,6 +383,24 @@ export async function createClay(container) {
   sponge.visible = false;
   guide.group.add(sponge);
 
+  /* ---- Keramikern -------------------------------------------------------- */
+
+  // He waits by the kiln while you throw, and judges from behind the
+  // banding wheel — on its far side from the reveal camera, facing it
+  const behind = new THREE.Vector3(-DIR_REVEAL.x, 0, -DIR_REVEAL.z).normalize();
+  studio.group.updateMatrixWorld(true);
+  const keramiker = createKeramiker({
+    home: new THREE.Vector3(2.8, 0, -2.25),
+    judge: studio.reveal.clone().setY(0).addScaledVector(behind, 0.85),
+    wheel: new THREE.Vector3(0, wheel.headY + 1, 0),
+    banding: studio.reveal.clone().setY(studio.banding.position.y + 0.02),
+    bandingRadius: 0.36,
+    kilnDoor: studio.kiln.group.localToWorld(new THREE.Vector3(0, 1.2, 0.8))
+  });
+  scene.add(keramiker.root);
+  const attention = new THREE.Vector3();
+  const pieceMid = new THREE.Vector3();
+
   const fx = buildFx(scene);
   const seedRand = mulberry(71);
   function seedSplats() {
@@ -381,10 +428,11 @@ export async function createClay(container) {
   // ?gfx=safe, eller vakten nedan: rita direkt utan efterbehandling
   let usePost = !gfx.safe;
 
-  // Ateljén är aldrig mörk på riktigt — solen står i fönstret och lampan
-  // lyser. Blir bilden ändå (nästan) svart på en krets trappas grafiken ner:
-  // först förbi efterbehandlingen, sedan bort med skuggorna (strålen genom
-  // fönstret är en skugga i väggen; går skuggkartan fel hamnar allt i mörker).
+  // Ateljén är aldrig mörk på riktigt — fyllnadsljusen bär rummet även om
+  // solen skulle försvinna. Blir bilden ändå (nästan) svart på en krets
+  // trappas grafiken ner: först förbi efterbehandlingen, sedan bort med
+  // skuggorna. Utan skuggor lyser solen genom väggen, så den dämpas och
+  // strålen genom fönstret släcks (den hör ihop med skuggan).
   const watchdog = new RenderWatchdog(
     renderer,
     [
@@ -393,6 +441,8 @@ export async function createClay(container) {
       },
       () => {
         renderer.shadowMap.enabled = false;
+        sun.intensity *= 0.35;
+        studio.shaft.visible = false;
         scene.traverse((o) => {
           if (o.material) [].concat(o.material).forEach((m) => (m.needsUpdate = true));
         });
@@ -508,6 +558,7 @@ export async function createClay(container) {
         hud.meterStars.classList.add('pop');
         if (stars === 3) toast('Keramikern höjer ögonbrynen!', true);
         else if (stars === 2) toast('Nu liknar det något!');
+        keramiker.cue('star', stars);
       }
       state.stars = stars;
     }
@@ -635,6 +686,9 @@ export async function createClay(container) {
     later(() => setPhaseLabel(''), 3400);
     hud.coach.textContent = COACH;
     hud.coach.classList.toggle('show', state.coached < 1.2);
+    // Keramikern points at the new lump and says what he wants
+    keramiker.clearVerdict();
+    keramiker.cue('intro');
   }
 
   function finishPiece() {
@@ -721,6 +775,7 @@ export async function createClay(container) {
       }, 420 + i * 340);
     }
     if (res.grade >= 9) later(() => sfx.fanfare(), 420 + res.stars * 340);
+    keramiker.cue('verdict', res.grade);
     renderChips();
   }
 
@@ -959,8 +1014,7 @@ export async function createClay(container) {
   }
 
   const DIR_THROW = new THREE.Vector3(0, 0.2, 1);
-  const DIR_KILN = new THREE.Vector3(-0.35, 0.5, 1); // high enough to see over keramikern
-  const DIR_REVEAL = new THREE.Vector3(-0.42, 0.2, 1);
+  const DIR_KILN = new THREE.Vector3(-0.35, 0.5, 1); // a little from above, so the glowing seam reads
   const DIR_SHOW = new THREE.Vector3(0.05, 0.12, 1);
   const REVEAL_LOOK = new THREE.Vector3();
   const SHOW_LOOK = new THREE.Vector3(studio.window.x, 1.95, -5.2);
@@ -1193,6 +1247,7 @@ export async function createClay(container) {
     if (wob > 0.45 && !state.wobbleWarned) {
       state.wobbleWarned = true;
       toast('Lugnt! Leran slår — glätta och ta det varsamt.');
+      keramiker.cue('wobble');
     }
 
     updateHands(dt, t);
@@ -1307,7 +1362,10 @@ export async function createClay(container) {
     } else if (ft < FIRE.close) {
       clayGroup.position.copy(kilnMouth);
       hinge.rotation.y = OPEN * (1 - ease((ft - FIRE.fly) / (FIRE.close - FIRE.fly)));
-      if (crossed(FIRE.close - 0.08)) sfx.door();
+      if (crossed(FIRE.close - 0.08)) {
+        sfx.door();
+        keramiker.cue('door');
+      }
     } else if (ft < FIRE.heat) {
       swapToFired();
       hinge.rotation.y = 0;
@@ -1376,7 +1434,7 @@ export async function createClay(container) {
       haze.uniforms.uCenter.value.set(tmpV.x * 0.5 + 0.5, tmpV.y * 0.5 + 0.5);
       haze.uniforms.uRadius.value.set(0.16 / Math.max(0.6, view.aspect), 0.32);
       haze.uniforms.uStrength.value = state.heat;
-      haze.uniforms.uTime.value = t;
+      haze.uniforms.uTime.value = t % 600;
     }
     bloom.strength = 0.3 + state.heat * 0.45 + flash * 0.25;
   }
@@ -1418,37 +1476,29 @@ export async function createClay(container) {
   }
 
   /**
-   * Keramikern watches the wheel from beside the kiln; when a piece goes in
-   * he walks round behind the banding wheel to judge it (out of the kiln
-   * shot), and throws an arm up for good work.
+   * Keramikern (keramiker.js) gets the moment each frame: what he should be
+   * watching while you throw — your hand on the clay, or the clay itself —
+   * the fired piece while he judges, and where the viewer is.
    */
-  const JUDGE_HOME = studio.judge.guy.position.clone();
-  const JUDGE_SPOT = new THREE.Vector3(3.3, 0, -1.6);
-  const judgeGoal = new THREE.Vector3();
-  function updateJudge(dt, t) {
-    const { guy, head, armR } = studio.judge;
-    const away = state.phase === 'fire' || state.phase === 'judge';
-    judgeGoal.copy(away ? JUDGE_SPOT : JUDGE_HOME);
-    const dist = guy.position.distanceTo(judgeGoal);
-    const step = Math.min(dist, dt * 1.6);
-    const walking = dist > 0.02;
-    // At home he faces the wheel; away, the banding wheel (and the camera)
-    let face = away ? Math.atan2(studio.reveal.x - guy.position.x, studio.reveal.z - guy.position.z) : -0.75;
-    if (walking) {
-      tmpV.subVectors(judgeGoal, guy.position).normalize();
-      guy.position.addScaledVector(tmpV, step);
-      face = Math.atan2(tmpV.x, tmpV.z);
+  function updateKeramiker(dt, t) {
+    const ph = state.phase;
+    if (ph === 'throw' || ph === 'intro') {
+      const b = brush && dragging ? brush : hover;
+      if (b) guide.group.localToWorld(attention.set(b.side * r[b.j], b.y, 0));
+      else attention.set(0, wheel.headY + H * 0.55, 0);
     }
-    guy.position.y = walking ? Math.abs(Math.sin(t * 9)) * 0.04 : 0;
-    let dr = face - guy.rotation.y;
-    dr = Math.atan2(Math.sin(dr), Math.cos(dr));
-    guy.rotation.y += dr * Math.min(1, dt * 4);
-    const judging = state.phase === 'judge' || (state.phase === 'fire' && state.t > FIRE.open);
-    head.rotation.x = judging ? Math.sin(t * 2.6) * 0.09 : head.rotation.x * (1 - Math.min(1, dt * 3));
-    head.rotation.y = judging || walking ? 0 : Math.sin(t * 0.4) * 0.25;
-    const res = state.results[state.slot];
-    const cheer = state.phase === 'judge' && res && res.grade >= 8;
-    armR.rotation.z += ((cheer ? 2.5 + Math.sin(t * 6) * 0.15 : 0.08) - armR.rotation.z) * Math.min(1, dt * 5);
+    if (fired) {
+      pieceMid.copy(fired.mesh.position);
+      pieceMid.y += H * fired.mesh.scale.y * 0.5;
+    }
+    keramiker.update(dt, t, {
+      phase: ph,
+      opened: ph === 'fire' && state.t >= FIRE.open,
+      attention,
+      piece: fired ? pieceMid : null,
+      camera: camera.position,
+      heat: state.heat
+    });
   }
 
   /** Pieces gliding to the window sill. */
@@ -1472,14 +1522,44 @@ export async function createClay(container) {
   let timeScale = 1; // tests on software GL fast-forward with this
   renderer.info.autoReset = false; // count the whole composer frame, not its last pass
 
+  /*
+   * Frame-time guard: when the GPU cannot keep up (a weak laptop, a busy
+   * phone), trade resolution for smoothness — at most twice, and never back
+   * up again, so the picture cannot pump between sharp and soft.
+   */
+  const perf = { auto: true, skip: 2500, sum: 0, n: 0, drops: 0 };
+  function guardFrameTime(ms) {
+    if (!perf.auto || perf.drops >= 2 || ms > 250) return; // > 250 ms: a stall or a tab switch, not load
+    if (perf.skip > 0) {
+      perf.skip -= ms; // first seconds: shader compiles and warm-up
+      return;
+    }
+    perf.sum += ms;
+    perf.n++;
+    if (perf.sum < 3000) return;
+    const avg = perf.sum / perf.n;
+    perf.sum = 0;
+    perf.n = 0;
+    if (avg < 30) return;
+    perf.drops++;
+    baseRatio = Math.max(0.7, baseRatio * 0.78);
+    renderer.setPixelRatio(baseRatio);
+    resize();
+  }
+
   function tick(now) {
     raf = requestAnimationFrame(tick);
-    const dt = clampDt(now - last) * timeScale;
+    const raw = now - last;
+    const dt = clampDt(raw) * timeScale;
     last = now;
     if (!running) return;
+    guardFrameTime(raw);
     renderer.info.reset();
     if (hudHost.dataset.phase !== state.phase) hudHost.dataset.phase = state.phase;
     const t = now / 1000;
+    // Shader clocks are wrapped: a page left open for hours would otherwise
+    // feed sin()/fract() numbers too big for the GPU's float precision
+    const tw = t % 600;
     plopGap -= dt;
 
     if (helpOpen) {
@@ -1511,7 +1591,7 @@ export async function createClay(container) {
 
     // The guide plane turns to face the camera
     guide.group.rotation.y = Math.atan2(camera.position.x, camera.position.z);
-    guide.setGhostTime(t, state.phase === 'intro' ? smooth(0.5, 1.4, state.t) : 0.9);
+    guide.setGhostTime(tw, state.phase === 'intro' ? smooth(0.5, 1.4, state.t) : 0.9);
 
     // The finished piece turns on the banding wheel while it is judged
     if (fired && (state.phase === 'judge' || (state.phase === 'fire' && state.t > FIRE.slide))) {
@@ -1520,7 +1600,7 @@ export async function createClay(container) {
     }
     updateGallery(dt);
 
-    updateJudge(dt, t);
+    updateKeramiker(dt, t);
 
     // Score counts up
     if (state.shownScore !== state.score) {
@@ -1536,7 +1616,7 @@ export async function createClay(container) {
     fx.glints.update(dt);
 
     // Ambience: the sun shaft shimmers, motes drift, swifts pass over
-    studio.shaft.material.uniforms.uTime.value = t;
+    studio.shaft.material.uniforms.uTime.value = tw;
     studio.motes.position.y = Math.sin(t * 0.11) * 0.05;
     studio.motes.position.x = Math.sin(t * 0.07) * 0.06;
     swiftIn -= dt;
@@ -1616,8 +1696,9 @@ export async function createClay(container) {
     setTimeScale(k = 1) {
       timeScale = Math.max(0.1, Math.min(8, k));
     },
-    /** Software-GL test runs render functional passes at a reduced ratio. */
+    /** Software-GL test runs render functional passes at a reduced ratio (and turn the frame-time guard off). */
     setPixelRatio(pr) {
+      perf.auto = false;
       renderer.setPixelRatio(pr);
       resize();
     },
@@ -1639,7 +1720,11 @@ export async function createClay(container) {
       return {
         drawCalls: renderer.info.render.calls,
         triangles: renderer.info.render.triangles,
-        lowTier: !!lowTier
+        lowTier: !!lowTier,
+        pixelRatio: renderer.getPixelRatio(),
+        post: usePost,
+        shadows: renderer.shadowMap.enabled,
+        watchdog: watchdog.level
       };
     }
   };
@@ -1666,6 +1751,7 @@ export async function createClay(container) {
 
     guide.dispose();
     fx.dispose();
+    keramiker.dispose();
     scene.traverse((o) => {
       if (o.geometry) o.geometry.dispose();
       if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(disposeMaterial);
@@ -1673,7 +1759,7 @@ export async function createClay(container) {
     body.dispose();
     maps.normal.dispose();
     maps.albedo.dispose();
-    envRT.dispose();
+    if (envRT) envRT.dispose();
     composer.passes.forEach((pass) => pass.dispose?.());
     composer.dispose(); // frigör även renderingsmålen
     renderer.dispose();
