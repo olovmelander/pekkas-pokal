@@ -191,18 +191,65 @@ export function addSpruce(G, rand, x, y0, z, h, o) {
         tip: tipArm
       });
     }
-    // Arm tips catch the most light (and new growth is a fresher green)
-    cTip.copy(col(shade * (0.95 + rand() * 0.12), o.tipLight || 0));
-    for (let j = 0; j < ring.length; j++) {
-      const p = ring[j];
-      const q = ring[(j + 1) % ring.length];
-      // Apex → q → p winds counter-clockwise seen from outside and above
-      const upA = 1.4;
-      G.v(ax, ay, az, (p.nx + q.nx) * 0.2, upA, (p.nz + q.nz) * 0.2, cTop, 0);
-      for (const v of [q, p]) {
-        _n.set(v.x - x, (v.y - cy) * 0.6 + r * 0.5, v.z - z);
-        G.v(v.x, v.y, v.z, _n.x, _n.y, _n.z, v.tip ? cTip : cIn, v.tip ? 1 : 0.25);
+    // Arm tips catch the most light (and new growth is a fresher green);
+    // whorls differ a little, the way a real tree is patchy
+    const patch = 0.9 + rand() * 0.2;
+    cTip.copy(col(shade * (0.95 + rand() * 0.12) * patch, o.tipLight || 0));
+    const vtx = (v, c, tip) => {
+      _n.set(v.x - x, (v.y - cy) * 0.6 + r * 0.5, v.z - z);
+      G.v(v.x, v.y, v.z, _n.x, _n.y, _n.z, c, tip);
+    };
+    if (o.elbow && !top) {
+      // Two-segment arms: out near level from the stem, then hanging at
+      // the tip — the drooping Norway spruce profile, readable at 60–90 m
+      const cMid = new THREE.Color().copy(cIn).lerp(cTip, 0.55);
+      const el = ring.map((v) => ({
+        x: ax + (v.x - ax) * 0.55,
+        y: ay - (ay - v.y) * (v.tip ? 0.22 : 0.35),
+        z: az + (v.z - az) * 0.55
+      }));
+      for (let j = 0; j < ring.length; j++) {
+        const j1 = (j + 1) % ring.length;
+        const p = ring[j];
+        const q = ring[j1];
+        const ep = el[j];
+        const eq = el[j1];
+        G.v(ax, ay, az, (p.nx + q.nx) * 0.2, 1.4, (p.nz + q.nz) * 0.2, cTop, 0);
+        vtx(eq, cMid, 0.4);
+        vtx(ep, cMid, 0.4);
+        vtx(ep, cMid, 0.4);
+        vtx(eq, cMid, 0.4);
+        vtx(q, q.tip ? cTip : cIn, q.tip ? 1 : 0.25);
+        vtx(ep, cMid, 0.4);
+        vtx(q, q.tip ? cTip : cIn, q.tip ? 1 : 0.25);
+        vtx(p, p.tip ? cTip : cIn, p.tip ? 1 : 0.25);
       }
+    } else {
+      for (let j = 0; j < ring.length; j++) {
+        const p = ring[j];
+        const q = ring[(j + 1) % ring.length];
+        // Apex → q → p winds counter-clockwise seen from outside and above
+        G.v(ax, ay, az, (p.nx + q.nx) * 0.2, 1.4, (p.nz + q.nz) * 0.2, cTop, 0);
+        vtx(q, q.tip ? cTip : cIn, q.tip ? 1 : 0.25);
+        vtx(p, p.tip ? cTip : cIn, p.tip ? 1 : 0.25);
+      }
+    }
+  }
+  if (o.trunk && o.twigs) {
+    // Dead lower branches below the crown: grey, thin, angled down — the
+    // tell of a spruce grown in a stand
+    const grey = new THREE.Color(0x6b6158).lerp(HAZE_C, haze);
+    for (let k = 0; k < o.twigs; k++) {
+      const a = rand() * Math.PI * 2;
+      const y = y0 + bare * (0.25 + rand() * 0.7);
+      const len = h * (0.05 + rand() * 0.05);
+      const ex = x + Math.cos(a) * len;
+      const ez = z + Math.sin(a) * len;
+      const ey = y - len * 0.45;
+      const t = Math.max(0.025, h * 0.003);
+      G.v(x - Math.sin(a) * t, y, z + Math.cos(a) * t, Math.cos(a), 0.3, Math.sin(a), grey);
+      G.v(x + Math.sin(a) * t, y, z - Math.cos(a) * t, Math.cos(a), 0.3, Math.sin(a), grey);
+      G.v(ex, ey, ez, Math.cos(a), 0.3, Math.sin(a), grey);
     }
   }
 }
@@ -435,7 +482,8 @@ export function buildForest(rand, { lite = false } = {}) {
         const tint = SPRUCE.clone().offsetHSL((rand() - 0.5) * 0.04, (rand() - 0.5) * 0.12, (rand() - 0.5) * 0.08);
         const tiers = lite ? 6 : Math.round(8 + h * 0.18);
         addSpruce(edge, rand, x, -0.6, zz, h, {
-          tiers, arms: lite ? 5 : 7, tint, tipColor: SPRUCE_TIP, tipLight: 0.35, haze: haze + rand() * 0.05, trunk: !lite
+          tiers, arms: lite ? 5 : 7, tint, tipColor: SPRUCE_TIP, tipLight: 0.35, haze: haze + rand() * 0.05, trunk: !lite,
+          elbow: !lite && old, twigs: lite ? 0 : 4
         });
         x += step * (0.5 + rand() * 0.8);
       }
@@ -521,8 +569,8 @@ export function buildForest(rand, { lite = false } = {}) {
   });
   [[36, -74, 12], [40, -78, 15], [33, -80, 9], [-58, -76, 13], [-62, -72, 10], [70, -86, 14]].forEach(([sx, sz, h]) => {
     addSpruce(field, rand, sx, -0.3, sz, h, {
-      tiers: lite ? 7 : 11, arms: lite ? 6 : 8, tint: SPRUCE.clone().offsetHSL(0, 0, (rand() - 0.5) * 0.05),
-      tipColor: SPRUCE_TIP, tipLight: 0.35, haze: 0.06, trunk: true
+      tiers: lite ? 7 : 12, arms: lite ? 6 : 8, tint: SPRUCE.clone().offsetHSL(0, 0, (rand() - 0.5) * 0.05),
+      tipColor: SPRUCE_TIP, tipLight: 0.35, haze: 0.06, trunk: true, elbow: true, twigs: lite ? 3 : 7
     });
   });
   // A rowan (rönn) with its August berries, near the fence

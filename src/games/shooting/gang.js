@@ -70,6 +70,9 @@ const SCORER = {
 
 const LUDVIG = 'Ludvig Ulenius';
 
+/** A resting hand's fingers drape over the knee like round a 13 cm cylinder. */
+const KNEE = { diameter: 0.13, blend: 0 };
+
 /* ------------------------------------------------------------- props */
 
 function paint(geo, color) {
@@ -146,7 +149,8 @@ function mugGeometry() {
   coffee.translate(0, 0.03, 0);
   const rim = new THREE.CylinderGeometry(0.0412, 0.0412, 0.008, 14, 1, true);
   rim.translate(0, 0.043, 0);
-  const handle = new THREE.TorusGeometry(0.024, 0.006, 5, 10, Math.PI);
+  // A proper loop you can see from across the field: 4 cm inside, 16 mm bar
+  const handle = new THREE.TorusGeometry(0.028, 0.008, 6, 12, Math.PI);
   handle.rotateZ(-Math.PI / 2);
   handle.translate(0.04, 0, 0);
   return mergeGeometries([
@@ -245,9 +249,9 @@ export function buildGang({ rand }) {
       const mug = new THREE.Mesh(mugGeo, propMat);
       mug.castShadow = true;
       mug.rotation.y = Math.PI / 2; // the handle (+x) turns to −Z
-      mug.position.z = 0.064; // the body sits in front of the bar
+      mug.position.z = 0.068; // the body sits in front of the bar
       m.cup.add(mug);
-      person.hold(m.cup, 'R', 'hook', { bar: 0.012, handle: 0.036 });
+      person.hold(m.cup, 'R', 'hook', { bar: 0.016, handle: 0.04 });
     }
     if (!seated) {
       // hold('flat'): origin = the middle of the held edge, +Y the top face
@@ -268,6 +272,16 @@ export function buildGang({ rand }) {
       m.pencil.add(pencil);
       person.hold(m.pencil, 'R', 'pinch', { diameter: 0.009 });
     }
+    // Free hands rest cupped over the knee (the fingers close round a
+    // knee-sized cylinder, so they drape instead of lying flat), clench in a
+    // cheer and go back to the pose for clapping or folded arms. Every grip
+    // used is solved once here, while loading.
+    m.freeSides = seated ? (def.cup ? ['L'] : ['L', 'R']) : [];
+    m.freeSides.forEach((side) => {
+      person.setGrip(side, 'fist', { blend: 0 });
+      person.setGrip(side, 'cup', KNEE);
+    });
+    m.freeGrip = 'rest';
     members.push(m);
     return m;
   }
@@ -337,6 +351,16 @@ export function buildGang({ rand }) {
     if (m.cup && m.seated && !mode) p.head[0] -= smoothstep(0.3, 1, m.sip) * 0.22;
     m.pose = p;
     return mode;
+  }
+
+  function freeHands(m, mode) {
+    const want = mode === 'cheer' || mode === 'gold' ? 'fist' : mode === 'clap' || mode === 'crossed' ? null : 'rest';
+    if (m.freeGrip === want) return;
+    m.freeGrip = want;
+    m.freeSides.forEach((side) => {
+      if (want === 'rest') m.person.setGrip(side, 'cup', { ...KNEE, blend: 0.3 });
+      else m.person.setGrip(side, want, { blend: 0.25 });
+    });
   }
 
   function expressionFor(m, mode) {
@@ -427,16 +451,18 @@ export function buildGang({ rand }) {
     const toast = mode === 'clap';
     // Targets for the handle in the person's frame (x = their left; the
     // right hand is −x). vZ points from the handle to the mug's body.
+    // The palm faces the mug's body: inward, like a handshake with the mug
+    // on the palm side, so the forearm runs straight into the wrist
     if (cheer) {
-      vLap.set(-0.32, 1.62 + Math.sin(t * 7) * 0.03, 0.12);
-      vZ.set(0.5, 0, 0.85);
+      vLap.set(-0.34, 1.62 + Math.sin(t * 7) * 0.03, 0.12);
+      vZ.set(0.8, 0, 0.6);
     } else if (toast) {
-      vLap.set(-0.25, 1.0 + Math.abs(Math.sin(t * 4.2)) * 0.06, 0.4);
-      vZ.set(0.55, 0, 0.85);
+      vLap.set(-0.27, 1.0 + Math.abs(Math.sin(t * 4.2)) * 0.06, 0.38);
+      vZ.set(0.85, 0, 0.5);
     } else {
-      // Resting on the right thigh, or up at the mouth for a sip
-      vLap.set(-0.17 + sip * 0.11, 0.66 + sip * 0.55, 0.26 - sip * 0.08);
-      vZ.set(0.6 + sip * 0.35, 0, 0.8 - sip * 0.5);
+      // Resting over the right thigh, or up at the mouth for a sip
+      vLap.set(-0.2 + sip * 0.1, 0.68 + sip * 0.53, 0.24 - sip * 0.06);
+      vZ.set(0.95, 0, 0.3 - sip * 0.25);
     }
     vLap.multiplyScalar(s);
     if (!m.handInit) {
@@ -512,6 +538,7 @@ export function buildGang({ rand }) {
       else if (m.reactT > 0) m.reactT -= dt;
       if (m.surprise > 0 && m.delay <= 0) m.surprise -= dt;
       const mode = poseFor(m, t);
+      freeHands(m, mode);
       m.person.setPose(m.pose, blendRate);
       m.person.root.updateMatrixWorld(true);
       if (m.cup) cupHand(m, mode === 'crossed' ? null : mode, t * m.tempo + m.phase, dt);

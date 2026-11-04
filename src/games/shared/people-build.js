@@ -452,8 +452,8 @@ export function buildTorso(b, ctx) {
   else if (top.neck === 'crew' && res.high) marks.push([yNeck - 0.0135, yNeck, { tint: [0.86, 0.86, 0.86], off: top.off + 0.0013, lip: false }]);
   if (top.stripes && res.high) {
     // Breton-style bands in the accent colour, each a crisp pair of ring edges
-    const n = 5;
-    const y0 = hemY + 0.05;
+    const n = 4;
+    const y0 = hemY + 0.06;
     const step = (1.4 - y0) / n;
     for (let k = 0; k < n; k++) marks.push([y0 + k * step, y0 + k * step + step * 0.36, { region: REGION.ACCENT, tint: [1, 1, 1], off: top.off, lip: false }]);
   }
@@ -654,7 +654,7 @@ export function buildArm(b, ctx, side) {
     bands.push({ from: -0.047, to: 0.583, region: REGION.SKIN, mat: MAT.SKIN, off: 0 });
   }
   const rings = ringsFromBands(ds, bands, { lipW: 0.007, simple: !res.high });
-  const cols = res.high ? 10 : 5;
+  const cols = res.high ? 9 : 5;
   const pts = [];
   for (const r of rings) {
     const d = r.t;
@@ -903,8 +903,8 @@ function digitTube(b, { o, axis, U, V, rings, cols, tint, shape, weight, glove =
       const a = (j / cols) * Math.PI * 2;
       const ca = Math.cos(a);
       const sa = Math.sin(a);
-      // Rounded-rectangle-ish section: a superellipse (exponent 2.4)
-      const e = 2 / 2.4;
+      // A softly squared round section: a superellipse (exponent 2.1)
+      const e = 2 / 2.1;
       const cx = Math.sign(ca) * Math.pow(Math.abs(ca), e);
       const sy = Math.sign(sa) * Math.pow(Math.abs(sa), e);
       const extra = r > 0 ? (shape ? shape(t, sa, ca) : 0) + pad : 0;
@@ -933,7 +933,7 @@ function digitTube(b, { o, axis, U, V, rings, cols, tint, shape, weight, glove =
     const th = ha + (hb - ha) * k;
     const ca = Math.cos(a);
     const sa = Math.sin(a);
-    const e = 2 / 2.4;
+    const e = 2 / 2.1;
     const cx = Math.sign(ca) * Math.pow(Math.abs(ca), e);
     const sy = Math.sign(sa) * Math.pow(Math.abs(sa), e);
     const extra = (shape ? shape(t, sa, ca) : 0) + pad;
@@ -1058,7 +1058,7 @@ export function buildHand(b, ctx, side) {
   const PC = PALM.c;
   const PH = PALM.half;
   blob(b, {
-    c: H(PC[0], PC[1], PC[2]), r: [PH[0] * hs + gpad, PH[1] * hs + gpad, PH[2] * hs + gpad], n: [3.4, 2.7],
+    c: H(PC[0], PC[1], PC[2]), r: [PH[0] * hs + gpad, PH[1] * hs + gpad, PH[2] * hs + gpad], n: [2.9, 2.25],
     cols: 10, rows: 7, region: REG, mat: MT,
     warp: (p, v) => {
       // Back to hand space
@@ -1076,7 +1076,7 @@ export function buildHand(b, ctx, side) {
       y += end * (arcY(f) - 0.0015 - (PC[1] - PH[1]));
       // Transverse arch: the back is domed, the palm hollow in the middle
       const fn = THREE.MathUtils.clamp(fc / PH[2], -1, 1);
-      if (dc > 0) d += 0.0022 * (1 - fn * fn) - 0.001;
+      if (dc > 0) d += 0.0034 * (1 - fn * fn) - 0.0016;
       else {
         d += 0.0016 * fn * fn - 0.0012 * gauss(y + 0.06, 0.02) * (1 - fn * fn);
         // Hypothenar pad (little finger side, near the wrist) and the pads under the knuckles
@@ -1086,7 +1086,7 @@ export function buildHand(b, ctx, side) {
       if (dc > 0) {
         // Knuckle heads and the tendons that fan out to them from the wrist
         for (const k of knuckles) {
-          d += 0.0024 * gauss(f - k[2], 0.0058) * gauss(y - k[1] - 0.003, 0.0075);
+          d += 0.0015 * gauss(f - k[2], 0.0065) * gauss(y - k[1] - 0.003, 0.0085);
           const tf = k[2] * sstep(-0.01, k[1] + 0.01, y) * 0.8;
           d += 0.0006 * gauss(f - tf, 0.0028) * sstep(-0.015, -0.04, y) * sstep(k[1] - 0.004, k[1] + 0.02, y);
         }
@@ -1138,10 +1138,10 @@ export function buildHand(b, ctx, side) {
     const L = l0 + l1 + l2;
     const o = H(D.mcp[0], D.mcp[1], D.mcp[2]);
     const rings = [
-      [-0.011, r0 * 0.86, 0.8], [0.001, r0 * 1.0, 0.86], [l0 * 0.52, r0 * 0.95, 0.86],
-      [j1 - 0.0015, r1 * 1.04, 0.86], [j1 + 0.0035, r1 * 1.0, 0.86], [j1 + l1 * 0.55, r1 * 0.96, 0.86],
-      [j2 - 0.001, r2 * 1.04, 0.86], [j2 + l2 * 0.42, r2 * 1.0, 0.83],
-      [j2 + l2 * 0.8, r2 * 0.88, 0.8], [L - 0.0014, r2 * 0.45, 0.8], [L, 0, 0]
+      [-0.011, r0 * 0.88, 0.86], [0.001, r0 * 1.0, 0.92], [l0 * 0.52, r0 * 0.96, 0.92],
+      [j1 - 0.0015, r1 * 1.03, 0.92], [j1 + 0.0035, r1 * 1.0, 0.92], [j1 + l1 * 0.55, r1 * 0.97, 0.92],
+      [j2 - 0.001, r2 * 1.03, 0.92], [j2 + l2 * 0.42, r2 * 1.0, 0.9],
+      [j2 + l2 * 0.78, r2 * 0.9, 0.88], [L - 0.0032, r2 * 0.72, 0.88], [L - 0.0009, r2 * 0.4, 0.88], [L, 0, 0]
     ].map(([t, r, th]) => [t * hs, r * hs, th]);
     const shape = (tt, sa) => {
       const t = tt / hs;
@@ -1149,7 +1149,7 @@ export function buildHand(b, ctx, side) {
       if (sa > 0) {
         // Knuckles on the back
         const k = sa * sa;
-        x += k * (0.0016 * gauss(t, 0.005) + 0.0011 * gauss(t - j1, 0.0035) + 0.0006 * gauss(t - j2, 0.0026));
+        x += k * (0.0009 * gauss(t, 0.006) + 0.0007 * gauss(t - j1, 0.0042) + 0.0004 * gauss(t - j2, 0.003));
       } else {
         const k = sa * sa;
         // Pads between the joints, the fingertip's the fullest; creases at the joints
@@ -1167,7 +1167,7 @@ export function buildHand(b, ctx, side) {
     };
     const base = baseBone(f);
     const surf = digitTube(b, {
-      o, axis: [0, -1, 0], U: [0, 0, 1], V: Hv(1, 0, 0), rings, cols: 6, tint, shape, glove, pad: gpad,
+      o, axis: [0, -1, 0], U: [0, 0, 1], V: Hv(1, 0, 0), rings, cols: 7, tint, shape, glove, pad: gpad,
       weight: (tt) => {
         const t = tt / hs;
         const k1 = sstep(-0.006, 0.003, t);
@@ -1192,18 +1192,18 @@ export function buildHand(b, ctx, side) {
     const U = Hv(...T.axis);
     const V = Hv(...T.pad).map((v) => -v);
     const rings = [
-      [-0.008, r0 * 0.8, 0.8], [0.005, r0 * 1.0, 0.86], [l0 * 0.58, r0 * 0.95, 0.84], [j1 - 0.002, r1 * 1.08, 0.84],
-      [j1 + 0.005, r1 * 1.0, 0.82], [j1 + l1 * 0.55, r1 * 0.95, 0.82], [j2 - 0.001, r2 * 1.05, 0.8],
-      [j2 + l2 * 0.42, r2 * 1.02, 0.78], [j2 + l2 * 0.8, r2 * 0.88, 0.76],
-      [L - 0.0014, r2 * 0.45, 0.76], [L, 0, 0]
+      [-0.008, r0 * 0.82, 0.86], [0.005, r0 * 1.0, 0.9], [l0 * 0.58, r0 * 0.96, 0.9], [j1 - 0.002, r1 * 1.06, 0.88],
+      [j1 + 0.005, r1 * 1.0, 0.88], [j1 + l1 * 0.55, r1 * 0.96, 0.87], [j2 - 0.001, r2 * 1.04, 0.86],
+      [j2 + l2 * 0.42, r2 * 1.02, 0.84], [j2 + l2 * 0.78, r2 * 0.9, 0.82],
+      [L - 0.0034, r2 * 0.72, 0.82], [L - 0.001, r2 * 0.4, 0.82], [L, 0, 0]
     ].map(([t, r, th]) => [t * hs, r * hs, th]);
     const surf = digitTube(b, {
-      o, axis, U, V, rings, cols: 6, glove, pad: gpad,
+      o, axis, U, V, rings, cols: 7, glove, pad: gpad,
       tint: (tt, sa) => (sa < -0.3 ? (tt / hs > j2 + l2 * 0.4 ? [1.04, 0.93, 0.92] : palmTint) : tintSkin),
       shape: (tt, sa) => {
         const t = tt / hs;
         const k = sa * sa;
-        if (sa > 0) return k * (0.0012 * gauss(t - j1, 0.004) + 0.0007 * gauss(t - j2, 0.003)) * hs;
+        if (sa > 0) return k * (0.0007 * gauss(t - j1, 0.0045) + 0.0004 * gauss(t - j2, 0.0032)) * hs;
         return k * (0.0012 * gauss(t - j2 - l2 * 0.55, l2 * 0.3) + 0.0006 * gauss(t - j1 - l1 * 0.5, l1 * 0.3) -
           0.0006 * gauss(t - j2, 0.0016)) * hs;
       },
@@ -1221,9 +1221,9 @@ export function buildHand(b, ctx, side) {
     const cmc = new THREE.Vector3(...T.cmc);
     const bz = new THREE.Vector3(0, 0, 1).addScaledVector(ax, -ax.z).normalize();
     const bx = new THREE.Vector3().crossVectors(ax, bz).negate();
-    const ballC = cmc.clone().addScaledVector(ax, 0.019).addScaledVector(new THREE.Vector3(...T.pad), 0.0035).add(new THREE.Vector3(0.003, 0, -0.008));
+    const ballC = cmc.clone().addScaledVector(ax, 0.02).addScaledVector(new THREE.Vector3(...T.pad), 0.003).add(new THREE.Vector3(0.0045, 0, -0.009));
     blob(b, {
-      c: H(ballC.x, ballC.y, ballC.z), r: [0.0148 * hs, 0.0285 * hs, 0.0168 * hs], n: [2, 2], cols: 6, rows: 4,
+      c: H(ballC.x, ballC.y, ballC.z), r: [0.0172 * hs + gpad, 0.0305 * hs, 0.0188 * hs + gpad], n: [2, 2], cols: 6, rows: 4,
       region: REG, mat: MT, tint: gt(palmTint),
       warp: (p) => {
         // Lay the ball's long axis along the metacarpal

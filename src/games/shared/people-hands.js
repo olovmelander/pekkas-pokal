@@ -56,10 +56,10 @@ const BI = Object.fromEntries(HAND_BONES.map((n, i) => [n, i]));
  * [spread, flexMCP, flexPIP, flexDIP] — the little finger curls most.
  */
 export const DIGITS = {
-  index: { mcp: [-0.0015, -0.0935, 0.0284], len: [0.0325, 0.0198, 0.0168], r: [0.0101, 0.0093, 0.0085], rest: [-0.05, 0.16, 0.2, 0.1] },
-  middle: { mcp: [0.0005, -0.0962, 0.0095], len: [0.0355, 0.0215, 0.0172], r: [0.0104, 0.0096, 0.0087], rest: [-0.005, 0.24, 0.3, 0.14] },
-  ring: { mcp: [-0.001, -0.0948, -0.0094], len: [0.0338, 0.0205, 0.0166], r: [0.0099, 0.0091, 0.0083], rest: [0.045, 0.32, 0.38, 0.18] },
-  pinky: { mcp: [-0.0042, -0.0885, -0.0274], len: [0.0262, 0.0155, 0.0148], r: [0.0089, 0.0082, 0.0075], rest: [0.12, 0.4, 0.46, 0.22] }
+  index: { mcp: [-0.0015, -0.0935, 0.0284], len: [0.0302, 0.0184, 0.0158], r: [0.0101, 0.0094, 0.0087], rest: [-0.02, 0.26, 0.34, 0.16] },
+  middle: { mcp: [0.0005, -0.0962, 0.0095], len: [0.0330, 0.0200, 0.0162], r: [0.0104, 0.0097, 0.0089], rest: [0, 0.34, 0.44, 0.2] },
+  ring: { mcp: [-0.001, -0.0948, -0.0094], len: [0.0314, 0.0191, 0.0156], r: [0.0099, 0.0092, 0.0085], rest: [0.025, 0.43, 0.54, 0.25] },
+  pinky: { mcp: [-0.0042, -0.0885, -0.0274], len: [0.0244, 0.0145, 0.0139], r: [0.0090, 0.0084, 0.0078], rest: [0.07, 0.53, 0.62, 0.3] }
 };
 export const FINGER_NAMES = ['index', 'middle', 'ring', 'pinky'];
 
@@ -86,7 +86,7 @@ const TA = norm3([TD[1] * PD[2] - TD[2] * PD[1], TD[2] * PD[0] - TD[0] * PD[2], 
  */
 export const THUMB = {
   cmc: [-0.0095, -0.029, 0.0215], dir: TD, pad: PD, axis: TA,
-  len: [0.038, 0.029, 0.025], r: [0.0136, 0.0114, 0.0105]
+  len: [0.038, 0.028, 0.0242], r: [0.0146, 0.0118, 0.0108]
 };
 
 /* ------------------------------------------------------------ configs */
@@ -477,6 +477,14 @@ export const GRIPS = {
       thumb: [-0.12, 0.1, 0.35, 0.24, 0.22], palm: 0.05
     }
   }),
+  /** Legacy gripX = 0: an open hand that still rests naturally (fingers together, soft). */
+  openSoft: () => ({
+    fixed: true,
+    params: {
+      index: [-0.03, 0.1, 0.14, 0.06], middle: [0, 0.13, 0.18, 0.08], ring: [0.03, 0.17, 0.22, 0.1], pinky: [0.07, 0.21, 0.27, 0.12],
+      thumb: [0.12, 0.08, 0.3, 0.14, 0.12], palm: 0.02
+    }
+  }),
   open: () => ({
     fixed: true,
     params: {
@@ -594,7 +602,9 @@ export const GRIPS = {
     const bar = (o.bar || 0.008) / 2;
     const loop = (o.handle || 0.04) / 2;
     return {
-      pos: new THREE.Vector3(palmSurface(hs) - 0.022 * hs, -0.122 * hs, 0.006 * hs),
+      // The bar sits just palmar of the index/middle proximal phalanges, by the middle joints,
+      // so those fingers pass through the loop and curl back round it
+      pos: new THREE.Vector3(-0.0155 * hs - bar, -0.109 * hs, 0.019 * hs),
       quat: frameYZ(n(0, -0.12, 1), PALM_N),
       shapes: [
         { type: 'cyl', r: bar, h: loop + bar },
@@ -602,8 +612,8 @@ export const GRIPS = {
       ],
       fingers: {
         // Index and middle hook through the loop; ring and little finger curl against the mug
-        index: { start: [-0.04, 0.35, 0.6, 0.3], rate: [0.5, 1.2, 0.8], only: [0] },
-        middle: { start: [0.0, 0.4, 0.7, 0.3], rate: [0.5, 1.2, 0.8], only: [0] },
+        index: { start: [-0.02, 0.25, 0.15, 0.08], rate: [0.6, 1.25, 1.0], max: [1.4, 1.95, 1.4], only: [0] },
+        middle: { start: [0.0, 0.25, 0.15, 0.08], rate: [0.6, 1.25, 1.0], max: [1.4, 1.95, 1.4], only: [0] },
         ring: { start: [0.06, 0.8, 1.1, 0.6] },
         pinky: { start: [0.14, 0.9, 1.2, 0.6] }
       },
@@ -805,7 +815,7 @@ let legacy = null;
 export function legacyShapes() {
   if (!legacy) {
     legacy = {
-      open: solveGrip('open').config,
+      open: solveGrip('openSoft').config,
       relaxed: solveGrip('relaxed').config,
       fist: solveGrip('fist').config,
       point: solveGrip('point').config,

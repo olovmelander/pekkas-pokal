@@ -211,7 +211,7 @@ export function buildShotgun({ envMap, glow, star }) {
   const forendGrip = new THREE.Object3D();
   forendGrip.position.set(0, -0.042, -0.44);
   forendGrip.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(
-    new THREE.Vector3(0.86, -0.5, 0), new THREE.Vector3(0, 0, -1), new THREE.Vector3(0.5, 0.86, 0)
+    new THREE.Vector3(0.95, -0.3, 0), new THREE.Vector3(0, 0, -1), new THREE.Vector3(0.3, 0.95, 0)
   ));
   g.add(forendGrip);
   const pistolGrip = new THREE.Object3D();

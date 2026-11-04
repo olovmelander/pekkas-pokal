@@ -74,32 +74,22 @@ function bladeGeometry() {
   // Baking a root-to-tip ramp into it also gives free occlusion at the base.
   const vcol = new Float32Array(pos.length);
   for (let i = 0; i < pos.length / 3; i++) {
-    const shade = 0.52 + 0.48 * uvy[i];
-    vcol[i * 3] = shade;
-    vcol[i * 3 + 1] = shade;
-    vcol[i * 3 + 2] = shade;
+    // Dark at the root, and the top third ripening toward straw
+    const shade = 0.5 + 0.5 * uvy[i];
+    const ripe = Math.max(0, uvy[i] - 0.6) * 1.6;
+    vcol[i * 3] = shade * (1 + ripe * 0.18);
+    vcol[i * 3 + 1] = shade * (1 + ripe * 0.06);
+    vcol[i * 3 + 2] = shade * (1 - ripe * 0.35);
   }
   g.setAttribute('color', new THREE.BufferAttribute(vcol, 3));
   return g;
 }
 
 /**
- * Scatter blades over a disc, densest near the station.
- * `rand` is the caller's seeded RNG so the field is stable between runs.
+ * The meadow's vertex wind and backlit translucency, shared by the blades
+ * and the seed heads (same uniforms, so they sway as one field).
  */
-export function buildGrass(rand, { count = 23000, inner = 0.3, outer = 30, sunDir, sunColor } = {}) {
-  const geo = bladeGeometry();
-
-  const material = new THREE.MeshLambertMaterial({
-    vertexColors: true,
-    side: THREE.DoubleSide
-  });
-
-  const uniforms = {
-    uTime: { value: 0 },
-    uSunDir: { value: sunDir.clone() },
-    uSunColor: { value: new THREE.Color(sunColor) }
-  };
+function meadowShader(material, uniforms, key) {
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
@@ -138,7 +128,9 @@ export function buildGrass(rand, { count = 23000, inner = 0.3, outer = 30, sunDi
         vec4 gWorld = modelMatrix * instanceMatrix * vec4(transformed, 1.0);
         vec3 gView = normalize(gWorld.xyz - cameraPosition);
         float back = max(dot(gView, uSunDir), 0.0);
-        vTrans = back * back * back * aHeight * aHeight;
+        // Broad enough that the whole backlit half of the meadow glows at
+        // the tips, not only the blades right under the sun
+        vTrans = back * back * aHeight * sqrt(aHeight);
       `);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `
@@ -147,11 +139,31 @@ export function buildGrass(rand, { count = 23000, inner = 0.3, outer = 30, sunDi
         varying float vTrans;
       `)
       .replace('#include <opaque_fragment>', `
-        outgoingLight += diffuseColor.rgb * uSunColor * vTrans * 1.6;
+        outgoingLight += (diffuseColor.rgb * 1.7 + vec3(0.05, 0.04, 0.0)) * uSunColor * vTrans;
         #include <opaque_fragment>
       `);
   };
-  material.customProgramCacheKey = () => 'pp-grass';
+  material.customProgramCacheKey = () => key;
+}
+
+/**
+ * Scatter blades over a disc, densest near the station.
+ * `rand` is the caller's seeded RNG so the field is stable between runs.
+ */
+export function buildGrass(rand, { count = 23000, inner = 0.3, outer = 30, sunDir, sunColor } = {}) {
+  const geo = bladeGeometry();
+
+  const material = new THREE.MeshLambertMaterial({
+    vertexColors: true,
+    side: THREE.DoubleSide
+  });
+
+  const uniforms = {
+    uTime: { value: 0 },
+    uSunDir: { value: sunDir.clone() },
+    uSunColor: { value: new THREE.Color(sunColor) }
+  };
+  meadowShader(material, uniforms, 'pp-grass');
 
   const mesh = new THREE.InstancedMesh(geo, material, count);
   mesh.frustumCulled = false;
@@ -172,6 +184,7 @@ export function buildGrass(rand, { count = 23000, inner = 0.3, outer = 30, sunDi
   const GREEN_DARK = new THREE.Color(0x6d8a34);
   const GREEN_LIGHT = new THREE.Color(0xa2bd48);
   const STRAW = new THREE.Color(0xd6c268);
+  const SORREL = new THREE.Color(0x9a4a2e);
 
   let placed = 0;
   let guard = 0;
@@ -210,7 +223,8 @@ export function buildGrass(rand, { count = 23000, inner = 0.3, outer = 30, sunDi
       (0.12 + rand() * 0.42)
     );
     q.multiply(lean);
-    const s = 0.72 + rand() * 0.6;
+    // Mostly sward, with the odd taller tuft that breaks the even top
+    const s = (0.72 + rand() * 0.6) * (rand() < 0.1 ? 1.4 : 1);
     // Trodden down around the station: a shooter stands on a worn pad, and
     // waist-high grass right under the muzzle would just block the view.
     const mow = bermPass ? 1 : 0.34 + 0.66 * Math.min(1, Math.max(0, (r - 1.6) / 5.5));
@@ -220,7 +234,8 @@ export function buildGrass(rand, { count = 23000, inner = 0.3, outer = 30, sunDi
 
     const k = rand();
     colour.copy(GREEN_DARK).lerp(GREEN_LIGHT, rand());
-    if (k > 0.78) colour.lerp(STRAW, 0.35 + rand() * 0.45);
+    if (k > 0.7) colour.lerp(STRAW, 0.35 + rand() * 0.5);
+    else if (k < 0.03) colour.lerp(SORREL, 0.6); // a rust-red sorrel blade here and there
     // Slight darkening far out helps the aerial perspective read
     colour.multiplyScalar(0.88 + rand() * 0.26);
     mesh.setColorAt(placed, colour);
@@ -231,6 +246,98 @@ export function buildGrass(rand, { count = 23000, inner = 0.3, outer = 30, sunDi
   if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
 
   return { mesh, uniforms };
+}
+
+/**
+ * Seed heads — timotej and tuvtåtel standing above the sward, the part of
+ * an August meadow that catches the low sun. One InstancedMesh of a thin
+ * stalk with a spindle head (two crossed diamonds, 6 triangles), on the
+ * meadow's own wind and backlight. Densest in the vista's foreground and
+ * round the gang; none right in front of the muzzle.
+ */
+export function buildSeedHeads(rand, uniforms, { count = 2400 } = {}) {
+  const pos = [];
+  const hgt = [];
+  const col = [];
+  const STALK = [0.55, 0.62, 0.32];
+  const HEAD = [0.92, 0.84, 0.6];
+  const H = 1;
+  const push = (x, y, z, c) => {
+    pos.push(x, y, z);
+    hgt.push(y / (H + 0.12));
+    col.push(...c);
+  };
+  // Stalk
+  const w = 0.0045;
+  push(-w, 0, 0, STALK); push(w, 0, 0, STALK); push(w * 0.6, H, 0, STALK);
+  push(-w, 0, 0, STALK); push(w * 0.6, H, 0, STALK); push(-w * 0.6, H, 0, STALK);
+  // Head: two crossed diamonds
+  const hw = 0.013;
+  [[1, 0], [0, 1]].forEach(([dx, dz]) => {
+    push(0, H - 0.01, 0, HEAD); push(hw * dx, H + 0.05, hw * dz, HEAD); push(0, H + 0.12, 0, HEAD);
+    push(0, H - 0.01, 0, HEAD); push(0, H + 0.12, 0, HEAD); push(-hw * dx, H + 0.05, -hw * dz, HEAD);
+  });
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('aHeight', new THREE.Float32BufferAttribute(hgt, 1));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  const nor = new Float32Array(pos.length);
+  for (let i = 1; i < nor.length; i += 3) nor[i] = 1;
+  geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+
+  const material = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+  meadowShader(material, uniforms, 'pp-seedheads');
+  const mesh = new THREE.InstancedMesh(geo, material, count);
+  mesh.frustumCulled = false;
+  mesh.castShadow = false;
+  mesh.receiveShadow = true;
+
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const p = new THREE.Vector3();
+  const sc = new THREE.Vector3();
+  const lean = new THREE.Quaternion();
+  const axis = new THREE.Vector3();
+  const up = new THREE.Vector3(0, 1, 0);
+  const c = new THREE.Color();
+  const TINTS = [new THREE.Color(0xf2e2b0), new THREE.Color(0xd8c48a), new THREE.Color(0xc9b6a0), new THREE.Color(0xe6d09a)];
+  let placed = 0;
+  let guard = 0;
+  while (placed < count && guard < count * 8) {
+    guard++;
+    let x;
+    let z;
+    if (rand() < 0.55) {
+      // The vista's foreground, round the gang and the fika table
+      x = -5 + rand() * 13;
+      z = 2 + rand() * 9;
+    } else {
+      const r = 2.5 + 22 * rand() ** 1.6;
+      const a = rand() * Math.PI * 2;
+      x = Math.cos(a) * r;
+      z = Math.sin(a) * r;
+    }
+    if (Math.abs(x) < 1.6 && Math.abs(z) < 1.9) continue; // the mat
+    if (Math.abs(x) < 3.6 && z > 1.7 && z < 3.4) continue; // chairs and feet
+    if (x > 2.4 && x < 3.9 && z > 1.8 && z < 3.1) continue; // the fika table
+    if (z < 0 && z > -8 && Math.abs(x) < 4.5 + -z * 0.6) continue; // the shooter's view
+    if (Math.abs(x) < 2.6 && z < -13 && z > -19.5) continue; // the trap house
+    p.set(x, 0.02, z);
+    q.setFromAxisAngle(up, rand() * Math.PI);
+    lean.setFromAxisAngle(axis.set(rand() - 0.5, 0, rand() - 0.5).normalize(), 0.08 + rand() * 0.3);
+    q.multiply(lean);
+    const h = 0.42 + rand() * 0.42;
+    sc.set(1, h, 1);
+    m.compose(p, q, sc);
+    mesh.setMatrixAt(placed, m);
+    c.copy(TINTS[Math.floor(rand() * TINTS.length)]).multiplyScalar(0.85 + rand() * 0.25);
+    mesh.setColorAt(placed, c);
+    placed++;
+  }
+  mesh.count = placed;
+  mesh.instanceMatrix.needsUpdate = true;
+  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  return { mesh };
 }
 
 export default buildGrass;

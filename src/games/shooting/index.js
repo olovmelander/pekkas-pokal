@@ -48,7 +48,7 @@ import { buildGang } from './gang.js';
 import { createPerson, POSES, SKIN_TONES } from '../shared/people.js';
 import { mulberry, glowTexture, starTexture, buildRange, buildClay } from './range.js';
 import { buildShotgun } from './gun.js';
-import { buildGrass } from './grass.js';
+import { buildGrass, buildSeedHeads } from './grass.js';
 import { Particles, Shards, ShotCloud, buildAmbient } from './fx.js';
 import { buildHud, cardHtml, startPanelHtml, endPanelHtml, fmt } from './hud.js';
 
@@ -270,6 +270,8 @@ export async function createShooting(container) {
   scene.add(shafts.mesh);
   const grass = buildGrass(mulberry(8123), { sunDir: SUN_DIR, sunColor: SUN_COLOR });
   scene.add(grass.mesh);
+  const seeds = buildSeedHeads(mulberry(8124), grass.uniforms, { count: lowTier ? 1400 : 2400 });
+  scene.add(seeds.mesh);
 
   const gun = buildShotgun({ envMap, glow, star });
   gun.group.scale.setScalar(0.55);
@@ -286,7 +288,7 @@ export async function createShooting(container) {
     name: 'Skytten', height: 2.6, build: 'average', skin: SKIN_TONES.light,
     hair: { style: 'buzz' },
     outfit: { top: 'jacket', topColor: 0x46533a, bottom: 'trousers', bottomColor: 0x3b3a34 },
-    gloves: { side: 'both', color: 0x7a4e2e, cuff: false }
+    gloves: { side: 'both', color: 0xdcc093, cuff: false }
   });
   shooter.root.rotation.y = Math.PI; // face down the barrels (−z)
   shooter.root.position.set(-0.1, -2.4, -0.1);

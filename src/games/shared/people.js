@@ -119,6 +119,10 @@
  *       'ball'     a small ball in the fingertips (ping-pong toss): origin = centre: diameter (0.04)
  *       'relaxed' 'open' 'fist' 'point' 'thumbsUp'   hand shapes, no object needed
  *     opts.offset = { position, rotation | quaternion } nudges the object inside the grip frame.
+ *     Scaled parents: the object inherits the person's world scale, so sizes are in the person's
+ *     own units and it stays in proportion to the hand; opts.keepWorldScale = true keeps the
+ *     object's current world size instead (sizes are then world metres). holdWith works in world
+ *     space and accounts for any parent scale.
  *     Calling hold/setGrip again with the same grip and sizes changes nothing (safe every frame).
  *     The first use of a grip + size runs the solve (≈5–50 ms, then cached for everyone with the
  *     same build): hold or setGrip once while loading to keep it out of gameplay frames.
@@ -448,16 +452,24 @@ export function createPerson(specIn = {}) {
     }
     return h.anchor;
   };
+  const tmpScale = new THREE.Vector3();
+  /** The hand's world scale from any scaled parents (bones themselves are unit scale). */
+  const handWorldScale = (S) => {
+    bones[`hand${S}`].getWorldScale(tmpScale);
+    return (Math.abs(tmpScale.x) + Math.abs(tmpScale.y) + Math.abs(tmpScale.z)) / 3 || 1;
+  };
   const setOverride = (h, grip, opts = {}) => {
     const name = grip && GRIP_NAMES.includes(grip) ? grip : grip ? 'relaxed' : null;
+    // Sizes are in the person's own units; with keepWorldScale they are world metres
+    const sizeScale = s * (opts.keepWorldScale ? handWorldScale(h.S) : 1);
     // Calling again with the same grip and sizes (e.g. every frame) changes nothing
-    const key = name ? `${name}|${JSON.stringify(modelOpts(opts, s))}` : '';
+    const key = name ? `${name}|${JSON.stringify(modelOpts(opts, sizeScale))}` : '';
     if (key === h.key) return;
     h.key = key;
     startHandBlend(h, opts.blend ?? 0.2);
     h.grip = name;
     h.opts = opts;
-    h.solved = name ? solveGrip(name, modelOpts(opts, s), handScale) : null;
+    h.solved = name ? solveGrip(name, modelOpts(opts, sizeScale), handScale) : null;
     if (name) anchorFor(h);
     if (!posedSinceUpdate || h.k >= 1) writeHand(h, lastPose, 1);
   };
@@ -530,16 +542,26 @@ export function createPerson(specIn = {}) {
       setOverride(h, grip, opts);
       const anchor = anchorFor(h);
       if (object) {
+        // keepWorldScale: the object keeps its size in the world (its scale makes up for scaled parents)
+        if (opts.keepWorldScale) {
+          object.updateWorldMatrix(true, false);
+          object.getWorldScale(tmpHV2);
+        }
         anchor.add(object);
         object.position.set(0, 0, 0);
         object.quaternion.identity();
+        if (opts.keepWorldScale) {
+          anchor.updateWorldMatrix(true, false);
+          anchor.getWorldScale(tmpScale);
+          object.scale.set(tmpHV2.x / (tmpScale.x || 1), tmpHV2.y / (tmpScale.y || 1), tmpHV2.z / (tmpScale.z || 1));
+        }
         const off = opts.offset;
         if (off) {
           if (off.position) object.position.fromArray(off.position.toArray ? off.position.toArray() : off.position);
           if (off.quaternion) object.quaternion.copy(off.quaternion);
           else if (off.rotation) object.rotation.fromArray(off.rotation.toArray ? off.rotation.toArray() : off.rotation);
         }
-        if (opts.scale !== undefined) object.scale.setScalar(opts.scale);
+        if (opts.scale !== undefined) object.scale.setScalar(opts.scale / (opts.keepWorldScale ? handWorldScale(h.S) : 1));
         attached.add(object);
       }
       h.object = object || null;
@@ -594,9 +616,9 @@ export function createPerson(specIn = {}) {
       tmpHV.fromArray(at).applyMatrix4(object.matrixWorld);
       object.getWorldQuaternion(tmpHQ);
       if (roll) tmpHQ.multiply(tmpHQ2.setFromAxisAngle(tmpHV2.set(0, 1, 0), roll));
-      // hand = point × anchor⁻¹
+      // hand = point × anchor⁻¹ (the anchor's offset scaled like the hand: scaled parents count)
       tmpHQ.multiply(tmpHQ2.copy(anchor.quaternion).invert());
-      tmpHV2.copy(anchor.position).applyQuaternion(tmpHQ);
+      tmpHV2.copy(anchor.position).multiplyScalar(handWorldScale(S)).applyQuaternion(tmpHQ);
       tmpHV.sub(tmpHV2);
       return person.ikArm(S, tmpHV, pole, tmpHQ);
     },

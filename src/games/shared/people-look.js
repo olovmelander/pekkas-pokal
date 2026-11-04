@@ -16,7 +16,7 @@ export const SKIN_TONES = {
 export const HAIR_COLORS = {
   black: 0x231812, darkBrown: 0x3b281b, brown: 0x60432b, lightBrown: 0x87684a, ash: 0x7a6a57,
   blond: 0xc4a066, lightBlond: 0xdcc08c, ginger: 0x9a4f2a, gray: 0xaaa69f, saltPepper: 0x76706a,
-  darkBlond: 0x9a7b52, strawberry: 0xc68d58, copper: 0x91492a
+  darkBlond: 0x9a7b52, strawberry: 0xc68d58, copper: 0x80462a
 };
 /** Iris colours, linear RGB. */
 export const EYE_COLORS = {
