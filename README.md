@@ -584,7 +584,7 @@ det förra — avstånd säljs med färg, inte med mer geometri. Skogen, häcken
 och vimplarna ritas som `InstancedMesh` med färg per instans; det är
 ritanropen, inte trianglarna, som en telefon-GPU tar slut på. Med statiska
 grupper sammanslagna och publiken instansierad ligger trädgården nu på
-ungefär 67 ritanrop på dator (77 under domen), från 208.
+ungefär 66 ritanrop på dator (73 under domen), från 208.
 
 **Uppgraderingen.** Spelet fyller nu hela skärmen: på datorn hänger förlagan
 till vänster om staffliet och paletten står till höger, på telefonen är
@@ -604,6 +604,21 @@ målningar sparas i ett galleri på enheten. Trädgården lever: granar och
 björkkronor vajar, vimplarna fladdrar, svalor flyger över häcken och en björk
 utanför bild kastar rörliga ljusfläckar på gräsmattan. Tonmappningen är
 Neutral i stället för ACES, så duken visar den färg man faktiskt blandat.
+
+**Andra uppgraderingen.** Trädgården har fått riktiga människor: Mikael
+Hägglund i svart polotröja och runda glasögon går med anteckningsboken mellan
+stafflierna, kommer fram när tiden är ute, studerar duken med pennan mot hakan,
+skriver och vänder sig sedan mot dig och säger sin dom – med ett ansikte som
+avslöjar betyget innan kortet gör det. Runt omkring målar hela 2021 års fält:
+Per Olsson som Hans Hedberg i röd basker och keramikerförkläde, Olov Melander
+(vid Skriet förstås), Per Vikman, Henrik Lundqvist och Viktor Jones blandar på
+paletten, lägger penseldrag och backar för att titta, medan resten av
+deltagarna står vid sina staffli längre bort och applåderar när någon fångar
+essensen. Spelet tål också riktiga grafikkort bättre: duken ligger inte längre
+millimetern från sin ram, vinden räknas utan stora tidsvärden, shaders
+kompileras i förväg och en vakt förenklar trädgården om bilden någonsin blir
+svart. Skogen sluter sig nu runt hela trädgården.
+
 
 **Kontroller i flipperspelet**
 
@@ -768,7 +783,7 @@ stänger dem.
 | `src/games/fencing/` | Fäktspelet: `salle` (fäktsal, ljusvolymer, publik), `fencer` (IK-riggade fäktare), `fx` (gnistor, klingspår, konfetti), `hud` (paneler, slutspelsträd), `audio` (syntetiskt ljud), `index` (duell-AI + spelloop) |
 | `src/games/shooting/` | Skyttespelet: `range` (fält, lerduvor), `gang` (2022 års gäng på fikastolarna), `sky` (himmelsshader och moln), `gun` (bockbössan i PBR), `grass` (instansierad äng med vind), `fx` (skärvor, damm, haglsvärm), `hud` (25-kortet, spökstapeln, slutkortet), `audio` (syntetiskt ljud), `index` (banor + spelloop) |
 | `src/games/pingis/` | Pingisspelet: `hall` (bygdegård, bord, figurer), `crowd` (instansierad publik), `scoreboard` (fällbara siffror), `fx` (bollspår, ringar, gnistor), `post` (bloom, gradering, spegelgolv), `hud` (paneler, scoutingkort), `audio` (syntetiskt ljud), `index` (fysik, AI och spelloop) |
-| `src/games/painting/` | Målerispelet: `artworks` (motiven + färgblandning i RYB och Lab), `canvasart` (penseldrag och dukens höjdkarta), `palette` (paletten i 3D), `garden` (trädgården, staffli, målare, Hägglund), `hud` (paneler, dom, galleri), `audio` (syntetiskt ljud), `index` (spelloop och dom) |
+| `src/games/painting/` | Målerispelet: `artworks` (motiven + färgblandning i RYB och Lab), `canvasart` (penseldrag och dukens höjdkarta), `palette` (paletten i 3D), `garden` (trädgården, stafflier), `cast` (Hägglund och 2021 års målare), `hud` (paneler, dom, galleri), `audio` (syntetiskt ljud), `index` (spelloop och dom) |
 | `public/` | Statiska filer: `event.json`, `manifest.json`, ikoner, `brand/` (älgen), `og-image.png`, `games/` (affischbilder), `photos/` |
 
 Data hämtas från `competition-data.csv` vid sidladdning. Om filen inte går att

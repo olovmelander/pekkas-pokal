@@ -24,6 +24,8 @@ export const MAT = { SKIN: 0, CLOTH: 1, GLOSS: 2, LAME: 3 };
 
 export const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 export function sstep(a, b, x) {
+  // Equal edges are a hard step, not 0/0: a NaN here becomes a NaN vertex
+  if (a === b) return x < a ? 0 : 1;
   const t = clamp((x - a) / (b - a), 0, 1);
   return t * t * (3 - 2 * t);
 }
