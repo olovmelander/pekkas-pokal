@@ -251,7 +251,7 @@ export function addBirch(G, rand, x, y0, z, h, o = {}) {
     }
   }
   // Crown: hanging clumps around the upper stem, biggest in the middle
-  const leaf = new THREE.Color(o.leaf || 0x7a9c3e);
+  const leaf = new THREE.Color(o.leaf || 0x9cba52);
   const n = o.clumps || 7;
   const crownC = new THREE.Vector3(...at(0.78));
   const cw = h * (0.17 + rand() * 0.05);

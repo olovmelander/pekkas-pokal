@@ -21,6 +21,12 @@
  * handed and your opponents are left-handed (as a good share of elite
  * foilists are). The person is never mirrored: faces, hair partings and
  * the lamé stay true; only which hand holds the foil changes.
+ *
+ * Hands: the foil sits in the people grip library's French grip (index
+ * and thumb pinch the handle behind the bell, the other fingers wrap it
+ * as aids) inside a white glove with a gauntlet cuff; the rear hand
+ * closes on the mask's padded top while it carries it. Footwork steps
+ * one foot at a time and lifts any foot that travels, so nothing slides.
  */
 
 import * as THREE from 'three';
@@ -377,6 +383,7 @@ export class Fencer {
     this.wDir = new THREE.Vector3(1, 0, 0);
     this.wPole = new THREE.Vector3();
     this.wValid = false;
+    this.clock = 0;
     this.foilHolder = new THREE.Group();
     this.foilHolder.add(this.foil);
     this.bladeL = new THREE.Vector3().copy(BLADE_L);
@@ -445,7 +452,7 @@ export class Fencer {
       this.foilHolder.position.set(0, 0, 0);
       p.hold(this.foilHolder, H, 'foil', { handle: [0.016, 0.012], blend: 0 });
       const anchor = p.sockets[`hold${H}`];
-      this.sock = anchor;
+      this.gripSock = anchor;
       this.bladeL.set(0, 1, 0).applyQuaternion(anchor.quaternion).normalize();
       this.gripOff = GRIP_OFF;
     } else {
@@ -453,7 +460,7 @@ export class Fencer {
       this.foil.quaternion.copy(this.foilQ);
       this.foil.position.set(0, 0, 0);
       p.attach(this.foilHolder, `grip${H}`);
-      this.sock = p.sockets[`grip${H}`];
+      this.gripSock = p.sockets[`grip${H}`];
       this.bladeL.copy(BLADE_L);
       this.gripOff = 0;
     }
@@ -648,10 +655,15 @@ export class Fencer {
     const ch = clamp(p[P.cheer], -1, 1);
     const up = Math.max(0, ch);
     const down = Math.max(0, -ch);
+    // Never a statue at ease: a slow, personal sway through the spine and
+    // shoulders (the legs stay put, so the feet never slide)
+    const ph = this.clock + ((this.person.look.seed || 0) % 97);
+    const sway = Math.sin(ph * 0.83) * 0.022 + Math.sin(ph * 0.31) * 0.014;
+    const turn = Math.sin(ph * 0.47) * 0.05;
     const w = this.writer.clear();
     w.set('hips', 0.0, 0.08, 0.02)
-      .set('spine', 0.02 + down * 0.16, 0.0, -0.01)
-      .set('chest', -0.02 - up * 0.08 + down * 0.1, -0.06, 0)
+      .set('spine', 0.02 + down * 0.16, turn * 0.4, -0.01 + sway)
+      .set('chest', -0.02 - up * 0.08 + down * 0.1, -0.06 + turn * 0.6, -sway * 0.5)
       .set('neck', 0.04 + down * 0.12, 0, 0)
       .set('head', -0.03 + down * 0.28 - up * 0.12, 0.0, 0)
       .set('shoulderL', 0, 0, -0.03 - down * 0.05)
@@ -700,7 +712,7 @@ export class Fencer {
       this.wPole.copy(pole);
     }
     const b = person.bones;
-    const sock = this.sock.position;
+    const sock = this.gripSock.position;
     const bladeW = this.V().copy(dir).normalize();
     const q = this.Q();
     const wrist = this.V();
@@ -733,7 +745,7 @@ export class Fencer {
    */
   _rollBow(handQ) {
     const base = this.foilBaseQ;
-    const hq = this.Q().copy(handQ).multiply(this.sock.quaternion);
+    const hq = this.Q().copy(handQ).multiply(this.gripSock.quaternion);
     const bladeH = this.V().set(1, 0, 0).applyQuaternion(base);
     const bowH = this.V().set(0, 1, 0).applyQuaternion(base);
     const bladeW = this.V().copy(bladeH).applyQuaternion(hq);
@@ -799,6 +811,7 @@ export class Fencer {
    */
   update(dt, t) {
     const { person } = this;
+    this.clock = (this.clock + dt) % 600;
     const e = this.expr;
     if (e.t > 0) {
       e.t -= dt;

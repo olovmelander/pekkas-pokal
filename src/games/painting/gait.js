@@ -60,6 +60,8 @@ export class Feet {
     this.drop = 0;
     this.still = 0;
     this.next = 'L';
+    /** While a walk cycle drives the legs, the feet only follow it (see adopt). */
+    this.hold = false;
     this.out = { drop: 0, sway: 0, swing: 0, twist: 0 };
     this.feet = ['L', 'R'].map((S) => ({
       S,
@@ -125,6 +127,12 @@ export class Feet {
     this.still = speed < 0.05 ? this.still + d : 0;
     const { yaw } = this;
     const lead = 0.25;
+    if (this.hold) {
+      this.drop = 0;
+      this.out.drop = 0;
+      this.out.sway = 0;
+      return this.out;
+    }
 
     // In the air: chase where the body will be when the foot lands
     let flying = null;
@@ -229,6 +237,26 @@ export class Feet {
       f.ankle.y = f.pos.y + ANKLE * s;
     }
     return f.ankle;
+  }
+
+  /**
+   * Plant the feet where the legs actually are now (after a walk cycle drove
+   * them): on the ground under each ankle, turned the way the foot points.
+   * Call after the pose is applied and the world matrices are current.
+   */
+  adopt() {
+    const b = this.person.bones;
+    for (const f of this.feet) {
+      const foot = b[`foot${f.S}`];
+      foot.getWorldPosition(f.pos);
+      f.pos.y = 0;
+      foot.getWorldQuaternion(_q);
+      _v.set(0, 0, 1).applyQuaternion(_q);
+      f.yaw = Math.atan2(_v.x, _v.z);
+      f.pitch = 0;
+      f.t = -1;
+    }
+    this.still = 0;
   }
 
   /** Legs onto the feet. Call after setPose and root.updateMatrixWorld. */

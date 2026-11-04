@@ -119,6 +119,7 @@
  *       'ball'     a small ball in the fingertips (ping-pong toss): origin = centre: diameter (0.04)
  *       'relaxed' 'open' 'fist' 'point' 'thumbsUp'   hand shapes, no object needed
  *     opts.offset = { position, rotation | quaternion } nudges the object inside the grip frame.
+ *     Calling hold/setGrip again with the same grip and sizes changes nothing (safe every frame).
  *   person.release(side, { detach = true, blend = 0.25 }) → the object; the pose drives the fingers again
  *   person.setGrip(side, grip | null, opts) → sockets.holdX   fingers only (null hands them back)
  *   person.gripOf(side) → grip name | null
@@ -403,7 +404,7 @@ export function createPerson(specIn = {}) {
   const attached = new Set();
   /* Hands: a grip override per side (hold / setGrip) and eased transitions */
   const mkHand = (S) => ({
-    S, grip: null, opts: null, solved: null, object: null, anchor: null,
+    S, grip: null, opts: null, solved: null, object: null, anchor: null, key: '',
     from: new Float32Array(HAND_BONE_COUNT * 4), cfg: new Float32Array(HAND_BONE_COUNT * 4),
     k: 1, dur: 0.2
   });
@@ -446,6 +447,10 @@ export function createPerson(specIn = {}) {
   };
   const setOverride = (h, grip, opts = {}) => {
     const name = grip && GRIP_NAMES.includes(grip) ? grip : grip ? 'relaxed' : null;
+    // Calling again with the same grip and sizes (e.g. every frame) changes nothing
+    const key = name ? `${name}|${JSON.stringify(modelOpts(opts, s))}` : '';
+    if (key === h.key) return;
+    h.key = key;
     startHandBlend(h, opts.blend ?? 0.2);
     h.grip = name;
     h.opts = opts;
@@ -457,6 +462,7 @@ export function createPerson(specIn = {}) {
   const tmpHQ2 = new THREE.Quaternion();
   const tmpHV = new THREE.Vector3();
   const tmpHV2 = new THREE.Vector3();
+  const tmpAcc = new THREE.Vector3();
   const layered = ['spine', 'chest', 'neck', 'head', 'shoulderL', 'shoulderR'].map((n) => ({
     bone: bones[n], base: new THREE.Quaternion(), written: new THREE.Quaternion(0, 0, 0, 0)
   }));
@@ -579,7 +585,7 @@ export function createPerson(specIn = {}) {
     holdWith(side, object, { at = [0, -0.25, 0], roll = 0, grip = 'power', pole, ...opts } = {}) {
       const S = sideOf(side);
       const h = hands[S];
-      if (h.grip !== grip || JSON.stringify(h.opts && modelOpts(h.opts, s)) !== JSON.stringify(modelOpts(opts, s))) setOverride(h, grip, opts);
+      setOverride(h, grip, opts);
       const anchor = anchorFor(h);
       object.updateWorldMatrix(true, false);
       tmpHV.fromArray(at).applyMatrix4(object.matrixWorld);
@@ -715,7 +721,7 @@ export function createPerson(specIn = {}) {
         }
         tmpV2.subVectors(tmpV, state.rootPrev).divideScalar(d);
         state.rootPrev.copy(tmpV);
-        const acc = tmpV2.clone().sub(state.rootVel).divideScalar(d);
+        const acc = tmpAcc.copy(tmpV2).sub(state.rootVel).divideScalar(d);
         state.rootVel.copy(tmpV2);
         state.rootAcc.lerp(acc.clampLength(0, 30), k(14));
         let dy = yawNow - state.rootYaw;
@@ -775,8 +781,8 @@ export function createPerson(specIn = {}) {
         state.gazeBlinkT = 1.2;
       }
       state.gazeBlinkT -= d;
-      [state.headYaw, state.headYawV] = crit(state.headYaw, state.headYawV, headTarget, 7.5);
-      [state.headPitch, state.headPitchV] = crit(state.headPitch, state.headPitchV, pitchT - chestPitchT, 7.5);
+      [state.headYaw, state.headYawV] = crit(state.headYaw, state.headYawV, headTarget, 9);
+      [state.headPitch, state.headPitchV] = crit(state.headPitch, state.headPitchV, pitchT - chestPitchT, 9);
       [state.chestYaw, state.chestYawV] = crit(state.chestYaw, state.chestYawV, chestYawT, 4.5);
       [state.chestPitch, state.chestPitchV] = crit(state.chestPitch, state.chestPitchV, chestPitchT, 4.5);
       state.lookYaw = state.headYaw + state.chestYaw;

@@ -9,11 +9,12 @@
  *    after a RANDOM delay (0.2–1.8 s) exactly like Olympic skeet, so the
  *    launch always startles a little.
  *  - Singles give two shells, like real trap. Doubles give one per bird.
- *  - 24 duvor over three series — singles, crossers, then doubles — and
- *    then the 25th: GULDDUVAN, small, fast and worth 500. A full round
- *    of 25, like a real scorecard.
+ *  - 24 duvor over three series — singles, crossers with incomers from
+ *    the high tower, then doubles — and then the 25th: GULDDUVAN, small,
+ *    fast and worth 500. A full round of 25, like a real scorecard.
  *  - Swing-through controls: touch, track the bird, RELEASE to fire.
- *    The whole phone is the gun.
+ *    The whole phone is the gun, and its sight rides above the finger so
+ *    the finger never hides the bird.
  *  - The shot has a time of flight (~0.1 s out to the clay) and carries
  *    the swing with it: follow the bird and release on it, and the pattern
  *    arrives where the bird has got to; stop the gun and it goes behind.
@@ -1051,6 +1052,7 @@ export async function createShooting(container) {
     if (reduceMotion) return;
     later(() => {
       reaction.target = 1;
+      hideLead(); // the miss diagram belongs to the field, not to the gang
     }, 250);
     later(() => {
       reaction.target = 0;
@@ -1494,6 +1496,7 @@ export async function createShooting(container) {
   const reactPose = { pos: new THREE.Vector3(), q: new THREE.Quaternion(), fov: 40 };
   const GANG_CENTRE = new THREE.Vector3(0.5, 0.98, 2.65);
   const REACT_DIR = new THREE.Vector3(-0.08, 0.2, -1).normalize();
+  const REACT_DIR_TALL = new THREE.Vector3(-0.08, 0.36, -1).normalize();
   const lookM = new THREE.Matrix4();
   const lookAt = new THREE.Vector3();
   const euler = new THREE.Euler(0, 0, 0, 'YXZ');
@@ -1554,10 +1557,11 @@ export async function createShooting(container) {
    */
   function reactionPose(t) {
     const portrait = view.aspect < 0.9;
-    reactPose.fov = portrait ? 52 : 38;
+    reactPose.fov = portrait ? 60 : 38;
     const halfH = Math.tan(THREE.MathUtils.degToRad(reactPose.fov / 2)) * view.aspect;
-    const dist = THREE.MathUtils.clamp(2.9 / halfH, 3.8, 8.5);
-    reactPose.pos.copy(GANG_CENTRE).addScaledVector(REACT_DIR, dist);
+    const dist = THREE.MathUtils.clamp(2.9 / halfH, 3.8, portrait ? 9.5 : 8.5);
+    // A tall frame looks down over the station rail at the row instead of through it
+    reactPose.pos.copy(GANG_CENTRE).addScaledVector(portrait ? REACT_DIR_TALL : REACT_DIR, dist);
     reactPose.pos.x += Math.sin(t * 0.3) * 0.06;
     lookM.lookAt(reactPose.pos, GANG_CENTRE, THREE.Object3D.DEFAULT_UP);
     reactPose.q.setFromRotationMatrix(lookM);
@@ -2014,6 +2018,7 @@ export async function createShooting(container) {
       if (hold) {
         reaction.target = 1;
         reaction.k = 1;
+        hideLead();
         timers.forEach((id) => clearTimeout(id));
         timers.clear();
       }

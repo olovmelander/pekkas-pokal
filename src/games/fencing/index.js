@@ -764,7 +764,8 @@ export async function createFencing(container) {
     me.setBaseExpression(won ? 'grin' : 'frown');
     foe.setBaseExpression(won ? 'frown' : 'smile');
     salle.referee.signal('award', won ? -1 : 1);
-    salle.crowd.react(won ? 'clap' : 'groan');
+    // A won bout gets the applause; a lost one the sporting, polite kind for the winner
+    salle.crowd.react(won ? 'clap' : 'polite');
     if (won) {
       sfx.verdictWin();
       sfx.applause(2.4);
@@ -843,7 +844,7 @@ export async function createFencing(container) {
     animAi.play('ease');
     me.setBaseExpression(medal ? 'smile' : 'neutral');
     foe.setBaseExpression('smile');
-    salle.crowd.react(medal === 1 ? 'clap' : 'idle');
+    salle.crowd.react(medal === 1 ? 'clap' : medal ? 'polite' : 'idle');
     hud.screen(finalScreen({
       medal, score: state.score, best, isBest, fencer: fencerName, results: state.results
     }));
@@ -1316,7 +1317,7 @@ export async function createFencing(container) {
     if (ph === 'bracket') return foe;
     if (ph === 'result') return state.results.length && state.results[state.results.length - 1].won ? me : foe;
     if (ph === 'title' && portrait) return me;
-    if (ph === 'final' && !portrait) return me;
+    if (ph === 'final') return me;
     return null;
   }
 
@@ -1330,11 +1331,12 @@ export async function createFencing(container) {
       subject.j.torso.getWorldPosition(v3);
       const drift = Math.sin(t * 0.11) * 0.18;
       if (aspect < 0.9) {
-        const d = ph === 'title' ? 6.1 : 7.1;
-        goal.look.set(v3.x, 0.92, 0);
+        // (the champion holds the cup up high: stand further back)
+        const d = ph === 'title' ? 6.1 : ph === 'final' ? 7.9 : 7.1;
+        goal.look.set(v3.x, ph === 'final' ? 1.1 : 0.92, 0);
         goal.pos.set(v3.x + 0.5 + drift, 1.3, d);
         goal.fov = 40;
-        goal.shift.set(0.5, ph === 'title' ? 0.27 : 0.24);
+        goal.shift.set(0.5, ph === 'title' ? 0.27 : ph === 'final' ? 0.2 : 0.24);
       } else {
         // Closer on short landscape phones: the person fills the height
         // (the champion holds the cup up high: frame a little taller)

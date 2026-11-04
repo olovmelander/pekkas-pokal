@@ -1037,6 +1037,54 @@ export function buildGarden({ lowTier = false } = {}) {
     group.add(headMesh);
   }
 
+  /* Pollen and seed fluff drifting through the sunlight: the air itself,
+     catching the light against the hedge and the shade */
+  {
+    const n = lowTier ? 70 : 160;
+    const pos = new Float32Array(n * 3);
+    const seed = new Float32Array(n);
+    const rp = mulberry(3301);
+    for (let i = 0; i < n; i++) {
+      pos.set([-7 + rp() * 13, 0.35 + rp() * 2.6, -8.5 + rp() * 10.5], i * 3);
+      seed[i] = rp() * TAU;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
+    const cv = document.createElement('canvas');
+    cv.width = 32;
+    cv.height = 32;
+    const c2 = cv.getContext('2d');
+    const gr = c2.createRadialGradient(16, 16, 0, 16, 16, 16);
+    gr.addColorStop(0, 'rgba(255,255,255,1)');
+    gr.addColorStop(0.35, 'rgba(255,255,255,0.55)');
+    gr.addColorStop(1, 'rgba(255,255,255,0)');
+    c2.fillStyle = gr;
+    c2.fillRect(0, 0, 32, 32);
+    const dot = new THREE.CanvasTexture(cv);
+    dot.colorSpace = THREE.SRGBColorSpace;
+    const mat = new THREE.PointsMaterial({
+      size: 0.03, map: dot, color: 0xfff4d6, transparent: true, opacity: 0.8, depthWrite: false, sizeAttenuation: true
+    });
+    const ph = phaseUniform(wind, [0.23, 0.31, 0.17]);
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.uPolPh = ph;
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute float aSeed;\nuniform vec3 uPolPh;')
+        .replace('#include <begin_vertex>', `#include <begin_vertex>
+          transformed.x += sin(uPolPh.x + aSeed) * 0.6 + sin(uPolPh.y * 2.0 + aSeed * 1.7) * 0.25;
+          transformed.y += sin(uPolPh.z + aSeed * 2.3) * 0.35;
+          transformed.z += cos(uPolPh.x + aSeed * 0.7) * 0.5;`)
+        // Never a big blob in front of the lens, whatever the distance
+        .replace('#include <fog_vertex>', '#include <fog_vertex>\n  gl_PointSize = clamp( gl_PointSize, 1.0, 6.0 );');
+    };
+    mat.customProgramCacheKey = () => 'pm-pollen';
+    const pollen = new THREE.Points(geo, mat);
+    pollen.frustumCulled = false;
+    refs.extras.push(pollen);
+    group.add(pollen);
+  }
+
   /* Swallows, looping over the hedge */
   {
     const birdMat = new THREE.MeshBasicMaterial({ color: 0x2b2d36, side: THREE.DoubleSide });

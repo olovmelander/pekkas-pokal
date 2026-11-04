@@ -53,7 +53,7 @@ const SEATS = [
     look: { outfit: { top: 'sweater', topColor: 0x2f5f5c } }
   },
   {
-    name: 'Rickard Nilsson', x: 0.86, z: 2.98, yaw: -0.07, fabric: 0xa8832e,
+    name: 'Rickard Nilsson', x: 0.86, z: 2.98, yaw: -0.07, fabric: 0xa8832e, pump: true,
     look: { outfit: { top: 'jacket', topColor: 0x4a5a3a, shoes: 'boots', shoeColor: 0x3a2a1e } }
   },
   {
@@ -221,7 +221,7 @@ export function buildGang({ rand }) {
     group.add(person.root);
     const s = person.scale || person.height / 1.8;
     const m = {
-      name: def.name, person, seated, scale: s, lean: def.lean || 0,
+      name: def.name, person, seated, scale: s, lean: def.lean || 0, pump: !!def.pump,
       cup: null, board: null, pencil: null,
       react: null, reactT: 0, delay: 0, surprise: 0,
       phase: rand() * 10, tempo: 0.9 + rand() * 0.25,
@@ -310,6 +310,7 @@ export function buildGang({ rand }) {
       p.forearmL[0] -= Math.abs(Math.sin(tt * 4.2)) * 0.35;
       p.chest[0] -= 0.05;
     } else if (mode === 'clap') p = m.seated ? POSES.sitClap(tt, m.pose) : POSES.clap(tt, m.pose);
+    else if (mode === 'cheer' && m.seated && m.pump) p = POSES.sitFistPump(tt, m.pose); // not everyone throws both arms up
     else if (mode === 'cheer' || mode === 'gold') p = m.seated ? POSES.sitCheer(tt, m.pose) : POSES.cheer(tt, m.pose);
     else if (mode === 'crossed') {
       // Seated with the arms folded: the sitting legs, armsCrossed above the hips
@@ -324,10 +325,9 @@ export function buildGang({ rand }) {
       }
     } else if (m.seated) {
       p = POSES.sit(tt, m.pose);
-      // Settled back into the canvas, with a slow breath of sway
+      // Settled back into the canvas (update() adds each one's own sway)
       p.spine[0] -= m.lean;
       p.chest[0] -= m.lean * 0.5;
-      p.spine[2] += Math.sin(tt * 0.31) * 0.015;
     } else {
       // Standing: his own seeded weight shifts and fidgets, never in step with anyone
       p = POSES.idle(t, m.pose, m.person.look.seed);

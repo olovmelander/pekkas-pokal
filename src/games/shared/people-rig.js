@@ -276,6 +276,15 @@ function fill(out, src) {
 
 /* ------------------------------------------------------------ gait */
 
+/** Write [x, y, z] into a pose channel in place (no per-frame garbage). */
+function set3(p, n, x, y, z) {
+  const a = p[n] || (p[n] = [0, 0, 0]);
+  a[0] = x;
+  a[1] = y;
+  a[2] = z;
+  return a;
+}
+
 /** Leg geometry of the 1.80 m model (metres). */
 const LEG = { L1: 0.415, L2: 0.41, hipX: 0.088, hipY: -0.045, hipZ: -0.014, ankleY: 0.08, footX: 0.096 };
 const HEEL = [0.08, 0.055];
@@ -283,9 +292,9 @@ const BALL = [0.08, -0.12];
 
 /** Walk styles: stride (m per cycle), arm swing, foot lift, trunk lean, elbow bend, pelvis turn. */
 const WALK_STYLES = {
-  stroll: { stride: 1.05, swing: 0.17, lift: 0.045, lean: 0.015, elbow: 0.24, pelvis: 0.05, toe: 0.55 },
+  stroll: { stride: 1.05, swing: 0.17, lift: 0.045, lean: 0.015, elbow: 0.24, pelvis: 0.05, toe: 0.65 },
   walk: { stride: 1.3, swing: 0.27, lift: 0.06, lean: 0.035, elbow: 0.32, pelvis: 0.07, toe: 0.62 },
-  brisk: { stride: 1.6, swing: 0.42, lift: 0.075, lean: 0.07, elbow: 0.85, pelvis: 0.1, toe: 0.7 }
+  brisk: { stride: 1.5, swing: 0.42, lift: 0.075, lean: 0.07, elbow: 0.85, pelvis: 0.1, toe: 0.59 }
 };
 /** Metres the root travels per walk cycle (two steps) at 1.80 m, per style. */
 export const WALK_STRIDES = { stroll: WALK_STYLES.stroll.stride, walk: WALK_STYLES.walk.stride, brisk: WALK_STYLES.brisk.stride };
@@ -348,12 +357,12 @@ function legTo(p, side, ankle, g, toeOut = 0) {
   const alpha = Math.atan2(d.z, -d.y);
   const beta = Math.asin(Math.max(-1, Math.min(1, (L2 * Math.sin(knee)) / L)));
   const thighX = -(alpha + beta);
-  p[`thigh${S}`] = [thighX, -p.hips[1] * 0.85 + side * toeOut * 0.5, Math.asin(Math.max(-1, Math.min(1, d.x / L)))];
-  p[`shin${S}`] = [knee, 0, 0];
-  p[`foot${S}`] = [g - (p.hips[0] + thighX + knee), side * toeOut * 0.5, 0];
+  set3(p, `thigh${S}`, thighX, -p.hips[1] * 0.85 + side * toeOut * 0.5, Math.asin(Math.max(-1, Math.min(1, d.x / L))));
+  set3(p, `shin${S}`, knee, 0, 0);
+  set3(p, `foot${S}`, g - (p.hips[0] + thighX + knee), side * toeOut * 0.5, 0);
 }
 
-/** Highest hip-joint height at which a leg still reaches `ankle` with the knee bent `kMin`. */
+/** Highest hips-bone height at which a leg still reaches `ankle` with the knee bent `kMin`. */
 function reachHeight(p, side, ankle, kMin) {
   const hj = hipJoint(p, side, _hd);
   const { L1, L2 } = LEG;
@@ -366,7 +375,8 @@ const softMin = (a, b, k = 0.006) => -k * Math.log(Math.exp(-a / k) + Math.exp(-
 
 /** The ankle (root frame) of a leg at gait phase u (0 = heel strike). */
 function gaitAnkle(u, st, side, out) {
-  const F0 = st.stride * 0.31;
+  // Stance centred a little behind the hip (the body leads the feet)
+  const F0 = st.stride * (st.toe / 2 - 0.06);
   const TO = st.toe;
   const x = side * LEG.footX;
   const at = (uu) => {
@@ -418,8 +428,8 @@ function walkCycle(phase, out, style) {
   const c = Math.cos(ph);
   const s = Math.sin(ph);
   // Pelvis: turns with the leading leg, drops on the swing side, shifts over the stance foot
-  p.hips = v3(0.02 + st.lean * 0.3, -st.pelvis * c, 0.038 * s);
-  p.hipsPos = v3(0.016 * s, 0, 0);
+  set3(p, 'hips', 0.02 + st.lean * 0.3, -st.pelvis * c, 0.038 * s);
+  set3(p, 'hipsPos', 0.016 * s, 0, 0);
   const uL = ph / (Math.PI * 2);
   const uR = uL + 0.5;
   const fl = (u) => u - Math.floor(u);
@@ -428,33 +438,33 @@ function walkCycle(phase, out, style) {
   // Hip height: as high as the stance legs allow (soft knees), never above standing
   const stanceL = fl(uL) < st.toe;
   const stanceR = fl(uR) < st.toe;
-  let H = 0.905 - 0.012 - st.lean * 0.1;
+  let H = 0.95 - 0.012 - st.lean * 0.1;
   if (stanceL) H = softMin(H, reachHeight(p, 1, _al, 0.1));
   if (stanceR) H = softMin(H, reachHeight(p, -1, _ar, 0.1));
-  p.hipsPos[1] = H - 0.905 + 0.004;
+  p.hipsPos[1] = H - 0.95 - 0.002;
   legTo(p, 1, _al, gL, 0.05);
   legTo(p, -1, _ar, gR, 0.05);
   // Trunk: counter-rotates against the pelvis, leans with speed, stays upright over the tilt
   const twist = (st.pelvis + 0.06) * c;
-  p.spine = v3(0.02 + st.lean * 0.6, twist * 0.4, -p.hips[2] * 0.7);
-  p.chest = v3(-0.02 + st.lean * 0.4, twist * 0.6, -p.hips[2] * 0.25);
+  set3(p, 'spine', 0.02 + st.lean * 0.6, twist * 0.4, -p.hips[2] * 0.7);
+  set3(p, 'chest', -0.02 + st.lean * 0.4, twist * 0.6, -p.hips[2] * 0.25);
   // Head: steadied in the world (cancel the chest's turn and tilt, keep the eyes level)
   const chestYaw = p.hips[1] + p.spine[1] + p.chest[1];
   const roll = p.hips[2] + p.spine[2] + p.chest[2];
-  p.neck = v3(0.04 - st.lean * 0.5, -chestYaw * 0.4, -roll * 0.4);
-  p.head = v3(-0.03 - st.lean * 0.5 + 0.01 * Math.cos(2 * ph), -chestYaw * 0.6, -roll * 0.6);
+  set3(p, 'neck', 0.04 - st.lean * 0.5, -chestYaw * 0.4, -roll * 0.4);
+  set3(p, 'head', -0.03 - st.lean * 0.5 + 0.01 * Math.cos(2 * ph), -chestYaw * 0.6, -roll * 0.6);
   // Arms: counter-swing, lagging the legs a little; the elbow bends as the arm comes forward
   const lag = 0.28;
   const aL = Math.cos(ph - lag);
   const sw = st.swing;
-  p.upperArmL = v3(0.04 + sw * aL, 0.12, 0.1 + 0.03 * st.elbow);
-  p.upperArmR = v3(0.04 - sw * aL, -0.12, -0.1 - 0.03 * st.elbow);
-  p.forearmL = v3(-(st.elbow + 0.28 * (1 - aL) * 0.5 + 0.06), 0, 0);
-  p.forearmR = v3(-(st.elbow + 0.28 * (1 + aL) * 0.5 + 0.06), 0, 0);
-  p.handL = v3(-0.05 + 0.06 * Math.sin(ph - lag - 0.6), 0, -0.1);
-  p.handR = v3(-0.05 - 0.06 * Math.sin(ph - lag - 0.6), 0, 0.1);
-  p.shoulderL = v3(0, -0.05 * aL * sw * 3, -0.03);
-  p.shoulderR = v3(0, -0.05 * aL * sw * 3, 0.03);
+  set3(p, 'upperArmL', 0.04 + sw * aL, 0.12, 0.1 + 0.03 * st.elbow);
+  set3(p, 'upperArmR', 0.04 - sw * aL, -0.12, -0.1 - 0.03 * st.elbow);
+  set3(p, 'forearmL', -(st.elbow + 0.28 * (1 - aL) * 0.5 + 0.06), 0, 0);
+  set3(p, 'forearmR', -(st.elbow + 0.28 * (1 + aL) * 0.5 + 0.06), 0, 0);
+  set3(p, 'handL', -0.05 + 0.06 * Math.sin(ph - lag - 0.6), 0, -0.1);
+  set3(p, 'handR', -0.05 - 0.06 * Math.sin(ph - lag - 0.6), 0, 0.1);
+  set3(p, 'shoulderL', 0, -0.05 * aL * sw * 3, -0.03);
+  set3(p, 'shoulderR', 0, -0.05 * aL * sw * 3, 0.03);
   p.gripL = 0.2;
   p.gripR = 0.2;
   return p;
@@ -491,23 +501,23 @@ function idleCycle(t, out, seed = 0) {
   const lift = side(k) * side(k - 1) < 0 ? Math.sin(Math.PI * Math.min(1, local / shiftT)) : 0;
   // Pelvis over the stance leg, its hip up; trunk and shoulders counter it, head level
   const sway = Math.sin(tt * 0.6 + r0 * 6) * 0.004;
-  p.hips = v3(0.01, 0.05 * w, 0.045 * w);
-  p.hipsPos = v3(0.03 * w + sway, 0, 0.004 * Math.sin(tt * 0.37));
-  p.spine = v3(0.02, -0.02 * w, -0.035 * w + sway * 2);
-  p.chest = v3(-0.02 + 0.006 * Math.sin(tt * 1.3), -0.035 * w, -0.025 * w);
+  set3(p, 'hips', 0.01, 0.05 * w, 0.045 * w);
+  set3(p, 'hipsPos', 0.03 * w + sway, 0, 0.004 * Math.sin(tt * 0.37));
+  set3(p, 'spine', 0.02, -0.02 * w, -0.035 * w + sway * 2);
+  set3(p, 'chest', -0.02 + 0.006 * Math.sin(tt * 1.3), -0.035 * w, -0.025 * w);
   const roll = p.hips[2] + p.spine[2] + p.chest[2];
   const yaw = p.hips[1] + p.spine[1] + p.chest[1];
-  p.neck = v3(0.04, -yaw * 0.4, -roll * 0.4);
-  p.head = v3(-0.03, -yaw * 0.6 + Math.sin(tt * 0.29 + r0 * 3) * 0.06, -roll * 0.6);
+  set3(p, 'neck', 0.04, -yaw * 0.4, -roll * 0.4);
+  set3(p, 'head', -0.03, -yaw * 0.6 + Math.sin(tt * 0.29 + r0 * 3) * 0.06, -roll * 0.6);
   // Feet: the stance foot under the hip, the free foot a little forward and out, heel soft
   const wl = Math.max(0, w);
   const wr = Math.max(0, -w);
   const fL = _al.set(LEG.footX + 0.018 * wr, LEG.ankleY + 0.012 * wr + (w > 0 ? 0 : 0.02 * lift), 0.012 + 0.07 * wr);
   const fR = _ar.set(-LEG.footX - 0.018 * wl, LEG.ankleY + 0.012 * wl + (w < 0 ? 0 : 0.02 * lift), 0.012 + 0.07 * wl);
-  let H = 0.905 - 0.004;
+  let H = 0.95 - 0.004;
   H = softMin(H, reachHeight(p, 1, fL, 0.05 + 0.25 * wr), 0.004);
   H = softMin(H, reachHeight(p, -1, fR, 0.05 + 0.25 * wl), 0.004);
-  p.hipsPos[1] = H - 0.905 + 0.002;
+  p.hipsPos[1] = H - 0.95 - 0.001;
   legTo(p, 1, fL, 0.12 * wr, 0.08 + 0.06 * wr);
   legTo(p, -1, fR, 0.12 * wl, 0.08 + 0.06 * wl);
   // Arms hang and breathe; the free-leg side swings a touch forward
@@ -530,12 +540,12 @@ function idleCycle(t, out, seed = 0) {
       p.head[0] -= 0.05 * f;
     } else if (kind === 2) {
       // Rub the hands in front
-      p.upperArmL = v3(-0.2 * f + 0.04, 0.12 - 0.5 * f, 0.1 + 0.15 * f);
-      p.upperArmR = v3(-0.2 * f + 0.04, -0.12 + 0.5 * f, -0.1 - 0.15 * f);
-      p.forearmL = v3(-0.22 - 1.1 * f, 0, 0);
-      p.forearmR = v3(-0.22 - 1.1 * f, 0, 0);
-      p.handL = v3(-0.05, 0.3 * f, -0.1 + 0.3 * f + 0.08 * Math.sin(t * 9) * f);
-      p.handR = v3(-0.05, -0.3 * f, 0.1 - 0.3 * f - 0.08 * Math.sin(t * 9) * f);
+      set3(p, 'upperArmL', -0.2 * f + 0.04, 0.12 - 0.5 * f, 0.1 + 0.15 * f);
+      set3(p, 'upperArmR', -0.2 * f + 0.04, -0.12 + 0.5 * f, -0.1 - 0.15 * f);
+      set3(p, 'forearmL', -0.22 - 1.1 * f, 0, 0);
+      set3(p, 'forearmR', -0.22 - 1.1 * f, 0, 0);
+      set3(p, 'handL', -0.05, 0.3 * f, -0.1 + 0.3 * f + 0.08 * Math.sin(t * 9) * f);
+      set3(p, 'handR', -0.05, -0.3 * f, 0.1 - 0.3 * f - 0.08 * Math.sin(t * 9) * f);
     } else if (kind === 3) {
       // Up onto the toes and down
       p.hipsPos[1] += 0.025 * f;

@@ -29,7 +29,9 @@ const P = (o) => o;
  * The thirteen, as they appear in competition-data.csv. Hair, facial hair,
  * glasses, headwear and build follow the owner's group photo (Jonas is not
  * in it). Everyday outfits are the photo's summer clothes; games dress them
- * in their own kit on top.
+ * in their own kit on top. The owner's rule: of the participants only Henrik
+ * and Viktor wear glasses (clear ones) and nobody wears sunglasses; invented
+ * characters may (glasses 'sun', shades 'up' | 'shirt').
  */
 export const PARTICIPANTS = {
   'Olov Melander': P({ height: 1.81, build: 'average', skin: 'light', hair: ['sidePart', 'brown'], eyes: 'blue', smile: 0.35,
@@ -38,7 +40,7 @@ export const PARTICIPANTS = {
   // Tall and slim, neat short hair. The painting game's culture critic: the
   // polo neck is his default outfit.
   'Mikael Hägglund': P({ height: 1.87, build: 'slim', skin: 'light', hair: ['crop', 'lightBrown'], eyes: 'grayBlue',
-    face: { jaw: 0.94, nose: 1.04, noseLen: 1.05, chin: 1.02, headL: 1.0, cheek: 0.96, brow: 1.04 },
+    face: { jaw: 0.91, nose: 1.04, noseLen: 1.06, chin: 1.05, headL: 1.02, headW: 0.96, cheek: 0.93, brow: 1.05 },
     outfit: { top: 'poloNeck', topColor: 0x1f2026, bottom: 'trousers', bottomColor: 0x8f8268, shoes: 'leather' } }),
   'Viktor Jones': P({ height: 1.8, build: 'average', skin: 'fair', hair: ['crop', 'brown'], facialHair: 'fullBeard', glasses: 'round', glassesColor: 0x1a1614, eyes: 'brown',
     headwear: { style: 'cap', color: 0x6f6152 },
@@ -48,23 +50,23 @@ export const PARTICIPANTS = {
     face: { jaw: 0.97, nose: 1.06, noseLen: 1.06, brow: 1.04, cheek: 0.98, headL: 1.02 },
     outfit: { top: 'linen', topColor: 0xc8cebd, bottom: 'shorts', bottomColor: 0xbca785 } }),
   'Erik Vallgren': P({ height: 1.86, build: 'average', skin: 'fair', hair: ['receding', 'darkBlond'], eyes: 'blue',
-    face: { jaw: 1.04, headW: 1.04, noseLen: 1.0, chin: 1.02, cheek: 1.06 },
+    face: { jaw: 1.07, headW: 1.06, noseLen: 1.0, chin: 1.03, cheek: 1.08 },
     outfit: { topColor: 0xb3b5b5, bottom: 'shorts', bottomColor: 0x1f2638 } }),
   'Henrik Lundqvist': P({ height: 1.83, build: 'slim', skin: 'light', hair: ['messy', 'darkBrown'], glasses: 'rect', glassesColor: 0x141416, eyes: 'hazel',
-    face: { jaw: 0.95, chin: 1.02, nose: 1.04, noseLen: 1.04, cheek: 0.96, headW: 0.98, brow: 1.04 }, browThick: 1.15,
+    face: { jaw: 0.93, chin: 1.03, nose: 1.04, noseLen: 1.04, cheek: 0.95, headW: 0.97, brow: 1.05 }, browThick: 1.15,
     outfit: { topColor: 0x3b2b22, bottom: 'shorts', bottomColor: 0x1d1e23 } }),
   'Rickard Nilsson': P({ height: 1.8, build: 'average', skin: 'lightWarm', hair: ['sweptBack', 'strawberry'], facialHair: 'stubble', eyes: 'blue', smile: 0.45,
-    face: { jaw: 1.06, chin: 1.04, brow: 1.06, nose: 1.0, cheek: 1.04, mouth: 1.08 },
+    face: { jaw: 1.09, chin: 1.07, brow: 1.07, nose: 1.0, cheek: 1.04, mouth: 1.1 },
     outfit: { topColor: 0xbabcb9, bottom: 'shorts', bottomColor: 0x1c1d22 } }),
   'Niklas Norberg': P({ height: 1.78, build: 'broad', skin: 'light', hair: ['crop', 'lightBrown'], facialHair: 'beard', eyes: 'green',
     headwear: { style: 'cap', color: 0x6d6c4c },
-    face: { jaw: 1.1, cheek: 1.12, nose: 1.04, headW: 1.07, chin: 0.98 },
+    face: { jaw: 1.12, cheek: 1.15, nose: 1.05, headW: 1.08, chin: 0.97 },
     outfit: { topColor: 0x3e4531, bottom: 'shorts', bottomColor: 0x2a2b30 } }),
   'Per Olsson': P({ height: 1.84, build: 'average', skin: 'light', hair: ['crop', 'darkBrown'], eyes: 'brown',
     face: { brow: 1.04, nose: 1.02, jaw: 1.0, lips: 1.04, headL: 1.02, cheek: 0.98 },
     outfit: { top: 'polo', topColor: 0x22253a, bottom: 'shorts', bottomColor: 0xb6a37f } }),
   'Tobias Lundqvist': P({ height: 1.81, build: 'average', skin: 'fair', hair: ['shaved', 'strawberry'], facialHair: 'fullBeard', eyes: 'blue',
-    face: { jaw: 1.04, chin: 1.0, nose: 1.0, cheek: 1.03, headW: 1.02, brow: 1.06 },
+    face: { jaw: 1.06, chin: 1.0, nose: 0.98, cheek: 1.06, headW: 1.04, brow: 1.07 },
     outfit: { topColor: 0xeae8e3, bottom: 'shorts', bottomColor: 0x2b2c31 } }),
   'Lars Sandin': P({ height: 1.79, build: 'average', skin: 'light', hair: ['sidePart', 'blond'], eyes: 'grayBlue',
     face: { jaw: 1.0, nose: 1.02, cheek: 1.02, chin: 1.0, headW: 1.0 },

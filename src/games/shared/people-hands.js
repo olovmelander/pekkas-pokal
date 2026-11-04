@@ -474,7 +474,7 @@ export const GRIPS = {
     fixed: true,
     params: {
       index: DIGITS.index.rest, middle: DIGITS.middle.rest, ring: DIGITS.ring.rest, pinky: DIGITS.pinky.rest,
-      thumb: [-0.04, 0.2, 0.35, 0.18, 0.14], palm: 0.05
+      thumb: [-0.12, 0.1, 0.35, 0.24, 0.22], palm: 0.05
     }
   }),
   open: () => ({
@@ -619,7 +619,8 @@ export const GRIPS = {
       quat: frameYZ(n(0, -0.15, 1), PALM_N),
       shapes: [{ type: 'cyl', r: R, h: (o.height || 0.09) / 2 }],
       fingers: wrapAll([0, 0.15, 0.25, 0.12], 0.1),
-      thumb: { guess: [0.35, 0.5, 0.4, 0.1, 0.05], target: null, wrap: true },
+      // The thumb wraps the near side, opposite the fingers
+      thumb: { guess: [0.25, 0.45, 0.5, 0.15, 0.1], target: [-(R + 0.0095) * 0.95, 0.014, (R + 0.0095) * 0.28] },
       palm: 0.15
     };
   },
@@ -698,7 +699,7 @@ export const GRIPS = {
   point: (o, hs) => {
     const f = GRIPS.fist(o, hs);
     f.fingers.index = { start: [-0.02, 0.06, 0.05, 0.02], fixed: true };
-    f.thumb = { guess: [-0.05, 0.8, 0.8, 0.4, 0.5], target: overFinger('middle', 0.5, 0.7) };
+    f.thumb = { guess: [0.1, 0.45, 0.8, 0.55, 0.35], target: overFinger('middle', 0.35, 1.0) };
     return f;
   },
   /** Thumbs up: a fist with the thumb straight up out of the top. */

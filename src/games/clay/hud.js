@@ -23,6 +23,11 @@ export function starsHtml(n, cls = '') {
 export function buildHud(root) {
   root.innerHTML = `
     <div class="lr-vignette"></div>
+    <!-- First in the markup (it stacks on top by its z-index anyway), so the
+         start button is the first primary button a script or a screen reader meets -->
+    <div class="pb-overlay lr-overlay" id="lr-overlay">
+      <div class="pb-panel lr-panel" id="lr-panel"></div>
+    </div>
     <div class="lr-hud">
       <div class="lr-top">
         <div class="lr-score-wrap">
@@ -83,10 +88,6 @@ export function buildHud(root) {
       <div class="lr-lines" id="lr-v-lines"></div>
       <div class="lr-badge" id="lr-v-badge" hidden></div>
       <button class="pb-btn" id="lr-next">Nästa alster</button>
-    </div>
-
-    <div class="pb-overlay lr-overlay" id="lr-overlay">
-      <div class="pb-panel lr-panel" id="lr-panel"></div>
     </div>
 
     <button class="pb-info" id="lr-info" aria-label="Så spelar du">?</button>

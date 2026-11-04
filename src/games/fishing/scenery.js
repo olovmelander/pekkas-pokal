@@ -116,7 +116,7 @@ function birchHeight(dx, H, W, lump) {
  * and greener), `mistH` how high the haze reaches up its foot.
  */
 function makeRank(spec, lite) {
-  const step = spec.step * (lite ? 1.6 : 1);
+  const step = spec.step * (lite ? 2 : 1);
   const n = Math.ceil((spec.x1 - spec.x0) / step) + 1;
   const h = new Float32Array(n);
   const birch = new Uint8Array(n);
@@ -185,7 +185,7 @@ function rankGeometry(rank, sunAz, glowC) {
     const my = Math.min(hy, base + rank.mistH);
     // A hot core of haze right under the sun and a wide, faint skirt
     const a = sunAngle(x, z, sunAz);
-    const g1 = Math.exp(-((a / 0.09) ** 2)) * rank.glow * 0.8;
+    const g1 = Math.exp(-((a / 0.09) ** 2)) * rank.glow * 0.62;
     const g2 = Math.exp(-((a / 0.42) ** 2)) * rank.glow * 0.22;
     top.set(rank.top);
     if (rank.birch[i]) top.lerp(birchC, 0.35);
@@ -429,8 +429,10 @@ function buildHeadland(lite) {
   kit.add(box(0.6, 0.12, 0.6, cx + 1.4, cy + WALL + 2.6, cz - 0.6), 0x3a3534);
   // Front: door with a white frame, two windows with white frames (glass is in the glow mesh)
   const fz = cz + D2;
+  // Seen from 60–80 m, trim only a few cm proud of a wall could flicker on
+  // a 16-bit depth buffer: every layer here stands 8 cm or more out
   kit.add(box(1.15, 2.05, 0.12, cx + 1.3, cy + 1.1, fz + 0.04), WHITE);
-  kit.add(box(0.9, 1.85, 0.16, cx + 1.3, cy + 1.02, fz + 0.06), 0x4e6a5a);
+  kit.add(box(0.9, 1.85, 0.16, cx + 1.3, cy + 1.02, fz + 0.14), 0x4e6a5a);
   [-1.6, -0.2].forEach((wx) => kit.add(box(1.1, 1.1, 0.12, cx + wx, cy + 1.6, fz + 0.04), WHITE));
   kit.add(box(1.6, 0.3, 0.9, cx + 1.3, cy - 0.05, fz + 0.5), 0x7a6248); // step
   // Woodpile against the gable and a bench by the door
@@ -474,9 +476,9 @@ function buildHeadland(lite) {
   /* Lit windows: plain colour so they glow through the evening */
   const glowKit = new Kit();
   [-1.6, -0.2].forEach((wx) => {
-    glowKit.add(box(0.86, 0.86, 0.06, cx + wx, cy + 1.6, fz + 0.12), 0xffc670);
+    glowKit.add(box(0.86, 0.86, 0.06, cx + wx, cy + 1.6, fz + 0.2), 0xffc670);
   });
-  glowKit.add(box(0.7, 0.7, 0.06, cx + W2 + 0.1, cy + 1.6, cz + 0.6, Math.PI / 2), 0xffb85a);
+  glowKit.add(box(0.7, 0.7, 0.06, cx + W2 + 0.12, cy + 1.6, cz + 0.6, Math.PI / 2), 0xffb85a);
   const glow = new THREE.Mesh(glowKit.geometry(), new THREE.MeshBasicMaterial({ vertexColors: true, fog: false }));
   glow.renderOrder = -6;
 

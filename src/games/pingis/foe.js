@@ -235,7 +235,8 @@ export class Foe {
 
   /**
    * v: { x, z, stroke, fh, ball (Vector3|null), contact (Vector3|null),
-   *      mode: 'play'|'intro'|'menu'|'clap', look (Vector3|null), focus 0..1,
+   *      mode: 'play'|'intro'|'menu'|'clap', relax (between matches),
+   *      look (Vector3|null), focus 0..1,
    *      toss: −1 or 0..1 (his serve toss), tossBall (Vector3, written back) }
    */
   update(dt, t, v) {
@@ -282,11 +283,14 @@ export class Foe {
     const won = reacting === 'matchWon';
     const celebrate = v.mode === 'clap' || won;
     const patting = v.mode === 'clap' || reacting === 'matchLost';
+    // Between matches (and in the menu) he stands at ease: the shared idle,
+    // seeded per person so the three never sway in step
+    const idle = v.mode === 'menu' || (v.relax && !reacting);
     if (walking) POSES.walk(this.walkPhase, pose);
     else if (won && st.won !== 'modest') POSES.cheer(t * (st.won === 'roar' ? 1.25 : 0.8), pose);
-    else if (v.mode === 'menu') POSES.idle(t, pose);
+    else if (idle) POSES.idle(t, pose, p.look.seed);
     else POSES.ready(t, pose);
-    const play = (v.mode === 'play' || v.mode === 'intro') && !celebrate && !walking;
+    const play = (v.mode === 'play' || v.mode === 'intro') && !celebrate && !walking && !idle;
     pose.gripR = 0.95; // without the shared grip: the bat never leaves his hand…
     pose.pointR = 1; // …and the index finger lies straight along its back
     if (v.toss >= 0) pose.gripL = 0.04; // the ball rests on an OPEN palm
@@ -369,7 +373,7 @@ export class Foe {
     } else if (won) {
       if (st.won === 'modest') this.freeHand(0.2, 1.62 + Math.sin(r.t * 6) * 0.03, 0.22, env);
       p.lookAt(v.look || null, 0.6);
-    } else if (v.mode === 'menu') {
+    } else if (idle) {
       p.lookAt(v.look || null, 0.5);
     } else {
       this.swingArm(v, reachLean);

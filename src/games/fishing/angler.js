@@ -192,7 +192,7 @@ export function createAngler(boat) {
   /* Idle life while he waits: a jig, a few turns of the crank, a glance */
   const idle = { t: 3 + Math.random() * 3, kind: null, left: 0 };
   /* One-shot reactions: an expression held for a while, maybe a rod kick */
-  const react = { expr: null, amount: 1, left: 0 };
+  const react = { expr: null, amount: 1, left: 0, pump: 0 };
   let crankAngle = 0;
   let crankSpeed = 0;
 
@@ -206,11 +206,11 @@ export function createAngler(boat) {
       case 'junk':
         Object.assign(react, { expr: 'frown', amount: 1, left: 1.6 });
         break;
-      case 'big':
-        Object.assign(react, { expr: 'grin', amount: 1, left: 2.4 });
+      case 'big': // a new species, a record, the Pekkagädda: a fist pump
+        Object.assign(react, { expr: 'grin', amount: 1, left: 2.4, pump: 1.1 });
         break;
       case 'perfect':
-        Object.assign(react, { expr: { grin: 0.7, shout: 0.6 }, amount: 1, left: 2.2 });
+        Object.assign(react, { expr: { grin: 0.7, shout: 0.6 }, amount: 1, left: 2.2, pump: 1.3 });
         break;
       case 'miss':
         Object.assign(react, { expr: 'frown', amount: 0.8, left: 0.9 });
@@ -276,6 +276,7 @@ export function createAngler(boat) {
       react.left -= dt;
       ({ expr } = react);
     }
+    if (react.pump > 0) react.pump -= dt;
 
     /* Ease every channel toward the action */
     const { w, z } = action;
@@ -290,7 +291,7 @@ export function createAngler(boat) {
     const yaw = sp.yaw.step(action.yaw * DEG, dt, w, z);
     const lean = sp.lean.step(action.lean + (crank ? Math.sin(crankAngle) * 0.025 : 0), dt, w * 0.7, 0.8);
     const twist = sp.twist.step(action.twist || 0, dt, w * 0.75, 0.75);
-    const leftMode = crank ? 'crank' : capOn ? 'cap' : action.left;
+    const leftMode = react.pump > 0 ? 'fist' : crank ? 'crank' : capOn ? 'cap' : action.left;
     LEFT_MODES.forEach((m) => sp[m].step(m === leftMode ? 1 : 0, dt, 11, 1));
     // The tip lags the swing: a fast forward stroke (pitch falling) leaves
     // it trailing up and back, then it whips through when the rod stops
@@ -380,7 +381,8 @@ export function createAngler(boat) {
       addLeft(wc, hP, hQ);
     }
     if (wfi > 1e-3) {
-      v.set(0.26 * K, 1.52 * K, 0.36 * K);
+      const pumpY = react.pump > 0 ? Math.abs(Math.sin(t * 9)) * 0.12 - 0.08 : 0;
+      v.set(0.26 * K, (1.52 + pumpY) * K, 0.36 * K);
       root.localToWorld(v);
       dirW(-1, 0, 0.25, zL);
       dirW(0.15, -1, -0.1, yL);

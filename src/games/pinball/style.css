@@ -1393,6 +1393,20 @@
   letter-spacing: 0;
 }
 
+.pbf[data-orient='port'] .pbf-steps {
+  margin-top: 10px;
+  gap: 4px;
+}
+
+.pbf[data-orient='port'] .pbf-steps li {
+  font-size: 0.8rem;
+}
+
+.pbf[data-orient='port'] .pbf-steps b {
+  width: 22px;
+  height: 22px;
+}
+
 .pbf[data-orient='port'] .pbf-sheet-board li {
   padding: 4px 8px;
   font-size: 0.82rem;

@@ -810,24 +810,16 @@ function crowdSeats(high) {
   return seats;
 }
 
-const _cm = new THREE.Matrix4();
-const _cl = new THREE.Matrix4();
-const _cr = new THREE.Matrix4();
-
 /**
  * The spectators: a people.js crowd (one instanced draw call per pose
- * variant in use) with the salle's own reactions layered on top. The
- * crowd itself knows idle, clapping, cheering and the standing ovation;
- * leaning in on a telegraphed attack, the recoil of an »ooh« and the slump
- * of a groan are a lean of each instance about its hips, applied to the
- * instance matrices after the crowd has written them.
+ * variant in use). The crowd itself knows idle, clapping, cheering, the
+ * groan (hands to the head, then the slump) and the standing ovation, and
+ * leans in or sits back on request — each member with their own depth and
+ * lag, so a gasp ripples along the benches. The salle only says when.
  *
  * Named spectators are the rest of the 2023 field: whoever you are not
  * fencing as watches from the benches.
  */
-/** How fast each group of spectators follows the mood (per second). */
-const GROUP_RATE = [2.6, 3.4, 4.3, 5.4, 6.6, 8, 9.6, 12];
-
 class Spectators {
   constructor(high) {
     this.group = new THREE.Group();
@@ -838,9 +830,6 @@ class Spectators {
     this.mood = 'idle';
     this.moodT = 0;
     this.lean = 0;
-    // A crowd does not move as one: eight groups follow the mood at their
-    // own pace, so a gasp or a slump ripples along the benches
-    this.groups = new Float32Array(8);
     this.floor = new THREE.Vector3(0, -3, 1.5);
   }
 
@@ -856,10 +845,11 @@ class Spectators {
     this.crowd = next;
     this.group.add(next.root);
     this.key = key;
+    this.lean = NaN; // set the lean again on the new crowd
     return true;
   }
 
-  /** idle | tense | ooh | cheer | groan | clap | stand */
+  /** idle | tense | ooh | cheer | groan | clap | polite | stand */
   react(mood) {
     const c = this.crowd;
     if (mood !== 'ooh' || this.mood !== 'groan') {
@@ -868,6 +858,8 @@ class Spectators {
     }
     if (mood === 'cheer') c.react('cheer', 1.9);
     else if (mood === 'clap') c.react('clap', 3.2);
+    else if (mood === 'polite') c.react('polite', 2.4);
+    else if (mood === 'groan') c.react('groan', 2.2);
     else if (mood === 'stand') {
       c.setMood('ovation');
       c.react('ovation', 99);
@@ -881,55 +873,28 @@ class Spectators {
     this.moodT += dt;
     const m = this.mood;
     const mt = this.moodT;
-    let lean = 0;
+    // 0 sits back … 1 elbows on the knees; negative leans back
+    let lean = 0.15;
     let look = focus;
-    if (m === 'tense') lean = 0.17;
+    if (m === 'tense') lean = 0.85;
     else if (m === 'ooh') {
-      lean = -0.09;
+      lean = -0.25;
       if (mt > 0.8) this.mood = 'idle';
     } else if (m === 'groan') {
-      // Thrown back in the seat, then the slump with heads down
-      lean = mt < 0.3 ? -0.1 : 0.2;
+      // The crowd's own groan does the hands and the slump; heads go down
+      lean = 0.3;
       if (mt > 0.3) look = this.floor;
-      if (mt > 2) this.mood = 'idle';
+      if (mt > 2.2) this.mood = 'idle';
     } else if (m === 'cheer') {
-      lean = -0.05;
+      lean = -0.15;
       if (mt > 2) this.mood = 'idle';
-    } else if (m === 'clap' && mt > 3.4) this.mood = 'idle';
-    this.lean = lean;
-    let any = false;
-    for (let g = 0; g < 8; g++) {
-      this.groups[g] += (lean - this.groups[g]) * (1 - Math.exp(-dt * GROUP_RATE[g]));
-      if (Math.abs(this.groups[g]) > 1e-3) any = true;
+    } else if ((m === 'clap' && mt > 3.4) || (m === 'polite' && mt > 2.6)) this.mood = 'idle';
+    if (lean !== this.lean) {
+      this.lean = lean;
+      if (this.crowd.setLean) this.crowd.setLean(lean);
     }
     this.crowd.lookAt(look || null);
     this.crowd.update(dt, t);
-    if (any) this.applyLean();
-  }
-
-  /** Lean every instance about its hips (seated) or its waist (standing). */
-  applyLean() {
-    for (const e of this.crowd.meshes) {
-      const { mesh } = e;
-      if (!mesh.visible) continue;
-      const pivot = mesh.name.includes(':stand:') ? 0.98 : 0.56;
-      for (let i = 0; i < mesh.count; i++) {
-        mesh.getMatrixAt(i, _cm);
-        const el = _cm.elements;
-        // Per-spectator amount from where they sit: some lean further
-        const h = Math.abs(Math.sin(el[12] * 12.9898 + el[14] * 78.233) * 43758.5453) % 1;
-        const h2 = Math.abs(Math.sin(el[12] * 39.346 + el[14] * 11.135) * 24634.6345) % 1;
-        const a = this.groups[Math.min(7, Math.floor(h2 * 8))] * (0.65 + 0.7 * h);
-        _cl.makeTranslation(0, pivot, 0);
-        _cr.makeRotationX(a);
-        _cl.multiply(_cr);
-        _cr.makeTranslation(0, -pivot, 0);
-        _cl.multiply(_cr);
-        _cm.multiply(_cl);
-        mesh.setMatrixAt(i, _cm);
-      }
-      mesh.instanceMatrix.needsUpdate = true;
-    }
   }
 
   get drawCalls() {
@@ -1021,9 +986,10 @@ class Referee {
 
   /** Target pose for the current signal (he faces +z: his right is −x). */
   pose(t) {
-    const p = POSES.stand(0, this.target);
+    // His own seeded idle underneath (weight shifts, sway), the signal's
+    // arms on top
+    const p = POSES.idle(t, this.target, this.person.look.seed || 7);
     const k = this.t;
-    p.hips[2] += Math.sin(t * 0.6) * 0.02;
     const arm = (S, x, y, z, fore = -0.15, hand = [0, 0, 0]) => {
       p[`upperArm${S}`] = v3p(x, y, z);
       p[`forearm${S}`] = v3p(fore, 0, 0);

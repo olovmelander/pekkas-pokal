@@ -1247,7 +1247,7 @@ export function buildHand(b, ctx, side) {
     const webLen = webDir.length();
     webDir.normalize();
     blob(b, {
-      c: H(webC.x, webC.y, webC.z), r: [0.0052 * hs, 0.0085 * hs, (webLen * 0.5 + 0.004) * hs], n: [2, 2], cols: 6, rows: 3,
+      c: H(webC.x, webC.y, webC.z), r: [0.0068 * hs + gpad, 0.0125 * hs, (webLen * 0.5 + 0.005) * hs], n: [2.2, 2], cols: 6, rows: 3,
       region: REG, mat: MT, tint: gt(tintSkin),
       warp: (p) => {
         // Turn the blob's z axis onto the thumb→index line, thinning towards the free edge
@@ -1262,7 +1262,7 @@ export function buildHand(b, ctx, side) {
       weight: (p) => {
         const q = new THREE.Vector3((p[0] - W.x) * s / hs, (p[1] - W.y) / hs, (p[2] - W.z) / hs).sub(mcpT);
         const k = THREE.MathUtils.clamp(q.dot(webDir) / webLen, 0, 1);
-        const kt = sstep(0.85, 0.1, k);
+        const kt = sstep(0.95, 0.0, k) * 0.9;
         return [[`hand${S}`, 1 - kt], [`thumb${S}`, kt]];
       }
     });

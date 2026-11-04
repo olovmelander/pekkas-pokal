@@ -296,6 +296,7 @@ export async function createClay(container) {
   const summaryFree = new THREE.Vector4(0, 0.6, 0, 1);
   // ...and the one the verdict card leaves (on a phone held upright: above it)
   const verdictFree = new THREE.Vector4(0, 1, 0.1, 0.5);
+  let verdictBelow = true;
 
   /* ---- World ------------------------------------------------------------ */
 
@@ -840,7 +841,10 @@ export async function createClay(container) {
     if (!host.height) return;
     const card = hud.verdict.getBoundingClientRect();
     const chips = hud.chips.getBoundingClientRect();
-    if (view.portrait) {
+    // A card across the bottom (phones upright, squarish windows) leaves the
+    // space above it; a card on the left (wide screens) the space beside it
+    verdictBelow = card.width > host.width * 0.6;
+    if (verdictBelow) {
       const y0 = clamp01((chips.bottom - host.top + 6) / host.height);
       const y1 = Math.max(y0 + 0.25, (card.top - host.top - 8) / host.height);
       verdictFree.set(0, 1, Math.min(0.2, y0), Math.min(1, y1));
@@ -1139,13 +1143,18 @@ export async function createClay(container) {
       REVEAL_LOOK.copy(studio.reveal);
       REVEAL_LOOK.x += 0.15;
       REVEAL_LOOK.y += 0.45;
-      if (ph === 'judge' && P) {
+      if (ph === 'judge' && verdictBelow) {
         // Above the verdict card: the piece AND keramikern, beret and all
         REVEAL_LOOK.y += 0.17;
         frameIn(REVEAL_LOOK, DIR_REVEAL, 0.66, 0.68, 0.94, verdictFree);
+      } else if (ph === 'judge') {
+        // Beside the card, centred between the piece and keramikern (he stands
+        // on its left), so the card never covers him on a narrower window
+        REVEAL_LOOK.x -= 0.25;
+        REVEAL_LOOK.y += 0.06;
+        frameIn(REVEAL_LOOK, DIR_REVEAL, 0.86, 0.8, 0.9, verdictFree);
       } else {
-        frame(REVEAL_LOOK, DIR_REVEAL, P ? 0.75 : 1.3, 0.7, P ? 0.9 : 0.75,
-          ph === 'judge' ? [0.3, 0] : [0, P ? 0.1 : 0]);
+        frame(REVEAL_LOOK, DIR_REVEAL, P ? 0.75 : 1.3, 0.7, P ? 0.9 : 0.75, [0, P ? 0.1 : 0]);
       }
     } else if (ph === 'over') {
       // The sill (half-width ~1.3 with its pieces, plus margin) fills the free region

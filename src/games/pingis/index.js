@@ -1999,7 +1999,7 @@ export async function createPingis(container) {
   /* The opponent, from the view: where he stands, the stroke, the ball he
      is watching, and what the moment asks of his face */
   const foeView = {
-    x: 0, z: FOE_Z, stroke: 0, fh: 1, ball: null, contact: null, mode: 'menu', look: null, focus: 0,
+    x: 0, z: FOE_Z, stroke: 0, fh: 1, ball: null, contact: null, mode: 'menu', relax: false, look: null, focus: 0,
     toss: -1, tossBall: new THREE.Vector3(), servePoint: new THREE.Vector3()
   };
   const contactW = new THREE.Vector3();
@@ -2011,6 +2011,8 @@ export async function createPingis(container) {
     fv.mode = ph === 'menu' ? 'menu'
       : ph === 'intro' ? 'intro'
         : ph === 'celebrate' || (ph === 'over' && state.champion) ? 'clap' : 'play';
+    // The match is over and the card is up: he stands at ease
+    fv.relax = ph === 'matchend' || (ph === 'over' && !state.champion);
     fv.x = v.foeX;
     fv.z = v.foeZ;
     fv.stroke = v.stroke;
@@ -2063,10 +2065,12 @@ export async function createPingis(container) {
       rate = 2.2;
     } else if (camMode === 'replay') {
       if (camera.aspect < 0.8) {
-        // A tall frame: straight across from the side, wide, drifting with the ball
-        tPos.set(2.9, 1.45, THREE.MathUtils.clamp(v.bz * 0.3, -0.9, 0.9) + 0.35);
-        tLook.set(v.bx * 0.25, 0.92, v.bz * 0.45 - 0.15);
-        fov = 62;
+        // A tall frame has no width for a side angle: from high over your
+        // right shoulder, down the length of the table to him, drifting
+        // with the ball
+        tPos.set(0.85 + v.bx * 0.15, 2.05, 2.55);
+        tLook.set(v.bx * 0.35, 0.9, -0.85 + v.bz * 0.15);
+        fov = 56;
       } else {
         // The broadcast three-quarter: low from your right-hand corner,
         // looking up the table at him — the ball's curve and his stroke in

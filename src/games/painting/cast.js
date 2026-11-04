@@ -33,7 +33,7 @@
  */
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { createPerson, appearanceFor, POSES, createCrowd } from '../shared/people.js';
+import { createPerson, appearanceFor, POSES, createCrowd, WALK_STRIDES } from '../shared/people.js';
 import { buildFieldEasels, mulberry, FIELD_W, FIELD_H, FIELD_SCALE } from './garden.js';
 import { ARTWORKS } from './artworks.js';
 import { renderPainting } from './canvasart.js';
@@ -91,6 +91,9 @@ const BACK_ROW = {
   names: ['Tobias Lundqvist', 'Ludvig Ulenius', 'Erik Vallgren', 'Rickard Nilsson', 'Niklas Norberg'],
   at: [[-6.2, -7.8], [0.3, -8.8], [3.4, -7.4], [-5.6, -5.4], [4.4, -4.6]]
 };
+
+/** What the stroll cycle drives on Hägglund (the left arm carries the notebook by IK). */
+const WALK_CHANNELS = ['hips', 'spine', 'chest', 'neck', 'thighL', 'shinL', 'footL', 'thighR', 'shinR', 'footR', 'upperArmR', 'forearmR', 'handR', 'shoulderR'];
 
 /** Hägglund's costume: the culture profile's black polo neck. */
 const JUDGE_OUTFIT = { top: 'poloNeck', topColor: 0x1f2026, bottomColor: 0x8f8268, shoes: 'leather' };
@@ -747,7 +750,9 @@ class Painter {
 
   /** The body: standing at the easel, leaning into the work, turning into each stroke. */
   bodyPose(t, g) {
-    const pose = POSES.stand(t, this.pose);
+    // A seeded idle underneath (weight shifts, sway), so no two painters
+    // move in step; the legs it asks for are overruled by the planted feet
+    const pose = POSES.idle(t, this.pose, this.person.look.seed);
     const { root } = this.person;
     // Where the bristles are, in the painter's own frame
     _v.subVectors(this.tip, root.position);
@@ -860,6 +865,8 @@ class Judge {
     this.t = 0;
     this.walk = null;
     this.walkW = 0;
+    this.walkPhase = 0;
+    this.legQ = ['thighL', 'shinL', 'footL', 'thighR', 'shinR', 'footR'].map((n) => [n, new THREE.Quaternion()]);
     this.grade = 5;
     this.stroll = false;
     this.strollSpots = [];
@@ -873,6 +880,7 @@ class Judge {
     this.chinW = 0;
     this.readW = 0;
     this.pose = POSES.stand();
+    this.poseB = POSES.stand();
     this.poseC = POSES.stand();
     this.lookPt = new THREE.Vector3();
     this.lookGoal = new THREE.Vector3();
@@ -971,19 +979,34 @@ class Judge {
     const turnRate = this.mode === 'walk' ? (this.walk && !this.walk.go ? 4.5 : 6) : 3.5;
     this.ry += angleTo(this.ry, w.face) * (1 - Math.exp(-dt * turnRate));
     root.rotation.y = this.ry;
-    this.walkW = ease(this.walkW, w.walk, 6, dt);
+    this.walkW = ease(this.walkW, w.walk, 9, dt);
+    if (this.walkW > 0.995 && w.walk === 1) this.walkW = 1;
     this.writeW = ease(this.writeW, w.write, 5, dt);
     this.chinW = ease(this.chinW, w.chin, 4, dt);
     this.readW = ease(this.readW, w.read, 4, dt);
     this.explainW = ease(this.explainW, w.explain, 5, dt);
     this.lookPt.lerp(this.lookGoal, 1 - Math.exp(-dt * 8));
+    // Walking straight, the shared stroll cycle drives the legs (its stride
+    // matched to the ground covered, so the standing foot stays put); for
+    // the turns on the spot, the stop and the settling, the planted feet do
+    const wk = this.walkW;
+    this.feet.hold = wk > 0.999;
     const g = this.feet.plan(dt);
     P.setPose(this.bodyPose(t, g), 1);
     // Nods and head shakes ride on top of the pose (update() keeps them)
     P.bones.head.rotation.x += w.nod;
     P.bones.head.rotation.y += w.shake;
     root.updateMatrixWorld(true);
-    this.feet.solve();
+    if (wk > 0.999) this.feet.adopt();
+    else {
+      const { bones } = P;
+      if (wk > 0.001) for (const [n, q] of this.legQ) q.copy(bones[n].quaternion);
+      this.feet.solve();
+      if (wk > 0.001) {
+        for (const [n, q] of this.legQ) bones[n].quaternion.slerp(q, wk);
+        root.updateMatrixWorld(true);
+      }
+    }
     this.hands(t);
     P.lookAt(this.lookPt, 1);
     P.update(dt, t);
@@ -1058,7 +1081,7 @@ class Judge {
         this.t = 0;
       }
       this.lookGoal.set(w.tx, 1.55, w.tz);
-      return 0.2;
+      return 0;
     }
     const T = this.t;
     const { dur, ramp, dist } = w;
@@ -1073,10 +1096,12 @@ class Judge {
     const k = s / dist;
     P.root.position.x = w.fx + (w.tx - w.fx) * k;
     P.root.position.z = w.fz + (w.tz - w.fz) * k;
+    // The cycle advances with the ground covered: one stroll stride per 2π
+    this.walkPhase = (this.walkPhase + (ds / (WALK_STRIDES.stroll * P.scale)) * TAU) % (TAU * 1000);
     // Where he is going, at eye height
     this.lookGoal.set(w.tx, 1.55, w.tz).addScaledVector(_v.set(w.tx - w.fx, 0, w.tz - w.fz).normalize(), 2);
     if (T >= dur) this.arrive(this.then);
-    return Math.min(1, ds / Math.max(dt, 1e-4) / 0.9);
+    return 1;
   }
 
   /** The verdict: turned mostly to you, talking, nodding or shaking his head. */
@@ -1095,26 +1120,28 @@ class Judge {
     else this.lookGoal.copy(this.canvasC);
   }
 
-  /** Upper body over the planted feet; the arms come from hands() and the explain gesture. */
+  /**
+   * The body: a seeded idle over the planted feet when he stands, the
+   * shared stroll cycle when he walks (blended by walkW); the arms come from
+   * hands() and the explain gesture.
+   */
   bodyPose(t, g) {
-    const p = POSES.stand(t, this.pose);
     const P = this.person;
+    const p = POSES.idle(t, this.pose, P.look.seed);
     const wk = this.walkW;
-    // A slight forward lean and a counter-swing of the trunk while walking
-    p.spine[0] += 0.04 * wk;
-    p.hips[1] += g.twist * 0.12 * wk;
-    p.chest[1] -= g.twist * 0.16 * wk;
-    p.head[1] += g.twist * 0.05 * wk;
-    p.hipsPos[1] -= g.drop / P.scale;
-    p.hipsPos[0] += g.sway * 0.02;
-    p.hips[2] += g.sway * 0.035;
-    p.chest[2] -= g.sway * 0.02;
-    // Idle weight: a slow breathing sway of the trunk
-    p.spine[2] += Math.sin(t * 0.6) * 0.015 * (1 - wk);
-    p.head[0] = 0.02 + 0.12 * this.readW;
-    // The pen arm swings against the feet when nothing else wants it
-    p.upperArmR[0] = -0.3 * g.swing * wk + 0.04;
-    p.forearmR[0] = -0.35 - Math.max(0, g.swing) * 0.25 * wk;
+    p.hipsPos[1] -= (g.drop / P.scale) * (1 - wk);
+    p.hipsPos[0] += g.sway * 0.02 * (1 - wk);
+    p.hips[2] += g.sway * 0.035 * (1 - wk);
+    p.head[0] += 0.12 * this.readW;
+    if (wk > 0.001) {
+      const wp = POSES.walk(this.walkPhase, this.poseB, 'stroll');
+      for (const n of WALK_CHANNELS) {
+        for (let i = 0; i < 3; i++) p[n][i] += (wp[n][i] - p[n][i]) * wk;
+      }
+      for (let i = 0; i < 3; i++) p.hipsPos[i] += (wp.hipsPos[i] - p.hipsPos[i]) * wk;
+      p.head[1] += (wp.head[1] - p.head[1]) * wk;
+      p.head[2] += (wp.head[2] - p.head[2]) * wk;
+    }
     fallbackFingers(p, this.penGrip, 'R');
     fallbackFingers(p, this.bookGrip, 'L');
     if (this.explainW > 0.001) {
@@ -1263,6 +1290,8 @@ export function buildCast({ lowTier = false, safe = false, reduced = false, home
   props.forEach((m) => {
     // Hands move every frame; the bones' bounds are the person's
     m.frustumCulled = false;
+    // A phone keeps its shadow pass for the people themselves
+    if (lowTier) m.castShadow = false;
   });
 
   const focus = new THREE.Vector3().copy(canvasC);
@@ -1282,7 +1311,7 @@ export function buildCast({ lowTier = false, safe = false, reduced = false, home
       });
       crowd.lookAt(canvasC);
       crowdLook = 4;
-      crowd.react(great ? 'cheer' : 'clap', great ? 2.6 : 2.2);
+      crowd.react(great ? 'cheer' : 'polite', great ? 2.6 : 2.4);
     },
     update(dt, t, camera) {
       ctx.camera = camera;

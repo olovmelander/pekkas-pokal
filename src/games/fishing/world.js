@@ -11,7 +11,8 @@
  *    underneath a physically placed Snell's window (GLSL refract() into air,
  *    total internal reflection outside the cone) with caustics crawling over
  *    the ceiling; from above a fresnel mix of sky reflection and lake body,
- *    the treeline mirrored in it, and a sun-glitter path
+ *    every rank of the far shore (scenery.js) mirrored in it by ray-casting
+ *    against their outlines, and a sun-glitter path
  *  - an underwater volume: a background dome graded up/level/down by depth
  *    with god rays fanning from the refracted sun, and a matching
  *    direction-aware fog patched into every lit material, so far fish and
@@ -21,7 +22,8 @@
  *    sunken eka — and something golden next to it
  *  - light shafts with soft edges and a flicker
  *
- * The eka and the angler in it live in boat.js and angler.js.
+ * The shore above the water lives in scenery.js; the eka and the angler in
+ * it in boat.js and angler.js.
  */
 
 import * as THREE from 'three';

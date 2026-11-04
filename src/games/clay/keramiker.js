@@ -7,25 +7,34 @@
  * Barcelona a real keramiker set the task and judged the results, and that
  * is his job here too:
  *
- *  - when a lump lands he points at it and says what he wants
- *  - while you throw he stands by the kiln with his arms crossed, watching
- *    your hands; a new star earns a nod and a smile, three stars raise his
- *    eyebrows, an off-centre wobble a frown and a shake of the head
- *  - while the piece fires he watches the kiln, hands on hips
+ *  - on the start screen he waits by the wheel and tells you about the
+ *    evening, hands talking
+ *  - when a lump lands he walks to his place, points at it and says what
+ *    he wants
+ *  - while you throw he stands by the kiln with his arms folded (for real:
+ *    forearm over forearm, not an X at the wrists), watching your hands; a
+ *    new star earns a nod and a smile, three stars raise his eyebrows, an
+ *    off-centre wobble a frown and a shake of the head
+ *  - he shuts the kiln door himself, hand round its bar, watches it fire
+ *    with his hands on his hips, pulls the door open and steps back out of
+ *    the way of the hot piece
  *  - when it comes out he steps up to the banding wheel and leans in, one
  *    hand turning the wheel and a fist under his chin, then gives the
  *    verdict with his whole face: a grin and an arm in the air for 8+, a
- *    nod for decent work, a frown and a slow head shake for a rustic piece
- *    — talking while the card shows his words
+ *    thumbs-up for decent work, a shrug, or a frown and a slow head shake
+ *    for a rustic piece — talking while the card shows his words
  *
  * Posing is the shared pose library plus a few layers of our own,
  * cross-faded with eased weights (so no state change ever snaps), two-bone
- * IK for the hand on the wheel and the fist on the chin, and nods and
- * shakes written on top before people.js adds breathing and look-at.
+ * IK for every contact (folded arms, the door bar, the wheel, the chin, the
+ * pointing arm), hand shapes from the shared grip library (thumbsUp, point,
+ * fist, power), the shared IK walk with the stride matched to the ground
+ * covered, and nods and shakes written on top before people.js adds
+ * breathing and look-at.
  */
 
 import * as THREE from 'three';
-import { createPerson, POSES, emptyPose, WALK_STRIDE } from '../shared/people.js';
+import { createPerson, POSES, emptyPose, WALK_STRIDE, WALK_STRIDES } from '../shared/people.js';
 
 /** The studio is built a touch over life size; he matches its props. */
 export const KERAMIKER_HEIGHT = 2.05;
@@ -76,6 +85,15 @@ function mixAll(a, b, k) {
 }
 
 const ease = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
+/*
+ * Walk style from speed: 0 = 'stroll' … 0.5 = 'walk' (people.js takes a
+ * number). The root must cover exactly that style's stride per cycle, or
+ * the planted foot slides.
+ */
+const STROLL = (WALK_STRIDES && WALK_STRIDES.stroll) || WALK_STRIDE;
+const WALK = (WALK_STRIDES && WALK_STRIDES.walk) || WALK_STRIDE;
+const styleFor = (speed) => Math.max(0, Math.min(0.5, (speed - 0.35) / 1.3));
+const strideOf = (style) => STROLL + (WALK - STROLL) * style * 2;
 /** 0 → 1 → 0 over [a, b] with soft shoulders of width w. */
 const window01 = (x, a, b, w = 0.25) => ease((x - a) / w) * ease((b - x) / w);
 const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -281,6 +299,7 @@ export function createKeramiker({
     now: 0,
     walkW: 0,
     phase: 0, // walk cycle
+    style: 0.3, // walk style, 0 stroll … 0.5 walk
     rim: 0, // IK weights: hand on the banding wheel, fist on the chin, hand on the kiln door
     door: 0,
     doorGrip: false,
@@ -506,7 +525,8 @@ export function createKeramiker({
       root.rotation.y += backErr * k(4);
       const step = Math.min(dist, Math.min(0.85, 0.35 + dist * 1.4) * dt);
       root.position.addScaledVector(tmp.normalize(), step);
-      st.phase -= (step / (WALK_STRIDE * s)) * Math.PI * 2;
+      st.style += (0 - st.style) * k(6);
+      st.phase -= (step / (strideOf(st.style) * s)) * Math.PI * 2;
       walkGoal = 0.8;
     } else if (dist > 0.03) {
       const err = wrapAngle(Math.atan2(tmp.x, tmp.z) - root.rotation.y);
@@ -514,7 +534,10 @@ export function createKeramiker({
       const speed = Math.abs(err) > 1.1 ? 0 : Math.min(1.15, 0.3 + dist * 1.6) * (1 - Math.abs(err) / 1.6);
       const step = Math.min(dist, speed * dt);
       root.position.addScaledVector(tmp.normalize(), step);
-      st.phase += (step / (WALK_STRIDE * s)) * Math.PI * 2;
+      // A short move is a stroll, across the room a walk; the phase follows the
+      // ground covered at that style's stride, so the planted foot stays put
+      st.style += (styleFor(speed) - st.style) * k(4);
+      st.phase += (step / (strideOf(st.style) * s)) * Math.PI * 2;
       walkGoal = 1;
     } else {
       root.position.x = goal.x;
@@ -537,8 +560,9 @@ export function createKeramiker({
       const g = goalW[name];
       w[name] += (g - w[name]) * (1 - Math.exp(-(g > w[name] ? 5.5 : 4) * dt));
     }
-    POSES.idle(t, base);
-    if (st.walkW > 1e-3) mixAll(base, POSES.walk(st.phase, walkP), st.walkW);
+    // His own idle (seeded: weight shifts and fidgets nobody else shares)
+    POSES.idle(t, base, person.look.seed);
+    if (st.walkW > 1e-3) mixAll(base, POSES.walk(st.phase, walkP, st.style), st.walkW);
     // Walking, he lets his arms swing: the resting layers give way to the stride
     const free = 1 - 0.8 * st.walkW;
     for (const [name, fn] of LAYERS) {

@@ -38,7 +38,10 @@ import { REGION, rng } from './people-build.js';
 import { appearanceFor, resolveLook } from './people-look.js';
 import { buildPersonData, toBindPose, makeSkeleton, crowdAccessories } from './people-assemble.js';
 
-const HAIR_BIT = { crop: 0, sidePart: 0, tousled: 0, sweptBack: 1, curly: 2, long: 3, bun: 4, balding: 5, buzz: 6, bald: -1 };
+// Hair styles → the crowd's baked hair pieces (newer styles map onto the nearest one)
+const HAIR_BIT = {
+  crop: 0, sidePart: 0, tousled: 0, messy: 0, sweptBack: 1, curly: 2, wavy: 2, long: 3, bun: 4, balding: 5, receding: 5, buzz: 6, bald: -1
+};
 const CLAP_IN_T = 0.35 / 2.3;
 const sstep01 = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
 

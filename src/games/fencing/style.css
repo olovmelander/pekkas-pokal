@@ -1004,6 +1004,7 @@
 .fen[data-orient='landscape'][data-mode='result'] .fen-screen,
 .fen[data-orient='landscape'][data-mode='final'] .fen-screen {
   justify-content: flex-end;
+  padding-top: calc(var(--safe-t) + 54px); /* clear of the close button */
   padding-right: max(3vw, 16px);
   background: linear-gradient(270deg, rgba(6, 4, 3, 0.88) 0%, rgba(6, 4, 3, 0.6) 42%, rgba(6, 4, 3, 0.12) 72%, rgba(6, 4, 3, 0) 100%);
 }
@@ -1013,14 +1014,16 @@
 .fen[data-orient='landscape'][data-mode='final'] .fen-panel { width: min(440px, 56%); }
 
 .fen[data-orient='portrait'][data-mode='bracket'] .fen-screen,
-.fen[data-orient='portrait'][data-mode='result'] .fen-screen {
+.fen[data-orient='portrait'][data-mode='result'] .fen-screen,
+.fen[data-orient='portrait'][data-mode='final'] .fen-screen {
   align-items: flex-end;
   padding: 20px 12px calc(var(--safe-b) + 4px);
   background: linear-gradient(0deg, rgba(6, 4, 3, 0.92) 0%, rgba(6, 4, 3, 0.7) 45%, rgba(6, 4, 3, 0) 66%);
 }
 
 .fen[data-orient='portrait'][data-mode='bracket'] .fen-panel,
-.fen[data-orient='portrait'][data-mode='result'] .fen-panel {
+.fen[data-orient='portrait'][data-mode='result'] .fen-panel,
+.fen[data-orient='portrait'][data-mode='final'] .fen-panel {
   max-height: 60%;
   padding: 14px 12px 12px;
 }
@@ -1036,6 +1039,15 @@
 .fen[data-orient='portrait'][data-mode='result'] .fen-big-score { font-size: 2.4rem; margin-top: 6px; }
 .fen[data-orient='portrait'][data-mode='result'] .fen-stats { margin-top: 10px; }
 .fen[data-orient='portrait'][data-mode='result'] .fen-lead { font-size: 0.8rem; margin-top: 8px; }
+.fen[data-orient='portrait'][data-mode='final'] .fen-medal-big svg { width: 52px; height: 52px; }
+.fen[data-orient='portrait'][data-mode='final'] .fen-medal-big { margin-bottom: 2px; }
+.fen[data-orient='portrait'][data-mode='final'] .fen-h { font-size: 1.6rem; }
+.fen[data-orient='portrait'][data-mode='final'] .fen-lead { font-size: 0.78rem; margin-top: 6px; }
+.fen[data-orient='portrait'][data-mode='final'] .fen-recap { margin-top: 8px; gap: 3px; }
+.fen[data-orient='portrait'][data-mode='final'] .fen-recap div { padding: 5px 10px; font-size: 0.74rem; }
+.fen[data-orient='portrait'][data-mode='final'] .fen-total { margin-top: 8px; }
+.fen[data-orient='portrait'][data-mode='final'] .fen-total b { font-size: 1.8rem; }
+.fen[data-orient='portrait'][data-mode='final'] .fen-go { margin-top: 10px; }
 
 /* ---- Portrait / phones ---- */
 

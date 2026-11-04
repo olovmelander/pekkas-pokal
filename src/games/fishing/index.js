@@ -75,13 +75,13 @@ const CLOCK_WRAP = 3600;
  * The midnight sun keeps the shallows warm; Pekkadjupet is nearly black.
  */
 const MID_STOPS = [
-  [0, 0x2fa7ae], [8, 0x1b8590], [18, 0x12667c], [30, 0x0b4565], [44, 0x062a48], [60, 0x030f1e]
+  [0, 0x2fa7ae], [8, 0x1b8590], [18, 0x12667c], [30, 0x0b4565], [44, 0x07304f], [60, 0x051a2e]
 ];
 const UP_STOPS = [
   [0, 0x9fe6d8], [8, 0x63c8c4], [18, 0x3c9cab], [30, 0x22708c], [44, 0x134a6a], [60, 0x0a2442]
 ];
 const DOWN_STOPS = [
-  [0, 0x0f5c6a], [8, 0x0a4758], [18, 0x063247], [30, 0x042138], [44, 0x021428], [60, 0x010812]
+  [0, 0x0f5c6a], [8, 0x0a4758], [18, 0x063247], [30, 0x042138], [44, 0x031830], [60, 0x020e1e]
 ];
 const RAY_STOPS = [
   [0, 0xfff0c8], [10, 0xd8f4dc], [24, 0x9fe0dc], [40, 0x6fb8d8], [60, 0x3a6ab0]
@@ -1747,6 +1747,7 @@ export async function createFishing(container) {
   }
 
   let loonIn = 6;
+  let vakIn = 2.5;
 
   function tick(now) {
     raf = requestAnimationFrame(tick);
@@ -1866,6 +1867,17 @@ export async function createFishing(container) {
       if (loonIn <= 0) {
         loonIn = 14 + Math.random() * 16;
         sfx.loon();
+      }
+      // …and a fish rises somewhere out on the flat water: a plop and a
+      // ring spreading through the reflections — the lake is alive
+      vakIn -= dt;
+      if (vakIn <= 0 && !eyeUnder) {
+        vakIn = 4 + Math.random() * 8;
+        const x = boat.position.x - 16 + Math.random() * 36;
+        const z = -5 - Math.random() * 28;
+        ripples.spawn(x, z, 1.4 + Math.random() * 0.8, 0.5, 2.0);
+        later(() => ripples.spawn(x, z, 0.9, 0.35, 1.5), 380);
+        spray.burst(x, 0.12, z, 7, 1.6, { cell: CELL.DROP, color: 0xe8f6ff, grav: -12, size: 0.07, life: 0.55, lift: 1.3, drag: 0.4 });
       }
     }
 

@@ -433,7 +433,7 @@ export async function createPainting(container) {
 
   const view = { w: 1, h: 1, lay: layoutFor(1, 1) };
   /** The camera rig: the shot it is on, how far into the move, seconds on it. */
-  const rig = { name: 'wide', t: 1, dur: 1, from: null, since: 0 };
+  const rig = { name: 'wide', t: 1, dur: 1, from: null, since: 0, kick: 0, kickAmp: 0 };
 
   /** A camera shot: where it stands, what it looks at, lens, lens shift. */
   function shotParams(name, t = 0) {
@@ -452,12 +452,15 @@ export async function createPainting(container) {
         ox: W / 2 - (r.x + r.w / 2), oy: H / 2 - (r.y + r.h / 2)
       };
     }
-    if (name === 'judge') {
+    if (name === 'judge' || name === 'inspect') {
       // The canvas and Hägglund beside it, in the space the verdict card
-      // leaves free: the left of a wide screen, the top of a tall one
-      const free = wide
-        ? { x: 0, y: lay.top, w: W - lay.card - 28, h: H - lay.top }
-        : { x: 0, y: lay.top - 10, w: W, h: H * 0.3 - lay.top + 16 };
+      // leaves free: the left of a wide screen, the top of a tall one. While
+      // he is still walking over and looking ('inspect') there is no card
+      // yet, so the pair has the whole screen.
+      let free;
+      if (name === 'inspect') free = { x: 0, y: lay.top, w: W, h: H - lay.top - (wide ? 10 : H * 0.1) };
+      else if (wide) free = { x: 0, y: lay.top, w: W - lay.card - 28, h: H - lay.top };
+      else free = { x: 0, y: lay.top - 10, w: W, h: H * 0.3 - lay.top + 16 };
       const fov = wide ? 36 : 46;
       const tan = Math.tan(THREE.MathUtils.degToRad(fov / 2));
       const ppu = Math.min((free.h * 0.86) / 2.35, (free.w * 0.86) / 2.3);
@@ -465,7 +468,7 @@ export async function createPainting(container) {
       const tgt = new THREE.Vector3(0.45, 1.15, -0.5);
       const dir = new THREE.Vector3(0.62, 0.22, 2.0).normalize();
       // Once he has arrived, the camera leans in on him, slowly
-      const push = reduced ? 0 : 0.08 * (1 - Math.exp(-Math.max(0, rig.since - 2.2) / 5));
+      const push = reduced || name !== 'judge' ? 0 : 0.08 * (1 - Math.exp(-Math.max(0, rig.since - 2.2) / 5));
       tgt.x += push * 1.6;
       tgt.y += push * 0.9;
       return {
@@ -525,6 +528,12 @@ export async function createPainting(container) {
     if (!reduced && rig.name === 'easel') {
       camera.position.x += Math.sin(t * 0.5) * 0.006;
       camera.position.y += Math.sin(t * 0.37) * 0.004;
+      // A colour hit leans the camera in toward the canvas for a beat
+      if (rig.kick > 0.001) {
+        rig.kick = Math.max(0, rig.kick - dt * 2.4);
+        const k = Math.sin(Math.min(1, rig.kick) * Math.PI) * rig.kickAmp;
+        camera.position.lerp(cur.tgt, k);
+      }
     }
     camera.lookAt(cur.tgt);
     camera.fov = cur.fov;
@@ -909,6 +918,10 @@ export async function createPainting(container) {
     const an = analyse(work).regions[idx];
     const at = canvasPoint(an.cx, an.cy);
     popAt(`+${fmt(pts)}`, at, hit ? 'hit' : acc < 0.6 ? 'miss' : '');
+    if (hit) {
+      rig.kick = 1;
+      rig.kickAmp = Math.min(0.045, 0.018 + 0.006 * state.streak);
+    }
     if (hit && state.streak >= 2) {
       callout(`SVIT ×${state.streak}`, 'streak');
       sfx.streak(state.streak);
@@ -1068,13 +1081,15 @@ export async function createPainting(container) {
     store.set(GALLERY_KEY, gallery);
 
     // Hägglund walks over while the camera turns to watch him
-    setShot('judge', 1.7);
+    setShot('inspect', 1.7);
     cast.judge.inspect(grade);
     later(() => showReveal(result), reduced ? 400 : 2000);
   }
 
   function showReveal(r) {
     setPhase('reveal');
+    // Room for the card: the camera eases the pair aside
+    setShot('judge', 1.1);
     // If he is still on his way over, the verdict waits until he arrives
     cast.judge.verdict();
     const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -1086,6 +1101,7 @@ export async function createPainting(container) {
     hud.rvOrig.replaceChildren(renderPainting(r.work, targetsOf(r.work), pw, ph, { museum: true }));
     hud.rvOrigCap.textContent = `${r.work.artist}, ${r.work.year}`;
     hud.rvGrade.textContent = '0,0';
+    hud.rvGrade.parentElement.classList.remove('landed', 'gold');
     hud.rvStars.innerHTML = starsHtml(0, 'big');
     hud.rvPb.hidden = true;
     hud.rvQuote.textContent = `”${r.verdict.say}”`;
@@ -1120,6 +1136,9 @@ export async function createPainting(container) {
       },
       done() {
         hud.rvGrade.textContent = grade1(r.grade);
+        // The figure lands like a stamp; a 9 or better lands in gold
+        hud.rvGrade.parentElement.classList.add('landed');
+        hud.rvGrade.parentElement.classList.toggle('gold', r.grade >= 9);
         setScore(state.score);
         for (let i = 0; i < r.stars; i++) {
           later(() => {
