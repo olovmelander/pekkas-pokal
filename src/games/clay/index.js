@@ -412,13 +412,16 @@ export async function createClay(container) {
 
   /* ---- Keramikern -------------------------------------------------------- */
 
-  // He waits by the kiln while you throw, and judges from behind the
-  // banding wheel — on its far side from the reveal camera, facing it
+  // He waits by the kiln while you throw, and judges from the far side of
+  // the banding wheel, facing the reveal camera — stepped a little to its
+  // left so a wide piece does not hide him, and clear of the piece's flight
+  // from the kiln, which lands from the right
   const behind = new THREE.Vector3(-DIR_REVEAL.x, 0, -DIR_REVEAL.z).normalize();
+  const camLeft = new THREE.Vector3(behind.z, 0, -behind.x);
   studio.group.updateMatrixWorld(true);
   const keramiker = createKeramiker({
     home: new THREE.Vector3(2.8, 0, -2.25),
-    judge: studio.reveal.clone().setY(0).addScaledVector(behind, 0.85),
+    judge: studio.reveal.clone().setY(0).addScaledVector(behind, 0.8).addScaledVector(camLeft, 0.32),
     wheel: new THREE.Vector3(0, wheel.headY + 1, 0),
     banding: studio.reveal.clone().setY(studio.banding.position.y + 0.02),
     bandingRadius: 0.36,
@@ -1694,7 +1697,9 @@ export async function createClay(container) {
   // Asynkront: ett synkront block av tunga material (glasyrerna, leran)
   // kunde få Direct3D-kompilatorn på Windows att trigga GPU-vakthunden och
   // lämna en svart duk. Laddkortet ligger kvar medan det kompilerar.
-  await precompile(renderer, scene, camera);
+  // The composer draws the scene into its own (linear, untonemapped) target,
+  // which needs different program variants from the screen — warm those
+  await precompile(renderer, scene, camera, { target: usePost ? composer.renderTarget1 : null });
   hidden.forEach((o) => {
     o.visible = false;
   });

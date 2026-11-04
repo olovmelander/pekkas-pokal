@@ -615,8 +615,9 @@ class Judge {
     const w = { face: this.ry, walk: 0, write: 0, chin: 0, explain: 0, nod: 0, shake: 0 };
     const towards = (v) => Math.atan2(v.x - root.position.x, v.z - root.position.z);
     if (this.mode === 'walk') {
-      w.walk = this.stepWalk(dt);
+      // Heading first: stepWalk() may arrive, and arriving ends the walk
       w.face = Math.atan2(this.walk.tx - this.walk.fx, this.walk.tz - this.walk.fz);
+      w.walk = this.stepWalk(dt);
     } else if (this.mode === 'inspect') {
       w.face = towards(this.canvasC);
       // His eyes go over the whole canvas, not one spot on it

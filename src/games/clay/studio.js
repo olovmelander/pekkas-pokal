@@ -897,13 +897,8 @@ export function buildStudio() {
   glossMesh.castShadow = true;
   g.add(glossMesh);
 
-  /*
-   * Sun direction: low (≈14°) through the window centre. The upper part of
-   * the beam rakes the whole clay column from the left; the lower part runs
-   * on past the wheel and lays the arch of the window on the floor in front
-   * of it, with the wheel's and the clay's shadows cut into it.
-   */
-  const sunDir = new THREE.Vector3(4.4, -1.9, 5.6).normalize();
+  /* Sun direction: from the window centre onto the wheel */
+  const sunDir = new THREE.Vector3(-WIN.x, -1.35, 5.5).normalize();
   const shaft = buildShaft(sunDir, 6.2);
   g.add(shaft);
 

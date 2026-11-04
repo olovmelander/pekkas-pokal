@@ -1520,7 +1520,9 @@ export async function createFencing(container) {
       o.visible = true;
     }
   });
-  await precompile(renderer, scene, camera);
+  // With the composer in use three draws into a render target (linear, no
+  // tone mapping) — compile those program variants, not the screen ones
+  await precompile(renderer, scene, camera, usePost ? { target: composer.renderTarget1 } : {});
   hidden.forEach((o) => {
     o.visible = false;
   });

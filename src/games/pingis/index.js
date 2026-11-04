@@ -295,12 +295,8 @@ export async function createPingis(container) {
      mirror, the cube capture) renders into one, and a program compiled
      against the canvas is a different, tone-mapped variant. */
   const compileTarget = new THREE.WebGLRenderTarget(1, 1);
-  const compileAll = async (toTarget) => {
-    renderer.setRenderTarget(toTarget ? compileTarget : null);
-    await precompile(renderer, scene, camera);
-    renderer.setRenderTarget(null);
-  };
-  await compileAll(true);
+  await precompile(renderer, scene, camera, { target: compileTarget });
+  compileTarget.dispose();
 
   /* The hall reflects itself: one cube capture from over the table, so the
      lacquer, the ball and the cups shine with THIS room, not a studio. */
@@ -2174,8 +2170,7 @@ export async function createPingis(container) {
   // Everything is in the scene now (the cup, the crowd's poses and the
   // markers included — compile visits hidden objects too): compile it all
   // for the target the first frame will actually render into
-  await compileAll(usePost);
-  compileTarget.dispose();
+  await precompile(renderer, scene, camera, { target: usePost ? post.composer.renderTarget1 : null });
 
   showMenu();
   raf = requestAnimationFrame(tick);

@@ -2401,12 +2401,8 @@ export async function createPinball(container, opts = {}) {
   // tone mapping and output colour space into each program, and both differ
   // between the screen and the composer's buffer. Compiled for the screen,
   // every material would compile a second time — in one blocking burst — at
-  // the first composed frame. (compileAsync reads the target synchronously,
-  // so it can be put back straight away.)
-  renderer.setRenderTarget(usePost ? composer.readBuffer : null);
-  const compiling = precompile(renderer, scene, camera);
-  renderer.setRenderTarget(null);
-  await compiling;
+  // the first composed frame.
+  await precompile(renderer, scene, camera, { target: usePost ? composer.renderTarget1 : null });
   hidden.forEach((o) => {
     o.visible = false;
   });
@@ -2552,7 +2548,6 @@ export async function createPinball(container, opts = {}) {
     // Passes own their materials and targets; the composer only its two
     composer.passes.forEach((pass) => pass.dispose());
     composer.dispose();
-    if (refs.playfield.material !== materials.playfield) refs.playfield.material.dispose();
     renderer.dispose();
     renderer.forceContextLoss?.();
     sfx.close();
