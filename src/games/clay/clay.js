@@ -244,7 +244,9 @@ export function glazeMaterial(maps, metal) {
     clearcoatRoughness: 0.06,
     vertexColors: true,
     emissive: 0xff5a14,
-    emissiveIntensity: 0
+    emissiveIntensity: 0,
+    // Metal has no diffuse to fall back on: let gold drink in the room's light
+    envMapIntensity: metal ? 2.4 : 1
   });
   patchRW(mat, 1.0, metal ? 0.3 : 0.15);
   return mat;
@@ -469,7 +471,7 @@ export class ClayBody {
         glazed = 0;
       } else if (outerJ >= 0 && outerJ < N) {
         // convex (negative second difference) → thin glaze → break
-        breakK = Math.max(0, Math.min(1, -curv[outerJ] * 90)) * 0.35 + smooth01(H - 0.25, H, y) * 0.45;
+        breakK = Math.max(0, Math.min(1, -curv[outerJ] * 90)) * 0.18 + smooth01(H - 0.25, H, y) * 0.45;
         // a soft glaze line rather than a ruler-straight one
         glazed = smooth01(0.13, 0.19, y);
       } else if (outerJ >= N && outerJ < N + LIP) {

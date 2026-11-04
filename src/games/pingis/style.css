@@ -163,9 +163,18 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  padding: 6px 18px 5px;
+  border-radius: 14px;
+  background: rgba(10, 8, 6, 0.66);
+  border: 1px solid rgba(242, 193, 78, 0.45);
+  backdrop-filter: blur(6px);
   opacity: 0;
   transition: opacity 0.3s ease, transform 0.35s var(--ease-out);
   pointer-events: none;
+}
+
+.pg-ui .pg-mp.theirs {
+  border-color: rgba(255, 107, 92, 0.5);
 }
 
 .pg-ui .pg-mp.show {
@@ -381,6 +390,14 @@
 
 .pg-ui .pb-overlay.show {
   pointer-events: auto;
+}
+
+/* The champion's card sits low: the cup is orbiting in the top half */
+.pg-ui .pb-overlay.pg-low {
+  align-items: flex-end;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  background: linear-gradient(0deg, rgba(6, 5, 4, 0.88), rgba(6, 5, 4, 0.3) 55%, rgba(6, 5, 4, 0) 75%);
+  backdrop-filter: none;
 }
 
 .pg-ui .pg-card {
@@ -854,6 +871,25 @@
 
   .pg-ui .pg-card {
     padding: 20px 16px 16px;
+  }
+}
+
+@media (max-width: 560px), (max-height: 500px) {
+  .pg-ui .pb-help-card {
+    padding: 16px 16px 14px;
+  }
+
+  .pg-ui .pb-help-list {
+    gap: 6px;
+  }
+
+  .pg-ui .pb-help-list li {
+    font-size: 12.5px;
+    line-height: 1.38;
+  }
+
+  .pg-ui .pb-help-tip {
+    font-size: 11.5px;
   }
 }
 

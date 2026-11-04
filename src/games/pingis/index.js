@@ -171,9 +171,12 @@ const smooth = (a, b, x) => {
  * the subject while the hall — stage, curtain, crowd, the wall seating —
  * fills the sides instead of the table being dwarfed in the middle.
  */
-function framing(aspect, out) {
+function framing(aspect, out, height = 900) {
   const k = smooth(0.56, 1.6, aspect);
-  out.fov = THREE.MathUtils.lerp(58, 38, k);
+  // A phone on its side has ~390 px of height and the HUD takes the top
+  // fifth of it: a slightly longer lens buys the table some size back
+  const short = smooth(560, 400, height) * k;
+  out.fov = THREE.MathUtils.lerp(58, 38, k) - short * 4;
   out.pos.set(0, THREE.MathUtils.lerp(2.5, 2.3, k), THREE.MathUtils.lerp(3.85, 4.3, k));
   out.look.set(0, THREE.MathUtils.lerp(1.02, 1.0, k), THREE.MathUtils.lerp(-1.1, -1.25, k));
   return out;
@@ -184,17 +187,21 @@ function framing(aspect, out) {
 export async function createPingis(container) {
   const coarse = window.matchMedia?.('(pointer: coarse)').matches ?? false;
   const lowTier = coarse || Math.min(window.innerWidth, window.innerHeight) < 560;
-  const tier = lowTier ? 'low' : 'high';
+  // window.__ppPingisQuality lets a test force a tier; nothing else sets it
+  const tier = window.__ppPingisQuality || (lowTier ? 'low' : 'high');
+  const low = tier !== 'high';
   const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   const vrand = Math.random; // visuals only — the rules have their own seeded rng
 
   // Canvas textures bake their lettering once, so give the site's display
   // face a moment to arrive before the signs and the board are painted.
   try {
-    await Promise.race([
-      document.fonts?.load('700 64px "Schibsted Grotesk"'),
-      new Promise((resolve) => setTimeout(resolve, 900))
-    ]);
+    if (document.fonts && !document.fonts.check('700 64px "Schibsted Grotesk"')) {
+      await Promise.race([
+        document.fonts.load('700 64px "Schibsted Grotesk"'),
+        new Promise((resolve) => setTimeout(resolve, 600))
+      ]);
+    }
   } catch (e) {
     /* offline or blocked: the fallback face will do */
   }
@@ -214,7 +221,7 @@ export async function createPingis(container) {
   // No MSAA on the canvas: the scene renders into the composer's own
   // multisampled target and the canvas only ever receives the final pass.
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-  const maxPR = lowTier ? 1.75 : 2;
+  const maxPR = low ? 1.75 : 2;
   let pixelRatio = Math.min(window.devicePixelRatio || 1, maxPR);
   renderer.setPixelRatio(pixelRatio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -242,7 +249,7 @@ export async function createPingis(container) {
   key.position.set(1.6, 5.4, 2.4);
   key.target.position.set(0, 0.7, -0.4);
   key.castShadow = true;
-  key.shadow.mapSize.set(lowTier ? 1024 : 2048, lowTier ? 1024 : 2048);
+  key.shadow.mapSize.set(low ? 1024 : 2048, low ? 1024 : 2048);
   key.shadow.camera.left = -3.4;
   key.shadow.camera.right = 3.4;
   key.shadow.camera.top = 4;
@@ -292,7 +299,7 @@ export async function createPingis(container) {
     });
   });
   useEnv(scene);
-  hall.refs.floorMat.envMapIntensity = lowTier ? 0.9 : 0.3;
+  hall.refs.floorMat.envMapIntensity = low ? 0.9 : 0.3;
   hall.refs.tableTopMat.envMapIntensity = 0.7;
 
   /* Opponent figure across the table */
@@ -390,7 +397,7 @@ export async function createPingis(container) {
   const swooshFoe = new Swoosh();
   const rings = new Rings(14);
   const sparks = new Sparks(glow);
-  const confetti = new Confetti(lowTier ? 200 : 360);
+  const confetti = new Confetti(low ? 200 : 360);
   scene.add(trail.mesh, swooshMe.mesh, swooshFoe.mesh, rings.mesh, sparks.points, confetti.mesh);
 
   const crowd = buildCrowd(hall.refs.seats);
@@ -411,7 +418,7 @@ export async function createPingis(container) {
   trophyShaft.visible = false;
   scene.add(trophyShaft);
 
-  const post = createPost(renderer, scene, camera, { samples: lowTier ? 0 : 4, bloomRes: lowTier ? 0.35 : 0.5 });
+  const post = createPost(renderer, scene, camera, { samples: low ? 0 : 4, bloomRes: low ? 0.35 : 0.5 });
 
   /* ---- State ----------------------------------------------------------- */
 
@@ -1100,6 +1107,7 @@ export async function createPingis(container) {
       crowd.react('ooh', 0.8 + tierIdx * 0.2);
     }
     hud.setRally(n, tierIdx ? RALLY_TIERS[tierIdx - 1].word : '', tierIdx);
+    if (coarse && n >= 4) hud.showKeys(false); // the counter takes that corner
   }
 
   function onBeginPoint() {
@@ -1487,7 +1495,7 @@ export async function createPingis(container) {
     dragging = true;
     lastPX = e.clientX;
     lastPY = e.clientY;
-    lastPT = performance.now();
+    lastPT = e.timeStamp || performance.now();
     me.aimX = aimFrom(e);
   }
 
@@ -1499,7 +1507,9 @@ export async function createPingis(container) {
     } else if (!dragging) {
       return;
     }
-    const now = performance.now();
+    // The event's own timestamp, not the handler's clock: on a busy phone
+    // handlers run late and bunched, which would read a flick as a crawl
+    const now = e.timeStamp || performance.now();
     const dt = Math.max(8, now - lastPT) / 1000;
     // Flick velocity in "screen heights per second", smoothed
     const rect = canvasHost.getBoundingClientRect();
@@ -1543,8 +1553,12 @@ export async function createPingis(container) {
         again();
       }
     } else if (e.key === '?' || (e.key === 'Escape' && helpOpen)) {
+      // Escape closes the help card here; the site closes the game on it
+      // otherwise, so a consumed Escape must not reach the site's handler
+      if (e.key === 'Escape') e.stopPropagation();
       setHelp(!helpOpen);
     } else if (e.key === 'Escape' && state.phase === 'replay') {
+      e.stopPropagation();
       endReplay();
     }
   }
@@ -1575,7 +1589,8 @@ export async function createPingis(container) {
       else if (act === 'help-close') setHelp(false);
       return;
     }
-    if (e.target.closest('#pg-info')) setHelp(true);
+    if (e.target === hud.el.help) setHelp(false); // tap beside the card closes it
+    else if (e.target.closest('#pg-info')) setHelp(true);
     else if (e.target.closest('#pg-mute')) {
       sfx.setMuted(!sfx.muted);
       hud.el.mute.classList.toggle('off', sfx.muted);
@@ -1586,7 +1601,7 @@ export async function createPingis(container) {
   canvasHost.addEventListener('pointerdown', onPointerDown);
   window.addEventListener('pointermove', onPointerMove);
   window.addEventListener('pointerup', onPointerUp);
-  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('keydown', onKeyDown, true); // capture: ahead of the site's Escape
   window.addEventListener('keyup', onKeyUp);
 
   /* ---- Resize ----------------------------------------------------------- */
@@ -1601,7 +1616,7 @@ export async function createPingis(container) {
     renderer.setSize(viewW, viewH, false);
     post.setSize(viewW, viewH);
     camera.aspect = viewW / viewH;
-    framing(camera.aspect, base);
+    framing(camera.aspect, base, viewH);
     aimCam.aspect = camera.aspect;
     aimCam.fov = base.fov;
     aimCam.position.copy(base.pos);
@@ -1745,7 +1760,7 @@ export async function createPingis(container) {
     t: 0, bx: 0, by: 1, bz: HITZ, bvis: false, st: 0, ss: 0, vz: 0, live: false, smash: false,
     meX: 0, meVx: 0, meDVX: 0, meDVY: 0, meSwing: 0, meSpin: 0, aiX: 0, foeX: 0, stroke: 0, fh: 1
   };
-  const foeAnim = { x: 0, fh: 1, stroke: 0, prevX: 0 };
+  const foeAnim = { x: 0, fh: 1, stroke: 0 };
 
   function liveView(dt) {
     const src = dead.on ? dead.pos : b.pos;
@@ -1842,7 +1857,7 @@ export async function createPingis(container) {
   const headW = new THREE.Vector3();
   const bladeA = new THREE.Vector3();
   const bladeB = new THREE.Vector3();
-  const halfUp = new THREE.Vector3();
+  const ballW = new THREE.Vector3();
 
   function poseOpponent(v, t, dt) {
     if (!foe) return;
@@ -1918,21 +1933,25 @@ export async function createPingis(container) {
       // so the card can take the left, on a phone he stands above it
       const wide = camera.aspect > 1.05;
       const fx = foe ? foe.group.position.x : 0;
-      tPos.set(fx + (wide ? 0.4 : 0.15), wide ? 1.85 : 1.7, wide ? -0.05 : 0.6);
-      tLook.set(fx - (wide ? 0.62 : 0), wide ? 1.58 : 1.25, -2.1);
-      fov = wide ? 36 : 50;
+      tPos.set(fx + (wide ? 0.45 : 0.2), wide ? 1.85 : 1.75, wide ? 1.35 : 1.0);
+      tLook.set(fx - (wide ? 0.62 : 0), wide ? 1.48 : 1.22, -2.1);
+      fov = wide ? 32 : 48;
       rate = 2.2;
     } else if (camMode === 'replay') {
-      tPos.set(2.35, 1.22, THREE.MathUtils.clamp(v.bz * 0.45, -1.1, 1.2) + 0.25);
-      tLook.set(v.bx * 0.3, 0.95, v.bz * 0.75);
-      fov = camera.aspect < 0.8 ? 52 : 38;
+      // A low broadcast angle from the side, far enough back to hold both
+      // ends of the table, drifting with the ball
+      tPos.set(2.9, 1.45, THREE.MathUtils.clamp(v.bz * 0.3, -0.9, 0.9) + 0.35);
+      tLook.set(v.bx * 0.25, 0.92, v.bz * 0.45 - 0.15);
+      fov = camera.aspect < 0.8 ? 62 : 42;
       rate = 4;
     } else if (camMode === 'celebrate') {
       celebT += dt;
       const a = celebT * 0.28;
       const r = camera.aspect < 0.8 ? 3.4 : 2.9;
-      tPos.set(Math.sin(a) * r, 1.75 + Math.sin(celebT * 0.4) * 0.15, 0.45 + Math.cos(a) * r);
-      tLook.set(0, T.height + 0.55, 0.45);
+      // Once the card is up it sits low, so the cup rides above it
+      const carded = state.phase === 'over';
+      tPos.set(Math.sin(a) * r, (carded ? 2.05 : 1.75) + Math.sin(celebT * 0.4) * 0.15, 0.45 + Math.cos(a) * r);
+      tLook.set(0, T.height + (carded ? 0.02 : 0.55), 0.45);
       fov = camera.aspect < 0.8 ? 56 : 44;
       rate = celebT < 1.5 ? 1.5 : 3;
     }
@@ -2044,7 +2063,7 @@ export async function createPingis(container) {
 
     /* Crowd: excitement from the rally, silence for match point */
     const excite = state.phase === 'rally' || state.phase === 'point' ? smooth(3, 14, state.rallyHits) : 0;
-    crowd.update(t, dt, v.bvis ? halfUp.set(v.bx, v.by, v.bz) : null, { excite, hush: drama.v });
+    crowd.update(t, dt, v.bvis ? ballW.set(v.bx, v.by, v.bz) : null, { excite, hush: drama.v });
     sfx.crowdLevel(state.phase === 'celebrate' ? 1 : Math.max(0, excite * 0.8 + 0.15 - drama.v * 0.15));
     board.update(dt);
 
@@ -2179,7 +2198,7 @@ export async function createPingis(container) {
     canvasHost.removeEventListener('pointerdown', onPointerDown);
     window.removeEventListener('pointermove', onPointerMove);
     window.removeEventListener('pointerup', onPointerUp);
-    window.removeEventListener('keydown', onKeyDown);
+    window.removeEventListener('keydown', onKeyDown, true);
     window.removeEventListener('keyup', onKeyUp);
     realTimers.forEach((id) => clearTimeout(id));
     timers.length = 0;

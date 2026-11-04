@@ -79,7 +79,7 @@ const PIECES = [
     id: 'vas',
     name: 'Vasen',
     brief: 'En klassisk vas — fyllig buk, smal hals, liten läpp.',
-    glaze: { color: 0x1d4d98, rim: 0x8a6a52, metal: false },
+    glaze: { color: 0x163f8e, rim: 0x8a6a52, metal: false },
     css: '#3d6fc0',
     glazeName: 'koboltglasyr',
     profile: profileOf([[0, 0.58], [0.16, 0.82], [0.38, 1.02], [0.62, 0.62], [0.82, 0.34], [0.93, 0.36], [1, 0.5]])
@@ -601,7 +601,7 @@ export async function createClay(container) {
     const p = piece();
     renderMatch();
     const { match } = state;
-    const timeBonus = match >= 0.6 ? Math.round(state.timeLeft * 3) : 0;
+    const timeBonus = match >= 0.6 ? Math.max(0, Math.round(state.timeLeft * 3)) : 0;
     const base = Math.round(match ** 2 * 1000);
     const stars = starsFor(match);
     const prev = bests[p.id];
@@ -623,6 +623,7 @@ export async function createClay(container) {
     dragging = false;
     brush = null;
     smoothing = false;
+    keySmooth = false;
     contact.visible = false;
     sfx.setShaping(0);
     sfx.wire();
@@ -918,7 +919,7 @@ export async function createClay(container) {
   }
 
   const DIR_THROW = new THREE.Vector3(0, 0.2, 1);
-  const DIR_KILN = new THREE.Vector3(0.15, 0.25, 1);
+  const DIR_KILN = new THREE.Vector3(-0.35, 0.5, 1); // high enough to see over keramikern
   const DIR_REVEAL = new THREE.Vector3(-0.42, 0.2, 1);
   const DIR_SHOW = new THREE.Vector3(0.05, 0.12, 1);
   const REVEAL_LOOK = new THREE.Vector3();
@@ -933,7 +934,11 @@ export async function createClay(container) {
   studio.kiln.group.localToWorld(kilnMouth.set(0, 0.63, 0.05));
   studio.kiln.group.localToWorld(kilnFlue.copy(studio.kiln.flue));
   const kilnFront = new THREE.Vector3();
-  studio.kiln.group.localToWorld(kilnFront.set(0, 1.25, 1.7));
+  studio.kiln.group.localToWorld(kilnFront.set(0, 2.2, 1.3));
+  const kilnOpen = new THREE.Vector3();
+  studio.kiln.group.localToWorld(kilnOpen.set(-0.2, 1.15, 1.0));
+  const kilnSeam = new THREE.Vector3();
+  studio.kiln.group.localToWorld(kilnSeam.set(0, 1.76, 0.78));
 
   function updateCamera(t, dt) {
     const P = view.portrait;
@@ -952,7 +957,9 @@ export async function createClay(container) {
       frame(REVEAL_LOOK, DIR_REVEAL, P ? 0.75 : 1.3, 0.7, P ? 0.9 : 0.75,
         ph === 'judge' ? (P ? [0, 0.42] : [0.3, 0]) : [0, P ? 0.1 : 0]);
     } else if (ph === 'over') {
-      frame(SHOW_LOOK, DIR_SHOW, 1.55, 0.75, P ? 0.92 : 0.7, P ? [0, 0.45] : [-0.3, 0]);
+      // The sill sits in the half of the screen the summary card leaves free
+      if (P) frame(SHOW_LOOK, DIR_SHOW, 1.45, 0.75, 0.95, [0, 0.45]);
+      else frame(SHOW_LOOK, DIR_SHOW, 2.6, 0.95, 1, [-0.44, 0]);
     }
     const k = 1 - Math.exp(-dt * (ph === 'fire' ? 2.4 : 2.0));
     camera.position.lerp(camGoal, k);
@@ -1240,7 +1247,7 @@ export async function createClay(container) {
     const crossed = (mark) => prevT < mark && ft >= mark;
     state.wheelSpeed += (0 - state.wheelSpeed) * Math.min(1, dt * 2.5);
     const { hinge } = studio.kiln;
-    const OPEN = -1.95;
+    const OPEN = 1.95; // right-hinged: positive swings it out toward the camera's right
 
     if (ft < FIRE.lift) {
       clayGroup.position.y = wheel.headY + ease(ft / FIRE.lift) * 0.3;
@@ -1269,9 +1276,10 @@ export async function createClay(container) {
       hud.temp.style.setProperty('--heat', h.toFixed(2));
       studio.kiln.led.draw(String(temp).padStart(4, ' '));
       if (rand() < dt * 14 * h) sfx.crackle();
-      // Embers pour out of the flue
+      // Embers pour out of the flue and spit from the door's top seam
       if (rand() < dt * 40 * h) {
-        fx.embers.emit(kilnFlue.x, kilnFlue.y, kilnFlue.z, (rand() - 0.5) * 0.6, 1.0 + rand() * 1.2, (rand() - 0.5) * 0.6, 1.6 + rand(), 0.05 + rand() * 0.05);
+        const src = rand() < 0.5 ? kilnFlue : kilnSeam;
+        fx.embers.emit(src.x + (rand() - 0.5) * 0.4, src.y, src.z, (rand() - 0.5) * 0.6, 0.8 + rand() * 1.2, (rand() - 0.5) * 0.6, 1.4 + rand(), 0.04 + rand() * 0.05);
       }
     } else if (ft < FIRE.open) {
       if (crossed(FIRE.heat)) {
@@ -1314,9 +1322,10 @@ export async function createClay(container) {
 
     // Kiln glow light: at the door while firing, a flash when it opens
     const flash = ft > FIRE.heat && ft < FIRE.heat + 0.5 ? Math.sin(((ft - FIRE.heat) / 0.5) * Math.PI) * (reduceMotion ? 0.6 : 2.2) : 0;
-    accent.position.copy(kilnFront);
+    // Closed, the glow leaks round the door; open, it pours out of the chamber
+    accent.position.copy(ft < FIRE.heat ? kilnFront : kilnOpen);
     accent.color.setRGB(1, 0.45 + state.heat * 0.2, 0.15);
-    accent.intensity = state.heat * 4.5 + flash * 4;
+    accent.intensity = state.heat * (ft < FIRE.heat ? 3.5 : 2.4) + flash * 3;
     haze.enabled = state.heat > 0.15;
     if (haze.enabled) {
       tmpV.copy(kilnFlue).add(kilnLook).multiplyScalar(0.5).project(camera);
@@ -1425,6 +1434,7 @@ export async function createClay(container) {
     last = now;
     if (!running) return;
     renderer.info.reset();
+    if (hudHost.dataset.phase !== state.phase) hudHost.dataset.phase = state.phase;
     const t = now / 1000;
     plopGap -= dt;
 

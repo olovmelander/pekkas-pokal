@@ -378,8 +378,11 @@ function rubberTexture(hex, mark) {
     ctx.fillRect(rand() * s, rand() * s, 2, 2);
   }
   if (mark) {
+    // The cylinder cap maps canvas +x to "down the blade" once the blade is
+    // stood up, so the mark is set a quarter-turn round, near the handle
     ctx.save();
-    ctx.translate(s / 2, s * 0.8);
+    ctx.translate(s * 0.8, s / 2);
+    ctx.rotate(-Math.PI / 2);
     ctx.fillStyle = 'rgba(255,236,200,0.75)';
     ctx.font = '700 22px "Schibsted Grotesk", "Space Grotesk", Inter, sans-serif';
     ctx.textAlign = 'center';
@@ -746,8 +749,10 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
     g.position.set(x, 2.1, z);
     g.rotation.y = ry;
     g.add(new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.5), paneMat));
+    // The frame box sits BEHIND the pane: its front face has to stay
+    // behind z = 0, or it paints over the glass (it did, for years)
     const frame = new THREE.Mesh(new THREE.BoxGeometry(1.24, 1.64, 0.07), frameMat);
-    frame.position.z = -0.012;
+    frame.position.z = -0.045;
     g.add(frame);
     [[1.24, 0.04], [0.04, 1.64]].forEach(([mw, mh]) => {
       const mull = new THREE.Mesh(new THREE.BoxGeometry(mw, mh, 0.03), frameMat);
@@ -1432,15 +1437,13 @@ export function buildPlayer(shirt, opts = {}) {
   jaw.scale.set(1, 0.8, 1);
   jaw.position.set(0, 0.06, -0.02);
   headG.add(jaw);
-  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.118, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.6), hairMat);
-  hair.scale.set(0.96, 1.08, 1.05);
-  hair.position.set(0, 0.135, 0.008);
-  hair.rotation.x = 0.22;
+  // Hair hugs the skull — a cap any bigger reads as a helmet — tilted so
+  // the forehead shows and the back of the head is covered
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.116, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.62), hairMat);
+  hair.scale.set(0.94, 1.1, 1.02);
+  hair.position.set(0, 0.128, 0.006);
+  hair.rotation.x = 0.38;
   headG.add(hair);
-  const fringe = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.035, 0.04), hairMat);
-  fringe.position.set(0, 0.2, -0.085);
-  fringe.rotation.x = -0.3;
-  headG.add(fringe);
   [-1, 1].forEach((sx) => {
     const ear = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 6), skinMat);
     ear.scale.set(0.5, 1, 0.8);

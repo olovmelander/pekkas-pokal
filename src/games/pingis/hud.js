@@ -235,6 +235,7 @@ export function buildHud(root, { mouse }) {
       el.intro.classList.add('show');
     },
     showPanel(html, cls = '') {
+      el.overlay.classList.toggle('pg-low', cls === 'pg-final');
       el.panel.className = `pb-panel pg-card ${cls}`;
       el.panel.innerHTML = html;
       el.overlay.classList.add('show');

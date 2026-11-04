@@ -93,11 +93,21 @@
   50% { opacity: 0.55; transform: scale(1.06); }
 }
 
+/* The start and summary panels own the screen: no score bar behind them */
+.lr-ui[data-phase='idle'] .lr-top,
+.lr-ui[data-phase='over'] .lr-chips {
+  opacity: 0;
+}
+
+.lr-top {
+  transition: opacity 0.3s ease;
+}
+
 /* Piece chips: one per piece of the evening, plus the locked Pokal. On a
    phone they get their own row under the task card. */
 .lr-chips {
   position: absolute;
-  top: 126px; /* relative to the top bar: just under the task card */
+  top: 144px; /* relative to the top bar: just under the task card */
   left: -4px;
   display: flex;
   gap: 4px;
@@ -433,8 +443,9 @@
   align-items: center;
   justify-content: center;
   min-height: 46px;
-  padding: 0.5rem 1.3rem;
+  padding: 0.45rem 1.2rem;
   border-radius: 999px;
+  white-space: nowrap;
   font-size: 0.74rem;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -1171,6 +1182,7 @@
   }
 
   .lr-ui.lr-wide .lr-verdict {
+    top: calc(50% + 24px); /* below the score */
     width: 300px;
     padding: 12px 14px;
   }

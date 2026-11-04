@@ -735,28 +735,29 @@ function buildKiln(metal) {
   chamber.position.set(0, 1.145, 0.1);
   g.add(chamber);
 
-  // The door, hinged on its left edge
+  // The door, hinged on its right edge: it swings open away from the
+  // camera's view into the chamber
   const hinge = new THREE.Group();
-  hinge.position.set(-0.5, 1.15, 0.72);
+  hinge.position.set(0.54, 1.15, 0.72);
   const db = new Batch();
-  db.add(new THREE.BoxGeometry(1.04, 1.18, 0.13), 0x4f4e55, [0.52, 0, 0]);
-  db.add(new THREE.BoxGeometry(0.9, 1.02, 0.03), 0xd8c6a6, [0.52, 0, -0.075]);
-  db.add(new THREE.CylinderGeometry(0.025, 0.025, 0.32, 6), 0x9a9aa2, [0.95, 0, 0.12]);
-  db.add(new THREE.BoxGeometry(0.04, 0.04, 0.1), 0x9a9aa2, [0.95, 0.13, 0.08]);
-  db.add(new THREE.BoxGeometry(0.04, 0.04, 0.1), 0x9a9aa2, [0.95, -0.13, 0.08]);
+  db.add(new THREE.BoxGeometry(1.04, 1.18, 0.13), 0x4f4e55, [-0.52, 0, 0]);
+  db.add(new THREE.BoxGeometry(0.9, 1.02, 0.03), 0x9c8467, [-0.52, 0, -0.075]);
+  db.add(new THREE.CylinderGeometry(0.025, 0.025, 0.32, 6), 0x9a9aa2, [-0.95, 0, 0.12]);
+  db.add(new THREE.BoxGeometry(0.04, 0.04, 0.1), 0x9a9aa2, [-0.95, 0.13, 0.08]);
+  db.add(new THREE.BoxGeometry(0.04, 0.04, 0.1), 0x9a9aa2, [-0.95, -0.13, 0.08]);
   const door = db.mesh(metal);
   door.castShadow = true;
   hinge.add(door);
   const glowMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
   const spy = new THREE.Mesh(new THREE.CircleGeometry(0.045, 12), glowMat);
-  spy.position.set(0.52, 0.18, 0.068);
+  spy.position.set(-0.52, 0.18, 0.068);
   hinge.add(spy);
   g.add(hinge);
   // Seams that leak light around the closed door
   const seams = new Batch();
   seams.add(new THREE.BoxGeometry(1.06, 0.025, 0.02), 0xffffff, [0, 1.75, 0.705]);
   seams.add(new THREE.BoxGeometry(1.06, 0.025, 0.02), 0xffffff, [0, 0.555, 0.705]);
-  seams.add(new THREE.BoxGeometry(0.025, 1.2, 0.02), 0xffffff, [0.535, 1.15, 0.705]);
+  seams.add(new THREE.BoxGeometry(0.025, 1.2, 0.02), 0xffffff, [-0.51, 1.15, 0.705]);
   const seamMesh = seams.mesh(glowMat);
   g.add(seamMesh);
 
@@ -853,8 +854,10 @@ export function buildStudio() {
       [Math.sin(a) * 0.12, 0, -Math.cos(a) * 0.12]);
   });
   steel.add(new THREE.CylinderGeometry(0.08, 0.1, 0.06, 10), 0x3a393e, [reveal.x, 0.99, reveal.z]);
-  const banding = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.035, 28), metal);
-  banding.geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(banding.geometry.attributes.position.count * 3).fill(0.5), 3));
+  const banding = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.36, 0.36, 0.035, 28),
+    new THREE.MeshStandardMaterial({ color: 0x8c8a86, roughness: 0.62, metalness: 0.35 })
+  );
   banding.position.set(reveal.x, 1.035, reveal.z);
   banding.castShadow = true;
   g.add(banding);
