@@ -121,7 +121,8 @@ export class Foe {
     this.planted = false;
     this.fresh = true;
     this.mode = '';
-    this.react = { kind: '', t: 9, dur: 0 };
+    this.react = { kind: '', t: 9, dur: 0, power: 0 };
+    this.modeT = 0;
     this.expr = '';
     this.mood = '';
     this._v = new THREE.Vector3();
@@ -133,10 +134,14 @@ export class Foe {
     this._fist = new THREE.Vector3();
   }
 
-  /** A moment to react to: 'point' (his), 'lost', 'smash', 'matchWon', 'matchLost'. */
-  cue(kind) {
+  /**
+   * A moment to react to: 'point' (his), 'lost', 'smash', 'matchWon',
+   * 'matchLost'. `power` (0..1) is how much the point meant — a long rally
+   * gets a grin, not a smile.
+   */
+  cue(kind, power = 0.5) {
     const dur = { point: 1.3, lost: 1.2, smash: 0.7, matchWon: 3, matchLost: 2.5 }[kind] ?? 1;
-    this.react = { kind, t: 0, dur };
+    this.react = { kind, t: 0, dur, power };
   }
 
   setExpr(name, amount = 1) {
@@ -166,7 +171,11 @@ export class Foe {
     this.pos.set(v.x, 0, v.z);
     this.root.position.copy(this.pos);
     // A new stance (or a teleport) puts the feet down where the pose has them
-    if (jump || this.mode !== v.mode) this.planted = false;
+    if (jump || this.mode !== v.mode) {
+      this.planted = false;
+      if (this.mode !== v.mode) this.modeT = 0;
+    }
+    this.modeT += dt;
     this.mode = v.mode;
     this.fresh = false;
 
@@ -206,6 +215,10 @@ export class Foe {
         pose.chest[0] += reachLean * 0.4;
         pose.hipsPos[1] -= reachLean * 0.12;
       }
+      if (v.mode === 'intro') {
+        // A nod to the camera as the card comes up
+        pose.head[0] += Math.sin(smoothstep(0.5, 1.1, this.modeT) * Math.PI) * 0.2;
+      }
       if (reacting === 'lost') {
         // Shoulders drop, a shake of the head
         pose.chest[0] += 0.12 * env;
@@ -236,7 +249,7 @@ export class Foe {
     }
 
     /* Face */
-    if (reacting === 'point') this.setExpr(r.dur > 1.5 ? 'grin' : 'smile', 0.9);
+    if (reacting === 'point') this.setExpr(r.power > 0.65 ? 'grin' : 'smile', 0.9);
     else if (reacting === 'lost') this.setExpr('frown', 0.8);
     else if (reacting === 'smash') this.setExpr('shout', 0.9);
     else if (reacting === 'matchWon') this.setExpr('grin', 1);

@@ -1358,17 +1358,17 @@ export async function createShooting(container) {
   const vista = { pos: new THREE.Vector3(), q: new THREE.Quaternion(), fov: 50, ox: 0, oy: 0 };
   const fp = { pos: new THREE.Vector3(), q: new THREE.Quaternion(), fov: 50 };
   const reactPose = { pos: new THREE.Vector3(), q: new THREE.Quaternion(), fov: 40 };
-  const GANG_CENTRE = new THREE.Vector3(0.45, 0.98, 2.7);
-  const REACT_DIR = new THREE.Vector3(0.24, 0.2, -1).normalize();
+  const GANG_CENTRE = new THREE.Vector3(0.5, 0.98, 2.65);
+  const REACT_DIR = new THREE.Vector3(-0.08, 0.2, -1).normalize();
   const lookM = new THREE.Matrix4();
   const lookAt = new THREE.Vector3();
   const euler = new THREE.Euler(0, 0, 0, 'YXZ');
   const applied = { fov: 0, ox: -1, oy: -1, w: 0, h: 0 };
 
   /**
-   * The establishing shot: behind the gang, up and to the right — their
-   * backs, the station, the trap house, the barn and the low sun in one
-   * frame. On desktop the panel sits right, so the scene is shifted left
+   * The establishing shot: behind the gang, up and to the right — the whole
+   * row on their fika chairs, Henrik and the trophy at the end, the
+   * station, the trap house, the barn and the low sun in one frame. On desktop the panel sits right, so the scene is shifted left
    * with a view offset; on a phone the panel is a bottom sheet, so the
    * horizon is lifted into the top of the frame instead.
    */
@@ -1382,20 +1382,14 @@ export async function createShooting(container) {
       lookAt.set(-9, 1.2, -30);
       vista.fov = 60;
       vista.ox = 0;
-      vista.oy = view.h * 0.25;
+      vista.oy = view.h * 0.3;
     } else {
-      vista.pos.set(5.6 + Math.sin(t * 0.07) * 0.6 * drift, 3.4 + Math.sin(t * 0.11) * 0.06 * drift,
-        10.6 + Math.cos(t * 0.05) * 0.3 * drift);
-      lookAt.set(-6.5, 2.2, -40);
+      vista.pos.set(2.0 + Math.sin(t * 0.07) * 0.4 * drift, 2.65 + Math.sin(t * 0.11) * 0.05 * drift,
+        9.8 + Math.cos(t * 0.05) * 0.25 * drift);
+      lookAt.set(-5.5, 1.15, -30);
       vista.fov = 44;
       vista.ox = Math.min(view.w * 0.16, 240);
       vista.oy = 0;
-    }
-    const tn = window.__ppSkytte && window.__ppSkytte.tune;
-    if (tn) {
-      vista.pos.set(...tn.pos);
-      lookAt.set(...tn.look);
-      vista.fov = tn.fov;
     }
     lookM.lookAt(vista.pos, lookAt, THREE.Object3D.DEFAULT_UP);
     vista.q.setFromRotationMatrix(lookM);
@@ -1426,7 +1420,7 @@ export async function createShooting(container) {
     const portrait = view.aspect < 0.9;
     reactPose.fov = portrait ? 52 : 38;
     const halfH = Math.tan(THREE.MathUtils.degToRad(reactPose.fov / 2)) * view.aspect;
-    const dist = THREE.MathUtils.clamp(2.9 / halfH, 3.8, 10);
+    const dist = THREE.MathUtils.clamp(2.9 / halfH, 3.8, 8.5);
     reactPose.pos.copy(GANG_CENTRE).addScaledVector(REACT_DIR, dist);
     reactPose.pos.x += Math.sin(t * 0.3) * 0.06;
     lookM.lookAt(reactPose.pos, GANG_CENTRE, THREE.Object3D.DEFAULT_UP);
@@ -1613,10 +1607,11 @@ export async function createShooting(container) {
     const seen = camBlend < 0.999 || reaction.k > 0.001;
     gang.group.visible = seen;
     if (!seen) return;
-    // On the camera's flights and in the reaction shot they watch the
-    // shooter's station; in the vista they get on with their fika
-    const watching = (camBlend > 0.02 && camBlend < 0.999) || reaction.k > 0.001;
-    gang.lookAt(watching ? stationEye : null);
+    // On the camera's flights they watch the shooter's station; in the
+    // reaction shot they look straight at the shooter who turned round to
+    // them (the camera); in the vista they get on with their fika
+    if (reaction.k > 0.001) gang.lookAt(camera.position);
+    else gang.lookAt(camBlend > 0.02 && camBlend < 0.999 ? stationEye : null);
     gang.update(dt, t);
   }
 
@@ -1863,8 +1858,6 @@ export async function createShooting(container) {
         timers.clear();
       }
     },
-    /* TEMP vista tuning */
-    tune: null,
     gang,
     info() {
       return {

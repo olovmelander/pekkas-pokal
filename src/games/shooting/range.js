@@ -483,7 +483,12 @@ export function buildRange(rand, { envMap } = {}) {
   // (1.5 cm up: far enough above the ground plane to never z-fight, even on
   // a 16-bit depth buffer at vista distance)
   props.put(new THREE.CircleGeometry(1.7, 20), 0x9c8757, { at: [0, 0.015, 0], rot: [-Math.PI / 2, 0, 0] });
-  props.put(box(1.7, 0.05, 1.7), 0x2e3338, { at: [0, 0.025, 0] });
+  // The station's platform: weathered decking, plank by plank
+  const plankRand = mulberry(31);
+  for (let i = 0; i < 7; i++) {
+    const tone = new THREE.Color(0x8a7a5e).offsetHSL(0, (plankRand() - 0.5) * 0.06, (plankRand() - 0.5) * 0.08);
+    props.put(box(0.235, 0.06, 1.7), tone, { at: [-0.75 + i * 0.25, 0.03, 0], darken: 0.5 });
+  }
   // The gun rest rail in front of the station
   props.put(box(2.5, 0.09, 0.09), 0x6b5136, { at: [0, 0.88, -1.15] });
   [-1.15, 1.15].forEach((x) => props.put(cyl(0.05, 0.06, 0.88, 5), 0x5a422c, { at: [x, 0.44, -1.15] }));

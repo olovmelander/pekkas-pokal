@@ -30,6 +30,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createPerson, appearanceFor, POSES, mixPoses, createCrowd, WALK_STRIDE } from '../shared/people.js';
 import { buildFieldEasels, mulberry } from './garden.js';
+import { ARTWORKS } from './artworks.js';
 
 const TAU = Math.PI * 2;
 const UP = new THREE.Vector3(0, 1, 0);
@@ -55,25 +56,26 @@ const FIST = 0.08;
  */
 const PAINTERS = [
   {
-    name: 'Per Olsson', at: [-1.0, -4.75], face: -0.8, detail: 'high',
+    name: 'Per Olsson', work: 'stjarnenatten', at: [-1.0, -4.75], face: -0.8, detail: 'high',
     // Per came as Hans Hedberg: the red beret (the bun tucked under it), and
     // a ceramicist's apron over a linen shirt
     look: { hair: { style: 'crop' }, headwear: { style: 'beret', color: 0xa8202c }, outfit: { top: 'apron', topColor: 0xe4dac6, accent: 0x6b4a2e, bottom: 'trousers', bottomColor: 0x4a4038, shoes: 'leather' } }
   },
   {
-    name: 'Olov Melander', at: [0.45, -5.8], face: 1.6, detail: 'high',
+    // Olov drew Skriet out of the hat — and won with it
+    name: 'Olov Melander', work: 'skriet', at: [0.45, -5.8], face: 1.6, detail: 'high',
     look: { outfit: { top: 'shirt', topColor: 0x2f4f6e, bottom: 'trousers', bottomColor: 0x3a3f4a, shoes: 'leather' } }
   },
   {
-    name: 'Per Vikman', at: [-3.6, -7.0], face: -0.9, detail: 'low',
+    name: 'Per Vikman', work: 'monalisa', at: [-3.6, -7.0], face: -0.9, detail: 'low',
     look: { outfit: { top: 'shirt', topColor: 0x7a2e2a, bottom: 'trousers', bottomColor: 0x5a5348, shoes: 'leather' } }
   },
   {
-    name: 'Henrik Lundqvist', at: [1.8, -8.1], face: 1.5, detail: 'low',
+    name: 'Henrik Lundqvist', work: 'nattvarden', at: [1.8, -8.1], face: 1.5, detail: 'low',
     look: { outfit: { top: 'sweater', topColor: 0x3f6a4a, bottom: 'trousers', bottomColor: 0x4a5a72 } }
   },
   {
-    name: 'Viktor Jones', at: [-1.2, -8.4], face: -0.75, detail: 'low',
+    name: 'Viktor Jones', work: 'parlorhange', at: [-1.2, -8.4], face: -0.75, detail: 'low',
     look: { outfit: { top: 'shirt', topColor: 0xe8e0cf, bottom: 'trousers', bottomColor: 0x2a2e38, shoes: 'leather' } }
   }
 ];
@@ -156,6 +158,42 @@ function penGeometry() {
     { geo: new THREE.CylinderGeometry(0.0045, 0.0045, 0.13, 6), color: 0x18181a, m: M4([0, 0.02, 0]) },
     { geo: new THREE.ConeGeometry(0.0045, 0.015, 6), color: 0xc9a24a, m: M4([0, 0.092, 0]) }
   ]);
+}
+
+/**
+ * A painter's canvas so far, as a grid of vertex colours: the motif's
+ * regions filled flat in roughly the master's colours (they are amateurs,
+ * and a beer or two in), with the last few regions still bare linen.
+ */
+function workInProgress(work, seed, cols = 16, rows = 18) {
+  const cv = document.createElement('canvas');
+  cv.width = cols * 4;
+  cv.height = rows * 4;
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  const r = mulberry(seed);
+  ctx.fillStyle = '#d8cfba';
+  ctx.fillRect(0, 0, cv.width, cv.height);
+  const done = Math.ceil(work.regions.length * (0.6 + r() * 0.3));
+  work.regions.forEach((rg, i) => {
+    if (i >= done) return;
+    const c = new THREE.Color(rg.color).offsetHSL((r() - 0.5) * 0.04, (r() - 0.5) * 0.12, (r() - 0.5) * 0.08);
+    ctx.fillStyle = `#${c.getHexString()}`;
+    ctx.beginPath();
+    rg.path(ctx, cv.width, cv.height);
+    ctx.fill();
+  });
+  // Sample the middle of each 4×4 cell
+  const px = ctx.getImageData(0, 0, cv.width, cv.height).data;
+  const colors = new Float32Array(cols * rows * 3);
+  const c = new THREE.Color();
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const k = ((y * 4 + 2) * cv.width + (x * 4 + 2)) * 4;
+      c.setRGB(px[k] / 255, px[k + 1] / 255, px[k + 2] / 255, THREE.SRGBColorSpace);
+      colors.set([c.r, c.g, c.b], (y * cols + x) * 3);
+    }
+  }
+  return { cols, rows, colors };
 }
 
 /* ------------------------------------------------------------- helpers */
@@ -291,8 +329,27 @@ class Painter {
   }
 
   update(dt, t, ctx) {
+    this.advance(dt);
+    const w = this.goals(dt, t, ctx);
+    this.ikW = ease(this.ikW, w.ik, w.ik ? 7 : 5, dt);
+    this.lean = ease(this.lean, w.lean, 4, dt);
+    this.back = ease(this.back, w.back, 3, dt);
+    this.salute = ease(this.salute, w.salute, 6, dt);
+    this.tip.lerp(this.tipGoal, 1 - Math.exp(-dt * 22));
+    this.look.lerp(this.lookGoal, 1 - Math.exp(-dt * 9));
     const p = this.person;
-    const { bones } = p;
+    p.setPose(this.bodyPose(t), 1);
+    p.root.updateMatrixWorld(true);
+    this.updatePalette();
+    if (this.ikW > 0.005) this.brushArm();
+    p.lookAt(this.look, 1);
+    p.update(dt, t);
+    p.root.updateMatrixWorld(true);
+    this.updateBrush();
+  }
+
+  /** Paint for a while, then mix or step back; a hail interrupts. */
+  advance(dt) {
     this.modeT += dt;
     if (this.saluteDelay !== undefined) {
       this.saluteDelay -= dt;
@@ -305,12 +362,11 @@ class Painter {
       if (this.mode === 'paint') this.setMode(this.rand() < 0.55 ? 'mix' : 'look');
       else this.setMode('paint');
     }
+  }
 
-    /* What the brush is doing and where the eyes go */
-    let ik = 0;
-    let lean = 0;
-    let back = 0;
-    let salute = 0;
+  /** Where the bristles and the eyes go this frame, and the body's weights. */
+  goals(dt, t, ctx) {
+    const w = { ik: 0, lean: 0, back: 0, salute: 0 };
     if (this.mode === 'paint') {
       const s = this.stroke;
       s.t += dt / s.dur;
@@ -320,37 +376,33 @@ class Painter {
       const lift = s.t > 1 ? Math.sin(((s.t - 1) / 0.35) * Math.PI) * 0.05 : 0;
       this.canvasPoint(s.a[0] + (s.b[0] - s.a[0]) * k, s.a[1] + (s.b[1] - s.a[1]) * k, lift, this.tipGoal);
       this.lookGoal.copy(this.tipGoal);
-      ik = 1;
-      lean = 1;
+      w.ik = 1;
+      w.lean = 1;
     } else if (this.mode === 'mix') {
       // Circles in the middle of the palette
       const a = t * 7 + this.phase;
       this.tipGoal.copy(this.paletteTop).add(_v.set(Math.cos(a) * 0.025, 0.015, Math.sin(a) * 0.02));
       this.lookGoal.copy(this.paletteTop);
-      ik = 1;
-      lean = 0.4;
+      w.ik = 1;
+      w.lean = 0.4;
     } else if (this.mode === 'salute') {
       this.lookGoal.copy(ctx.focus);
-      salute = Math.sin(Math.min(1, this.modeT / this.modeDur) * Math.PI);
-      salute = Math.min(1, salute * 1.6);
+      w.salute = Math.min(1, Math.sin(Math.min(1, this.modeT / this.modeDur) * Math.PI) * 1.6);
     } else {
       // Stepped back, head on one side, judging their own work
       this.lookGoal.copy(this.canvasC);
-      back = 1;
+      w.back = 1;
     }
     // The judge walking past is more interesting than one's own canvas
     if (ctx.judgeWalking && this.mode !== 'salute') {
-      const d = Math.hypot(ctx.judgeHead.x - p.root.position.x, ctx.judgeHead.z - p.root.position.z);
-      if (d < 2.6) this.lookGoal.copy(ctx.judgeHead);
+      const root = this.person.root.position;
+      if (Math.hypot(ctx.judgeHead.x - root.x, ctx.judgeHead.z - root.z) < 2.6) this.lookGoal.copy(ctx.judgeHead);
     }
-    this.ikW = ease(this.ikW, ik, ik ? 7 : 5, dt);
-    this.lean = ease(this.lean, lean, 4, dt);
-    this.back = ease(this.back, back, 3, dt);
-    this.salute = ease(this.salute, salute, 6, dt);
-    this.tip.lerp(this.tipGoal, 1 - Math.exp(-dt * 22));
-    this.look.lerp(this.lookGoal, 1 - Math.exp(-dt * 9));
+    return w;
+  }
 
-    /* Body: the off arm holds the palette, the brush arm hangs or rises */
+  /** Standing at ease: the off arm holds the palette, the brush arm hangs or rises. */
+  bodyPose(t) {
     const pose = POSES.holdNotebook(t * 0.9 + this.phase, this.pose);
     const idle = POSES.idle(t * 0.8 + this.phase, this.poseB);
     for (const n of ['hips', 'spine', 'chest', 'thighL', 'thighR', 'footL', 'footR']) {
@@ -372,37 +424,35 @@ class Painter {
       }
       pose.chest[0] -= 0.05 * w;
     }
-    pose.spine[0] += 0.09 * this.lean;
+    pose.spine[0] += 0.09 * this.lean - 0.04 * this.back;
     pose.chest[0] += 0.05 * this.lean;
     pose.hipsPos[2] += 0.02 * this.lean - 0.09 * this.back;
-    pose.spine[0] -= 0.04 * this.back;
     pose.head[2] = this.tilt * this.back;
-    p.setPose(pose, 1);
+    return pose;
+  }
 
-    /* The brush arm, by IK, from where the pose left it */
-    p.root.updateMatrixWorld(true);
-    this.updatePalette();
-    if (this.ikW > 0.005) {
-      bones.handR.getWorldPosition(this.restHand);
-      bones.upperArmR.getWorldPosition(this.shoulder);
-      _v.subVectors(this.tip, this.shoulder).normalize();
-      // Wrist target: back from the bristles by the brush and the fist
-      _v2.copy(this.tip).addScaledVector(_v, -(BRUSH_OUT + FIST));
-      _v2.lerpVectors(this.restHand, _v2, this.ikW);
-      // Elbow out to the side, down and back, like anyone holding a brush
-      this.pole.set(-0.7, -0.8, -0.35).multiplyScalar(p.scale);
-      bones.chest.localToWorld(this.pole);
-      p.ikArm('R', _v2, this.pole);
-      bones.handR.rotation.set(-0.15 * this.ikW, 0, 0.12 * this.ikW);
-    }
-    p.lookAt(this.look, 1);
-    p.update(dt, t);
-    p.root.updateMatrixWorld(true);
+  /** The brush arm by IK, blended from wherever the pose left the hand. */
+  brushArm() {
+    const p = this.person;
+    const { bones } = p;
+    bones.handR.getWorldPosition(this.restHand);
+    bones.upperArmR.getWorldPosition(this.shoulder);
+    _v.subVectors(this.tip, this.shoulder).normalize();
+    // Wrist target: back from the bristles by the brush and the fist
+    _v2.copy(this.tip).addScaledVector(_v, -(BRUSH_OUT + FIST));
+    _v2.lerpVectors(this.restHand, _v2, this.ikW);
+    // Elbow out to the side, down and back, like anyone holding a brush
+    this.pole.set(-0.7, -0.8, -0.35).multiplyScalar(p.scale);
+    bones.chest.localToWorld(this.pole);
+    p.ikArm('R', _v2, this.pole);
+    bones.handR.rotation.set(-0.15 * this.ikW, 0, 0.12 * this.ikW);
+  }
 
-    /* Props */
+  /** The brush: aimed from the fist at what it paints, or resting out past the thumb. */
+  updateBrush() {
+    const p = this.person;
     p.sockets.gripR.getWorldPosition(this.grip);
-    // Resting: the brush runs out of the fist past the thumb
-    bones.handR.getWorldQuaternion(_q);
+    p.bones.handR.getWorldQuaternion(_q);
     const rest = _v.set(0, -0.55, 0.85).applyQuaternion(_q).normalize();
     if (this.salute > 0.3) rest.set(0, 1, 0);
     const aim = _v2.subVectors(this.tip, this.grip).normalize();
@@ -470,8 +520,7 @@ class Judge {
     this.bookPos = new THREE.Vector3();
     this.bookMatrix = new THREE.Matrix4();
     this.penMatrix = new THREE.Matrix4();
-    this.nod = 0;
-    this.shake = 0;
+    this.explainW = 0;
   }
 
   get walking() {
@@ -536,99 +585,114 @@ class Judge {
   }
 
   update(dt, t, ctx) {
-    const P = this.person;
-    const { bones } = P;
-    const { root } = P;
     this.t += dt;
-    let face = this.ry;
-    let walkW = 0;
-    let write = 0;
-    let chin = 0;
-    let explain = 0;
-    this.nod = 0;
-    this.shake = 0;
+    const P = this.person;
+    const { root } = P;
+    const w = this.behave(dt, t, ctx);
+    this.ry += angleTo(this.ry, w.face) * (1 - Math.exp(-dt * (this.mode === 'walk' ? 7 : 4.5)));
+    root.rotation.y = this.ry;
+    this.walkW = ease(this.walkW, w.walk, 10, dt);
+    this.writeW = ease(this.writeW, w.write, 5, dt);
+    this.chinW = ease(this.chinW, w.chin, 4, dt);
+    this.explainW = ease(this.explainW, w.explain, 5, dt);
+    this.lookPt.lerp(this.lookGoal, 1 - Math.exp(-dt * 8));
+    P.setPose(this.bodyPose(t), 1);
+    // Nods and head shakes ride on top of the pose (update() keeps them)
+    P.bones.head.rotation.x += w.nod;
+    P.bones.head.rotation.y += w.shake;
+    root.updateMatrixWorld(true);
+    this.updateBook();
+    this.penHand(t);
+    P.lookAt(this.lookPt, 1);
+    P.update(dt, t);
+    root.updateMatrixWorld(true);
+    this.updatePen();
+  }
 
+  /** What he is doing this frame: facing, and the weights of each gesture. */
+  behave(dt, t, ctx) {
+    const { root } = this.person;
+    const w = { face: this.ry, walk: 0, write: 0, chin: 0, explain: 0, nod: 0, shake: 0 };
+    const towards = (v) => Math.atan2(v.x - root.position.x, v.z - root.position.z);
     if (this.mode === 'walk') {
-      const w = this.walk;
-      // Trapezoid speed: ease in, stride, ease out
-      const T = this.t;
-      const { dur, ramp, dist } = w;
-      const v = dist / (dur - ramp);
-      let s;
-      if (T < ramp) s = (v * T * T) / (2 * ramp);
-      else if (T < dur - ramp) s = v * (T - ramp / 2);
-      else s = dist - (v * Math.max(0, dur - T) ** 2) / (2 * ramp);
-      s = Math.min(dist, s);
-      const ds = s - w.s;
-      w.s = s;
-      const k = s / dist;
-      root.position.x = w.fx + (w.tx - w.fx) * k;
-      root.position.z = w.fz + (w.tz - w.fz) * k;
-      this.walkPhase += (ds / (WALK_STRIDE * P.scale)) * TAU;
-      const speed = ds / Math.max(dt, 1e-4);
-      walkW = Math.min(1, speed / 0.9);
-      face = Math.atan2(w.tx - w.fx, w.tz - w.fz);
-      // Where he is going, at eye height
-      this.lookGoal.set(w.tx, 1.55, w.tz).addScaledVector(_v.set(w.tx - w.fx, 0, w.tz - w.fz).normalize(), 2);
-      if (T >= dur) this.arrive(this.then);
+      w.walk = this.stepWalk(dt);
+      w.face = Math.atan2(this.walk.tx - this.walk.fx, this.walk.tz - this.walk.fz);
     } else if (this.mode === 'inspect') {
-      face = Math.atan2(this.canvasC.x - root.position.x, this.canvasC.z - root.position.z);
+      w.face = towards(this.canvasC);
       // His eyes go over the whole canvas, not one spot on it
       this.lookGoal.copy(this.canvasC).add(_v.set(Math.sin(t * 0.9) * 0.38, Math.sin(t * 1.37 + 1) * 0.36, 0));
       const cyc = this.t % 4.4;
-      chin = cyc < 2.4 ? 1 : 0;
-      write = cyc >= 2.6 ? 1 : 0;
+      w.chin = cyc < 2.4 ? 1 : 0;
+      w.write = cyc >= 2.6 ? 1 : 0;
     } else if (this.mode === 'verdict') {
-      // Mostly to you, a little to the canvas
-      const cam = ctx.camera.position;
-      face = Math.atan2(cam.x - root.position.x, cam.z - root.position.z) * 0.7
-        + Math.atan2(this.canvasC.x - root.position.x, this.canvasC.z - root.position.z) * 0.3;
-      const talkFor = 2.8;
-      if (this.t > talkFor && this.t - dt <= talkFor) P.talk(0);
-      const k = Math.min(1, this.t / 2.6);
-      const fade = Math.sin(k * Math.PI);
-      const g = this.grade;
-      if (this.reduced) {
-        this.nod = 0;
-      } else if (g >= 7.5) this.nod = Math.sin(this.t * 7) * 0.13 * fade;
-      else if (g < 4.5) this.shake = Math.sin(this.t * 8) * 0.3 * fade;
-      explain = this.t < talkFor + 0.4 ? 1 : 0;
-      // Eye contact while he speaks; then a look back at the canvas
-      if (this.t < talkFor + 0.6 || (this.t % 5) < 3) this.lookGoal.copy(cam);
-      else this.lookGoal.copy(this.canvasC);
+      this.deliver(dt, ctx, w, towards);
     } else if (this.mode === 'view') {
       const v = this.viewing;
-      face = Math.atan2(v.canvasC.x - root.position.x, v.canvasC.z - root.position.z);
+      w.face = towards(v.canvasC);
       this.lookGoal.copy(v.canvasC).add(_v.set(Math.sin(t * 0.8) * 0.2, Math.sin(t * 1.1) * 0.15, 0));
-      write = this.t % 5 > 3 ? 1 : 0;
+      w.write = this.t % 5 > 3 ? 1 : 0;
       if (this.t > 5.5) this.walkTo(this.home.x, this.home.z, 'home');
     } else {
       // Home: looking round the field, now and then a note
-      face = this.home.ry;
+      w.face = this.home.ry;
       this.glanceT -= dt;
       if (this.glanceT <= 0 && this.sights.length) {
         this.glanceT = 2.2 + Math.random() * 2.8;
         this.glance = (this.glance + 1 + Math.floor(Math.random() * (this.sights.length - 1))) % this.sights.length;
       }
       if (this.sights.length) this.lookGoal.copy(this.sights[this.glance]);
-      write = this.t % 9 > 6.5 ? 1 : 0;
+      w.write = this.t % 9 > 6.5 ? 1 : 0;
       if (this.stroll && this.strollSpots.length && this.t > this.strollNext) {
         this.strollNext = 7 + Math.random() * 5;
-        const spot = this.strollSpots[Math.floor(Math.random() * this.strollSpots.length)];
-        this.viewing = spot;
-        this.walkTo(spot.x, spot.z, 'view', 1.1);
+        this.viewing = this.strollSpots[Math.floor(Math.random() * this.strollSpots.length)];
+        this.walkTo(this.viewing.x, this.viewing.z, 'view', 1.1);
       }
     }
+    return w;
+  }
 
-    this.ry += angleTo(this.ry, face) * (1 - Math.exp(-dt * (this.mode === 'walk' ? 7 : 4.5)));
-    root.rotation.y = this.ry;
-    this.walkW = ease(this.walkW, walkW, 10, dt);
-    this.writeW = ease(this.writeW, write, 5, dt);
-    this.chinW = ease(this.chinW, chin, 4, dt);
-    this.explainW = ease(this.explainW || 0, explain, 5, dt);
-    this.lookPt.lerp(this.lookGoal, 1 - Math.exp(-dt * 8));
+  /** One frame of walking: trapezoid speed, legs driven by distance. Returns the walk weight. */
+  stepWalk(dt) {
+    const P = this.person;
+    const w = this.walk;
+    const T = this.t;
+    const { dur, ramp, dist } = w;
+    const v = dist / (dur - ramp);
+    let s;
+    if (T < ramp) s = (v * T * T) / (2 * ramp);
+    else if (T < dur - ramp) s = v * (T - ramp / 2);
+    else s = dist - (v * Math.max(0, dur - T) ** 2) / (2 * ramp);
+    s = Math.min(dist, s);
+    const ds = s - w.s;
+    w.s = s;
+    const k = s / dist;
+    P.root.position.x = w.fx + (w.tx - w.fx) * k;
+    P.root.position.z = w.fz + (w.tz - w.fz) * k;
+    // The feet keep pace with the ground: one stride cycle per WALK_STRIDE
+    this.walkPhase += (ds / (WALK_STRIDE * P.scale)) * TAU;
+    // Where he is going, at eye height
+    this.lookGoal.set(w.tx, 1.55, w.tz).addScaledVector(_v.set(w.tx - w.fx, 0, w.tz - w.fz).normalize(), 2);
+    if (T >= dur) this.arrive(this.then);
+    return Math.min(1, ds / Math.max(dt, 1e-4) / 0.9);
+  }
 
-    /* Pose: notebook in the left hand whatever else he is doing */
+  /** The verdict: turned mostly to you, talking, nodding or shaking his head. */
+  deliver(dt, ctx, w, towards) {
+    const cam = ctx.camera.position;
+    w.face = towards(cam) * 0.7 + towards(this.canvasC) * 0.3;
+    const talkFor = 2.8;
+    if (this.t > talkFor && this.t - dt <= talkFor) this.person.talk(0);
+    const fade = Math.sin(Math.min(1, this.t / 2.6) * Math.PI);
+    if (!this.reduced && this.grade >= 7.5) w.nod = Math.sin(this.t * 7) * 0.13 * fade;
+    else if (!this.reduced && this.grade < 4.5) w.shake = Math.sin(this.t * 8) * 0.3 * fade;
+    w.explain = this.t < talkFor + 0.4 ? 1 : 0;
+    // Eye contact while he speaks; then now and again a look back at the canvas
+    if (this.t < talkFor + 0.6 || this.t % 5 < 3) this.lookGoal.copy(cam);
+    else this.lookGoal.copy(this.canvasC);
+  }
+
+  /** Notebook in the left hand whatever else he is doing; gestures and walking on top. */
+  bodyPose(t) {
     const stand = POSES.holdNotebook(t, this.pose);
     // The book up at the chest, where he can read it
     stand.upperArmL[0] = -0.32;
@@ -647,62 +711,54 @@ class Judge {
     stand.gripR = 0.85;
     if (this.explainW > 0.001) {
       const ex = POSES.explain(t, this.poseC);
-      const w = this.explainW;
+      const k = this.explainW;
       for (const n of ['upperArmR', 'forearmR', 'handR', 'chest']) {
-        for (let i = 0; i < 3; i++) stand[n][i] += (ex[n][i] - stand[n][i]) * w;
+        for (let i = 0; i < 3; i++) stand[n][i] += (ex[n][i] - stand[n][i]) * k;
       }
-      stand.gripR += (ex.gripR - stand.gripR) * w;
+      stand.gripR += (ex.gripR - stand.gripR) * k;
     }
-    let pose = stand;
-    if (this.walkW > 0.001) {
-      const wk = POSES.walk(this.walkPhase, this.poseC);
-      takeArm(wk, stand, 'L');
-      pose = mixPoses(stand, wk, this.walkW, this.poseB);
-    }
-    P.setPose(pose, 1);
-    if (this.nod) bones.head.rotation.x += this.nod;
-    if (this.shake) bones.head.rotation.y += this.shake;
+    if (this.walkW <= 0.001) return stand;
+    const wk = POSES.walk(this.walkPhase, this.poseC);
+    takeArm(wk, stand, 'L');
+    return mixPoses(stand, wk, this.walkW, this.poseB);
+  }
 
-    /* The pen hand: to the chin, or writing in the book */
-    root.updateMatrixWorld(true);
-    this.updateBook();
+  /** The pen hand by IK: knuckles under the chin, or writing in the book. */
+  penHand(t) {
     const reach = Math.max(this.writeW, this.chinW);
-    if (reach > 0.005) {
-      bones.handR.getWorldPosition(this.handRest);
-      const goal = this.handGoal;
-      if (this.chinW >= this.writeW) {
-        // Knuckles under the chin
-        P.sockets.face.getWorldPosition(goal);
-        goal.y -= 0.13 * P.scale;
-        goal.x += Math.sin(this.ry) * 0.03;
-        goal.z += Math.cos(this.ry) * 0.03;
-      } else {
-        // A line of handwriting across the right-hand page
-        const a = t * 5.5;
-        this.penTip.set(0.03 + ((a * 0.012) % 0.05), 0.012, -0.05 + Math.sin(a * 3) * 0.006).applyMatrix4(this.bookMatrix);
-        bones.upperArmR.getWorldPosition(goal);
-        _v.subVectors(this.penTip, goal).normalize();
-        goal.copy(this.penTip).addScaledVector(_v, -0.12);
-      }
-      this.handRest.lerp(goal, reach);
-      this.pole.set(-0.6, -0.9, 0.2).multiplyScalar(P.scale);
-      bones.chest.localToWorld(this.pole);
-      P.ikArm('R', this.handRest, this.pole);
-      bones.handR.rotation.set(-0.3 * reach, 0, 0);
+    if (reach <= 0.005) return;
+    const P = this.person;
+    const { bones } = P;
+    bones.handR.getWorldPosition(this.handRest);
+    const goal = this.handGoal;
+    if (this.chinW >= this.writeW) {
+      P.sockets.face.getWorldPosition(goal);
+      goal.y -= 0.13 * P.scale;
+      goal.x += Math.sin(this.ry) * 0.03;
+      goal.z += Math.cos(this.ry) * 0.03;
+    } else {
+      // A line of handwriting across the right-hand page
+      const a = t * 5.5;
+      this.penTip.set(0.03 + ((a * 0.012) % 0.05), 0.012, -0.05 + Math.sin(a * 3) * 0.006).applyMatrix4(this.bookMatrix);
+      bones.upperArmR.getWorldPosition(goal);
+      _v.subVectors(this.penTip, goal).normalize();
+      goal.copy(this.penTip).addScaledVector(_v, -0.12);
     }
-    P.lookAt(this.lookPt, 1);
-    P.update(dt, t);
-    root.updateMatrixWorld(true);
+    this.handRest.lerp(goal, reach);
+    this.pole.set(-0.6, -0.9, 0.2).multiplyScalar(P.scale);
+    bones.chest.localToWorld(this.pole);
+    P.ikArm('R', this.handRest, this.pole);
+    bones.handR.rotation.set(-0.3 * reach, 0, 0);
+  }
 
-    /* Pen: aimed at the page while writing, otherwise out of the fist */
+  /** Pen: aimed at the page while writing, otherwise out of the fist. */
+  updatePen() {
+    const P = this.person;
     P.sockets.gripR.getWorldPosition(this.grip);
-    bones.handR.getWorldQuaternion(_q);
-    const rest = _v.set(0, -0.4, 0.9).applyQuaternion(_q).normalize();
-    if (this.writeW > 0.01) {
-      const aim = _v2.subVectors(this.penTip, this.grip).normalize();
-      rest.lerp(aim, this.writeW).normalize();
-    }
-    aimMatrix(this.grip, rest, this.penMatrix);
+    P.bones.handR.getWorldQuaternion(_q);
+    const dir = _v.set(0, -0.4, 0.9).applyQuaternion(_q).normalize();
+    if (this.writeW > 0.01) dir.lerp(_v2.subVectors(this.penTip, this.grip).normalize(), this.writeW).normalize();
+    aimMatrix(this.grip, dir, this.penMatrix);
   }
 
   /** The notebook lies open in the left hand, tipped up toward his eyes. */
@@ -744,14 +800,16 @@ export function buildCast({ lowTier = false, safe = false, reduced = false, home
   });
   const crowd = createCrowd({ seats, names: BACK_ROW.names, seed, castShadow: true, hats: 0 });
   group.add(crowd.root);
-  const backEasels = seats.map((s) => {
+  const backEasels = seats.map((s, i) => {
     const f = s.rotationY;
     const ex = s.position.x + Math.sin(f) * 0.66 - Math.cos(f) * 0.24;
     const ez = s.position.z + Math.cos(f) * 0.66 + Math.sin(f) * 0.24;
-    return { x: ex, z: ez, ry: Math.atan2(s.position.x - ex, s.position.z - ez) };
+    return { x: ex, z: ez, ry: Math.atan2(s.position.x - ex, s.position.z - ez), art: workInProgress(ARTWORKS[i % ARTWORKS.length], seed + 31 * i) };
   });
-
-  const easels = buildFieldEasels([...painters.map((p) => p.easel), ...backEasels]);
+  const easels = buildFieldEasels([
+    ...painters.map((p, i) => ({ ...p.easel, art: workInProgress(ARTWORKS.find((w) => w.id === PAINTERS[i].work) || ARTWORKS[0], seed + i) })),
+    ...backEasels
+  ]);
   group.add(easels);
 
   // From home he watches what is in front of him: your easel, the hat, and

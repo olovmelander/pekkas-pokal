@@ -406,6 +406,46 @@ function ledDisplay() {
   return { tex, draw };
 }
 
+/**
+ * Contact shadows: soft dark ovals where furniture meets the floor. Only the
+ * window light casts real shadows, so in the shade nothing else would ground
+ * the wheel, the kiln or the stools. All of them are one merged mesh (one
+ * draw call), a few millimetres up and pulled forward in depth so they never
+ * fight the tiles.
+ */
+function contactShadows(spots) {
+  const [cv, ctx] = canvas(64, 64);
+  const g = ctx.createRadialGradient(32, 32, 2, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255,255,255,0.85)');
+  g.addColorStop(0.5, 'rgba(255,255,255,0.45)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+  const tex = new THREE.CanvasTexture(cv);
+  const parts = spots.map(([x, z, sx, sz, ry = 0]) => {
+    const q = new THREE.PlaneGeometry(1, 1);
+    q.rotateX(-Math.PI / 2);
+    q.scale(sx, 1, sz);
+    q.rotateY(ry);
+    q.translate(x, 0.003, z);
+    return q;
+  });
+  const geo = mergeGeometries(parts, false);
+  parts.forEach((q) => q.dispose());
+  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+    color: 0x0d0603,
+    alphaMap: tex,
+    transparent: true,
+    opacity: 0.7,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -2
+  }));
+  mesh.renderOrder = 1;
+  return mesh;
+}
+
 /** Soft round sprite for points (motes, droplets, embers). */
 export function dotTexture() {
   const [cv, ctx] = canvas(64, 64);
@@ -766,6 +806,12 @@ export function buildStudio() {
   g.add(outside);
   addWindowFrame(wood);
 
+  /* Contact shadows under the furniture: [x, z, width, depth, turn] */
+  g.add(contactShadows([
+    [0, 0, 2.9, 2.9], [4.5, -2.6, 2.3, 2.1, -0.55], [2.55, -0.75, 1.2, 1.2], [-4.6, -1.9, 2.6, 1.6, 0.35],
+    [-7.3, -2.6, 3.6, 1.3, 1.1], [6.6, -4.4, 3.6, 1.2, -0.38], [-1.75, 1.0, 0.75, 0.75], [-1.7, -4.9, 2.0, 0.9]
+  ]));
+
   /* Shelves with fired pots, framing the room */
   addShelfUnit(wood, glossy, -7.3, -2.6, 1.1, 7);
   addShelfUnit(wood, glossy, 6.6, -4.4, -0.38, 20);
@@ -851,8 +897,13 @@ export function buildStudio() {
   glossMesh.castShadow = true;
   g.add(glossMesh);
 
-  /* Sun direction: from the window centre onto the wheel */
-  const sunDir = new THREE.Vector3(-WIN.x, -1.35, 5.5).normalize();
+  /*
+   * Sun direction: low (≈14°) through the window centre. The upper part of
+   * the beam rakes the whole clay column from the left; the lower part runs
+   * on past the wheel and lays the arch of the window on the floor in front
+   * of it, with the wheel's and the clay's shadows cut into it.
+   */
+  const sunDir = new THREE.Vector3(4.4, -1.9, 5.6).normalize();
   const shaft = buildShaft(sunDir, 6.2);
   g.add(shaft);
 
@@ -896,6 +947,8 @@ export function buildStudio() {
     reveal,
     banding,
     sill,
+    // Everything the sun's shadow camera must cover: the room, walls included
+    room: new THREE.Box3(new THREE.Vector3(-8.6, -0.1, -5.7), new THREE.Vector3(8.6, 8.1, 12.6)),
     lampPos: lamp.position.clone().add(new THREE.Vector3(0, -0.12, 0))
   };
 }
@@ -977,17 +1030,42 @@ export function buildWheel() {
 
 /* -------------------------------------------------------- hands and tools */
 
+/** A capsule from a to b whose radius runs from ra (at a) to rb (at b). */
+function limb(a, b, ra, rb, radial = 10) {
+  const axis = new THREE.Vector3().subVectors(b, a);
+  const len = axis.length();
+  const r = Math.max(ra, rb);
+  const geo = new THREE.CapsuleGeometry(r, Math.max(0.001, len), 4, radial);
+  // Taper: scale each ring by where it sits along the bone (y runs −len/2 … len/2)
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const t = Math.max(0, Math.min(1, pos.getY(i) / len + 0.5));
+    const k = (ra + (rb - ra) * t) / r;
+    pos.setX(i, pos.getX(i) * k);
+    pos.setZ(i, pos.getZ(i) * k);
+  }
+  geo.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis.normalize()));
+  geo.translate((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
+  geo.computeVertexNormals();
+  return geo;
+}
+
 /**
  * A stylised right hand reaching in from the potter's side: palm toward the
- * camera, four fingers stacked and pointing at the clay, thumb under them,
- * forearm trailing out of frame. The fingertips wear a coat of slip. The
- * contact point (fingertip pads) is the local origin; mirror with
- * scale.x = -1 for the left side.
+ * camera, four tapered fingers stacked and pointing at the clay, knuckles,
+ * the thumb tucked under them, and the forearm running out to a rolled
+ * linen sleeve and the upper arm, which leave the frame toward the viewer —
+ * so no cut-off limb ever floats in the picture. The fingertips wear a coat
+ * of slip. The contact point (fingertip pads) is the local origin; mirror
+ * with scale.x = −1 for the left side. The skin is the same soft, sheened
+ * material family as the people in every game.
  */
 export function buildHand() {
   const b = new Batch();
   const skin = new THREE.Color(0xd8a07a);
+  const linen = new THREE.Color(0xd9ccb2);
   const slip = new THREE.Color(0x9c5a36);
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
   const fingers = [
     [0.075, 0.25, 0.04],
     [0.025, 0.28, 0.045],
@@ -995,23 +1073,25 @@ export function buildHand() {
     [-0.072, 0.22, 0.04]
   ];
   fingers.forEach(([y, len, rad], i) => {
-    const geo = new THREE.CapsuleGeometry(rad, len, 4, 8);
-    geo.rotateZ(Math.PI / 2);
-    b.add(geo, skin, [len / 2 + rad + 0.005, y * 1.15, 0.02 - i * 0.012]);
+    const yy = y * 1.15;
+    const z = 0.02 - i * 0.012;
+    // Tip at the clay, base at the knuckle; a touch thinner at the tip
+    b.add(limb(V(rad * 0.9 + 0.005, yy, z), V(len + rad, yy, z), rad * 0.82, rad), skin);
+    b.add(new THREE.SphereGeometry(rad * 1.12, 10, 8), skin, [len + rad + 0.02, yy, z + 0.01]);
   });
-  const thumb = new THREE.CapsuleGeometry(0.045, 0.18, 4, 8);
-  thumb.rotateZ(Math.PI / 2 + 0.6);
-  b.add(thumb, skin, [0.2, -0.15, 0.05]);
-  b.add(new THREE.SphereGeometry(0.16, 12, 10), skin, [0.36, -0.01, 0], [0, 0, 0], [0.75, 1.0, 0.5]);
-  // Forearm: from the wrist, down and out toward the potter
-  const wrist = new THREE.Vector3(0.44, -0.07, 0.02);
-  const elbow = new THREE.Vector3(1.3, -0.72, 0.55);
-  const axis = elbow.clone().sub(wrist);
-  const fore = new THREE.CapsuleGeometry(0.1, axis.length() - 0.1, 4, 10);
-  fore.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis.clone().normalize()));
-  const mid = wrist.clone().add(elbow).multiplyScalar(0.5);
-  b.add(fore, skin, [mid.x, mid.y, mid.z]);
-  const mesh = b.mesh(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55 }));
+  b.add(limb(V(0.12, -0.13, 0.06), V(0.3, -0.06, 0.03), 0.04, 0.055), skin);
+  b.add(new THREE.SphereGeometry(0.16, 14, 10), skin, [0.36, -0.01, 0], [0, 0, 0], [0.75, 1.0, 0.5]);
+  // Forearm from the wrist to the elbow, then the rolled sleeve and the upper arm out of frame
+  const wrist = V(0.44, -0.07, 0.02);
+  const elbow = V(1.3, -0.72, 0.55);
+  const shoulder = V(2.3, -1.25, 2.9);
+  b.add(limb(wrist, elbow, 0.085, 0.112, 12), skin);
+  const dir = elbow.clone().sub(wrist).normalize();
+  b.add(limb(elbow.clone().addScaledVector(dir, -0.16), elbow.clone().addScaledVector(dir, 0.05), 0.135, 0.145, 14), linen);
+  b.add(limb(elbow, shoulder, 0.14, 0.17, 14), linen);
+  const mesh = b.mesh(new THREE.MeshPhysicalMaterial({
+    vertexColors: true, roughness: 0.55, metalness: 0, sheen: 0.3, sheenRoughness: 0.5, sheenColor: new THREE.Color(0.7, 0.34, 0.26)
+  }));
   // Paint the slip coat onto the fingertips: blend by distance from the tips
   const pos = mesh.geometry.attributes.position;
   const col = mesh.geometry.attributes.color;

@@ -181,6 +181,38 @@ function writeJson(key, value) {
   }
 }
 
+/**
+ * Fit a directional light's shadow camera tightly around a box. Anything
+ * outside the shadow frustum counts as SUNLIT — and in this studio the sun
+ * may only ever get in through the window — so the frustum must hold the
+ * whole room, walls and floor, whatever the sun's angle.
+ */
+function fitShadowCamera(light, box) {
+  const cam = light.shadow.camera;
+  light.updateMatrixWorld();
+  light.target.updateMatrixWorld();
+  // Same placement three uses when it renders the shadow map
+  cam.position.setFromMatrixPosition(light.matrixWorld);
+  cam.lookAt(new THREE.Vector3().setFromMatrixPosition(light.target.matrixWorld));
+  cam.updateMatrixWorld();
+  const lo = new THREE.Vector3(Infinity, Infinity, Infinity);
+  const hi = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+  const p = new THREE.Vector3();
+  for (let i = 0; i < 8; i++) {
+    p.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z);
+    p.applyMatrix4(cam.matrixWorldInverse);
+    lo.min(p);
+    hi.max(p);
+  }
+  cam.left = lo.x;
+  cam.right = hi.x;
+  cam.bottom = lo.y;
+  cam.top = hi.y;
+  cam.near = Math.max(0.1, -hi.z - 0.5);
+  cam.far = -lo.z + 0.5;
+  cam.updateProjectionMatrix();
+}
+
 /** Dispose every texture a material holds, including shader uniforms. */
 function disposeMaterial(m) {
   Object.values(m).forEach((v) => {
@@ -296,12 +328,7 @@ export async function createClay(container) {
   sun.target.position.copy(sunTarget);
   sun.castShadow = true;
   sun.shadow.mapSize.set(lowTier ? 1024 : 2048, lowTier ? 1024 : 2048);
-  sun.shadow.camera.left = -10;
-  sun.shadow.camera.right = 10;
-  sun.shadow.camera.top = 8;
-  sun.shadow.camera.bottom = -8;
-  sun.shadow.camera.near = 4;
-  sun.shadow.camera.far = 44;
+  fitShadowCamera(sun, studio.room);
   sun.shadow.bias = -0.0006;
   sun.shadow.normalBias = 0.025;
   sun.shadow.radius = 3;

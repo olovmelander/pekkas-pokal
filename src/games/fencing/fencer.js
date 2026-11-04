@@ -272,6 +272,8 @@ const _q2 = new THREE.Quaternion();
 const _m = new THREE.Matrix4();
 const _m2 = new THREE.Matrix4();
 const _s = new THREE.Vector3();
+const _wc = new THREE.Vector3();
+const FWD_L = new THREE.Vector3(0, 0, 1);
 
 /** Rotation taking local unit vector a→A and (the part of) b→B. */
 function frameQuat(a, A, b, B, out) {
@@ -284,7 +286,7 @@ function frameQuat(a, A, b, B, out) {
   const wb = _s.copy(B).addScaledVector(wa, -B.dot(wa));
   if (wb.lengthSq() < 1e-10) wb.set(wa.y, -wa.x, 0).add(_v3.set(0, wa.z, -wa.y)); // any perpendicular
   wb.normalize();
-  const wc = new THREE.Vector3().crossVectors(wa, wb);
+  const wc = _wc.crossVectors(wa, wb);
   _m2.makeBasis(wa, wb, wc);
   _m.transpose();
   _m2.multiply(_m);
@@ -317,6 +319,11 @@ export class Fencer {
     this.qb = BLEND.map(() => new THREE.Quaternion());
     this.ha = new THREE.Vector3();
     this.hb = new THREE.Vector3();
+    // Scratch vectors for the per-frame solve (no garbage every frame)
+    this.pool = Array.from({ length: 48 }, () => new THREE.Vector3());
+    this.qpool = Array.from({ length: 4 }, () => new THREE.Quaternion());
+    this.pi = 0;
+    this.qi = 0;
 
     this.mats = {
       grille: new THREE.MeshStandardMaterial({
@@ -337,6 +344,15 @@ export class Fencer {
     this.blade = foil.blade;
     this.bladeRest = foil.rest;
     this.button = foil.button;
+    // The fencing glove on the sword hand: a padded white fist and a long
+    // gauntlet cuff over the sleeve
+    const gloveGeo = new THREE.SphereGeometry(1, 12, 9);
+    gloveGeo.scale(0.047, 0.056, 0.05);
+    this.glove = new THREE.Mesh(gloveGeo, this.mats.pad);
+    this.glove.castShadow = true;
+    const cuffGeo = new THREE.CylinderGeometry(0.056, 0.047, 0.1, 12, 1, true);
+    this.cuff = new THREE.Mesh(cuffGeo, this.mats.pad);
+    this.cuff.castShadow = true;
     // Foil space → fist space: +x along the blade, +y the way it bows
     this.foilQ = frameQuat(new THREE.Vector3(1, 0, 0), BLADE_L, new THREE.Vector3(0, 1, 0), BOW_L, new THREE.Quaternion());
     this.person = null;
@@ -357,6 +373,8 @@ export class Fencer {
     this.s = p.scale;
     this.group.add(p.root);
     p.attach(this.foil, `grip${this.hand}`, { quaternion: this.foilQ });
+    p.attach(this.glove, `grip${this.hand}`, { position: [0, 0.008 * p.scale, 0], scale: p.scale });
+    p.attach(this.cuff, `forearm${this.hand}`, { position: [0, -0.215 * p.scale, 0.004 * p.scale], scale: p.scale });
     const { lame } = p.materials;
     if (lame) {
       // Lamé is woven metal: duller than a mirror, so the sun leaves a sheen
@@ -429,9 +447,23 @@ export class Fencer {
     this.person.setPose(w.pose, 1);
   }
 
+  V() {
+    const v = this.pool[this.pi];
+    this.pi = (this.pi + 1) % this.pool.length;
+    return v;
+  }
+
+  Q() {
+    const q = this.qpool[this.qi];
+    this.qi = (this.qi + 1) % this.qpool.length;
+    return q;
+  }
+
   /** Place every joint from a pose vector. */
   apply(p) {
     const { person } = this;
+    this.pi = 0;
+    this.qi = 0;
     const { root } = person;
     const relax = clamp(p[P.relax], 0, 1);
     const duelYaw = (this.mx * Math.PI) / 2;
@@ -486,29 +518,29 @@ export class Fencer {
     const footQ = (toe, pitch, out) => {
       const c = Math.cos(pitch);
       const sn = Math.sin(pitch);
-      const fwd = this._dir(toe[0] * c, sn, toe[2] * c, _v3.set(0, 0, 0)).clone();
-      const up = this._dir(-toe[0] * sn, c, -toe[2] * sn, new THREE.Vector3());
-      return frameQuat(new THREE.Vector3(0, 0, 1), fwd, UP_L, up, out);
+      const fwd = this._dir(toe[0] * c, sn, toe[2] * c, this.V());
+      const up = this._dir(-toe[0] * sn, c, -toe[2] * sn, this.V());
+      return frameQuat(FWD_L, fwd, UP_L, up, out);
     };
-    const ff = this._toWorld(p[P.ffx], p[P.ffy] + lift(p[P.ffp]), FOOT_Z * s, new THREE.Vector3());
-    const fPole = this._toWorld(p[P.ffx] + 0.5 * s, p[P.ffy] + 0.6 * s, 0.08 * s, new THREE.Vector3());
+    const ff = this._toWorld(p[P.ffx], p[P.ffy] + lift(p[P.ffp]), FOOT_Z * s, this.V());
+    const fPole = this._toWorld(p[P.ffx] + 0.5 * s, p[P.ffy] + 0.6 * s, 0.08 * s, this.V());
     person.ikLeg(this.hand, ff, fPole, footQ([1, 0, 0.04], p[P.ffp], _q));
     const toe = [0.28, 0, -0.96];
-    const bf = this._toWorld(p[P.bfx], p[P.bfy] + lift(p[P.bfp]), -FOOT_Z * s, new THREE.Vector3());
-    const bPole = this._toWorld(p[P.bfx] + 0.35 * s, p[P.bfy] + 0.55 * s, -0.75 * s, new THREE.Vector3());
+    const bf = this._toWorld(p[P.bfx], p[P.bfy] + lift(p[P.bfp]), -FOOT_Z * s, this.V());
+    const bPole = this._toWorld(p[P.bfx] + 0.35 * s, p[P.bfy] + 0.55 * s, -0.75 * s, this.V());
     person.ikLeg(this.rear, bf, bPole, footQ(toe, p[P.bfp], _q));
 
     /* Weapon arm: the fist where the pose says, the foil along fa / fyaw */
     const [sx, sy] = this.shoulderAt(p);
-    const grip = this._toWorld(sx + p[P.hx], sy + p[P.hy], this.sh.z + HAND_Z * s, new THREE.Vector3());
+    const grip = this._toWorld(sx + p[P.hx], sy + p[P.hy], this.sh.z + HAND_Z * s, this.V());
     const fa = p[P.fa];
     const yaw = p[P.fyaw];
-    const dir = this._dir(Math.cos(fa) * Math.cos(yaw), Math.sin(fa), -Math.cos(fa) * Math.sin(yaw), new THREE.Vector3());
-    const pole = this._toWorld(sx + 0.18 * s, sy - 0.7 * s, this.sh.z + 0.02 * s, new THREE.Vector3());
+    const dir = this._dir(Math.cos(fa) * Math.cos(yaw), Math.sin(fa), -Math.cos(fa) * Math.sin(yaw), this.V());
+    const pole = this._toWorld(sx + 0.18 * s, sy - 0.7 * s, this.sh.z + 0.02 * s, this.V());
     this._weapon(grip, dir, pole);
 
     /* Rear arm: carriage ↔ thrown back, or carrying / donning the mask */
-    const rs = this._toFencer(b[`upperArm${this.rear}`].getWorldPosition(new THREE.Vector3()), new THREE.Vector3());
+    const rs = this._toFencer(b[`upperArm${this.rear}`].getWorldPosition(this.V()), this.V());
     const back = clamp(p[P.back], -0.35, 1);
     const carriage = [-0.3, 0.25, -0.1];
     const thrown = [-0.58, -0.04, -0.07];
@@ -519,12 +551,12 @@ export class Fencer {
     // Donning: the hand rises to the face with the mask on the way
     const pull = Math.sin(Math.PI * m) ** 0.8;
     if (pull > 1e-3) {
-      const hc = this._toFencer(b.head.localToWorld(_v.copy(this.headC)), new THREE.Vector3());
+      const hc = this._toFencer(b.head.localToWorld(_v.copy(this.headC)), this.V());
       const face = [hc.x + 0.2 * s, hc.y - 0.16 * s, hc.z - 0.02 * s];
       for (let i = 0; i < 3; i++) target[i] = lerp(target[i], face[i], pull * 0.85);
     }
-    const rw = this._toWorld(target[0], target[1], target[2], new THREE.Vector3());
-    const rPole = this._toWorld(rs.x - 0.5 * s, rs.y - 0.35 * s - (1 - ms) * 0.3 * s, rs.z - 0.3 * s, new THREE.Vector3());
+    const rw = this._toWorld(target[0], target[1], target[2], this.V());
+    const rPole = this._toWorld(rs.x - 0.5 * s, rs.y - 0.35 * s - (1 - ms) * 0.3 * s, rs.z - 0.3 * s, this.V());
     // Hand: floppy and forward in the carriage, palm up when thrown back,
     // fingers down carrying the mask, palm to the face when donning
     const fing = [0, 1, 2].map((i) => lerp([0.02, -1, 0.05][i], lerp([0.62, 0.42, -0.08][i], [-1, -0.15, 0][i], clamp(back, 0, 1)), ms));
@@ -571,14 +603,14 @@ export class Fencer {
     const gx = lerp(lerp(-0.25, -0.2, down), -0.2, up);
     const gy = lerp(lerp(0.84, 0.79, down), 2.02, up);
     const gz = lerp(lerp(0.13, 0.06, down), 0.1, up);
-    const grip = local(gx, gy, gz, new THREE.Vector3());
-    const dir = ldir(lerp(lerp(-0.22, -0.08, down), -0.25, up), lerp(lerp(-0.72, -0.98, down), 1, up), lerp(lerp(0.62, 0.22, down), 0.12, up), new THREE.Vector3());
-    const pole = local(lerp(-0.7, -1.2, up), lerp(0.9, 1.7, up), lerp(-0.6, -0.1, up), new THREE.Vector3());
+    const grip = local(gx, gy, gz, this.V());
+    const dir = ldir(lerp(lerp(-0.22, -0.08, down), -0.25, up), lerp(lerp(-0.72, -0.98, down), 1, up), lerp(lerp(0.62, 0.22, down), 0.12, up), this.V());
+    const pole = local(lerp(-0.7, -1.2, up), lerp(0.9, 1.7, up), lerp(-0.6, -0.1, up), this.V());
     this._weapon(grip, dir, pole);
-    const rw = local(0.24, 0.84, 0.03, new THREE.Vector3());
-    const rPole = local(0.6, 1.1, -0.7, new THREE.Vector3());
-    const fing = ldir(0.04, -1, 0.06, new THREE.Vector3());
-    const palm = ldir(-1, 0, 0.1, new THREE.Vector3());
+    const rw = local(0.24, 0.84, 0.03, this.V());
+    const rPole = local(0.6, 1.1, -0.7, this.V());
+    const fing = ldir(0.04, -1, 0.06, this.V());
+    const palm = ldir(-1, 0, 0.1, this.V());
     // ldir already mirrors x; hand on the person's own left/right is handled in _rearHand
     this._rearHandW(rw, rPole, fing, palm);
   }
@@ -592,33 +624,33 @@ export class Fencer {
     const { person } = this;
     const b = person.bones;
     const sock = person.sockets[`grip${this.hand}`].position;
-    const bladeW = dir.clone().normalize();
-    const q = new THREE.Quaternion();
-    const wrist = new THREE.Vector3();
+    const bladeW = this.V().copy(dir).normalize();
+    const q = this.Q();
+    const wrist = this.V();
     const solve = (towardElbow) => {
       // u: perpendicular to the blade, towards the elbow and up (never degenerate)
-      const u = new THREE.Vector3();
+      const u = this.V();
       const add = (v, k) => u.addScaledVector(_v.copy(v).addScaledVector(bladeW, -v.dot(bladeW)), k);
       if (towardElbow) add(towardElbow, 1);
       add(_v2.set(0, 1, 0), 0.35);
       add(this._dir(-1, 0, 0, _v3), 0.08);
       if (u.lengthSq() < 1e-8) u.set(0, 0, 1).addScaledVector(bladeW, -bladeW.z);
       u.normalize();
-      const yW = new THREE.Vector3().copy(bladeW).multiplyScalar(COS_YB).addScaledVector(u, SIN_YB);
+      const yW = this.V().copy(bladeW).multiplyScalar(COS_YB).addScaledVector(u, SIN_YB);
       frameQuat(BLADE_L, bladeW, UP_L, yW, q);
       wrist.copy(sock).applyQuaternion(q).negate().add(grip);
       person.ikArm(this.hand, wrist, pole, q);
     };
     solve(null);
-    const elbow = b[`forearm${this.hand}`].getWorldPosition(new THREE.Vector3());
-    const hand = b[`hand${this.hand}`].getWorldPosition(new THREE.Vector3());
+    const elbow = b[`forearm${this.hand}`].getWorldPosition(this.V());
+    const hand = b[`hand${this.hand}`].getWorldPosition(this.V());
     solve(elbow.sub(hand));
   }
 
   /** Rear hand IK from fencer-frame finger/palm directions. */
   _rearHand(target, pole, fing, palm) {
-    const f = this._dir(fing[0], fing[1], fing[2], new THREE.Vector3());
-    const pl = this._dir(palm[0], palm[1], palm[2], new THREE.Vector3());
+    const f = this._dir(fing[0], fing[1], fing[2], this.V());
+    const pl = this._dir(palm[0], palm[1], palm[2], this.V());
     this._rearHandW(target, pole, f, pl);
   }
 
@@ -749,7 +781,7 @@ export class Fencer {
 
   dispose() {
     this.person.dispose();
-    for (const o of [this.mask, this.foil]) {
+    for (const o of [this.mask, this.foil, this.glove, this.cuff]) {
       o.traverse((c) => {
         if (c.geometry) c.geometry.dispose();
       });

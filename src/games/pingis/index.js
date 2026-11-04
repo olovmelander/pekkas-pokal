@@ -1206,7 +1206,7 @@ export async function createPingis(container) {
       crowd.react(rally >= 8 ? 'applause' : 'groan', power);
       if (rally >= 4) sfx.groan();
     }
-    if (foe) foe.cue(mine ? 'lost' : 'point');
+    if (foe) foe.cue(mine ? 'lost' : 'point', power);
   }
 
   /* Match-point drama: the hall dims around the table, the grade leans

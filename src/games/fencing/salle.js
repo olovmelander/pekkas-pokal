@@ -828,6 +828,7 @@ const _cr = new THREE.Matrix4();
 class Spectators {
   constructor(high) {
     this.group = new THREE.Group();
+    this.high = high;
     this.seats = crowdSeats(high);
     this.crowd = null;
     this.key = '';
@@ -843,7 +844,8 @@ class Spectators {
     if (this.crowd && key === this.key) return false;
     // Build the new crowd before disposing the old one, so the shader
     // programs stay cached and nothing recompiles
-    const next = createCrowd({ seats: this.seats, names, seed: 2023, hats: 0.06, castShadow: true });
+    // Shadows from the benches only where the GPU has room (desktop)
+    const next = createCrowd({ seats: this.seats, names, seed: 2023, hats: 0.06, castShadow: this.high });
     if (this.crowd) this.crowd.dispose();
     this.crowd = next;
     this.group.add(next.root);

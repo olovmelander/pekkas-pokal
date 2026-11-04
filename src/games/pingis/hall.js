@@ -1340,6 +1340,14 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1, profile = null 
   [-2.2, -1.5, -0.6, 0.55, 1.35, 1.95].forEach((x) => {
     refs.seats.push({ x, y: STAGE_H, z: -5.55 - rand() * 0.25, ry: (rand() - 0.5) * 0.4, pose: 'stand' });
   });
+  // The wide lens also finds the far corners of the floor: a few more on
+  // their feet there, by the fika table and the wall bars, turned to the
+  // table. A phone never sees them, so it never draws them either.
+  if (tier === 'high') {
+    [[-3.3, -3.95], [-3.8, -4.45], [3.45, -3.25], [3.3, -4.3]].forEach(([x, z]) => {
+      refs.seats.push({ x, y: 0, z, ry: Math.atan2(-x, -1 - z) + (rand() - 0.5) * 0.3, pose: 'stand' });
+    });
+  }
 
   mergeStatic(statics);
   return { group, refs, updateReflections };

@@ -172,11 +172,77 @@ function smearApron(person) {
   col.needsUpdate = true;
 }
 
+/* ------------------------------------------------------- our own poses */
+
+/** One arm up, fist clenched and pumping; the other hand stays on the hip. */
+function armUp(t, out) {
+  const p = POSES.handsOnHips(t, out);
+  const pump = Math.sin(t * 7) * 0.12;
+  p.shoulderR = [0, 0, -0.24];
+  p.upperArmR = [0.1, 0.18, -2.65 + pump * 0.4];
+  p.forearmR = [-0.42 - pump, 0, 0];
+  p.handR = [0, 0, 0];
+  p.gripR = 1;
+  p.chest = [-0.06, 0.06, 0.06];
+  p.head = [-0.12, 0, 0];
+  return p;
+}
+
+/** Forearm out, fist forward; the thumb is raised after setPose (see THUMB_UP). */
+function thumbsUp(t, out) {
+  const p = POSES.handsOnHips(t, out);
+  p.upperArmR = [-0.5, 0.3, -0.2];
+  p.forearmR = [-1.3, 0, 0];
+  p.handR = [0.1, 0, 0];
+  p.gripR = 1;
+  p.chest = [-0.03, -0.08, 0];
+  return p;
+}
+
+/** Shoulders up, forearms out, palms to the ceiling. */
+function shrug(t, out) {
+  const p = POSES.stand(t, out);
+  p.shoulderL = [0, 0, 0.3];
+  p.shoulderR = [0, 0, -0.3];
+  p.upperArmL = [0.05, -0.3, 0.26];
+  p.upperArmR = [0.05, 0.3, -0.26];
+  p.forearmL = [-1.6, 0, 0];
+  p.forearmR = [-1.6, 0, 0];
+  p.handL = [0, 1.45, -0.2];
+  p.handR = [0, -1.45, 0.2];
+  p.gripL = 0.05;
+  p.gripR = 0.05;
+  p.chest = [-0.04, 0, 0];
+  return p;
+}
+
+/** Leaning in over the banding wheel; the hands are placed by IK. */
+function leanIn(t, out) {
+  const p = POSES.stand(t, out);
+  p.spine = [0.12, 0, 0];
+  p.chest = [0.1, 0.08, 0];
+  p.neck = [0.04, 0, 0];
+  p.upperArmL = [-0.5, -0.2, 0.25];
+  p.forearmL = [-0.9, 0, 0];
+  p.upperArmR = [-0.4, 0.3, -0.3];
+  p.forearmR = [-2.0, 0, 0];
+  p.gripR = 0.9;
+  p.gripL = 0.2;
+  return p;
+}
+
+/** Upper-body layers in blend order: [weight name, pose function]. */
+const LAYERS = [
+  ['crossed', POSES.armsCrossed], ['hips', POSES.handsOnHips], ['point', POSES.point], ['clap', POSES.clap],
+  ['cheer', POSES.cheer], ['armUp', armUp], ['thumb', thumbsUp], ['shrug', shrug], ['lean', leanIn]
+];
+const THUMB_UP = new THREE.Quaternion().setFromEuler(new THREE.Euler(-1.45, 0.1, 0.2));
+
 /**
  * @param {object} o
  * @param {THREE.Vector3} o.home      where he stands while you throw
  * @param {THREE.Vector3} o.judge     behind the banding wheel
- * @param {THREE.Vector3} o.wheel     the wheel head centre (what he watches)
+ * @param {THREE.Vector3} o.wheel     the wheel head centre (what he faces while you throw)
  * @param {THREE.Vector3} o.banding   banding wheel top centre
  * @param {number} o.bandingRadius
  * @param {THREE.Vector3} o.kilnDoor  the kiln door (what he watches while it fires)
@@ -193,48 +259,41 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
   root.position.copy(home);
   root.rotation.y = Math.atan2(wheel.x - home.x, wheel.z - home.z);
 
-  /* Pose buffers, reused every frame */
+  /* Pose buffers and layer weights, reused every frame */
   const base = emptyPose();
   const walkP = emptyPose();
-  const L = {
-    crossed: emptyPose(),
-    hips: emptyPose(),
-    point: emptyPose(),
-    explain: emptyPose(),
-    armUp: emptyPose(),
-    cheer: emptyPose(),
-    clap: emptyPose(),
-    lean: emptyPose(),
-    thumb: emptyPose(),
-    shrug: emptyPose()
-  };
-  const w = { crossed: 0, hips: 0, point: 0, explain: 0, armUp: 0, cheer: 0, clap: 0, lean: 0, thumb: 0, shrug: 0 };
-  const goalW = { ...w };
+  const buf = {};
+  const w = {};
+  const goalW = {};
+  for (const [name] of LAYERS) {
+    buf[name] = emptyPose();
+    w[name] = 0;
+    goalW[name] = 0;
+  }
 
   const st = {
+    now: 0,
     walkW: 0,
-    phase: 0,
-    rim: 0, // IK weights
+    phase: 0, // walk cycle
+    rim: 0, // IK weights: hand on the banding wheel, fist on the chin
     chin: 0,
-    lookW: 0,
     expr: '',
     talking: -1,
     cue: null, // { kind, t0, value }
     verdict: null, // { t0, grade }
-    poseSwap: 0, // throw: arms crossed ↔ hands on hips
-    glance: 0
+    poseSwap: 0, // while you throw: arms crossed ↔ hands on hips
+    overT: -1
   };
+  /** What this frame asks for, filled by the plan* functions below. */
+  const plan = { look: null, exprKey: '', expr: null, talk: false, nod: 0, shake: 0, tilt: 0, lean: false };
 
   const goal = new THREE.Vector3();
   const faceAt = new THREE.Vector3();
-  const lookPt = new THREE.Vector3();
   const tmp = new THREE.Vector3();
   const tmp2 = new THREE.Vector3();
-  const rimPt = new THREE.Vector3();
-  const chinPt = new THREE.Vector3();
+  const target = new THREE.Vector3();
   const pole = new THREE.Vector3();
   const handQ = new THREE.Quaternion();
-  const eThumb = new THREE.Euler();
   const ikPos = new THREE.Vector3();
   const ikQ = new THREE.Quaternion();
   const qa = new THREE.Quaternion();
@@ -252,34 +311,27 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
     return out.setFromRotationMatrix(mBasis);
   }
 
-  function setExpr(key, spec) {
-    if (st.expr === key) return;
-    st.expr = key;
-    person.setExpression(spec);
-  }
-
-  function setTalk(on) {
-    const v = on ? 0.85 : 0;
-    if (st.talking === v) return;
-    st.talking = v;
-    person.talk(v);
-  }
-
   /**
-   * Weighted IK: move the hand from where the pose put it toward `target`
+   * Weighted IK: move the hand from where the pose put it toward `goalPos`
    * and turn it toward `goalQ` by the same eased weight, so an IK layer
    * fades in and out without ever snapping the wrist.
    */
-  function reachFor(side, target, goalQ, polePt, weight) {
+  function reachFor(side, goalPos, goalQ, polePt, weight) {
     const k = ease(weight);
     const hand = bones[side === 'L' ? 'handL' : 'handR'];
-    hand.getWorldPosition(ikPos).lerp(target, k);
+    hand.getWorldPosition(ikPos).lerp(goalPos, k);
     hand.getWorldQuaternion(ikQ).slerp(goalQ, k);
     person.ikArm(side, ikPos, polePt, ikQ);
   }
 
+  function express(key, spec) {
+    plan.exprKey = key;
+    plan.expr = spec;
+  }
+
   /* -------------------------------------------------------------- cues */
 
+  /** intro · star (n) · wobble · door · verdict (grade) */
   function cue(kind, value) {
     if (kind === 'verdict') {
       st.verdict = { t0: st.now, grade: value };
@@ -291,162 +343,131 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
     if (kind === 'door') person.blink();
   }
 
-  /* ------------------------------------------------------------ update */
+  /* ------------------------------------------------- what each moment asks */
 
-  st.now = 0;
-
-  /**
-   * @param {object} ctx
-   *   phase: idle | intro | throw | fire | judge | over
-   *   fireT: seconds into the firing (fire phase)
-   *   opened: the kiln door has opened (piece on its way to the banding wheel)
-   *   attention: what he watches while you throw (the hand, or the clay)
-   *   piece: the fired piece (judge), camera: the viewer
-   *   heat: kiln glow 0..1
-   */
-  function update(dt, t, ctx) {
-    st.now = t;
-    const { phase } = ctx;
-    const k = (rate) => 1 - Math.exp(-rate * dt);
-    for (const n of Object.keys(goalW)) goalW[n] = 0;
-
-    const atJudge = phase === 'judge' || (phase === 'fire' && ctx.opened);
-    goal.copy(atJudge ? judge : home);
-
-    /* Where he faces when standing, and what he looks at */
-    let lookTarget = null;
-    const lookWeight = 1;
-    let exprKey = 'neutral';
-    let exprSpec = 'neutral';
-    let talk = false;
-    let nod = 0;
-    let shake = 0;
-    let tilt = 0;
-    let lean = 0;
-    const cueAge = st.cue ? t - st.cue.t0 : 99;
-
-    if (phase === 'idle' || phase === 'over') {
-      // Waiting for you: half turned to the viewer, a friendly look
-      faceAt.copy(wheel).lerp(ctx.camera, 0.55);
-      goalW.hips = 1;
-      lookTarget = ctx.camera;
-      exprKey = 'warm';
-      exprSpec = { smile: 0.45 };
-      if (phase === 'over') {
-        // The evening is over: applause, then a proud look at the window
-        const age = t - (st.overT ?? (st.overT = t));
-        goalW.clap = age < 3.2 ? 1 : 0;
-        goalW.hips = age < 3.2 ? 0 : 1;
-        exprSpec = { smile: 0.8 };
-        exprKey = 'proud';
-      } else st.overT = undefined;
-    } else if (phase === 'intro' || phase === 'throw') {
-      st.overT = undefined;
-      faceAt.copy(wheel);
-      lookTarget = ctx.attention;
-      // Arms crossed, now and then hands on hips — a man who has seen a lot of clay
-      st.poseSwap += dt;
-      const swap = Math.floor(st.poseSwap / 9) % 2 === 1;
-      goalW.crossed = swap ? 0 : 1;
-      goalW.hips = swap ? 1 : 0;
-      exprKey = 'watch';
-      exprSpec = { focus: 0.35 };
-      if (st.cue && st.cue.kind === 'intro' && cueAge < 2.1) {
-        // "This one": points at the lump and says what he wants
-        goalW.point = window01(cueAge, 0.1, 1.9, 0.3);
-        goalW.crossed = 0;
-        goalW.hips = 0;
-        talk = cueAge > 0.2 && cueAge < 1.7;
-        lookTarget = cueAge < 0.9 ? ctx.camera : ctx.attention;
-        exprKey = 'tell';
-        exprSpec = { smile: 0.35 };
-      } else if (st.cue && st.cue.kind === 'star' && cueAge < 2.2) {
-        // A nod to the potter — and at three stars, raised eyebrows first
-        const three = st.cue.value >= 3;
-        lookTarget = cueAge < 1.4 ? ctx.camera : ctx.attention;
-        nod = window01(cueAge, three ? 0.6 : 0.05, three ? 1.8 : 1.2, 0.15) * Math.sin(cueAge * 13) * 0.12;
-        if (three && cueAge < 0.75) {
-          exprKey = 'wow';
-          exprSpec = { surprised: 0.85 };
-        } else {
-          exprKey = three ? 'grin' : 'smile';
-          exprSpec = three ? { grin: 0.8 } : { smile: 0.75 };
-        }
-      } else if (st.cue && st.cue.kind === 'wobble' && cueAge < 1.8) {
-        shake = window01(cueAge, 0.05, 1.5, 0.2) * Math.sin(cueAge * 9) * 0.16;
-        exprKey = 'frown';
-        exprSpec = { frown: 0.8 };
-      }
-    } else if (phase === 'fire' && !ctx.opened) {
-      // Watching the kiln: hands on hips, eyes narrowing as it glows
-      faceAt.copy(kilnDoor);
-      lookTarget = kilnDoor;
-      goalW.hips = 1;
-      exprKey = ctx.heat > 0.3 ? 'kiln' : 'watch';
-      exprSpec = ctx.heat > 0.3 ? { focus: 0.7 } : { focus: 0.35 };
-    } else {
-      // At (or on the way to) the banding wheel
-      faceAt.copy(banding);
-      lookTarget = ctx.piece || banding;
-      const arrived = root.position.distanceTo(judge) < 0.12;
-      const v = phase === 'judge' && st.verdict ? st.verdict : null;
-      if (!v) {
-        // Leaning in over the piece, turning the wheel, fist under the chin
-        goalW.lean = arrived ? 1 : 0;
-        lean = arrived ? 1 : 0;
-        exprKey = 'judge';
-        exprSpec = { focus: 0.75 };
-      } else {
-        const age = t - v.t0;
-        const g = v.grade;
-        lookTarget = age < 3.4 || Math.floor(age / 3) % 2 === 0 ? ctx.camera : ctx.piece || banding;
-        talk = age > 0.45 && age < 2.9;
-        if (g >= 10) {
-          exprKey = age < 0.6 ? 'wow' : 'grin';
-          exprSpec = age < 0.6 ? { surprised: 1 } : { grin: 1 };
-          goalW.cheer = window01(age, 0.45, 3.0, 0.3);
-          goalW.hips = age > 2.8 ? 1 : 0;
-          talk = age > 1.2 && age < 3.0;
-        } else if (g >= 8) {
-          exprKey = 'grin';
-          exprSpec = { grin: 0.85 };
-          goalW.armUp = window01(age, 0.3, 2.7, 0.3);
-          goalW.hips = age > 2.5 ? 1 : 0;
-          nod = window01(age, 2.6, 3.8, 0.2) * Math.sin(age * 11) * 0.1;
-        } else if (g >= 6) {
-          // Approved: a nod and a thumbs up
-          exprKey = 'smile';
-          exprSpec = { smile: 0.75 };
-          nod = window01(age, 0.2, 1.4, 0.2) * Math.sin(age * 12) * 0.11;
-          goalW.thumb = window01(age, 0.35, 2.7, 0.3);
-          goalW.hips = age > 2.5 ? 1 : 0;
-        } else if (g >= 4) {
-          // "Hm. Rustik." — a shrug, palms up, head on one side
-          exprKey = 'hm';
-          exprSpec = { focus: 0.4, smile: 0.2 };
-          tilt = window01(age, 0.1, 2.8, 0.4) * 0.14;
-          goalW.shrug = window01(age, 0.35, 2.4, 0.3);
-          goalW.crossed = age > 2.3 ? 1 : 0;
-        } else {
-          exprKey = 'frown';
-          exprSpec = { frown: 0.85 };
-          shake = window01(age, 0.25, 1.9, 0.25) * Math.sin(age * 7.5) * 0.17;
-          goalW.crossed = 1;
-          talk = age > 0.9 && age < 2.6;
-        }
-      }
+  /** Start screen and the evening's exhibition: half turned to the viewer. */
+  function planWaiting(t, ctx) {
+    faceAt.copy(wheel).lerp(ctx.camera, 0.55);
+    plan.look = ctx.camera;
+    goalW.hips = 1;
+    express('warm', { smile: 0.45 });
+    if (ctx.phase !== 'over') {
+      st.overT = -1;
+      return;
     }
+    // The evening is over: applause, then hands on hips, proud
+    if (st.overT < 0) st.overT = t;
+    const clapping = t - st.overT < 3.2;
+    goalW.clap = clapping ? 1 : 0;
+    goalW.hips = clapping ? 0 : 1;
+    express('proud', { smile: 0.8 });
+  }
 
-    /* Walk to the goal, or turn on the spot to face what matters */
-    tmp.subVectors(goal, root.position);
-    tmp.y = 0;
+  /** While you throw: arms crossed, watching your hands, reacting to cues. */
+  function planThrow(dt, t, ctx) {
+    faceAt.copy(wheel);
+    plan.look = ctx.attention;
+    // Now and then hands on hips instead — a man who has seen a lot of clay
+    st.poseSwap += dt;
+    const swap = Math.floor(st.poseSwap / 9) % 2 === 1;
+    goalW.crossed = swap ? 0 : 1;
+    goalW.hips = swap ? 1 : 0;
+    express('watch', { focus: 0.35 });
+    const c = st.cue;
+    const age = c ? t - c.t0 : 99;
+    if (c && c.kind === 'intro' && age < 2.1) {
+      // "This one": points at the lump and says what he wants
+      goalW.point = window01(age, 0.1, 1.9, 0.3);
+      goalW.crossed = 0;
+      goalW.hips = 0;
+      plan.talk = age > 0.2 && age < 1.7;
+      plan.look = age < 0.9 ? ctx.camera : ctx.attention;
+      express('tell', { smile: 0.35 });
+    } else if (c && c.kind === 'star' && age < 2.2) {
+      // A nod to the potter — and at three stars, raised eyebrows first
+      const three = c.value >= 3;
+      plan.look = age < 1.4 ? ctx.camera : ctx.attention;
+      plan.nod = window01(age, three ? 0.6 : 0.05, three ? 1.8 : 1.2, 0.15) * Math.sin(age * 13) * 0.12;
+      if (three && age < 0.75) express('wow', { surprised: 0.85 });
+      else if (three) express('grin', { grin: 0.8 });
+      else express('smile', { smile: 0.75 });
+    } else if (c && c.kind === 'wobble' && age < 1.8) {
+      plan.shake = window01(age, 0.05, 1.5, 0.2) * Math.sin(age * 9) * 0.16;
+      express('frown', { frown: 0.8 });
+    }
+  }
+
+  /** The kiln fires: hands on hips, eyes narrowing as it glows. */
+  function planKiln(ctx) {
+    faceAt.copy(kilnDoor);
+    plan.look = kilnDoor;
+    goalW.hips = 1;
+    if (ctx.heat > 0.3) express('kiln', { focus: 0.7 });
+    else express('watch', { focus: 0.35 });
+  }
+
+  /** At the banding wheel: weigh it up, then the verdict with his whole face. */
+  function planJudge(t, ctx) {
+    faceAt.copy(banding);
+    plan.look = ctx.piece || banding;
+    const v = ctx.phase === 'judge' ? st.verdict : null;
+    if (!v) {
+      // Leaning in over the piece, turning the wheel, fist under the chin
+      const arrived = root.position.distanceTo(judge) < 0.12;
+      goalW.lean = arrived ? 1 : 0;
+      plan.lean = arrived;
+      express('judge', { focus: 0.75 });
+      return;
+    }
+    const age = t - v.t0;
+    const g = v.grade;
+    // He tells you (looking at you), then glances back at the piece now and then
+    plan.look = age < 3.4 || Math.floor(age / 3) % 2 === 0 ? ctx.camera : ctx.piece || banding;
+    plan.talk = age > 0.45 && age < 2.9;
+    if (g >= 10) {
+      // Speechless for a moment, then both arms up
+      express(age < 0.6 ? 'wow' : 'grin', age < 0.6 ? { surprised: 1 } : { grin: 1 });
+      goalW.cheer = window01(age, 0.45, 3.0, 0.3);
+      goalW.hips = age > 2.8 ? 1 : 0;
+      plan.talk = age > 1.2 && age < 3.0;
+    } else if (g >= 8) {
+      // A grin and an arm in the air
+      express('grin', { grin: 0.85 });
+      goalW.armUp = window01(age, 0.3, 2.7, 0.3);
+      goalW.hips = age > 2.5 ? 1 : 0;
+      plan.nod = window01(age, 2.6, 3.8, 0.2) * Math.sin(age * 11) * 0.1;
+    } else if (g >= 6) {
+      // Approved: a nod and a thumbs up
+      express('smile', { smile: 0.75 });
+      plan.nod = window01(age, 0.2, 1.4, 0.2) * Math.sin(age * 12) * 0.11;
+      goalW.thumb = window01(age, 0.35, 2.7, 0.3);
+      goalW.hips = age > 2.5 ? 1 : 0;
+    } else if (g >= 4) {
+      // "Hm. Rustik." — a shrug, palms up, head on one side
+      express('hm', { focus: 0.4, smile: 0.2 });
+      plan.tilt = window01(age, 0.1, 2.8, 0.4) * 0.14;
+      goalW.shrug = window01(age, 0.35, 2.4, 0.3);
+      goalW.crossed = age > 2.3 ? 1 : 0;
+    } else {
+      // A frown, arms folded, a slow shake of the head
+      express('frown', { frown: 0.85 });
+      plan.shake = window01(age, 0.25, 1.9, 0.25) * Math.sin(age * 7.5) * 0.17;
+      goalW.crossed = 1;
+      plan.talk = age > 0.9 && age < 2.6;
+    }
+  }
+
+  /* ---------------------------------------------------------- the body */
+
+  /** Walk to the goal (turning first, easing out), or turn on the spot to face what matters. */
+  function locomotion(dt) {
+    const k = (rate) => 1 - Math.exp(-rate * dt);
+    tmp.subVectors(goal, root.position).setY(0);
     const dist = tmp.length();
     let walkGoal = 0;
     if (dist > 0.03) {
-      const heading = Math.atan2(tmp.x, tmp.z);
-      const err = wrapAngle(heading - root.rotation.y);
+      const err = wrapAngle(Math.atan2(tmp.x, tmp.z) - root.rotation.y);
       root.rotation.y += err * k(7);
-      // Turn first, then walk; ease out as he arrives
       const speed = Math.abs(err) > 1.1 ? 0 : Math.min(1.15, 0.3 + dist * 1.6) * (1 - Math.abs(err) / 1.6);
       const step = Math.min(dist, speed * dt);
       root.position.addScaledVector(tmp.normalize(), step);
@@ -455,8 +476,7 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
     } else {
       root.position.x = goal.x;
       root.position.z = goal.z;
-      const heading = Math.atan2(faceAt.x - root.position.x, faceAt.z - root.position.z);
-      const err = wrapAngle(heading - root.rotation.y);
+      const err = wrapAngle(Math.atan2(faceAt.x - root.position.x, faceAt.z - root.position.z) - root.rotation.y);
       const turn = err * k(3.5);
       root.rotation.y += turn;
       // A big turn on the spot gets a couple of small steps
@@ -466,129 +486,110 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
       }
     }
     st.walkW += (walkGoal - st.walkW) * k(walkGoal > st.walkW ? 8 : 5);
+  }
 
-    /* Layers */
-    for (const n of Object.keys(w)) w[n] += (goalW[n] - w[n]) * k(goalW[n] > w[n] ? 5.5 : 4);
+  /** Idle or walking legs, then every upper-body layer by its eased weight. */
+  function pose(dt, t) {
+    for (const [name] of LAYERS) {
+      const g = goalW[name];
+      w[name] += (g - w[name]) * (1 - Math.exp(-(g > w[name] ? 5.5 : 4) * dt));
+    }
     POSES.idle(t, base);
     if (st.walkW > 1e-3) mixAll(base, POSES.walk(st.phase, walkP), st.walkW);
-    if (w.crossed > 1e-3) mixUpper(base, POSES.armsCrossed(t, L.crossed), w.crossed);
-    if (w.hips > 1e-3) mixUpper(base, POSES.handsOnHips(t, L.hips), w.hips);
-    if (w.point > 1e-3) mixUpper(base, POSES.point(t, L.point), w.point);
-    if (w.explain > 1e-3) mixUpper(base, POSES.explain(t, L.explain), w.explain);
-    if (w.clap > 1e-3) mixUpper(base, POSES.clap(t, L.clap), w.clap);
-    if (w.cheer > 1e-3) mixUpper(base, POSES.cheer(t, L.cheer), w.cheer);
-    if (w.armUp > 1e-3) {
-      // One arm up, fist clenched, pumping — the left hand stays on the hip
-      const p = POSES.handsOnHips(t, L.armUp);
-      const pump = Math.sin(t * 7) * 0.12;
-      p.shoulderR = [0, 0, -0.24];
-      p.upperArmR = [0.1, 0.18, -2.65 + pump * 0.4];
-      p.forearmR = [-0.42 - pump, 0, 0];
-      p.handR = [0, 0, 0];
-      p.gripR = 1;
-      p.chest = [-0.06, 0.06, 0.06];
-      p.head = [-0.12, 0, 0];
-      mixUpper(base, p, w.armUp);
-    }
-    if (w.thumb > 1e-3) {
-      // Forearm out, fist forward — the thumb goes up after setPose below
-      const p = POSES.handsOnHips(t, L.thumb);
-      p.upperArmR = [-0.5, 0.3, -0.2];
-      p.forearmR = [-1.3, 0, 0];
-      p.handR = [0.1, 0, 0];
-      p.gripR = 1;
-      p.chest = [-0.03, -0.08, 0];
-      mixUpper(base, p, w.thumb);
-    }
-    if (w.shrug > 1e-3) {
-      const p = POSES.stand(t, L.shrug);
-      p.shoulderL = [0, 0, 0.3];
-      p.shoulderR = [0, 0, -0.3];
-      p.upperArmL = [0.05, -0.3, 0.26];
-      p.upperArmR = [0.05, 0.3, -0.26];
-      p.forearmL = [-1.6, 0, 0];
-      p.forearmR = [-1.6, 0, 0];
-      p.handL = [0, 1.45, -0.2];
-      p.handR = [0, -1.45, 0.2];
-      p.gripL = 0.05;
-      p.gripR = 0.05;
-      p.chest = [-0.04, 0, 0];
-      mixUpper(base, p, w.shrug);
-    }
-    if (w.lean > 1e-3) {
-      // Leaning in: a bend in the spine, the arms left to the IK below
-      const p = L.lean;
-      POSES.stand(t, p);
-      p.spine = [0.12, 0, 0];
-      p.chest = [0.1, 0.08, 0];
-      p.neck = [0.04, 0, 0];
-      p.upperArmL = [-0.5, -0.2, 0.25];
-      p.forearmL = [-0.9, 0, 0];
-      p.upperArmR = [-0.4, 0.3, -0.3];
-      p.forearmR = [-2.0, 0, 0];
-      p.gripR = 0.9;
-      p.gripL = 0.2;
-      mixUpper(base, p, w.lean);
-    }
+    for (const [name, fn] of LAYERS) if (w[name] > 1e-3) mixUpper(base, fn(t, buf[name]), w[name]);
     person.setPose(base, 1);
+  }
 
-    /* IK: a hand on the banding wheel and a fist under the chin while he weighs it up */
-    st.rim += ((lean ? 1 : 0) - st.rim) * k(5);
-    st.chin += ((lean ? 1 : 0) - st.chin) * k(3.5);
+  /** IK on top of the pose: the hand on the wheel, the fist on the chin, the pointing arm. */
+  function hands(dt, t, ctx) {
+    const k = (rate) => 1 - Math.exp(-rate * dt);
+    st.rim += ((plan.lean ? 1 : 0) - st.rim) * k(5);
+    st.chin += ((plan.lean ? 1 : 0) - st.chin) * k(3.5);
     const pointW = ctx.attention ? w.point : 0;
-    if (st.rim > 0.004 || st.chin > 0.004 || pointW > 0.004) root.updateMatrixWorld(true);
+    if (st.rim < 0.004 && st.chin < 0.004 && pointW < 0.004) return;
+    root.updateMatrixWorld(true);
     if (st.rim > 0.004) {
       // The rim point on his left, riding round with the wheel and back
       const left = tmp2.set(Math.cos(root.rotation.y), 0, -Math.sin(root.rotation.y));
       const toMe = tmp.subVectors(root.position, banding).setY(0).normalize();
       const a = Math.atan2(toMe.x + left.x * 0.9, toMe.z + left.z * 0.9) + Math.sin(t * 1.3) * 0.18;
-      rimPt.set(banding.x + Math.sin(a) * bandingRadius * 0.92, banding.y + 0.05 * s, banding.z + Math.cos(a) * bandingRadius * 0.92);
+      target.set(banding.x + Math.sin(a) * bandingRadius * 0.92, banding.y + 0.05 * s, banding.z + Math.cos(a) * bandingRadius * 0.92);
       // Palm down, fingers toward the wheel's centre
-      const fingers = tmp2.subVectors(banding, rimPt).setY(-0.25).normalize();
+      const fingers = tmp2.subVectors(banding, target).setY(-0.25).normalize();
       basisQuat(ax.set(0, 1, 0), fingers.negate(), handQ);
       bones.chest.localToWorld(pole.set(0.6 * s, -0.4 * s, -0.5 * s));
-      reachFor('L', rimPt, handQ, pole, st.rim);
+      reachFor('L', target, handQ, pole, st.rim);
     }
     if (st.chin > 0.004) {
       // Knuckles under the chin, elbow down and forward
-      sockets.face.localToWorld(chinPt.set(0, -0.19 * s, -0.02 * s));
+      sockets.face.localToWorld(target.set(0, -0.19 * s, -0.02 * s));
       bones.head.getWorldQuaternion(qa);
-      const up = tmp2.set(0.15, -1, 0.35).applyQuaternion(qa); // hand → elbow
-      basisQuat(ax.set(0.2, 0.25, -1).applyQuaternion(qa), up, handQ);
+      const toElbow = tmp2.set(0.15, -1, 0.35).applyQuaternion(qa);
+      basisQuat(ax.set(0.2, 0.25, -1).applyQuaternion(qa), toElbow, handQ);
       bones.chest.localToWorld(pole.set(-0.25 * s, -0.7 * s, 0.6 * s));
-      reachFor('R', chinPt, handQ, pole, st.chin);
+      reachFor('R', target, handQ, pole, st.chin);
     }
     if (pointW > 0.004) {
-      // Point AT the lump: the posed arm is re-aimed along the line to it,
+      // Point AT the lump: the posed arm re-aimed along the line to it,
       // fingers along the line, thumb up
       bones.upperArmR.getWorldPosition(tmp2);
       const reach = tmp.subVectors(ctx.attention, tmp2).normalize();
-      chinPt.copy(tmp2).addScaledVector(reach, 0.6 * s);
+      target.copy(tmp2).addScaledVector(reach, 0.6 * s);
       basisQuat(ax.set(0, 1, 0).cross(reach), az.copy(reach).negate(), handQ);
       bones.chest.localToWorld(pole.set(-0.5 * s, -0.6 * s, -0.3 * s));
-      reachFor('R', chinPt, handQ, pole, pointW);
+      reachFor('R', target, handQ, pole, pointW);
     }
+  }
 
-    /* The thumb of the thumbs up: straight out of the fist's top */
-    if (w.thumb > 0.01) {
-      qa.setFromEuler(eThumb.set(-1.45, 0.1, 0.2));
-      bones.thumbR.quaternion.slerp(qa, ease(w.thumb));
+  /* ------------------------------------------------------------ update */
+
+  /**
+   * @param {object} ctx
+   *   phase: idle | intro | throw | fire | judge | over
+   *   opened: the kiln door has opened (the piece is on its way to the banding wheel)
+   *   attention: what he watches while you throw (your hand, or the clay)
+   *   piece: the fired piece while it is judged · camera: the viewer · heat: kiln glow 0..1
+   */
+  function update(dt, t, ctx) {
+    st.now = t;
+    const { phase } = ctx;
+    for (const [name] of LAYERS) goalW[name] = 0;
+    plan.look = null;
+    plan.talk = false;
+    plan.nod = 0;
+    plan.shake = 0;
+    plan.tilt = 0;
+    plan.lean = false;
+
+    const atJudge = phase === 'judge' || (phase === 'fire' && ctx.opened);
+    goal.copy(atJudge ? judge : home);
+    if (phase === 'idle' || phase === 'over') planWaiting(t, ctx);
+    else if (phase === 'intro' || phase === 'throw') planThrow(dt, t, ctx);
+    else if (!atJudge) planKiln(ctx);
+    else planJudge(t, ctx);
+
+    locomotion(dt);
+    pose(dt, t);
+    hands(dt, t, ctx);
+    // The thumbs-up thumb: straight out of the top of the fist
+    if (w.thumb > 0.01) bones.thumbR.quaternion.slerp(THUMB_UP, ease(w.thumb));
+    // Nods, shakes and tilts on top (people.update keeps them and adds look-at)
+    if (plan.nod) bones.head.rotation.x += plan.nod;
+    if (plan.shake) {
+      bones.head.rotation.y += plan.shake;
+      bones.neck.rotation.y += plan.shake * 0.4;
     }
-
-    /* Nods, shakes, tilts on top (people.update keeps them and adds look-at) */
-    if (nod) bones.head.rotation.x += nod;
-    if (shake) {
-      bones.head.rotation.y += shake;
-      bones.neck.rotation.y += shake * 0.4;
+    if (plan.tilt) bones.head.rotation.z += plan.tilt;
+    person.lookAt(plan.look);
+    if (st.expr !== plan.exprKey) {
+      st.expr = plan.exprKey;
+      person.setExpression(plan.expr);
     }
-    if (tilt) bones.head.rotation.z += tilt;
-
-    if (lookTarget) {
-      lookPt.copy(lookTarget);
-      person.lookAt(lookPt, lookWeight);
-    } else person.lookAt(null);
-    setExpr(exprKey, exprSpec);
-    setTalk(talk);
+    const talk = plan.talk ? 0.85 : 0;
+    if (st.talking !== talk) {
+      st.talking = talk;
+      person.talk(talk);
+    }
     person.update(dt, t);
   }
 
@@ -597,14 +598,7 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
     person,
     cue,
     update,
-    /** Snap to the home spot (a new evening). */
-    reset() {
-      root.position.copy(home);
-      root.rotation.y = Math.atan2(wheel.x - home.x, wheel.z - home.z);
-      st.cue = null;
-      st.verdict = null;
-      st.walkW = 0;
-    },
+    /** A new piece: forget the last verdict. */
     clearVerdict() {
       st.verdict = null;
     },
