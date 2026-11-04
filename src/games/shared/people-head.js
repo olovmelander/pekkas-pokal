@@ -82,10 +82,10 @@ export function headField(F) {
     d = smin(d, ell(x, y, z, -0.0055, my + 0.0062, 0.0872, 0.008, 0.0042, 0.0072 * F.lips), 0.003);
     d = smin(d, ell(x, y, z, 0, my - 0.0062, 0.0856, 0.0172, 0.0066 * F.lips, 0.0088 * F.lips), 0.0035);
     // Nose: a narrow bridge, a round tip, two wings
-    d = smin(d, cap(x, y, z, 0, 0.012, 0.0862, 0, -0.021, 0.104 + nl, 0.0062, 0.0084 * nose), 0.0045);
-    d = smin(d, sph(x, y, z, 0, -0.0265 - 0.004 * (nose - 1), 0.1024 + nl + 0.006 * (nose - 1), 0.0114 * nose ** 1.4), 0.0032);
-    d = smin(d, sph(x, y, z, 0.0122 * nose, -0.0335, 0.0918, 0.0088 * nose), 0.0028);
-    d = smin(d, sph(x, y, z, -0.0122 * nose, -0.0335, 0.0918, 0.0088 * nose), 0.0028);
+    d = smin(d, cap(x, y, z, 0, 0.012, 0.0862, 0, -0.021, 0.104 + nl, 0.0064, 0.0086 * nose), 0.006);
+    d = smin(d, sph(x, y, z, 0, -0.0265 - 0.004 * (nose - 1), 0.1022 + nl + 0.006 * (nose - 1), 0.0116 * nose ** 1.4), 0.005);
+    d = smin(d, sph(x, y, z, 0.0112 * nose, -0.0335, 0.0905, 0.0082 * nose), 0.0055);
+    d = smin(d, sph(x, y, z, -0.0112 * nose, -0.0335, 0.0905, 0.0082 * nose), 0.0055);
     // Eye sockets, just bigger than the lids so the lids frame the eye
     if (F.sockets !== false) {
       d = smax(d, -sph(x, y, z, ex, ey, ez, FACE.eyeR + 0.0019), 0.004);
@@ -309,7 +309,7 @@ export function buildHeadSkin(b, ctx) {
   const topA = high ? [0, 19, 38, 56, 73] : [0, 50];
   const my = FACE.mouthY;
   const band = high
-    ? [0.035, 0.024, 0.016, 0.01, 0.005, 0.0, -0.006, -0.013, -0.019, -0.025, -0.0305, -0.0355, -0.041, -0.047, -0.054,
+    ? [0.035, 0.024, 0.016, 0.01, 0.005, 0.0, -0.006, -0.013, -0.019, -0.025, -0.0305, -0.0345, -0.0378, -0.041, -0.047, -0.054,
       my + 0.0075, my + 0.0035, my, my - 0.0035, my - 0.009, my - 0.017, -0.096]
     : [0.035, -0.01, -0.06, -0.096];
   const botA = high ? [107, 128, 152, 180] : [135, 180];
@@ -377,7 +377,7 @@ export function buildHeadSkin(b, ctx) {
   const H = { mouthHalfW: Math.abs(P[slitRow >= 0 ? slitRow * cols + cornerJ : 0].p[0]) || halfW, mouthCornerZ: mz - 0.008 };
   ctx.H = H;
   const idx = [];
-  const skinTint = (p) => headTint(p, ctx);
+  const skinTint = (p, n) => headTint(p, ctx, n);
   for (let k = 0; k < P.length; k++) {
     const i = Math.floor(k / cols);
     const j = k % cols;
@@ -385,7 +385,7 @@ export function buildHeadSkin(b, ctx) {
     const pm = toModel(q.p);
     const nm = q.n;
     const slit = i === slitRow && inSlit(j);
-    const tint = skinTint(q.p);
+    const tint = skinTint(q.p, q.n);
     if (slit) {
       const dark = [tint[0] * 0.55, tint[1] * 0.4, tint[2] * 0.4];
       const up = b.vertex(pm, nm, REGION.SKIN, dark, faceWeights(q.p, H, 0));
@@ -413,7 +413,7 @@ export function buildHeadSkin(b, ctx) {
   return H;
 }
 
-function headTint(p, ctx) {
+function headTint(p, ctx, n) {
   const [x, y, z] = p;
   const ax = Math.abs(x);
   let r = 1;
@@ -450,12 +450,14 @@ function headTint(p, ctx) {
   const subnasal = gauss(ax, 0.01) * gauss(y + 0.04, 0.004) * 0.05;
   // Painted nose: lit ridge and tip, shaded flanks, a crease round each wing, dark nostrils
   const noseZone = sstep(0.075, 0.09, z);
-  const ridge = gauss(ax, 0.0035) * sstep(0.012, 0.0, y) * sstep(-0.032, -0.02, y) * noseZone;
-  const tipHL = gauss(ax, 0.006) * gauss(y + 0.026, 0.005) * sstep(0.098, 0.106, z);
-  const flank = gauss(ax - 0.0095, 0.0035) * sstep(0.008, -0.004, y) * sstep(-0.03, -0.022, y) * noseZone;
-  const wingD = Math.hypot(ax - 0.0122, (y + 0.0335) * 1.1);
-  const crease = gauss(wingD - 0.0098, 0.0016) * sstep(-0.042, -0.036, y) * noseZone;
-  const nostril = gauss(ax - 0.0075, 0.0032) * gauss(y + 0.0398, 0.0028) * noseZone;
+  const down = n ? sstep(-0.15, -0.65, n[1]) : 0;
+  const ridge = gauss(ax, 0.006) * sstep(0.012, 0.0, y) * sstep(-0.03, -0.018, y) * noseZone;
+  const tipHL = gauss(Math.hypot(ax, (y + 0.025) * 0.9), 0.008) * sstep(0.098, 0.106, z);
+  const flank = gauss(ax - 0.011, 0.007) * sstep(0.008, -0.004, y) * sstep(-0.03, -0.02, y) * noseZone;
+  const wingD = Math.hypot(ax - 0.0112, (y + 0.0335) * 1.1);
+  const crease = gauss(wingD - 0.0092, 0.0028) * sstep(-0.042, -0.034, y) * noseZone * (0.3 + 0.7 * down);
+  // Nostrils are seen from below: only the downward-facing skin darkens, softly
+  const nostril = gauss(ax - 0.007, 0.0045) * gauss(y + 0.039, 0.004) * noseZone * down;
   r += (ridge * 0.05 + tipHL * 0.07);
   g += (ridge * 0.05 + tipHL * 0.06);
   bl += (ridge * 0.04 + tipHL * 0.05);
@@ -463,8 +465,8 @@ function headTint(p, ctx) {
   const lidCrease = gauss(ax - FACE.eyeX, 0.013) * gauss(y - (FACE.eyeY + FACE.eyeR + 0.0035), 0.0022) * sstep(0.06, 0.075, z);
   const corners = gauss(ax - FACE.mouthHalfW, 0.004) * gauss(y - my, 0.004) * 0.12;
   const chinFold = gauss(ax, 0.016) * gauss(y - (my - 0.016), 0.004) * 0.06;
-  const k = 1 - under - socket - wing - fold - subnasal - corners - chinFold - flank * 0.07 - crease * 0.12 -
-    nostril * 0.36 - lidCrease * 0.14;
+  const k = 1 - under - socket - wing - fold - subnasal - corners - chinFold - flank * 0.03 - crease * 0.05 -
+    nostril * 0.14 - lidCrease * 0.14;
   let tint = [r * k, g * k, bl * k];
   if (ctx.stubble) tint = ctx.stubble(p, tint);
   if (ctx.hairShadow) tint = ctx.hairShadow(p, tint);
