@@ -713,6 +713,49 @@
   font-family: var(--ff-sans);
 }
 
+/* OpenStreetMaps plattor är ljusa och mättade. I mörkt tema inverteras de
+   och tonas varmt så kartan blir en del av polarnatten; i ljust tema dämpas
+   de mot elfenbenspappret. Nålarna ligger i en egen ruta och tonas inte. */
+#map .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.85) saturate(0.4) sepia(0.2);
+}
+
+:root[data-theme='light'] #map .leaflet-tile-pane {
+  filter: saturate(0.5) sepia(0.16) contrast(0.95) brightness(1.02);
+}
+
+/* Svarar ingen kartserver: säg det, i stället för att visa en tom ruta */
+#map.map-failed::after {
+  content: 'Kartan kunde inte laddas just nu — nålarna visar ändå var pokalen avgjorts.';
+  position: absolute;
+  left: 50%;
+  top: var(--sp-4);
+  z-index: 1000;
+  transform: translateX(-50%);
+  max-width: calc(100% - 2 * var(--sp-6));
+  padding: var(--sp-2) var(--sp-4);
+  border-radius: var(--r-pill);
+  font-size: var(--text-xs);
+  text-align: center;
+  color: var(--text-2);
+  background: var(--surface-solid);
+  border: 1px solid var(--border-strong);
+  pointer-events: none;
+}
+
+.map-hint {
+  display: none;
+  margin-top: var(--sp-3);
+  font-size: var(--text-xs);
+  color: var(--text-3);
+}
+
+@media (pointer: coarse) {
+  .map-hint {
+    display: block;
+  }
+}
+
 .leaflet-bar a {
   background: var(--surface-solid) !important;
   color: var(--text-1) !important;
