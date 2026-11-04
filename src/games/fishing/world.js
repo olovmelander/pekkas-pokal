@@ -1050,7 +1050,7 @@ export function buildBasin() {
   // the shallows grow moss, the deep is cold slate.
   const P = geo.attributes.position;
   const N = geo.attributes.normal;
-  const col = new Float32Array(P.count * 3);
+  const col = new Float32Array(P.count * 4);
   const c = new THREE.Color();
   const moss = new THREE.Color(0x46603a);
   const rock = new THREE.Color(0x4c5866);
@@ -1062,12 +1062,22 @@ export function buildBasin() {
     c.lerp(moss, (1 - smooth(4, 18, d)) * 0.7);
     c.lerp(silt, smooth(0.35, 0.8, N.getY(i)) * 0.35);
     const v = 0.85 + Math.sin(P.getX(i) * 1.7 + P.getZ(i) * 2.3 + d) * 0.12;
-    col[i * 3] = c.r * v;
-    col[i * 3 + 1] = c.g * v;
-    col[i * 3 + 2] = c.b * v;
+    col[i * 4] = c.r * v;
+    col[i * 4 + 1] = c.g * v;
+    col[i * 4 + 2] = c.b * v;
+    // Alpha: each wall thins out toward its far end and its top edge, so it
+    // dissolves into the god rays behind it instead of ending on a line
+    const across = Math.abs(P.getX(i)) / Math.hypot(P.getX(i), P.getZ(i) - BASIN.zc);
+    col[i * 4 + 3] = smooth(0.38, 0.8, across) * smooth(2.4, 8, d);
   }
-  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide });
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 4));
+  const mat = new THREE.MeshLambertMaterial({
+    vertexColors: true,
+    flatShading: true,
+    side: THREE.DoubleSide,
+    transparent: true,
+    depthWrite: false
+  });
   mat.onBeforeCompile = fogWithReach(1.3);
   mat.customProgramCacheKey = () => 'fiske-wall';
   return new THREE.Mesh(geo, mat);

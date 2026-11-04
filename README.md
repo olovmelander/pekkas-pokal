@@ -172,6 +172,22 @@ världen blir bokstavligen dovare ju längre ner man kommer. Ingen
 efterbehandling: ACES-tonemappning gör jobbet i stället, så telefonen
 behåller sin bildfrekvens.
 
+**Uppgraderingen.** Fisket fyller nu hela skärmen även på datorn: kameran
+ramar in nedstigningen olika för stående telefon och bred skärm, och
+sjöbäckenets klippväggar, tångruskor och fjärran stim syns vid sidorna.
+Fiskarna simmar med en riktig vågrörelse genom kroppen — hela sjön ritas med
+en instansierad mesh per art — med sprintar och glid, och mörten går i stim
+som vänder tillsammans. Under ytan bygger solstrålar från den brutna
+midnattssolen, plankton och bubblor från draget upp djupet, och dimman tar
+exakt vattnets färg så att allt långt bort smälter in; ovanför speglar sjön
+samma himmel, trädraden och den röda stugan med bryggan. Varje kast har ett
+uppdrag — lätt, mellan, svårt — som ger bonus och en stjärna, en utropare
+ropar dubbelnapp och trippel, och den sista fisken i luften faller i slow
+motion. Fångstdagboken minns varje art du fått upp, den största av varje och
+dina rekord, och den som når botten hittar något gyllene bredvid den sjunkna
+ekan. Fortfarande ingen efterbehandling: allt som glöder är sprites och ACES
+gör graderingen.
+
 **Pekkas Lerskulptur (2026)**
 
 Kvällen i keramikateljén, som i Barcelona: keramikern visar en form, du
@@ -613,7 +629,7 @@ stänger dem.
 | `src/data/achievements.js` | Definitioner av alla utmärkelser |
 | `src/styles/` | `main` (tokens/teman), `layout`, `components`, `animations`, `games` (arkaden och spelscenen), `game-hud` (spelens delade HUD), `responsive` |
 | `src/games/pinball/` | Flipperspelet: `physics` (2D-kollision), `table` (layout + banans grafik), `meshes` (3D), `room` (arkadhallen), `dmd` (punktmatrisen), `fx` (gnistor, bollspår), `audio` (syntetiskt ljud), `hud` (paneler), `scores` (topplistan), `index` (spelloop) |
-| `src/games/fishing/` | Fiskespelet: `species` (procedurella fiskar), `world` (sjö, vattenshader, båt), `audio` (syntetiskt ljud), `index` (spelloop) |
+| `src/games/fishing/` | Fiskespelet: `species` (procedurella fiskar), `world` (sjö, vattenshader, båt), `fx` (stänk, bubblor, glimtar), `hud` (paneler, fångstdagbok), `progress` (uppdrag och rekord), `audio` (syntetiskt ljud), `index` (spelloop) |
 | `src/games/clay/` | Drejspelet: `studio` (ateljé, matcaps, drejskiva), `audio` (syntetiskt ljud), `index` (lerfysik + spelloop) |
 | `src/games/fencing/` | Fäktspelet: `salle` (fäktsal, fäktare, texturer), `audio` (syntetiskt ljud), `index` (duell-AI + spelloop) |
 | `src/games/shooting/` | Skyttespelet: `range` (fält, gevär, lerduvor), `grass` (instansierad äng med vind), `audio` (syntetiskt ljud), `index` (banor + spelloop) |
