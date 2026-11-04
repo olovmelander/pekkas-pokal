@@ -670,6 +670,11 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
     reflector.material.transparent = true;
     reflector.material.blending = THREE.AdditiveBlending;
     reflector.material.depthWrite = false;
+    // Två millimeter över golvet räcker inte på alla djupbuffertar —
+    // spegeln skimrade i fläckar. Förskjut den mot kameran i stället.
+    reflector.material.polygonOffset = true;
+    reflector.material.polygonOffsetFactor = -4;
+    reflector.material.polygonOffsetUnits = -4;
     reflector.rotation.x = -Math.PI / 2;
     reflector.position.y = 0.002;
     reflector.renderOrder = 0;
@@ -684,7 +689,8 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
   if (tier !== 'high') {
     const streakMat = new THREE.MeshBasicMaterial({
       map: glow, color: 0xffd9a0, transparent: true, opacity: 0.32,
-      depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false
+      depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
+      polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4
     });
     [[0, 3.24, -1.05], [0, 3.24, 0], [-3, 3.24, -3.2], [3, 3.24, -3.2]].forEach(([x, y, z]) => {
       const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), streakMat);
@@ -869,6 +875,12 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
   const top = new THREE.Mesh(new THREE.PlaneGeometry(T.width, T.length), topMat);
   top.rotation.x = -Math.PI / 2;
   top.position.y = T.height + 0.0004;
+  // 0,4 mm över kantfärgen: på ett 16-bitars djupbuffert kan de två ytorna
+  // inte skiljas åt och bordet flimrade blått/vitt. Djupförskjutningen gör
+  // att spelytan alltid vinner, oavsett krets.
+  topMat.polygonOffset = true;
+  topMat.polygonOffsetFactor = -2;
+  topMat.polygonOffsetUnits = -2;
   top.receiveShadow = true;
   table.add(top);
 

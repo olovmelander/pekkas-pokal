@@ -31,6 +31,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { guardRenderer, postTarget, addSanitize, RenderWatchdog, gfxNotice } from '../shared/gfx.js';
 import { Sfx } from './audio.js';
 import { HAZE, SUN_DIR, LIGHT_DIR, SUN_COLOR, buildSky, bakeEnvironment, buildHaze, buildHills } from './sky.js';
 import { mulberry, glowTexture, starTexture, buildRange, buildClay } from './range.js';
@@ -156,6 +157,10 @@ export async function createShooting(container) {
   // Count every pass of a frame (bloom included), not just the last one
   renderer.info.autoReset = false;
   canvasHost.appendChild(renderer.domElement);
+  // Riktiga grafikkretsar är strängare än testmiljöns: rätt sorts mål för
+  // efterbehandlingen, notis om en shader inte kompilerar, ?gfx=safe
+  const gfx = guardRenderer(renderer, container);
+  if (gfx.safe) quality.bloom = false;
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(HAZE, 50, 300);
@@ -239,9 +244,9 @@ export async function createShooting(container) {
   let composer = null;
   let bloom = null;
   function buildComposer() {
-    const rt = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: 4 });
-    composer = new EffectComposer(renderer, rt);
+    composer = new EffectComposer(renderer, postTarget(gfx, { samples: 4 }));
     composer.addPass(new RenderPass(scene, camera));
+    addSanitize(composer);
     bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.32, 0.5, 1.25);
     composer.addPass(bloom);
     composer.addPass(new OutputPass());
@@ -256,6 +261,22 @@ export async function createShooting(container) {
     bloom = null;
   }
   if (quality.bloom) buildComposer();
+
+  // Blir bilden svart på någon krets trappas grafiken ner i stället för att
+  // spelet blir ospelbart: först bort med efterbehandlingen, sedan skuggorna.
+  const watchdog = new RenderWatchdog(
+    renderer,
+    [
+      () => disposeComposer(),
+      () => {
+        renderer.shadowMap.enabled = false;
+        scene.traverse((o) => {
+          if (o.material) [].concat(o.material).forEach((m) => (m.needsUpdate = true));
+        });
+      }
+    ],
+    { onStep: () => gfxNotice(container, 'Grafiken förenklades för att fungera på den här enheten.') }
+  );
 
   /* ---- State ----------------------------------------------------------- */
 
@@ -1487,6 +1508,7 @@ export async function createShooting(container) {
     renderer.info.reset();
     if (composer) composer.render(realDt);
     else renderer.render(scene, camera);
+    watchdog.afterFrame();
     adapt(realDt);
   }
 
@@ -1652,6 +1674,8 @@ export async function createShooting(container) {
     hud.helpClose.removeEventListener('click', onHelpClose);
     hud.mute.removeEventListener('click', onMute);
     delete window.__ppSkytte;
+    gfx.dispose();
+    watchdog.dispose();
 
     const textures = new Set([glow, star, envMap, ...gun.textures]);
     const geometries = new Set();

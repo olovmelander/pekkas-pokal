@@ -2399,6 +2399,10 @@
     stage.hidden = false;
     loading.hidden = false;
     document.body.classList.add('game-open');
+    // Spelscenen har ett eget laddkort; webbplatsens laddskärm får inte
+    // ligga kvar och tona ovanpå spelet (t.ex. när sidan laddas om inne i
+    // ett spel och spelet startar medan sidan fortfarande bygger vyerna).
+    $('#loading-screen').classList.add('hidden');
     if (!App.lastFocusBeforeGame) App.lastFocusBeforeGame = document.activeElement;
     $('#game-close').focus({ preventScroll: true });
     if (App.trophy) App.trophy.pause();
