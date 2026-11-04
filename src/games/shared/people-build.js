@@ -440,6 +440,13 @@ export function buildTorso(b, ctx) {
   if (top.chestStripe) marks.push([1.205, 1.232, { region: REGION.ACCENT, tint: [1, 1, 1], off: top.off, lip: false }]);
   if (top.apron) marks.push([hemY + 0.0005, 1.33, { apron: true }]);
   if (top.trim) marks.push([yNeck - 0.016, yNeck, { region: REGION.ACCENT, tint: [1, 1, 1], off: top.off + 0.0006, lip: false }]);
+  if (top.stripes) {
+    // Breton-style bands in the accent colour, each a crisp pair of ring edges
+    const n = res.high ? 6 : 3;
+    const y0 = hemY + 0.05;
+    const step = (1.4 - y0) / n;
+    for (let k = 0; k < n; k++) marks.push([y0 + k * step, y0 + k * step + step * 0.36, { region: REGION.ACCENT, tint: [1, 1, 1], off: top.off, lip: false }]);
+  }
   marks.sort((a, b) => a[0] - b[0]);
   let cur = hemY;
   for (const [f, t, extra] of marks) {
@@ -1050,6 +1057,33 @@ export function buildTorsoExtras(b, ctx, sweepFn) {
     const ys = top.buttons === 2 ? [1.425, 1.385] : Array.from({ length: top.buttons }, (_, i) => 1.4 - i * 0.075);
     for (const y of ys) {
       surfaceBlob(b, ctx, { y, th: 0, r: [0.0042, 0.0042, 0.0016], lift: 0.0002, region: REGION.TOP, tint: [0.78, 0.78, 0.78], mat: MAT.GLOSS, weight: tw, cols: 5, rows: 2 });
+    }
+  }
+  if (top.placket && high) {
+    // Button stand: a flat strip down the front, a shade darker at its edges
+    const nk = necklineFn(top.neck);
+    const yTop = (nk ? nk.y0 - nk.dip(0) : 1.45) - 0.004;
+    const yBot = top.buttons === 2 ? 1.36 : top.tucked ? bot.waist + 0.004 : top.hem + 0.01;
+    const path = [];
+    for (let k = 0; k <= 10; k++) path.push(new THREE.Vector3(...ctx.torsoAt(lerp(yTop, yBot, k / 10), 0, 0.0009)));
+    sweepFn(b, { path, radius: 0.0105, cols: 4, region: REGION.TOP, tint: [0.93, 0.93, 0.93], mat: top.mat, weight: tw, flat: 0.12 });
+  }
+  if (ctx.look && ctx.look.shades === 'shirt' && !ctx.crowd) {
+    // Sunglasses hooked into the neckline by one arm
+    const nk = necklineFn(top.neck);
+    const yN = (nk ? nk.y0 - nk.dip(0) : 1.46) - 0.006;
+    const dark = [0.035, 0.035, 0.04];
+    for (const s of [1, -1]) {
+      surfaceBlob(b, ctx, {
+        y: yN - 0.026 - s * 0.002, th: s * 0.2, r: [0.0135, 0.0098, 0.0022], n: [3.2, 3.2], lift: 0.0036, region: REGION.FIXED,
+        tint: dark, mat: MAT.GLOSS, weight: tw, cols: high ? 8 : 5, rows: high ? 4 : 2
+      });
+    }
+    if (high) {
+      surfaceBlob(b, ctx, { y: yN - 0.02, th: 0, r: [0.006, 0.0022, 0.002], lift: 0.004, region: REGION.FIXED, tint: dark, mat: MAT.GLOSS, weight: tw, cols: 5, rows: 2 });
+      const arm = [];
+      for (let k = 0; k <= 4; k++) arm.push(new THREE.Vector3(...ctx.torsoAt(lerp(yN - 0.018, yN + 0.004, k / 4), lerp(-0.34, -0.2, k / 4), 0.0045 - k * 0.0012)));
+      sweepFn(b, { path: arm, radius: 0.0016, cols: 3, region: REGION.FIXED, tint: dark, mat: MAT.GLOSS, weight: tw, flat: 0.6 });
     }
   }
   if (top.zip) {

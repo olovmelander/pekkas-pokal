@@ -1046,56 +1046,132 @@ function limb(a, b, ra, rb, radial = 10) {
 }
 
 /**
- * A stylised right hand reaching in from the potter's side: palm toward the
- * camera, four tapered fingers stacked and pointing at the clay, knuckles,
- * the thumb tucked under them, and the forearm running out to a rolled
- * linen sleeve and the upper arm, which leave the frame toward the viewer —
- * so no cut-off limb ever floats in the picture. The fingertips wear a coat
- * of slip. The contact point (fingertip pads) is the local origin; mirror
- * with scale.x = −1 for the left side. The skin is the same soft, sheened
- * material family as the people in every game.
+ * The potter's right hand on the clay, reaching in from the right and
+ * toward the viewer: the back of the hand to the camera (knuckles, tendons
+ * and nails catch the light), four jointed fingers pointing into the wall
+ * with their tips curling round it, the thumb tucked under along the palm
+ * side, a real wrist and a forearm that runs out to a rolled linen sleeve —
+ * the elbow and upper arm leave the frame toward the viewer, so no cut-off
+ * limb ever floats in the picture. Wet slip coats the fingers and thins out
+ * up the back of the hand. The contact point (the middle finger's pad) is
+ * the local origin; mirror with scale.x = −1 for the left side. The skin is
+ * the same soft, sheened material family as the people in every game.
  */
 export function buildHand() {
   const b = new Batch();
-  const skin = new THREE.Color(0xd8a07a);
+  const skin = new THREE.Color(0xd9a27c);
+  const knuckle = new THREE.Color(0xd09272);
+  const nail = new THREE.Color(0xe8c0a8);
   const linen = new THREE.Color(0xd9ccb2);
+  const linenShade = new THREE.Color(0xc4b496);
   const slip = new THREE.Color(0x9c5a36);
   const V = (x, y, z) => new THREE.Vector3(x, y, z);
-  const fingers = [
-    [0.075, 0.25, 0.04],
-    [0.025, 0.28, 0.045],
-    [-0.025, 0.27, 0.045],
-    [-0.072, 0.22, 0.04]
+  // [knuckle y, knuckle x, segment lengths, radius, curl per joint] — index on top
+  const FINGERS = [
+    [0.082, 0.335, [0.13, 0.085, 0.07], 0.037, [0.18, 0.32, 0.26]],
+    [0.027, 0.345, [0.14, 0.095, 0.075], 0.039, [0.14, 0.3, 0.24]],
+    [-0.027, 0.338, [0.13, 0.088, 0.07], 0.036, [0.2, 0.36, 0.28]],
+    [-0.078, 0.318, [0.105, 0.07, 0.06], 0.031, [0.3, 0.42, 0.3]]
   ];
-  fingers.forEach(([y, len, rad], i) => {
-    const yy = y * 1.15;
-    const z = 0.02 - i * 0.012;
-    // Tip at the clay, base at the knuckle; a touch thinner at the tip
-    b.add(limb(V(rad * 0.9 + 0.005, yy, z), V(len + rad, yy, z), rad * 0.82, rad), skin);
-    b.add(new THREE.SphereGeometry(rad * 1.12, 10, 8), skin, [len + rad + 0.02, yy, z + 0.01]);
+  const tips = [];
+  FINGERS.forEach(([y, x0, lens, rad, curl], fi) => {
+    let p = V(x0, y, 0.012);
+    let th = 0.05 * (fi - 1.5);
+    lens.forEach((len, si) => {
+      th += curl[si];
+      // Pointing at the clay (−x), curling away from the camera (−z) round the wall
+      const d = V(-Math.cos(th), -0.04 * fi, -Math.sin(th)).normalize();
+      const q = p.clone().addScaledVector(d, len);
+      const r0 = rad * (1 - si * 0.09);
+      const r1 = rad * (0.92 - si * 0.1);
+      b.add(limb(p, q, r0, r1, 10), skin);
+      if (si === 2) {
+        // The nail on the back of the last joint
+        const n = new THREE.SphereGeometry(r1 * 0.78, 8, 6);
+        n.scale(1.25, 0.95, 0.35);
+        const mid = p.clone().lerp(q, 0.62);
+        const out = V(-d.z, 0, d.x).multiplyScalar(-1); // toward the camera, square to the finger
+        n.lookAt(out);
+        n.translate(mid.x + out.x * r1 * 0.72, mid.y, mid.z + out.z * r1 * 0.72);
+        b.add(n, nail);
+        tips.push(q.clone().addScaledVector(d, r1 * 0.8));
+      }
+      p = q;
+    });
+    // Knuckle: a soft bump on the back of the hand
+    b.add(new THREE.SphereGeometry(rad * 1.12, 10, 8), knuckle, [x0 + 0.01, y, 0.03], [0, 0, 0], [1, 0.9, 0.8]);
   });
-  b.add(limb(V(0.12, -0.13, 0.06), V(0.3, -0.06, 0.03), 0.04, 0.055), skin);
-  b.add(new THREE.SphereGeometry(0.16, 14, 10), skin, [0.36, -0.01, 0], [0, 0, 0], [0.75, 1.0, 0.5]);
-  // Forearm from the wrist to the elbow, then the rolled sleeve and the upper arm out of frame
-  const wrist = V(0.44, -0.07, 0.02);
-  const elbow = V(1.3, -0.72, 0.55);
-  const shoulder = V(2.3, -1.25, 2.9);
-  b.add(limb(wrist, elbow, 0.085, 0.112, 12), skin);
+  // Palm and back of the hand: a flattened, slightly cupped volume
+  const palm = new THREE.SphereGeometry(1, 18, 12);
+  const pp = palm.attributes.position;
+  for (let i = 0; i < pp.count; i++) {
+    const x = pp.getX(i);
+    const y = pp.getY(i);
+    let z = pp.getZ(i);
+    // flatter on the back (z > 0), fuller on the palm side; a hollow in the palm
+    z = z > 0 ? z * 0.82 : z * (1.05 - 0.35 * Math.max(0, 1 - Math.hypot(x, y) * 1.4));
+    pp.setXYZ(i, x * 0.16, y * (0.125 + 0.012 * x), z * 0.06);
+  }
+  palm.computeVertexNormals();
+  b.add(palm, skin, [0.47, 0.0, 0.0], [0, 0, -0.04]);
+  // Tendons fanning from the wrist to the knuckles, just under the skin
+  FINGERS.forEach(([y, x0], fi) => {
+    b.add(limb(V(0.6, -0.005 + y * 0.35, 0.05), V(x0 + 0.03, y, 0.045), 0.008, 0.011, 5), skin);
+    if (fi === 3) b.add(new THREE.SphereGeometry(0.03, 8, 6), knuckle, [0.62, -0.075, 0.025]); // wrist bone
+  });
+  // Thumb: tucked under the fingers along the palm side
+  const t0 = V(0.53, -0.08, -0.03);
+  const t1 = V(0.41, -0.14, -0.045);
+  const t2 = V(0.3, -0.155, -0.06);
+  const t3 = V(0.215, -0.145, -0.07);
+  b.add(limb(t0, t1, 0.055, 0.046, 10), skin);
+  b.add(limb(t1, t2, 0.044, 0.04, 10), skin);
+  b.add(limb(t2, t3, 0.039, 0.033, 10), skin);
+  const tn = new THREE.SphereGeometry(0.026, 8, 6);
+  tn.scale(1.3, 0.9, 0.35);
+  tn.rotateX(-0.5);
+  tn.translate(0.25, -0.17, -0.045);
+  b.add(tn, nail);
+  // Wrist and forearm toward the elbow (lower right, toward the viewer)
+  const wrist = V(0.62, -0.02, 0.0);
+  const elbow = V(1.32, -0.6, 0.72);
+  const shoulder = V(2.3, -1.2, 2.9);
+  b.add(limb(V(0.55, -0.01, 0.0), wrist, 0.1, 0.092, 14), skin);
+  b.add(limb(wrist, elbow, 0.09, 0.128, 14), skin);
   const dir = elbow.clone().sub(wrist).normalize();
-  b.add(limb(elbow.clone().addScaledVector(dir, -0.16), elbow.clone().addScaledVector(dir, 0.05), 0.135, 0.145, 14), linen);
-  b.add(limb(elbow, shoulder, 0.14, 0.17, 14), linen);
+  // The rolled sleeve: two fat turns of linen and the sleeve beyond them
+  const cuffAt = (k, rad, tube, col) => {
+    const tor = new THREE.TorusGeometry(rad, tube, 8, 22);
+    tor.lookAt(dir);
+    const c = wrist.clone().lerp(elbow, k);
+    tor.translate(c.x, c.y, c.z);
+    b.add(tor, col);
+  };
+  cuffAt(0.66, 0.13, 0.034, linen);
+  cuffAt(0.73, 0.137, 0.036, linenShade);
+  cuffAt(0.8, 0.14, 0.032, linen);
+  b.add(limb(wrist.clone().lerp(elbow, 0.78), elbow.clone().addScaledVector(dir, 0.08), 0.15, 0.158, 14), linenShade);
+  b.add(limb(elbow, shoulder, 0.158, 0.18, 14), linen);
   const mesh = b.mesh(new THREE.MeshPhysicalMaterial({
-    vertexColors: true, roughness: 0.55, metalness: 0, sheen: 0.3, sheenRoughness: 0.5, sheenColor: new THREE.Color(0.7, 0.34, 0.26)
+    vertexColors: true, roughness: 0.52, metalness: 0, sheen: 0.3, sheenRoughness: 0.5, sheenColor: new THREE.Color(0.7, 0.34, 0.26)
   }));
-  // Paint the slip coat onto the fingertips: blend by distance from the tips
+  // Wet slip: thick on the fingers, streaky up the back of the hand, gone by the wrist
   const pos = mesh.geometry.attributes.position;
   const col = mesh.geometry.attributes.color;
   const c = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
-    const k = Math.max(0, Math.min(1, (0.22 - pos.getX(i)) / 0.16));
-    c.setRGB(col.getX(i), col.getY(i), col.getZ(i)).lerp(slip, k * 0.85);
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const streak = 0.75 + 0.25 * Math.sin(y * 70 + x * 9);
+    const k = Math.max(0, Math.min(1, (0.46 - x) / 0.3)) * streak;
+    if (x > 0.75) continue; // the sleeve stays clean
+    c.setRGB(col.getX(i), col.getY(i), col.getZ(i)).lerp(slip, Math.min(0.88, k * 0.95));
     col.setXYZ(i, c.r, c.g, c.b);
   }
+  // The middle finger's pad sits on the origin
+  const mid = tips[1];
+  mesh.geometry.translate(-mid.x, -mid.y, -mid.z * 0.5);
+  mesh.geometry.computeBoundingSphere();
   mesh.castShadow = true;
   return mesh;
 }

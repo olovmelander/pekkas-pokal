@@ -42,7 +42,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { guardRenderer, postTarget, addSanitize, RenderWatchdog, gfxNotice, precompile } from '../shared/gfx.js';
 import { Sfx } from './audio.js';
-import { HAZE, SUN_DIR, LIGHT_DIR, SUN_COLOR, buildSky, bakeEnvironment, buildHaze, buildHills } from './sky.js';
+import { HAZE, SUN_DIR, LIGHT_DIR, SUN_COLOR, buildSky, bakeEnvironment, buildHaze, buildHills, buildShafts } from './sky.js';
 import { buildGang } from './gang.js';
 import { mulberry, glowTexture, starTexture, buildRange, buildClay } from './range.js';
 import { buildShotgun } from './gun.js';
@@ -253,8 +253,10 @@ export async function createShooting(container) {
   const haze = buildHaze();
   scene.add(haze.group);
   scene.add(buildHills());
-  const range = buildRange(mulberry(2022), { envMap });
+  const range = buildRange(mulberry(2022), { envMap, lite: lowTier });
   scene.add(range.group);
+  const shafts = buildShafts(mulberry(606));
+  scene.add(shafts.mesh);
   const grass = buildGrass(mulberry(8123), { sunDir: SUN_DIR, sunColor: SUN_COLOR });
   scene.add(grass.mesh);
 
@@ -368,6 +370,7 @@ export async function createShooting(container) {
     sky.dome.material = sky.plain;
     haze.group.visible = false;
     ambient.points.visible = false;
+    shafts.mesh.visible = false;
     scene.traverse((o) => {
       [].concat(o.material || []).forEach((m) => {
         if (m.envMap) {
@@ -1690,6 +1693,7 @@ export async function createShooting(container) {
     grass.uniforms.uTime.value = clock.game;
     sky.uniforms.uTime.value = clock.shader;
     haze.uniforms.uTime.value = clock.shader;
+    shafts.uniforms.uTime.value = clock.shader;
     range.flagUniforms.uTime.value = clock.game;
     ambient.uniforms.uTime.value = clock.game;
     range.swallows.update(dt, clock.game);

@@ -153,7 +153,122 @@ export function ringMaps(seed = 7) {
       alb[i + 3] = 255;
     }
   }
-  return { normal: dataTexture(nrm, size, false), albedo: dataTexture(alb, size, true) };
+  return { normal: dataTexture(nrm, size, false), albedo: dataTexture(alb, size, true), heights: h, size };
+}
+
+/*
+ * Glaze surfaces. Each glaze gets its own albedo map — the ring grooves of
+ * ringMaps (glaze pools in them) times a pattern of its own — so the four
+ * pieces look like four different glazes, not one colour four times. They
+ * only swap a texture, never a shader: every glazed piece keeps the program
+ * precompiled at load.
+ *
+ * The UVs wrap U_TILES times around a pot of ~0.7 radius and repeat every
+ * RING_TILE up it, so one texel is about ASPECT times wider on the pot than
+ * it is tall; the patterns are drawn squashed by that much and come out
+ * round on the clay.
+ */
+const ASPECT = 3;
+
+/** Tileable jittered-grid Voronoi: distance to the nearest edge, in "pot" units. */
+function voronoiEdges(size, gx, gy, rand) {
+  const pts = new Float32Array(gx * gy * 2);
+  for (let i = 0; i < gx * gy; i++) {
+    pts[i * 2] = rand();
+    pts[i * 2 + 1] = rand();
+  }
+  const out = new Float32Array(size * size);
+  for (let yi = 0; yi < size; yi++) {
+    for (let xi = 0; xi < size; xi++) {
+      const fx = (xi / size) * gx;
+      const fy = (yi / size) * gy;
+      const cx = Math.floor(fx);
+      const cy = Math.floor(fy);
+      let d1 = 1e9;
+      let d2 = 1e9;
+      for (let oy = -1; oy <= 1; oy++) {
+        for (let ox = -1; ox <= 1; ox++) {
+          const ix = (((cx + ox) % gx) + gx) % gx;
+          const iy = (((cy + oy) % gy) + gy) % gy;
+          const px = cx + ox + pts[(iy * gx + ix) * 2];
+          const py = cy + oy + pts[(iy * gx + ix) * 2 + 1];
+          // cells are gx wide and gy tall per tile; on the pot a tile is ASPECT× wider than tall
+          const dx = ((px - fx) / gx) * ASPECT;
+          const dy = (py - fy) / gy;
+          const d = dx * dx + dy * dy;
+          if (d < d1) {
+            d2 = d1;
+            d1 = d;
+          } else if (d < d2) d2 = d;
+        }
+      }
+      out[yi * size + xi] = Math.sqrt(d2) - Math.sqrt(d1);
+    }
+  }
+  return out;
+}
+
+/**
+ * One albedo variant per glaze kind:
+ *  - crackle: the celadon's crazing, a coarse and a fine network of dark lines
+ *  - speckle: iron spots bleeding through a honey glaze, with pale haloes
+ *  - mottle: the cobalt's depth — the glaze breaks lighter and pools darker
+ */
+export function glazeMaps(maps, seed = 11) {
+  let s = seed;
+  const rand = () => {
+    s = (s * 16807) % 2147483647;
+    return s / 2147483647;
+  };
+  const { heights: h, size } = maps;
+  const base = (i) => Math.max(0, Math.min(1, (238 - h[i] * 34) / 255));
+  const make = (fn) => {
+    const px = new Uint8Array(size * size * 4);
+    for (let i = 0; i < size * size; i++) {
+      const v = Math.max(0, Math.min(255, base(i) * fn(i) * 255));
+      px[i * 4] = v;
+      px[i * 4 + 1] = v;
+      px[i * 4 + 2] = v;
+      px[i * 4 + 3] = 255;
+    }
+    return dataTexture(px, size, true);
+  };
+  const coarse = voronoiEdges(size, 14, 5, rand);
+  const fine = voronoiEdges(size, 34, 12, rand);
+  const crackle = make((i) => {
+    const a = 1 - 0.55 * (1 - smooth01(0.0, 0.012, coarse[i]));
+    const b = 1 - 0.28 * (1 - smooth01(0.0, 0.006, fine[i]));
+    return a * b;
+  });
+  const spots = new Float32Array(size * size).fill(1);
+  for (let n = 0; n < 260; n++) {
+    const x = rand() * size;
+    const y = rand() * size;
+    // radius in texel rows (a texel is ASPECT× wider on the pot than tall)
+    const r = 2.2 + rand() * rand() * 5;
+    const dark = 0.3 + rand() * 0.35;
+    const ry = Math.ceil(r * 2.2);
+    const rx = Math.ceil((r * 2.2) / ASPECT);
+    for (let oy = -ry; oy <= ry; oy++) {
+      for (let ox = -rx; ox <= rx; ox++) {
+        const xi = (((Math.floor(x) + ox) % size) + size) % size;
+        const yi = (((Math.floor(y) + oy) % size) + size) % size;
+        const d = Math.hypot((ox + 0.5 - (x % 1)) * ASPECT, oy + 0.5 - (y % 1));
+        const i = yi * size + xi;
+        if (d < r) spots[i] = Math.min(spots[i], dark + (1 - dark) * (d / r) ** 3);
+        else if (d < r * 2.2 && spots[i] >= 1) spots[i] = 1.08;
+      }
+    }
+  }
+  const speckle = make((i) => spots[i]);
+  const blot = tileNoise(5, rand);
+  const blot2 = tileNoise(13, rand);
+  const mottle = make((i) => {
+    const x = (i % size) / size;
+    const y = Math.floor(i / size) / size;
+    return 0.82 + 0.26 * blot(x, y) + 0.12 * blot2(x, y);
+  });
+  return { crackle, speckle, mottle, list: [crackle, speckle, mottle] };
 }
 
 /* ------------------------------------------------------------ materials */
@@ -244,10 +359,10 @@ export function clayMaterial(maps, lite = false) {
  * (aRW.y = 1) drop to a glossy film with a clearcoat on top. The gold luster
  * of the bonus Pokal is a metal.
  */
-export function glazeMaterial(maps, metal) {
+export function glazeMaterial(maps, metal, albedo = null) {
   const mat = new THREE.MeshPhysicalMaterial({
     color: 0xffffff,
-    map: maps.albedo,
+    map: albedo || maps.albedo,
     normalMap: maps.normal,
     normalScale: new THREE.Vector2(0.55, 0.55),
     roughness: 0.86,
@@ -459,8 +574,12 @@ export class ClayBody {
    * Freeze the current shape into a fired piece: a new geometry with the
    * glaze painted into the vertex colours and aRW.y = "glazed".
    *  - the foot is waxed before glazing, so its bottom band stays bare body
-   *  - glaze runs thin and BREAKS on the rim and on convex bellies, pooling
-   *    darker in the concave neck (glazeData.rim is the colour it breaks to)
+   *  - glaze runs thin and BREAKS on the rim and on convex bellies, and
+   *    pools thicker, darker and richer in concave necks and the inside floor
+   *  - in the kiln it RUNS: it thickens toward the foot in streaks around the
+   *    pot, and creeps past the glaze line in drips with a fat bead at the end
+   *    (per column, so no two sides of the pot are the same)
+   *  - a lustre (the gold Pokal) is painted on thin and evenly: no runs
    */
   firedGeometry(r, glazeData) {
     this.update(r);
@@ -470,39 +589,87 @@ export class ClayBody {
     const glaze = new THREE.Color(glazeData.color);
     const rim = new THREE.Color(glazeData.rim);
     const body = new THREE.Color(0xb7774f);
+    const deep = glaze.clone().multiplyScalar(0.62);
     const c = new THREE.Color();
+    const runny = glazeData.metal ? 0 : 1;
+    // Per-column character from the profile itself, so a piece keeps its look
+    let seed = 1;
+    for (let j = 0; j < N; j += 7) seed = (seed * 31 + Math.round(r[j] * 997)) % 2147483647;
+    const rand = () => {
+      seed = (seed * 16807 + 11) % 2147483647;
+      return seed / 2147483647;
+    };
+    const streak = new Float32Array(K);
+    const drip = new Float32Array(K);
+    const ph = [rand(), rand(), rand(), rand()].map((x) => x * Math.PI * 2);
+    for (let k = 0; k < K; k++) {
+      const a = (k / K) * Math.PI * 2;
+      streak[k] = 0.5 * Math.sin(a * 3 + ph[0]) + 0.3 * Math.sin(a * 7 + ph[1]) + 0.2 * Math.sin(a * 13 + ph[2]);
+      // Mostly short tongues, now and then a long run
+      const x = rand();
+      drip[k] = runny * (0.012 + x * x * x * 0.11 + 0.02 * Math.max(0, Math.sin(a * 5 + ph[3])));
+    }
+    // A drip is a few columns wide: soften it with its neighbours (wrapping)
+    const dripS = new Float32Array(K);
+    for (let k = 0; k < K; k++) {
+      dripS[k] = Math.max(drip[k], 0.7 * drip[(k + 1) % K], 0.7 * drip[(k + K - 1) % K]);
+    }
     // Convexity per outside row from the second difference of the profile
     const curv = new Float32Array(N);
     for (let j = 1; j < N - 1; j++) curv[j] = r[j - 1] + r[j + 1] - 2 * r[j];
+    const GLAZE_LINE = 0.17;
     for (let i = 0; i < ROWS; i++) {
       const outerJ = i - 1;
       const y = this.py[i];
-      let glazed = 1;
+      const outside = outerJ >= 0 && outerJ < N;
+      const lip = outerJ >= N && outerJ < N + LIP;
+      const inside = outerJ >= N + LIP;
+      // Thickness before the runs: thin on the rim and convex bellies, pooled in concave necks
+      let thick = 1;
       let breakK = 0;
-      if (i === 0 || (outerJ >= 0 && outerJ < N && y < 0.13)) {
-        glazed = 0;
-      } else if (outerJ >= 0 && outerJ < N) {
-        // convex (negative second difference) → thin glaze → break
-        breakK = Math.max(0, Math.min(1, -curv[outerJ] * 90)) * 0.18 + smooth01(H - 0.25, H, y) * 0.45;
-        // a soft glaze line rather than a ruler-straight one
-        glazed = smooth01(0.13, 0.19, y);
-      } else if (outerJ >= N && outerJ < N + LIP) {
-        breakK = 0.6;
-      }
-      if (glazed > 0) {
-        c.copy(glaze).lerp(rim, breakK);
-        if (!glazeData.metal) c.lerp(body, 1 - glazed);
-      } else {
-        c.copy(body);
+      if (outside) {
+        const cv = Math.max(-1, Math.min(1, curv[outerJ] * 90));
+        breakK = Math.max(0, -cv) * 0.22 + smooth01(H - 0.25, H, y) * 0.45;
+        thick += Math.max(0, cv) * 0.35 + runny * 0.22 * (1 - y / H);
+      } else if (lip) {
+        breakK = 0.62;
+        thick = 0.7;
+      } else if (inside) {
+        // Glaze gathers in the bottom of a bowl: a glassy, deeper pool
+        thick = 1 + runny * 0.45 * smooth01(H * 0.5, FLOOR_Y, y);
       }
       const ao = this.pao[i];
       const base = i * COLS;
       for (let k = 0; k < COLS; k++) {
+        const kk = k % K;
+        let glazed = 1;
+        let t = thick;
+        let br = breakK;
+        if (i === 0) glazed = 0;
+        else if (outside) {
+          const line = GLAZE_LINE - dripS[kk];
+          // the glaze edge, and a fat bead where each drip stopped
+          glazed = smooth01(line - 0.03, line + 0.015, y);
+          const bead = Math.max(0, 1 - Math.abs(y - (line + 0.02)) / 0.05) * Math.min(1, dripS[kk] / 0.03);
+          t += runny * (0.18 * streak[kk] * (1 - y / H) + 0.55 * bead);
+          br = Math.max(0, br - runny * 0.12 * streak[kk]);
+          if (y < 0.035) glazed = 0;
+        } else if (inside) {
+          t += runny * 0.08 * streak[kk];
+        }
+        if (glazed > 0) {
+          c.copy(glaze).lerp(rim, Math.max(0, Math.min(1, br + (1 - t) * 0.8)));
+          if (t > 1) c.lerp(deep, Math.min(0.85, (t - 1) * 1.1));
+          if (!glazeData.metal) c.lerp(body, 1 - glazed);
+        } else {
+          c.copy(body);
+        }
         const vi = base + k;
         col[vi * 3] = c.r * ao;
         col[vi * 3 + 1] = c.g * ao;
         col[vi * 3 + 2] = c.b * ao;
-        rw[vi * 2] = 0.55 + 0.4 * this.pring[i];
+        // Thick glaze fills the throwing rings; thin glaze shows every one
+        rw[vi * 2] = (0.55 + 0.4 * this.pring[i]) * (glazed > 0 ? Math.max(0.45, 1.15 - 0.45 * t) : 1);
         rw[vi * 2 + 1] = glazed;
       }
     }

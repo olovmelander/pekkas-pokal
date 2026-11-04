@@ -33,7 +33,7 @@ const SEATS = [
   },
   {
     name: 'Viktor Jones', x: -0.85, z: 2.95, yaw: 0.07, fabric: 0x2b4f86,
-    look: { headwear: { style: 'cap', color: 0x1f2328 } }
+    look: { outfit: { top: 'polo', topColor: 0x34465e } }
   },
   {
     name: 'Ludvig Ulenius', x: 0.0, z: 2.86, yaw: 0, cup: true, fabric: 0x9a3a2e,
@@ -41,7 +41,7 @@ const SEATS = [
   },
   {
     name: 'Rickard Nilsson', x: 0.85, z: 2.97, yaw: -0.08, fabric: 0xa8832e,
-    look: { headwear: { style: 'beanie', color: 0x2f4a32 }, outfit: { top: 'jacket', topColor: 0x4a5a3a, shoes: 'boots', shoeColor: 0x3a2a1e } }
+    look: { outfit: { top: 'jacket', topColor: 0x4a5a3a, shoes: 'boots', shoeColor: 0x3a2a1e } }
   },
   {
     name: 'Per Olsson', x: 1.7, z: 2.8, yaw: -0.2, cup: true, fabric: 0x6a5a8a,

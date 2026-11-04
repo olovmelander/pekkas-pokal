@@ -15,7 +15,8 @@ export const SKIN_TONES = {
 };
 export const HAIR_COLORS = {
   black: 0x231812, darkBrown: 0x3b281b, brown: 0x60432b, lightBrown: 0x87684a, ash: 0x7a6a57,
-  blond: 0xc4a066, lightBlond: 0xdcc08c, ginger: 0x9a4f2a, gray: 0xaaa69f, saltPepper: 0x76706a
+  blond: 0xc4a066, lightBlond: 0xdcc08c, ginger: 0x9a4f2a, gray: 0xaaa69f, saltPepper: 0x76706a,
+  darkBlond: 0x9a7b52, strawberry: 0xb5784a, copper: 0xa4552c
 };
 /** Iris colours, linear RGB. */
 export const EYE_COLORS = {
@@ -24,33 +25,54 @@ export const EYE_COLORS = {
 };
 
 const P = (o) => o;
-/** The thirteen, as they appear in competition-data.csv. */
+/**
+ * The thirteen, as they appear in competition-data.csv. Hair, facial hair,
+ * glasses, headwear and build follow the owner's group photo (Jonas is not
+ * in it). Everyday outfits are the photo's summer clothes; games dress them
+ * in their own kit on top.
+ */
 export const PARTICIPANTS = {
-  'Olov Melander': P({ height: 1.83, build: 'average', skin: 'light', hair: ['sidePart', 'brown'], facialHair: 'stubble', eyes: 'blue',
-    face: { jaw: 1.05, nose: 1.02, chin: 1.06, brow: 1.02, cheek: 0.98 }, outfit: { topColor: 0x2f4f6e, bottomColor: 0x3b5578 } }),
-  'Mikael Hägglund': P({ height: 1.8, build: 'slim', skin: 'light', hair: ['sweptBack', 'gray'], glasses: 'round', eyes: 'grayBlue',
-    face: { jaw: 0.9, nose: 1.14, noseLen: 1.15, chin: 0.96, headL: 1.05, cheek: 0.95, brow: 1.08 }, glassesColor: 0x17171a,
-    outfit: { top: 'poloNeck', topColor: 0x1f2026, bottomColor: 0x8f8268, shoes: 'leather' } }),
-  'Viktor Jones': P({ height: 1.82, build: 'average', skin: 'medium', hair: ['curly', 'black'], facialHair: 'stubble', eyes: 'darkBrown',
-    face: { jaw: 1.04, lips: 1.25, nose: 1.1, cheek: 1.05, chin: 1.02 }, outfit: { topColor: 0xa8202c, bottomColor: 0x2a2e38 } }),
-  'Per Vikman': P({ height: 1.79, build: 'average', skin: 'lightWarm', hair: ['crop', 'darkBrown'], facialHair: 'beard', eyes: 'brown',
-    face: { jaw: 1.08, nose: 1.05, brow: 1.14, cheek: 1.02 }, outfit: { topColor: 0x7a2e2a, bottomColor: 0x5a5348 } }),
-  'Erik Vallgren': P({ height: 1.88, build: 'slim', skin: 'fair', hair: ['sweptBack', 'blond'], glasses: 'rect', eyes: 'blue',
-    face: { jaw: 0.92, headL: 1.04, noseLen: 1.12, chin: 1.1, cheek: 0.95 }, glassesColor: 0x222831, outfit: { topColor: 0x3e6b56, bottomColor: 0x3a3f4a } }),
-  'Henrik Lundqvist': P({ height: 1.85, build: 'broad', skin: 'lightWarm', hair: ['crop', 'brown'], facialHair: 'fullBeard', eyes: 'hazel',
-    face: { jaw: 1.12, nose: 1.08, brow: 1.1, cheek: 1.06, headW: 1.03 }, outfit: { topColor: 0x3f7a46, bottomColor: 0x4a5a72 } }),
-  'Rickard Nilsson': P({ height: 1.86, build: 'broad', skin: 'light', hair: ['buzz', 'black'], facialHair: 'stubble', eyes: 'brown',
-    face: { jaw: 1.15, chin: 1.12, brow: 1.16, nose: 0.96, cheek: 1.03 }, outfit: { topColor: 0x2f5f96, bottomColor: 0x1d2230 } }),
-  'Niklas Norberg': P({ height: 1.8, build: 'broad', skin: 'light', hair: ['balding', 'lightBrown'], facialHair: 'beard', glasses: 'rect', eyes: 'green',
-    face: { jaw: 1.08, cheek: 1.12, nose: 1.12, headW: 1.05, chin: 0.96 }, glassesColor: 0x2b3446, outfit: { topColor: 0x5b4a7a, bottomColor: 0x3c4a62 } }),
-  'Per Olsson': P({ height: 1.81, build: 'average', skin: 'fair', hair: ['bun', 'ginger'], facialHair: 'fullBeard', eyes: 'green',
-    face: { brow: 1.18, nose: 1.04, jaw: 1.02, lips: 1.1 }, browThick: 1.35, outfit: { topColor: 0x6b4a2e, bottomColor: 0x6b6a5a, bottom: 'trousers' } }),
-  'Tobias Lundqvist': P({ height: 1.78, build: 'slim', skin: 'lightWarm', hair: ['sidePart', 'brown'], glasses: 'round', eyes: 'hazel',
-    face: { jaw: 0.94, nose: 0.94, chin: 0.94, cheek: 0.97, lips: 1.08 }, glassesColor: 0x6a4428, outfit: { topColor: 0xc9a24a, bottomColor: 0x2b3140 } }),
-  'Lars Sandin': P({ height: 1.77, build: 'average', skin: 'light', hair: ['long', 'ash'], facialHair: 'stubble', eyes: 'grayBlue',
-    face: { jaw: 0.97, headL: 1.03, nose: 1.1, noseLen: 1.1, cheek: 0.96 }, outfit: { topColor: 0x8c3a3a, bottomColor: 0x4a5a72 } }),
-  'Ludvig Ulenius': P({ height: 1.9, build: 'slim', skin: 'fair', hair: ['tousled', 'lightBlond'], eyes: 'blue',
-    face: { jaw: 0.92, chin: 1.04, headW: 0.96, nose: 0.92, cheek: 0.94, lips: 0.95 }, outfit: { topColor: 0x2f5f5c, bottomColor: 0x8a7a60, bottom: 'trousers' } }),
+  'Olov Melander': P({ height: 1.81, build: 'average', skin: 'light', hair: ['sidePart', 'brown'], eyes: 'blue', smile: 0.35,
+    face: { jaw: 1.02, nose: 0.98, chin: 1.0, brow: 1.0, cheek: 1.05, mouth: 1.06, headW: 1.02 },
+    outfit: { topColor: 0xcfc5b2, bottom: 'shorts', bottomColor: 0x1c1d22 } }),
+  // Tall and slim, neat short hair. The painting game's culture critic: the
+  // polo neck is his default outfit.
+  'Mikael Hägglund': P({ height: 1.9, build: 'slim', skin: 'light', hair: ['crop', 'lightBrown'], eyes: 'grayBlue',
+    face: { jaw: 0.94, nose: 1.04, noseLen: 1.05, chin: 1.02, headL: 1.0, cheek: 0.96, brow: 1.04 },
+    outfit: { top: 'poloNeck', topColor: 0x1f2026, bottom: 'trousers', bottomColor: 0x8f8268, shoes: 'leather' } }),
+  'Viktor Jones': P({ height: 1.8, build: 'average', skin: 'fair', hair: ['crop', 'brown'], facialHair: 'fullBeard', glasses: 'round', glassesColor: 0x1a1614, eyes: 'brown',
+    headwear: { style: 'cap', color: 0x6f6152 },
+    face: { jaw: 1.02, lips: 1.04, nose: 1.02, cheek: 1.02, chin: 1.0 },
+    outfit: { top: 'stripedTee', topColor: 0xb8693a, accent: 0xe9d9c0, bottom: 'shorts', bottomColor: 0xc9b58f } }),
+  'Per Vikman': P({ height: 1.87, build: 'slim', skin: 'lightWarm', hair: ['wavy', 'darkBlond'], facialHair: 'stubble', eyes: 'blue', smile: 0.2,
+    face: { jaw: 0.97, nose: 1.06, noseLen: 1.06, brow: 1.04, cheek: 0.98, headL: 1.02 },
+    outfit: { top: 'linen', topColor: 0xc8cebd, bottom: 'shorts', bottomColor: 0xbca785 } }),
+  'Erik Vallgren': P({ height: 1.86, build: 'average', skin: 'fair', hair: ['receding', 'darkBlond'], eyes: 'blue', shades: 'shirt',
+    face: { jaw: 1.04, headW: 1.04, noseLen: 1.0, chin: 1.02, cheek: 1.06 },
+    outfit: { topColor: 0xb3b5b5, bottom: 'shorts', bottomColor: 0x1f2638 } }),
+  'Henrik Lundqvist': P({ height: 1.83, build: 'slim', skin: 'light', hair: ['messy', 'darkBrown'], glasses: 'rect', glassesColor: 0x141416, eyes: 'hazel',
+    face: { jaw: 0.95, chin: 1.02, nose: 1.04, noseLen: 1.04, cheek: 0.96, headW: 0.98, brow: 1.04 }, browThick: 1.15,
+    outfit: { topColor: 0x3b2b22, bottom: 'shorts', bottomColor: 0x1d1e23 } }),
+  'Rickard Nilsson': P({ height: 1.8, build: 'average', skin: 'lightWarm', hair: ['sweptBack', 'strawberry'], facialHair: 'stubble', eyes: 'blue', shades: 'up', smile: 0.45,
+    face: { jaw: 1.06, chin: 1.04, brow: 1.06, nose: 1.0, cheek: 1.04, mouth: 1.08 },
+    outfit: { topColor: 0xbabcb9, bottom: 'shorts', bottomColor: 0x1c1d22 } }),
+  'Niklas Norberg': P({ height: 1.78, build: 'broad', skin: 'light', hair: ['crop', 'lightBrown'], facialHair: 'beard', eyes: 'green',
+    headwear: { style: 'cap', color: 0x6d6c4c },
+    face: { jaw: 1.1, cheek: 1.12, nose: 1.04, headW: 1.07, chin: 0.98 },
+    outfit: { topColor: 0x3e4531, bottom: 'shorts', bottomColor: 0x2a2b30 } }),
+  'Per Olsson': P({ height: 1.84, build: 'average', skin: 'light', hair: ['crop', 'darkBrown'], glasses: 'sun', glassesColor: 0x0d0d0f, eyes: 'brown',
+    face: { brow: 1.04, nose: 1.02, jaw: 1.0, lips: 1.04, headL: 1.02, cheek: 0.98 },
+    outfit: { top: 'polo', topColor: 0x22253a, bottom: 'shorts', bottomColor: 0xb6a37f } }),
+  'Tobias Lundqvist': P({ height: 1.81, build: 'average', skin: 'fair', hair: ['shaved', 'strawberry'], facialHair: 'fullBeard', eyes: 'blue', shades: 'shirt',
+    face: { jaw: 1.04, chin: 1.0, nose: 1.0, cheek: 1.03, headW: 1.02, brow: 1.06 },
+    outfit: { topColor: 0xeae8e3, bottom: 'shorts', bottomColor: 0x2b2c31 } }),
+  'Lars Sandin': P({ height: 1.79, build: 'average', skin: 'light', hair: ['sidePart', 'blond'], eyes: 'grayBlue', shades: 'shirt',
+    face: { jaw: 1.0, nose: 1.02, cheek: 1.02, chin: 1.0, headW: 1.0 },
+    outfit: { topColor: 0xeeeeea, bottom: 'shorts', bottomColor: 0x1c1d22 } }),
+  // Shaved head and a long copper beard: the one silhouette everyone knows
+  'Ludvig Ulenius': P({ height: 1.84, build: 'slim', skin: 'fair', hair: ['shaved', 'copper'], facialHair: 'longBeard', eyes: 'blue',
+    face: { jaw: 0.96, chin: 1.0, headW: 0.98, nose: 1.02, noseLen: 1.06, cheek: 0.95, brow: 1.04 },
+    outfit: { topColor: 0x9ba2a6, bottom: 'shorts', bottomColor: 0x41709a } }),
   'Jonas Eriksson': P({ height: 1.76, build: 'average', skin: 'lightWarm', hair: ['crop', 'saltPepper'], facialHair: 'moustache', eyes: 'brown',
     face: { jaw: 1.04, nose: 1.14, cheek: 1.1, brow: 1.06, chin: 0.98 }, outfit: { topColor: 0x4d6b42, bottomColor: 0x3a3a40 } })
 };
@@ -65,6 +87,8 @@ function hashName(s) {
   return h >>> 0;
 }
 
+const WARM_TOPS = new Set(['jacket', 'fishingJacket', 'sweater', 'poloNeck']);
+const SPORT_TOPS = new Set(['fencing', 'jersey']);
 const pick = (r, list) => list[Math.floor(r() * list.length) % list.length];
 const SHIRT_COLORS = [0x8c3a3a, 0x36506e, 0x4d6b42, 0x7a5a2c, 0x5a3c62, 0x2f5f5c, 0x8a6a3a, 0xa8202c, 0xc9a24a, 0x3d4a66, 0xe0d6c4, 0x6e7f8c];
 const TROUSER_COLORS = [0x2b3140, 0x4a3e30, 0x1d2230, 0x3c4a62, 0x5a5348, 0x2e3a2e];
@@ -84,6 +108,7 @@ export function appearanceFor(name, overrides = {}) {
       name: key, height: base.height, build: base.build, skin: SKIN_TONES[base.skin],
       hair: { style: base.hair[0], color: HAIR_COLORS[base.hair[1]] }, facialHair: base.facialHair || null,
       glasses: base.glasses || null, glassesColor: base.glassesColor, eyes: base.eyes, face: { ...base.face },
+      headwear: base.headwear ? { ...base.headwear } : null, shades: base.shades || null, smile: base.smile || 0,
       browThick: base.browThick, seed: hashName(key),
       outfit: { top: 'tshirt', bottom: 'jeans', shoes: 'sneakers', ...base.outfit }
     };
@@ -107,10 +132,22 @@ export function appearanceFor(name, overrides = {}) {
   // A different garment drops the colour that belonged to the everyday one
   const everyday = { ...spec.outfit };
   const o = overrides.outfit || {};
-  if (o.top && o.top !== everyday.top) delete everyday.topColor;
+  if (o.top && o.top !== everyday.top) {
+    delete everyday.topColor;
+    if (everyday.accent !== undefined && o.accent === undefined) delete everyday.accent;
+  }
+  // Dressed for the weather: a warm top or boots over summer shorts gets long trousers
+  if (everyday.bottom === 'shorts' && !o.bottom && (WARM_TOPS.has(o.top) || o.shoes === 'boots')) {
+    everyday.bottom = 'jeans';
+    delete everyday.bottomColor;
+  }
   if (o.bottom && o.bottom !== everyday.bottom) delete everyday.bottomColor;
   if (o.shoes && o.shoes !== everyday.shoes) delete everyday.shoeColor;
   out.outfit = { ...everyday, ...o };
+  // A sports kit leaves the everyday cap and the sunglasses on the shelf
+  if (SPORT_TOPS.has(o.top) && !('headwear' in overrides)) out.headwear = null;
+  if (SPORT_TOPS.has(o.top) && !('shades' in overrides)) out.shades = null;
+  if (o.top && o.top !== spec.outfit.top && out.shades === 'shirt' && !('shades' in overrides)) out.shades = null;
   if (overrides.hair) out.hair = { ...spec.hair, ...overrides.hair };
   if (overrides.face) out.face = { ...spec.face, ...overrides.face };
   return out;
@@ -130,9 +167,17 @@ function topDef(kind, o) {
     case 'none':
       return { ...base, neck: null, hem: 0.99, tucked: true, off: 0, sleeve: 0, mat: MAT.SKIN, region: REGION.SKIN };
     case 'polo':
-      return { ...base, neck: 'collar', collar: 'fold', sleeve: 0.14, buttons: 2, sleeveBand: { region: REGION.TOP, tint: [0.88, 0.88, 0.88] } };
+      return { ...base, neck: 'collar', collar: 'fold', sleeve: 0.14, buttons: 2, placket: true, sleeveBand: { region: REGION.TOP, tint: [0.88, 0.88, 0.88] }, fabric: 'pique' };
+    case 'linen':
+      // An untucked linen shirt, sleeves rolled to just below the elbow
+      return {
+        ...base, neck: 'collar', collar: 'fold', hem: 0.826, off: 0.0052, sleeve: 0.33, sleeveOff: 0.0072, sleeveLoose: 1.5, buttons: 5,
+        placket: true, sleeveBand: { region: REGION.TOP, tint: [0.9, 0.9, 0.88] }, fabric: 'linen'
+      };
+    case 'stripedTee':
+      return { ...base, stripes: true, fabric: 'jersey' };
     case 'shirt':
-      return { ...base, neck: 'collar', collar: 'fold', tucked: true, off: 0.0035, sleeve: 0.54, cuff: true, cuffTint: [0.95, 0.95, 0.95], buttons: 6 };
+      return { ...base, neck: 'collar', collar: 'fold', tucked: true, off: 0.0035, sleeve: 0.54, cuff: true, cuffTint: [0.95, 0.95, 0.95], buttons: 6, placket: true };
     case 'poloNeck':
       return { ...base, neck: 'turtle', hem: 0.875, off: 0.0048, sleeve: 0.545, cuff: true, cuffTint: [0.9, 0.9, 0.9], neckRoll: true, rib: true };
     case 'sweater':
@@ -204,7 +249,7 @@ export function resolveOutfit(o = {}) {
     top, bottom,
     topColor: o.topColor ?? (top === 'fencing' ? 0xf3f1ea : top === 'fishingJacket' ? 0xf2c14e : 0x36506e),
     bottomColor: o.bottomColor ?? defaultBottomColor,
-    accent: o.accent ?? (top === 'apron' ? 0x3a5570 : top === 'jersey' ? 0xf1efe8 : 0xb23a48),
+    accent: o.accent ?? (top === 'apron' ? 0x3a5570 : top === 'jersey' ? 0xf1efe8 : top === 'stripedTee' ? 0xe9d9c0 : 0xb23a48),
     shoes: o.shoes || (bottom === 'knickers' ? 'sneakers' : 'sneakers'),
     shoeColor: o.shoeColor ?? (o.shoes === 'leather' ? 0x3a2418 : o.shoes === 'boots' ? 0x26343c : 0x2a2f3a),
     topDef: topDef(top, o),
@@ -222,6 +267,10 @@ export function finishOutfit(out) {
 export function resolveLook(spec = {}) {
   const r = rng((spec.seed ?? hashName(spec.name || 'x')) ^ 0x9e3779b9);
   const hair = typeof spec.hair === 'string' ? { style: spec.hair } : (spec.hair || {});
+  // Aliases: a shaved head is bald with a shadow of stubble on the scalp; a
+  // long beard is a full beard that keeps going (crowds show a full beard)
+  const shaved = hair.style === 'shaved';
+  const longBeard = spec.facialHair === 'longBeard';
   const head = typeof spec.headwear === 'string' ? { style: spec.headwear } : (spec.headwear || null);
   const faceIn = spec.face || {};
   const face = {
@@ -239,11 +288,15 @@ export function resolveLook(spec = {}) {
     height: spec.height ?? 1.8,
     build: spec.build || 'average',
     skin,
-    hairStyle: hair.style || 'crop',
+    hairStyle: shaved ? 'bald' : hair.style || 'crop',
+    shaved,
     hairColor,
-    facialHair: spec.facialHair || null,
+    facialHair: longBeard ? 'fullBeard' : spec.facialHair || null,
+    beardLong: longBeard,
     glasses: spec.glasses || null,
     glassesTint: lin(spec.glassesColor ?? 0x1a1a1e),
+    shades: spec.shades || null,
+    smile: spec.smile || 0,
     headwear: head ? head.style : null,
     headwearColor: head && head.color !== undefined ? new THREE.Color(head.color) : null,
     iris: eyes,

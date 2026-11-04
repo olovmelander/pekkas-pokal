@@ -207,6 +207,152 @@ function radialTexture(THREE, inner, stops) {
   return new THREE.CanvasTexture(cv);
 }
 
+/**
+ * Dressed stone for the castle: courses of slightly uneven blocks with dark
+ * mortar, grey so the material colour tints it. Mapped in world units by
+ * bakeStatic (one tile = STONE_TILE units), so a merlon and a tower wall
+ * show blocks of the same size.
+ */
+const STONE_TILE = 2.4;
+function stoneTexture(THREE) {
+  const N = 256;
+  const cv = document.createElement('canvas');
+  cv.width = N;
+  cv.height = N;
+  const g = cv.getContext('2d');
+  g.fillStyle = '#4a4a4e';
+  g.fillRect(0, 0, N, N);
+  let seed = 11;
+  const rnd = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  const rows = 14;
+  const rh = N / rows;
+  for (let r = 0; r < rows; r++) {
+    const cols = 7;
+    const cw = N / cols;
+    const off = r % 2 ? cw / 2 : 0;
+    for (let c = -1; c <= cols; c++) {
+      const x = c * cw + off;
+      const v = 168 + Math.round(rnd() * 60);
+      g.fillStyle = `rgb(${v},${v},${v + 4})`;
+      g.fillRect(x + 1.5, r * rh + 1.5, cw - 3, rh - 3);
+      // A lit top edge and a shaded bottom: the blocks stand proud of the mortar
+      g.fillStyle = 'rgba(255,255,255,0.16)';
+      g.fillRect(x + 1.5, r * rh + 1.5, cw - 3, 2);
+      g.fillStyle = 'rgba(0,0,0,0.22)';
+      g.fillRect(x + 1.5, r * rh + rh - 3.5, cw - 3, 2);
+    }
+  }
+  // Weathering
+  for (let i = 0; i < 260; i++) {
+    const v = rnd() < 0.5 ? 255 : 0;
+    g.fillStyle = `rgba(${v},${v},${v},${0.04 + rnd() * 0.06})`;
+    g.fillRect(rnd() * N, rnd() * N, 2 + rnd() * 6, 2 + rnd() * 4);
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+/** Re-maps a (world-space) geometry's UVs: box projection, or around a tower's axis */
+function worldUV(geo, scale, cyl) {
+  const p = geo.attributes.position;
+  const n = geo.attributes.normal;
+  const uv = geo.attributes.uv;
+  if (!p || !n || !uv) return;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i);
+    const y = p.getY(i);
+    const z = p.getZ(i);
+    let u;
+    let v;
+    const ny = Math.abs(n.getY(i));
+    if (cyl && ny < 0.7) {
+      // Seam at the back of the tower, away from the camera
+      u = (Math.atan2(x - cyl.x, z - cyl.z) * cyl.r) / scale;
+      v = y / scale;
+    } else {
+      const nx = Math.abs(n.getX(i));
+      const nz = Math.abs(n.getZ(i));
+      if (ny >= nx && ny >= nz) {
+        u = x / scale;
+        v = z / scale;
+      } else if (nx >= nz) {
+        u = z / scale;
+        v = y / scale;
+      } else {
+        u = x / scale;
+        v = y / scale;
+      }
+    }
+    uv.setXY(i, u, v);
+  }
+  uv.needsUpdate = true;
+}
+
+/**
+ * Static batching. Everything on the table that never moves on its own is
+ * merged into one mesh per material (and shadow setting), so the castle's
+ * forty-odd blocks, the wireform ties and the posts cost a handful of draw
+ * calls instead of a hundred — half of them twice, once more for the shadow
+ * map. Anything animated, swapped or recoloured is flagged `userData.keep`
+ * by its builder and left alone, with its whole subtree.
+ */
+export function bakeStatic(THREE, mergeGeometries, root) {
+  root.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
+  const buckets = new Map();
+  const visit = (o) => {
+    if (o.userData.keep || !o.visible) return;
+    if (o.isMesh && !o.isInstancedMesh && !o.isSkinnedMesh && !Array.isArray(o.material)) {
+      const key = `${o.material.uuid}|${o.castShadow ? 1 : 0}|${o.receiveShadow ? 1 : 0}|${o.renderOrder}`;
+      let b = buckets.get(key);
+      if (!b) {
+        b = { material: o.material, items: [], cast: o.castShadow, receive: o.receiveShadow, order: o.renderOrder };
+        buckets.set(key, b);
+      }
+      b.items.push(o);
+    }
+    o.children.forEach(visit);
+  };
+  root.children.forEach(visit);
+  const m = new THREE.Matrix4();
+  let merged = 0;
+  buckets.forEach((b) => {
+    const worldScale = b.material.userData.worldUV;
+    if (b.items.length < 2 && !worldScale) return;
+    const geos = b.items.map((o) => {
+      m.multiplyMatrices(inv, o.matrixWorld);
+      const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+      Object.keys(g.attributes).forEach((name) => {
+        if (name !== 'position' && name !== 'normal' && name !== 'uv') g.deleteAttribute(name);
+      });
+      g.morphAttributes = {};
+      g.clearGroups();
+      g.applyMatrix4(m);
+      if (worldScale) worldUV(g, worldScale, o.userData.cylUV);
+      return g;
+    });
+    const geo = mergeGeometries(geos, false);
+    geos.forEach((g) => g.dispose());
+    if (!geo) return;
+    const mesh = new THREE.Mesh(geo, b.material);
+    mesh.castShadow = b.cast;
+    mesh.receiveShadow = b.receive;
+    mesh.renderOrder = b.order;
+    mesh.name = 'baked';
+    root.add(mesh);
+    b.items.forEach((o) => o.parent && o.parent.remove(o));
+    merged += b.items.length;
+  });
+  return merged;
+}
+
 /* -------------------------------------------------------------- materials */
 
 /**
@@ -262,18 +408,31 @@ export function createMaterials(THREE, playfieldTexture) {
       metalness: 0.95,
       envMapIntensity: 1
     }),
+    // Dressed stone: the block map is grey, the colour tints it (a cool
+    // moonlit limestone, darker for the corbels and merlons)
     stone: new THREE.MeshStandardMaterial({
-      color: 0x8b93ad,
-      roughness: 0.82,
-      metalness: 0.12,
+      color: 0xb4bbd2,
+      roughness: 0.84,
+      metalness: 0.05,
       envMapIntensity: 0.25
     }),
     stoneDark: new THREE.MeshStandardMaterial({
-      color: 0x5c6480,
-      roughness: 0.85,
-      metalness: 0.1,
+      color: 0x7a83a3,
+      roughness: 0.86,
+      metalness: 0.05,
       envMapIntensity: 0.2
     }),
+    // Post and sling rubbers: off-white, matte, the classic look
+    rubberWhite: new THREE.MeshStandardMaterial({
+      color: 0xe9e4d8,
+      roughness: 0.62,
+      metalness: 0,
+      envMapIntensity: 0.3
+    }),
+    // Lit castle windows and the GI bulbs: self-lit, held under the bloom
+    // threshold so the small shapes never sparkle in and out of the bloom
+    window: new THREE.MeshBasicMaterial({ color: 0xffb35c }),
+    bulb: new THREE.MeshBasicMaterial({ color: 0xfff0d0 }),
     wood: new THREE.MeshStandardMaterial({
       color: 0x8a5a2b,
       roughness: 0.7,
@@ -386,6 +545,11 @@ export function createMaterials(THREE, playfieldTexture) {
     })
   };
   [m.chrome, m.rail, m.armour].forEach((mat) => tameGlints(mat));
+  const stone = stoneTexture(THREE);
+  [m.stone, m.stoneDark].forEach((mat) => {
+    mat.map = stone;
+    mat.userData.worldUV = STONE_TILE;
+  });
   return m;
 }
 
@@ -409,6 +573,9 @@ export const CAB = {
   // has to stay legible at that size.
   dmd: { w: 15.6, h: 3.9, y: 2.5 }
 };
+
+/** Height of the underside of the plastics over the slings and lane guides */
+const PLASTIC_Y = 1.95;
 
 /** World-space top edge of the backbox, for framing the camera */
 export function headTop() {
@@ -838,20 +1005,53 @@ function buildCastle(THREE, materials) {
     );
     tower.position.set(t.x, towerH / 2, -t.y);
     tower.castShadow = true;
+    tower.userData.cylUV = { x: t.x, z: -t.y, r: t.r + 0.17 };
     g.add(tower);
 
-    const roof = new THREE.Mesh(new THREE.ConeGeometry(t.r + 0.3, 1.1, 18), materials.gold);
-    roof.position.set(t.x, towerH + 0.55, -t.y);
+    // A plinth course at the foot and a corbelled gallery under the roof:
+    // the two rings that turn a cylinder into a tower
+    const plinth = new THREE.Mesh(new THREE.CylinderGeometry(t.r + 0.3, t.r + 0.34, 0.3, 18), materials.stoneDark);
+    plinth.position.set(t.x, 0.15, -t.y);
+    plinth.userData.cylUV = { x: t.x, z: -t.y, r: t.r + 0.32 };
+    g.add(plinth);
+    const corbel = new THREE.Mesh(new THREE.CylinderGeometry(t.r + 0.34, t.r + 0.16, 0.34, 18), materials.stoneDark);
+    corbel.position.set(t.x, towerH - 0.12, -t.y);
+    corbel.castShadow = true;
+    corbel.userData.cylUV = { x: t.x, z: -t.y, r: t.r + 0.3 };
+    g.add(corbel);
+
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(t.r + 0.36, 1.25, 18), materials.gold);
+    roof.position.set(t.x, towerH + 0.6, -t.y);
     roof.castShadow = true;
     g.add(roof);
+    // Finial ball on the spire
+    const finial = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), materials.gold);
+    finial.position.set(t.x, towerH + 1.27, -t.y);
+    g.add(finial);
+
+    // Arrow slits facing the player, lit from inside
+    [[0, 1.05, 0.12], [-0.42, 1.95, 0.1], [0.42, 1.95, 0.1]].forEach(([ax, y, w]) => {
+      const a = ax; // around the tower, radians from the front
+      const slit = new THREE.Mesh(new THREE.BoxGeometry(w, 0.42, 0.08), materials.window);
+      const rr = t.r + 0.15;
+      slit.position.set(t.x + Math.sin(a) * rr, y, -t.y + Math.cos(a) * rr);
+      slit.rotation.y = a;
+      g.add(slit);
+    });
 
     // Pennant flag
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.9, 6), materials.chrome);
-    pole.position.set(t.x, towerH + 1.5, -t.y);
+    pole.position.set(t.x, towerH + 1.6, -t.y);
     g.add(pole);
-    const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.3), materials.blueGlow);
-    flag.position.set(t.x + 0.28, towerH + 1.75, -t.y);
-    flag.material = materials.blueGlow;
+    const pennant = new THREE.Shape();
+    pennant.moveTo(0, 0.17);
+    pennant.lineTo(0.62, 0.03);
+    pennant.lineTo(0.5, -0.02);
+    pennant.lineTo(0.62, -0.1);
+    pennant.lineTo(0, -0.17);
+    pennant.closePath();
+    const flag = new THREE.Mesh(new THREE.ShapeGeometry(pennant), materials.blueGlow);
+    flag.position.set(t.x + 0.03, towerH + 1.86, -t.y);
     g.add(flag);
   });
 
@@ -907,6 +1107,7 @@ function buildCastle(THREE, materials) {
   portcullis.add(cross);
   // Bars are laid out in absolute playfield x, so the group only lifts them
   portcullis.position.set(0, 1.88, -gay);
+  portcullis.userData.keep = true;
   g.add(portcullis);
   refs.portcullis = portcullis;
 
@@ -922,6 +1123,7 @@ function buildCastle(THREE, materials) {
   });
   bridge.position.set(gateCx, 0.1, -(gay - 0.35));
   bridge.rotation.x = -Math.PI / 2 + 0.12; // raised (closed)
+  bridge.userData.keep = true;
   g.add(bridge);
   refs.bridge = bridge;
 
@@ -1030,6 +1232,500 @@ function apronTexture(THREE) {
   return tex;
 }
 
+/* ---------------------------------------------------------------- plastics */
+
+// Playfield region the plastics' shared print covers (2:1, like its canvas)
+const PL = { x0: -10.2, x1: 7.0, y0: 7.6, y1: 16.2 };
+
+/** The plastic pieces, in playfield coordinates */
+function plasticOutlines() {
+  const sling = [
+    [-5.0, 12.5], [-5.55, 11.9], [-5.32, 9.3], [-4.86, 8.66], [-3.55, 8.4],
+    [-3.16, 8.78], [-3.42, 9.36], [-4.58, 12.32]
+  ];
+  // A heater shield over the top of each lane guide, where the orbit
+  // returns drop onto the inlane
+  const guide = [[-7.9, 13.5], [-6.3, 13.5], [-6.3, 12.75], [-7.1, 12.05], [-7.9, 12.75]];
+  const mirror = (pts) => pts.map(([x, y]) => [mirrorX(x), y]).reverse();
+  return [
+    { id: 'slingL', pts: sling, art: 'trophy' },
+    { id: 'slingR', pts: mirror(sling), art: 'tower' },
+    { id: 'guideL', pts: guide, art: 'crown' },
+    { id: 'guideR', pts: mirror(guide), art: 'crown' }
+  ];
+}
+
+/**
+ * The plastics' print: screen-printed art on clear acrylic, one canvas for
+ * every piece so they all draw in a single call. Royal blue and crimson
+ * fields, heraldic charges in gold, a white ink keyline and the clear edge
+ * where the art stops short of the cut.
+ */
+function plasticsTexture(THREE, pieces) {
+  const W = 1024;
+  const H = 512;
+  const cv = document.createElement('canvas');
+  cv.width = W;
+  cv.height = H;
+  const g = cv.getContext('2d');
+  const sx = W / (PL.x1 - PL.x0);
+  const X = (x) => (x - PL.x0) * sx;
+  const Y = (y) => (PL.y1 - y) * sx;
+  g.fillStyle = '#1a2160';
+  g.fillRect(0, 0, W, H);
+  const GOLD = '#f2c14e';
+
+  const shield = (cx, cy, s) => {
+    const p = new Path2D();
+    p.moveTo(cx - s, cy - s * 0.95);
+    p.lineTo(cx + s, cy - s * 0.95);
+    p.lineTo(cx + s, cy + s * 0.05);
+    p.quadraticCurveTo(cx + s * 0.95, cy + s * 0.95, cx, cy + s * 1.35);
+    p.quadraticCurveTo(cx - s * 0.95, cy + s * 0.95, cx - s, cy + s * 0.05);
+    p.closePath();
+    return p;
+  };
+  const charge = (kind, cx, cy, s) => {
+    g.fillStyle = GOLD;
+    g.strokeStyle = GOLD;
+    if (kind === 'trophy') {
+      g.beginPath();
+      g.moveTo(cx - s * 0.5, cy - s * 0.55);
+      g.lineTo(cx + s * 0.5, cy - s * 0.55);
+      g.quadraticCurveTo(cx + s * 0.48, cy + s * 0.12, cx + s * 0.1, cy + s * 0.22);
+      g.lineTo(cx + s * 0.1, cy + s * 0.42);
+      g.lineTo(cx + s * 0.32, cy + s * 0.58);
+      g.lineTo(cx - s * 0.32, cy + s * 0.58);
+      g.lineTo(cx - s * 0.1, cy + s * 0.42);
+      g.lineTo(cx - s * 0.1, cy + s * 0.22);
+      g.quadraticCurveTo(cx - s * 0.48, cy + s * 0.12, cx - s * 0.5, cy - s * 0.55);
+      g.fill();
+      g.lineWidth = s * 0.09;
+      g.beginPath();
+      g.arc(cx - s * 0.5, cy - s * 0.3, s * 0.2, Math.PI * 0.5, Math.PI * 1.5);
+      g.arc(cx + s * 0.5, cy - s * 0.3, s * 0.2, -Math.PI * 0.5, Math.PI * 0.5);
+      g.stroke();
+    } else if (kind === 'tower') {
+      g.beginPath();
+      g.moveTo(cx - s * 0.42, cy + s * 0.6);
+      g.lineTo(cx - s * 0.42, cy - s * 0.3);
+      for (let i = 0; i < 4; i++) {
+        const x = cx - s * 0.42 + (i * s * 0.84) / 3.5;
+        g.lineTo(x, cy - s * 0.52);
+        g.lineTo(x + s * 0.12, cy - s * 0.52);
+        g.lineTo(x + s * 0.12, cy - s * 0.3);
+        g.lineTo(x + s * 0.24, cy - s * 0.3);
+      }
+      g.lineTo(cx + s * 0.42, cy - s * 0.52);
+      g.lineTo(cx + s * 0.42, cy + s * 0.6);
+      g.closePath();
+      g.fill();
+      g.fillStyle = '#7a1022';
+      g.beginPath();
+      g.moveTo(cx - s * 0.13, cy + s * 0.6);
+      g.lineTo(cx - s * 0.13, cy + s * 0.2);
+      g.arc(cx, cy + s * 0.2, s * 0.13, Math.PI, 0);
+      g.lineTo(cx + s * 0.13, cy + s * 0.6);
+      g.fill();
+    } else {
+      // Crown
+      g.beginPath();
+      g.moveTo(cx - s * 0.55, cy + s * 0.32);
+      g.lineTo(cx - s * 0.6, cy - s * 0.32);
+      g.lineTo(cx - s * 0.28, cy - s * 0.02);
+      g.lineTo(cx, cy - s * 0.48);
+      g.lineTo(cx + s * 0.28, cy - s * 0.02);
+      g.lineTo(cx + s * 0.6, cy - s * 0.32);
+      g.lineTo(cx + s * 0.55, cy + s * 0.32);
+      g.closePath();
+      g.fill();
+      g.fillStyle = '#c8203f';
+      [-0.6, 0, 0.6].forEach((k) => {
+        g.beginPath();
+        g.arc(cx + k * s * (k ? 1 : 0), cy - s * (k ? 0.36 : 0.52), s * 0.08, 0, Math.PI * 2);
+        g.fill();
+      });
+    }
+  };
+
+  pieces.forEach((pc) => {
+    const path = new Path2D();
+    pc.pts.forEach(([x, y], i) => (i ? path.lineTo(X(x), Y(y)) : path.moveTo(X(x), Y(y))));
+    path.closePath();
+    const xs = pc.pts.map((p) => X(p[0]));
+    const ys = pc.pts.map((p) => Y(p[1]));
+    const bx0 = Math.min(...xs);
+    const bx1 = Math.max(...xs);
+    const by0 = Math.min(...ys);
+    const by1 = Math.max(...ys);
+    const cx = (bx0 + bx1) / 2;
+    const cy = (by0 + by1) / 2;
+    const span = Math.min(bx1 - bx0, by1 - by0);
+    const isSling = pc.id.startsWith('sling');
+    g.save();
+    g.clip(path);
+    const bg = g.createLinearGradient(bx0, by0, bx1, by1);
+    if (isSling) {
+      bg.addColorStop(0, '#2b3aa8');
+      bg.addColorStop(1, '#141a5e');
+    } else {
+      bg.addColorStop(0, '#b01d3a');
+      bg.addColorStop(1, '#5e0c1f');
+    }
+    g.fillStyle = bg;
+    g.fillRect(bx0, by0, bx1 - bx0, by1 - by0);
+    // Diagonal heraldic bend and a field of tiny stars
+    if (isSling) {
+      g.fillStyle = 'rgba(200,32,63,0.75)';
+      g.beginPath();
+      g.moveTo(bx0, by1 - (by1 - by0) * 0.18);
+      g.lineTo(bx1, by0 + (by1 - by0) * 0.2);
+      g.lineTo(bx1, by0 + (by1 - by0) * 0.34);
+      g.lineTo(bx0, by1 - (by1 - by0) * 0.04);
+      g.fill();
+      g.fillStyle = 'rgba(255,236,190,0.6)';
+      for (let i = 0; i < 26; i++) {
+        const a = i * 2.39996;
+        const r = Math.sqrt(i / 26) * span * 0.62;
+        g.fillRect(cx + Math.cos(a) * r, cy + Math.sin(a) * r * 1.4, 2.5, 2.5);
+      }
+    }
+    // The charge on its shield
+    const s = span * (isSling ? 0.3 : 0.3);
+    const scy = cy + (isSling ? -span * 0.12 : -span * 0.04);
+    g.fillStyle = '#0d1033';
+    g.fill(shield(cx, scy, s * 1.08));
+    g.strokeStyle = GOLD;
+    g.lineWidth = Math.max(3, s * 0.12);
+    g.stroke(shield(cx, scy, s * 0.92));
+    charge(pc.art, cx, scy + s * 0.04, s * 0.9);
+    // Inner keylines: dark, then gold, just inside the cut
+    g.lineJoin = 'round';
+    g.strokeStyle = 'rgba(5,6,20,0.7)';
+    g.lineWidth = 22;
+    g.stroke(path);
+    g.strokeStyle = GOLD;
+    g.lineWidth = 12;
+    g.stroke(path);
+    g.strokeStyle = 'rgba(255,248,230,0.95)';
+    g.lineWidth = 4;
+    g.stroke(path);
+    g.restore();
+  });
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  // Extrusion caps carry the shape's own (playfield) coordinates as UVs
+  tex.repeat.set(1 / (PL.x1 - PL.x0), 1 / (PL.y1 - PL.y0));
+  tex.offset.set(-PL.x0 / (PL.x1 - PL.x0), -PL.y0 / (PL.y1 - PL.y0));
+  return tex;
+}
+
+/**
+ * Plastics on their standoffs, with the GI bulbs that live under them.
+ * The print is also the emissive map, tinted every frame with the GI colour
+ * by the game, so the plastics glow with the string and recolour with it.
+ */
+function buildPlastics(THREE, materials, mergeGeometries) {
+  const group = new THREE.Group();
+  const pieces = plasticOutlines();
+  const tex = plasticsTexture(THREE, pieces);
+  const mat = new THREE.MeshStandardMaterial({
+    map: tex,
+    emissiveMap: tex,
+    emissive: 0xffe0bc,
+    emissiveIntensity: 0.32,
+    roughness: 0.2,
+    metalness: 0,
+    envMapIntensity: 0.9
+  });
+  const geos = pieces.map((pc) => {
+    const sh = new THREE.Shape();
+    pc.pts.forEach(([x, y], i) => (i ? sh.lineTo(x, y) : sh.moveTo(x, y)));
+    sh.closePath();
+    const geo = flatten(new THREE.ExtrudeGeometry(sh, {
+      depth: 0.07,
+      bevelEnabled: true,
+      bevelThickness: 0.02,
+      bevelSize: 0.03,
+      bevelOffset: -0.03,
+      bevelSegments: 1
+    }));
+    geo.translate(0, PLASTIC_Y + 0.02, 0);
+    return geo;
+  });
+  const mesh = new THREE.Mesh(mergeGeometries(geos, false), mat);
+  mesh.castShadow = true;
+  mesh.userData.keep = true;
+  group.add(mesh);
+
+  // Standoffs under the lane-guide shields (the slings stand on their posts)
+  pieces.filter((p) => p.id.startsWith('guide')).forEach((pc) => {
+    const top = pc.pts.reduce((a, p) => a + p[0], 0) / pc.pts.length;
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, PLASTIC_Y, 10), materials.chrome);
+    post.position.set(top, PLASTIC_Y / 2, -12.85);
+    group.add(post);
+  });
+
+  // GI bulbs tucked under the sling plastics, two a side
+  const bulbs = [[-5.08, 10.1], [-4.25, 8.78]];
+  bulbs.concat(bulbs.map(([x, y]) => [mirrorX(x), y])).forEach(([x, y]) => {
+    const socket = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.2, 8), materials.rubber);
+    socket.position.set(x, 0.1, -y);
+    group.add(socket);
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), materials.bulb);
+    bulb.scale.y = 1.35;
+    bulb.position.set(x, 0.34, -y);
+    group.add(bulb);
+  });
+  return { group, material: mat };
+}
+
+/* ------------------------------------------------------------ flashers */
+
+/**
+ * Two flasher domes on the wall tops, either side of the upper playfield.
+ * Each has its own material so the game can fire them independently; the
+ * light they throw is a punch on the nearest GI lamp (adding lights would
+ * change every shader on the table mid-game).
+ */
+function buildFlashers(THREE, materials) {
+  const group = new THREE.Group();
+  const list = [
+    { id: 'left', x: -10.15, y: 22.6, color: 0xff3b4e },
+    { id: 'right', x: 6.6, y: 21.2, color: 0xffb02e }
+  ].map((f) => {
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.5, 0.16, 16), materials.rubber);
+    base.position.set(f.x, L.wallH + 0.08, -f.y);
+    group.add(base);
+    const mat = new THREE.MeshStandardMaterial({
+      color: f.color,
+      roughness: 0.18,
+      metalness: 0,
+      transparent: true,
+      opacity: 0.82,
+      emissive: f.color,
+      emissiveIntensity: 0.18,
+      envMapIntensity: 1.2
+    });
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(0.42, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), mat);
+    dome.position.set(f.x, L.wallH + 0.16, -f.y);
+    dome.scale.y = 1.25;
+    dome.renderOrder = 3;
+    dome.userData.keep = true;
+    group.add(dome);
+    return { id: f.id, x: f.x, y: f.y, color: new THREE.Color(f.color), mat, dome, t: 9 };
+  });
+  return { group, list };
+}
+
+/* ---------------------------------------------------------- lamp matrix */
+
+/**
+ * Small round inserts: the grenar row, the P-O-K-A-L letters, the locks,
+ * bonus multipliers, kickback and the inlanes. A real playfield is covered
+ * in these; the art is printed on the wood over a frosted lens.
+ *
+ * All of them are ONE mesh (and their glows a second), coloured per vertex:
+ * the game sets each lamp's level and the colours are rewritten in place —
+ * two draw calls for any number of lamps, and no new lights.
+ */
+const LAMP_DEFS = [
+  // Grenar, a row over the flippers, left to right in the order they come
+  ...["'12", "'13", "'19", "'22", "'24"].map((label, i) => ({
+    id: `gren${i}`, x: -3.3 + i * 0.84, y: 10.55, r: 0.34, color: 0x7c8cf8, label
+  })),
+  { id: 'gren5', x: -3.3 + 5 * 0.84, y: 10.55, r: 0.34, color: 0xffd166, label: 'crown' },
+  // The letters, just in front of each drop target
+  ...L.targets.map((t, i) => ({
+    id: `pokal${i}`, x: t.x + Math.sin(t.a) * 1.05, y: t.y - Math.cos(t.a) * 1.05, r: 0.36, color: 0xf26d8d, label: t.letter
+  })),
+  // Lock lamps either side of the castle arrow
+  { id: 'lock0', x: -2.25, y: 19.55, r: 0.3, color: 0x7c8cf8, label: 'lock' },
+  { id: 'lock1', x: -0.15, y: 19.55, r: 0.3, color: 0x7c8cf8, label: 'lock' },
+  // Bonus multipliers: a second row under the grenar, clear of the
+  // raised flippers
+  ...[2, 3, 4, 5, 6].map((n, i) => ({
+    id: `bx${n}`, x: L.centerX + (i - 2) * 0.84, y: 9.55, r: 0.27, color: 0xffb347, label: `${n}×`
+  })),
+  { id: 'kickback', x: -8.05, y: 11.75, r: 0.3, color: 0xf2c14e, label: 'K' },
+  { id: 'inL', x: -6.15, y: 11.55, r: 0.26, color: 0x5eead4, label: '' },
+  { id: 'inR', x: mirrorX(-6.15), y: 11.55, r: 0.26, color: 0x5eead4, label: '' }
+];
+
+function lampAtlas(THREE, defs) {
+  const C = 64;
+  const cols = 8;
+  const rows = Math.ceil(defs.length / cols);
+  const cv = document.createElement('canvas');
+  cv.width = C * cols;
+  cv.height = C * rows;
+  const g = cv.getContext('2d');
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  defs.forEach((d, i) => {
+    const x = (i % cols) * C + C / 2;
+    const y = Math.floor(i / cols) * C + C / 2;
+    // Frosted lens: bright core falling off to the rim, a thin lit edge
+    const grad = g.createRadialGradient(x - 4, y - 5, 2, x, y, C / 2);
+    grad.addColorStop(0, '#ffffff');
+    grad.addColorStop(0.55, '#d8d8d8');
+    grad.addColorStop(0.86, '#8a8a8a');
+    grad.addColorStop(0.94, '#e6e6e6');
+    grad.addColorStop(1, '#5a5a5a');
+    g.fillStyle = grad;
+    g.fillRect(x - C / 2, y - C / 2, C, C);
+    // The print over it, in dark ink
+    g.fillStyle = 'rgba(8,10,28,0.82)';
+    g.strokeStyle = 'rgba(8,10,28,0.82)';
+    if (d.label === 'crown') {
+      g.beginPath();
+      g.moveTo(x - 16, y + 10);
+      g.lineTo(x - 18, y - 9);
+      g.lineTo(x - 8, y + 1);
+      g.lineTo(x, y - 14);
+      g.lineTo(x + 8, y + 1);
+      g.lineTo(x + 18, y - 9);
+      g.lineTo(x + 16, y + 10);
+      g.closePath();
+      g.fill();
+    } else if (d.label === 'lock') {
+      g.lineWidth = 5;
+      g.beginPath();
+      g.arc(x, y - 4, 8, Math.PI, 0);
+      g.stroke();
+      g.fillRect(x - 12, y - 3, 24, 17);
+    } else if (d.label) {
+      const big = d.label.length <= 1;
+      g.font = `800 ${big ? 34 : 24}px "Schibsted Grotesk", Inter, Arial, sans-serif`;
+      g.fillText(d.label, x, y + 2);
+    } else {
+      // Plain chevron
+      g.beginPath();
+      g.moveTo(x - 14, y - 6);
+      g.lineTo(x, y + 9);
+      g.lineTo(x + 14, y - 6);
+      g.lineTo(x + 9, y - 10);
+      g.lineTo(x, y - 1);
+      g.lineTo(x - 9, y - 10);
+      g.closePath();
+      g.fill();
+    }
+  });
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return { tex, cols, rows };
+}
+
+function buildLamps(THREE, materials, mergeGeometries) {
+  const group = new THREE.Group();
+  const defs = LAMP_DEFS;
+  const { tex, cols, rows } = lampAtlas(THREE, defs);
+  const SEG = 20;
+  const lensGeos = [];
+  const glowGeos = [];
+  const bezels = [];
+  defs.forEach((d, i) => {
+    const cu = (i % cols) / cols;
+    const cvv = 1 - (Math.floor(i / cols) + 1) / rows;
+    const lens = new THREE.CircleGeometry(d.r, SEG);
+    const uv = lens.attributes.uv;
+    for (let k = 0; k < uv.count; k++) uv.setXY(k, cu + uv.getX(k) / cols, cvv + uv.getY(k) / rows);
+    flatten(lens).translate(d.x, 0.032, -d.y);
+    lensGeos.push(lens.toNonIndexed());
+    const glow = flatten(new THREE.PlaneGeometry(d.r * 5.2, d.r * 5.2)).translate(d.x, 0.05, -d.y);
+    glowGeos.push(glow.toNonIndexed());
+    const ring = new THREE.Mesh(flatten(new THREE.RingGeometry(d.r * 0.98, d.r + 0.08, SEG)), materials.bezel);
+    ring.position.set(d.x, 0.018, -d.y);
+    bezels.push(ring);
+  });
+  bezels.forEach((b) => group.add(b));
+  const lensGeo = mergeGeometries(lensGeos, false);
+  const glowGeo = mergeGeometries(glowGeos, false);
+  const lensVerts = lensGeos[0].attributes.position.count;
+  const glowVerts = glowGeos[0].attributes.position.count;
+  lensGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(lensGeo.attributes.position.count * 3), 3));
+  glowGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(glowGeo.attributes.position.count * 3), 3));
+  const lens = new THREE.Mesh(lensGeo, new THREE.MeshBasicMaterial({
+    map: tex,
+    vertexColors: true,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2
+  }));
+  lens.userData.keep = true;
+  group.add(lens);
+  const glowTex = radialTexture(THREE, 0, [
+    [0, 'rgba(255,255,255,0.7)'],
+    [0.35, 'rgba(255,255,255,0.22)'],
+    [1, 'rgba(255,255,255,0)']
+  ]);
+  // The glow quads share one radial map; each covers the whole texture
+  const glow = new THREE.Mesh(glowGeo, new THREE.MeshBasicMaterial({
+    map: glowTex,
+    vertexColors: true,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    toneMapped: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -3,
+    polygonOffsetUnits: -3
+  }));
+  glow.renderOrder = 2;
+  glow.userData.keep = true;
+  group.add(glow);
+
+  const index = {};
+  defs.forEach((d, i) => {
+    index[d.id] = i;
+  });
+  const base = defs.map((d) => new THREE.Color(d.color));
+  const level = new Float32Array(defs.length);
+  const shown = new Float32Array(defs.length).fill(-1);
+  const tint = defs.map(() => null);
+  const tmp = new THREE.Color();
+  return {
+    group,
+    defs,
+    /** Target level 0…1 (and optional colour override) for a lamp by id */
+    set(id, v, color = null) {
+      const i = index[id];
+      if (i === undefined) return;
+      level[i] = v;
+      tint[i] = color;
+    },
+    /** Eases toward the targets and rewrites the vertex colours that changed */
+    update(dt) {
+      const k = Math.min(1, dt * 16);
+      const lc = lensGeo.attributes.color;
+      const gc = glowGeo.attributes.color;
+      let dirty = false;
+      for (let i = 0; i < defs.length; i++) {
+        const cur = shown[i] < 0 ? level[i] : shown[i] + (level[i] - shown[i]) * k;
+        if (Math.abs(cur - shown[i]) < 0.002) continue;
+        shown[i] = cur;
+        dirty = true;
+        const c = tint[i] || base[i];
+        // Unlit: the dark tinted plastic. Lit: a bright lens, peak kept
+        // just under the bloom threshold.
+        tmp.copy(c).multiplyScalar(0.16 + cur * 0.95);
+        tmp.r += cur * 0.12;
+        tmp.g += cur * 0.12;
+        tmp.b += cur * 0.12;
+        for (let v = 0; v < lensVerts; v++) lc.setXYZ(i * lensVerts + v, tmp.r, tmp.g, tmp.b);
+        tmp.copy(c).multiplyScalar(cur * 0.85);
+        for (let v = 0; v < glowVerts; v++) gc.setXYZ(i * glowVerts + v, tmp.r, tmp.g, tmp.b);
+      }
+      if (dirty) {
+        lc.needsUpdate = true;
+        gc.needsUpdate = true;
+      }
+    }
+  };
+}
+
 /* ------------------------------------------------------------------ builder */
 
 export function buildTable(THREE, mergeGeometries, materials) {
@@ -1045,6 +1741,7 @@ export function buildTable(THREE, mergeGeometries, materials) {
   );
   playfield.position.set((ART.x0 + ART.x1) / 2, 0, -(ART.y0 + ART.y1) / 2);
   playfield.receiveShadow = true;
+  playfield.userData.keep = true;
   group.add(playfield);
   refs.playfield = playfield;
 
@@ -1079,20 +1776,32 @@ export function buildTable(THREE, mergeGeometries, materials) {
   pushChain(L.leftRail, 0.22, railShapes);
   pushChain(L.rightRail, 0.22, railShapes);
   // One-way return gates read as thin wires
-  pushChain(L.leftReturnGate, 0.09, railShapes);
-  pushChain(L.rightReturnGate, 0.09, railShapes);
+  const gateShapes = [];
+  pushChain(L.leftReturnGate, 0.09, gateShapes);
+  pushChain(L.rightReturnGate, 0.09, gateShapes);
 
-  const wallGeos = wallShapes.map((s) =>
-    flatten(new THREE.ExtrudeGeometry(s, { depth: L.wallH, bevelEnabled: false }))
-  );
+  // Rolled edges. A sharp-cornered extrusion has nothing along its top to
+  // catch the light, so from above every wall read as a flat grey ribbon.
+  // The bevel is pulled INSIDE the outline (bevelOffset = −size), so the
+  // sides stand exactly where the colliders are; the bottom bevel sinks
+  // below the wood, out of sight.
+  const bevelled = (s, h, size, segs = 5) => flatten(new THREE.ExtrudeGeometry(s, {
+    depth: h - size,
+    curveSegments: segs,
+    bevelEnabled: true,
+    bevelThickness: size,
+    bevelSize: size,
+    bevelOffset: -size,
+    bevelSegments: 2
+  }));
+  const wallGeos = wallShapes.map((s) => bevelled(s, L.wallH, 0.09));
   const walls = new THREE.Mesh(mergeGeometries(wallGeos), materials.rail);
   walls.castShadow = true;
   walls.receiveShadow = true;
   group.add(walls);
 
-  const railGeos = railShapes.map((s) =>
-    flatten(new THREE.ExtrudeGeometry(s, { depth: 1.0, bevelEnabled: false }))
-  );
+  const railGeos = railShapes.map((s) => bevelled(s, 1.0, 0.07, 6))
+    .concat(gateShapes.map((s) => flatten(new THREE.ExtrudeGeometry(s, { depth: 1.0, curveSegments: 5, bevelEnabled: false }))));
   const rails = new THREE.Mesh(mergeGeometries(railGeos), materials.chrome);
   rails.castShadow = true;
   group.add(rails);
@@ -1121,19 +1830,50 @@ export function buildTable(THREE, mergeGeometries, materials) {
       materials.blueGlow
     );
     face.castShadow = true;
+    face.userData.keep = true;
     group.add(face);
     refs[name] = face;
+
+    // The rubber ring stretched round three posts, as on every real sling:
+    // the two plain edges carry the off-white band, the kicker edge keeps
+    // its lit face. Each post also carries a plastic above it (below).
+    const corners = [P.T, P.BO, P.BI];
+    const cx = (P.T[0] + P.BO[0] + P.BI[0]) / 3;
+    const cy = (P.T[1] + P.BO[1] + P.BI[1]) / 3;
+    const out = (p, k) => {
+      const dx = p[0] - cx;
+      const dy = p[1] - cy;
+      const l = Math.hypot(dx, dy) || 1;
+      return new THREE.Vector3(p[0] + (dx / l) * k, 0.62, -(p[1] + (dy / l) * k));
+    };
+    const band = new THREE.CatmullRomCurve3([out(P.T, 0.17), out(P.BO, 0.17), out(P.BI, 0.17)], false, 'catmullrom', 0.1);
+    const bandMesh = new THREE.Mesh(new THREE.TubeGeometry(band, 24, 0.11, 6, false), materials.rubberWhite);
+    bandMesh.castShadow = true;
+    group.add(bandMesh);
+    corners.forEach((c) => {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, PLASTIC_Y, 10), materials.chrome);
+      post.position.set(c[0], PLASTIC_Y / 2, -c[1]);
+      group.add(post);
+    });
   });
 
-  /* ---- Posts ---- */
+  /* ---- Posts: brass, each wearing its rubber ring and a star-post cap ---- */
   L.posts.forEach((p) => {
     const post = new THREE.Mesh(
-      new THREE.CylinderGeometry(p.r, p.r, L.wallH, 16),
+      new THREE.CylinderGeometry(p.r * 0.5, p.r * 0.56, L.wallH, 12),
       materials.gold
     );
     post.position.set(p.x, L.wallH / 2, -p.y);
     post.castShadow = true;
     group.add(post);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(p.r - 0.085, 0.085, 8, 20), materials.rubberWhite);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(p.x, 0.62, -p.y);
+    ring.castShadow = true;
+    group.add(ring);
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(p.r * 0.8, p.r * 0.95, 0.22, 8), materials.blueGlow);
+    cap.position.set(p.x, L.wallH + 0.11, -p.y);
+    group.add(cap);
   });
 
   /* ---- Pop bumpers ---- */
@@ -1197,6 +1937,7 @@ export function buildTable(THREE, mergeGeometries, materials) {
     light.position.y = 1.9;
     g.add(light);
 
+    g.userData.keep = true;
     group.add(g);
     refs.bumpers.push({ group: g, ring, trophy: dome, bead, light, base: 0, isTrophy: false });
   });
@@ -1213,6 +1954,7 @@ export function buildTable(THREE, mergeGeometries, materials) {
     face.position.y = 0.58;
     face.castShadow = true;
     g.add(face);
+    g.userData.keep = true;
     group.add(g);
     refs.targets.push({ group: g, face, down: false });
   });
@@ -1250,6 +1992,7 @@ export function buildTable(THREE, mergeGeometries, materials) {
     light.position.y = 2.4;
     g.add(light);
 
+    g.userData.keep = true;
     group.add(g);
     refs.jackpot = { group: g, trophy, halo, light };
   }
@@ -1271,6 +2014,7 @@ export function buildTable(THREE, mergeGeometries, materials) {
     arch.position.set(p0.x, 0.35, p0.z);
     const tan = curve.getTangentAt(0);
     arch.rotation.y = Math.atan2(tan.x, tan.z) + Math.PI / 2;
+    arch.userData.keep = true;
     group.add(arch);
     refs.rampArches[side] = arch;
   });
@@ -1358,6 +2102,7 @@ export function buildTable(THREE, mergeGeometries, materials) {
       const mesh = new THREE.Mesh(s.disc ? discGeo : geo, mat);
       mesh.position.set(s.x, 0.035, -s.y);
       mesh.rotation.y = s.a;
+      mesh.userData.keep = true;
       group.add(mesh);
 
       const pool = new THREE.Mesh(
@@ -1378,6 +2123,7 @@ export function buildTable(THREE, mergeGeometries, materials) {
       pool.position.set(s.x, 0.05, -s.y);
       pool.scale.setScalar(s.disc ? 2.8 : 3.4);
       pool.renderOrder = 2;
+      pool.userData.keep = true;
       group.add(pool);
 
       const light = new THREE.PointLight(s.color, 0, 7, 2);
@@ -1406,6 +2152,7 @@ export function buildTable(THREE, mergeGeometries, materials) {
     );
     blade.position.y = 1.05;
     blade.castShadow = true;
+    blade.userData.keep = true;
     g.add(blade);
     group.add(g);
     refs.spinner = { group: g, blade, spin: 0 };
@@ -1447,6 +2194,7 @@ export function buildTable(THREE, mergeGeometries, materials) {
     // Retracted below the playfield until the mode raises them
     g.position.y = -2.2;
     g.visible = false;
+    g.userData.keep = true;
     group.add(g);
     return { group: g, up: false };
   });
@@ -1476,6 +2224,7 @@ export function buildTable(THREE, mergeGeometries, materials) {
     );
     strip.position.y = 0.3;
     g.add(strip);
+    g.userData.keep = true;
     group.add(g);
     return g;
   };
@@ -1496,6 +2245,7 @@ export function buildTable(THREE, mergeGeometries, materials) {
     materials.ball
   );
   ball.castShadow = true;
+  ball.userData.keep = true;
   group.add(ball);
   refs.ball = ball;
 
@@ -1522,9 +2272,24 @@ export function buildTable(THREE, mergeGeometries, materials) {
     knob.position.z = 1.5;
     plunger.add(knob);
     plunger.position.set(L.laneBallX, 0.55, -L.laneBottomY + 0.6);
+    plunger.userData.keep = true;
     group.add(plunger);
     refs.plunger = plunger;
   }
+
+  /* ---- Plastics, GI bulbs, flashers and the lamp matrix ---- */
+  const plastics = buildPlastics(THREE, materials, mergeGeometries);
+  group.add(plastics.group);
+  refs.plastics = plastics.material;
+  const flashers = buildFlashers(THREE, materials);
+  group.add(flashers.group);
+  refs.flashers = flashers.list;
+  const lamps = buildLamps(THREE, materials, mergeGeometries);
+  group.add(lamps.group);
+  refs.lamps = lamps;
+
+  // Everything static becomes a handful of merged meshes
+  refs.baked = bakeStatic(THREE, mergeGeometries, group);
 
   return { group, refs };
 }

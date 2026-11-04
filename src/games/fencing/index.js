@@ -466,7 +466,8 @@ export async function createFencing(container) {
   function startBout() {
     sfx.resume();
     hud.screen('');
-    hud.setMode('duel');
+    // The salute is ceremony: the board shows, the controls wait for »En garde«
+    hud.setMode('intro');
     state.myTouches = 0;
     state.foeTouches = 0;
     state.streak = 0;
@@ -483,8 +484,10 @@ export async function createFencing(container) {
     state.phaseT = 0;
     animMe.play('salute', 1.6);
     animAi.play('salute', 1.6);
-    animAi.ox = 0;
-    animMe.ox = 0;
+    [animAi, animMe].forEach((a) => {
+      a.ox = 0;
+      a.step = null;
+    });
     hud.call(opp().name.toUpperCase(), 'name');
     hud.sub(`${ROUNDS[state.round]} · ${opp().title}`);
     me.setBaseExpression('focus');
@@ -497,6 +500,7 @@ export async function createFencing(container) {
   function startReady() {
     state.phase = 'ready';
     state.phaseT = 0;
+    hud.setMode('duel');
     state.readyStep = 0;
     meS.pose = 'guard';
     meS.t = 0;
@@ -506,6 +510,13 @@ export async function createFencing(container) {
     ai.pendingRiposte = false;
     ai.timer = opp().attackEvery[0] + rand() * (opp().attackEvery[1] - opp().attackEvery[0]);
     if (state.tutorial && state.round === 0 && state.firstAttack) ai.timer = 1.4;
+    // Back to the en-garde lines for the next phrase, a step at a time
+    [animAi, animMe].forEach((a) => {
+      if (Math.abs(a.ox) > 0.01) {
+        a.step = null;
+        a.stepBy(-a.ox, 0.45);
+      }
+    });
     hud.call('EN GARDE');
     sfx.ready(0);
     salle.referee.signal('engarde');
@@ -527,7 +538,8 @@ export async function createFencing(container) {
       : '<b>↑ ↓</b> byter gard · <b>mellanslag</b> stöter · <b>F</b> fintar.', 3600);
   }
 
-  function scoreTouch(mine, points, label, at) {
+  /** `via`: how the referee explains it — 'point', 'parry' (riposte) or 'attack' (right of way). */
+  function scoreTouch(mine, points, label, at, via = 'point') {
     state.phase = 'touch';
     state.phaseT = 0;
     const hitAt = at || (mine ? foe : me).j.torso.getWorldPosition(new THREE.Vector3()).setY(1.2);
@@ -537,7 +549,8 @@ export async function createFencing(container) {
     sfx.buzzer();
     kick(mine ? 1.3 : 1.6, 130);
     salle.score.flash(mine ? 0 : 1);
-    salle.referee.signal('point', mine ? -1 : 1);
+    // The attacker who had right of way is also the scorer: one side for both arms
+    salle.referee.signal(via, mine ? -1 : 1);
     flashes.fire(hitAt, mine ? new THREE.Color(1.2, 2.6, 1.5) : new THREE.Color(2.6, 1.1, 0.8), 0.7, 0.4);
     sparks.burst(hitAt, { n: 26, speed: 3.2, color: new THREE.Color(3, 2.6, 1.8), life: 0.55 });
     (mine ? animAi : animMe).flash = 1;
@@ -685,7 +698,7 @@ export async function createFencing(container) {
     animAi.play(won ? 'lose' : 'win', 1);
     me.setBaseExpression(won ? 'grin' : 'frown');
     foe.setBaseExpression(won ? 'frown' : 'smile');
-    salle.referee.signal('point', won ? -1 : 1);
+    salle.referee.signal('award', won ? -1 : 1);
     salle.crowd.react(won ? 'clap' : 'groan');
     if (won) {
       sfx.verdictWin();
@@ -734,7 +747,7 @@ export async function createFencing(container) {
     me.setBaseExpression('grin');
     foe.setBaseExpression('smile');
     salle.crowd.react('stand');
-    salle.referee.signal('point', -1);
+    salle.referee.signal('award', -1);
     confetti.start(-HOME, 0);
     sfx.fanfare();
     camCut = 'ceremony';
@@ -810,7 +823,7 @@ export async function createFencing(container) {
       if (feintHit) state.stats.feints++;
       if (riposte) hud.sub('PARAD — RIPOST!', 'gold');
       scoreTouch(true, riposte ? 175 : feintHit ? 150 : 100,
-        riposte ? 'RIPOST +175' : feintHit ? 'FINT-TUSCH +150' : '+100', tipMe.clone());
+        riposte ? 'RIPOST +175' : feintHit ? 'FINT-TUSCH +150' : '+100', tipMe.clone(), riposte ? 'parry' : 'point');
       return;
     }
     if (ai.pose === 'telegraph' || ai.pose === 'attack') {
@@ -818,7 +831,7 @@ export async function createFencing(container) {
       sparks.burst(tipMe, { n: 8, speed: 1.6, color: new THREE.Color(2.4, 2, 1.6), life: 0.3 });
       hud.sub('VÄGRÄTT TILL MOTSTÅNDAREN', 'red');
       coach('row', '<b>Rätten till anfall:</b> stöt inte in i deras anfall — parera först.', 3600);
-      scoreTouch(false, 0, '', me.j.torso.getWorldPosition(new THREE.Vector3()).setY(1.25));
+      scoreTouch(false, 0, '', me.j.torso.getWorldPosition(new THREE.Vector3()).setY(1.25), 'attack');
       return;
     }
     // Opponent on guard: they may read it and parry
@@ -867,7 +880,7 @@ export async function createFencing(container) {
       hud.sub('RIPOSTERA — STÖT!', 'gold');
       coach('parried', '<b>Nu!</b> Motståndaren vacklar — tryck <b>STÖT</b> för ripost.', 2600);
     } else {
-      scoreTouch(false, 0, '', tipAi.clone());
+      scoreTouch(false, 0, '', tipAi.clone(), ai.riposting ? 'parry' : 'point');
     }
   }
 
@@ -916,6 +929,7 @@ export async function createFencing(container) {
           ai.pose = 'attack';
           ai.t = 0;
           ai.resolved = false;
+          ai.riposting = false;
           sfx.swish();
         }
         break;
@@ -944,6 +958,7 @@ export async function createFencing(container) {
           ai.pose = 'attack';
           ai.t = 0;
           ai.resolved = false;
+          ai.riposting = true;
           ai.line = Math.floor(rand() * 3);
           ai.shownLine = ai.line;
           sfx.swish();
@@ -974,8 +989,30 @@ export async function createFencing(container) {
     }
   }
 
+  /**
+   * The distance game, played for you: when the opponent steps in you
+   * give ground, when he drifts back you follow — a beat late, one foot
+   * then the other, like a fencer keeping measure.
+   */
+  function keepMeasure(dt) {
+    if (meS.pose !== 'guard' || animMe.step) return;
+    meS.measureT = (meS.measureT || 0) - dt;
+    if (meS.measureT > 0) return;
+    const want = Math.max(-0.16, Math.min(0.12, -animAi.ox * 0.8));
+    const d = want - animMe.ox;
+    if (Math.abs(d) > 0.06) {
+      animMe.stepBy(Math.max(-0.12, Math.min(0.12, d)));
+      meS.measureT = 0.25 + rand() * 0.3;
+    } else if (rand() < dt * 0.35) {
+      // A small step of your own now and then: the piste is never still
+      animMe.stepBy(animMe.ox > 0.02 ? -0.08 : 0.08);
+      meS.measureT = 0.6 + rand() * 0.6;
+    }
+  }
+
   function updatePlayer(dt) {
     meS.t += dt;
+    keepMeasure(dt);
     if (meS.pose === 'lunge' && meS.t >= 0.24 && !meS.resolved) {
       meS.resolved = true;
       resolvePlayerAttack();
@@ -1162,8 +1199,17 @@ export async function createFencing(container) {
   /* ---- Camera --------------------------------------------------------- */
 
   let aspect = 1.6;
-  const cam = { pos: new THREE.Vector3(0, 2.4, 10), look: new THREE.Vector3(0, 2, 0), fov: 36, roll: 0 };
-  const goal = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 36, roll: 0, rate: 3 };
+  let viewW = 1;
+  let viewH = 1;
+  // `shift`: where on screen the look point lands (0..1, 0.5 = centre) — an
+  // off-axis projection, so a subject can stand beside or above a panel
+  // without the camera turning away from it
+  const cam = {
+    pos: new THREE.Vector3(0, 2.4, 10), look: new THREE.Vector3(0, 2, 0), fov: 36, roll: 0, shift: new THREE.Vector2(0.5, 0.5)
+  };
+  const goal = {
+    pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 36, roll: 0, rate: 3, shift: new THREE.Vector2(0.5, 0.5)
+  };
 
   /**
    * The duel framing by aspect. Landscape is the hero: side-on, a little
@@ -1182,11 +1228,46 @@ export async function createFencing(container) {
     out.roll = 0;
   }
 
+  /**
+   * The screens around the duel put a panel over the salle; frame the
+   * person the screen is about beside it. Portrait: the panel sits at the
+   * bottom, the person stands whole in the top half. Landscape: the panel
+   * sits on the right, the person on the left third.
+   */
+  function screenSubject() {
+    const ph = state.phase;
+    const portrait = aspect < 0.9;
+    if (ph === 'bracket') return foe;
+    if (ph === 'result') return state.results.length && state.results[state.results.length - 1].won ? me : foe;
+    if (ph === 'title' && portrait) return me;
+    return null;
+  }
+
   function cameraGoal(t) {
     duelFrame(goal);
     goal.rate = 3;
+    goal.shift.set(0.5, 0.5);
     const ph = state.phase;
-    if (ph === 'title' || ph === 'bracket' || ph === 'final' || ph === 'result') {
+    const subject = screenSubject();
+    if (subject) {
+      subject.j.torso.getWorldPosition(v3);
+      const drift = Math.sin(t * 0.11) * 0.18;
+      if (aspect < 0.9) {
+        const d = ph === 'title' ? 5.6 : 6.4;
+        goal.look.set(v3.x, 0.92, 0);
+        goal.pos.set(v3.x + 0.5 + drift, 1.3, d);
+        goal.fov = 40;
+        goal.shift.set(0.5, ph === 'title' ? 0.29 : 0.25);
+      } else {
+        // Closer on short landscape phones: the person fills the height
+        const d = lerp(4.6, 3.9, smoothstep(1.6, 2.1, aspect));
+        goal.look.set(v3.x, 1.02, 0);
+        goal.pos.set(v3.x + 0.35 + drift, 1.32, d);
+        goal.fov = 34;
+        goal.shift.set(lerp(0.3, 0.26, smoothstep(1.6, 2.1, aspect)), 0.5);
+      }
+      goal.rate = 1.6;
+    } else if (ph === 'title' || ph === 'bracket' || ph === 'final' || ph === 'result') {
       // Slow drift, pulled back, the salle as the backdrop for the panels
       const k = smoothstep(0.62, 1.25, aspect);
       goal.pos.x += Math.sin(t * 0.08) * 1.1 + (ph === 'title' ? lerp(0, 2.2, k) : 0);
@@ -1195,20 +1276,6 @@ export async function createFencing(container) {
       goal.look.y += 0.35;
       goal.look.x += ph === 'title' ? lerp(0, 1.6, k) : 0;
       goal.rate = 1.2;
-      if (ph === 'bracket' && aspect > 1.2) {
-        // Wide screens: the panel sits in the middle, so frame the next
-        // opponent beside it — mask in hand, looking at you
-        foe.j.head.getWorldPosition(v3);
-        goal.look.set(v3.x - 1.75, 1.25, 0);
-        goal.pos.set(v3.x - 2.1, 1.55, 4.6);
-        goal.fov = 34;
-      }
-      if (ph === 'result') {
-        const winner = state.results.length && state.results[state.results.length - 1].won ? me : foe;
-        winner.j.torso.getWorldPosition(v3);
-        goal.look.lerp(v3, 0.35);
-        goal.fov *= 0.86;
-      }
     } else if (ph === 'touch' && state.lastTouch) {
       // Punch in on the point of contact, a slight Dutch angle
       const { at } = state.lastTouch;
@@ -1270,6 +1337,7 @@ export async function createFencing(container) {
     cam.look.lerp(goal.look, k);
     cam.fov += (goal.fov - cam.fov) * k;
     cam.roll += (goal.roll - cam.roll) * k;
+    cam.shift.lerp(goal.shift, k);
     camera.position.copy(cam.pos);
     if (shake.power > 0.001) {
       shake.power = Math.max(0, shake.power - dt * 4);
@@ -1283,6 +1351,20 @@ export async function createFencing(container) {
       camera.fov = cam.fov;
       camera.updateProjectionMatrix();
     }
+    applyShift(cam.shift.x, cam.shift.y);
+  }
+
+  function applyShift(cx, cy) {
+    const sx = cx - 0.5;
+    const sy = cy - 0.5;
+    if (Math.abs(sx) > 1e-3 || Math.abs(sy) > 1e-3) {
+      const v = camera.view;
+      const ox = -sx * viewW;
+      const oy = -sy * viewH;
+      if (!v || !v.enabled || Math.abs(v.offsetX - ox) > 0.05 || Math.abs(v.offsetY - oy) > 0.05 || v.fullWidth !== viewW || v.fullHeight !== viewH) {
+        camera.setViewOffset(viewW, viewH, ox, oy, viewW, viewH);
+      }
+    } else if (camera.view && camera.view.enabled) camera.clearViewOffset();
   }
 
   /* ---- Sizing --------------------------------------------------------- */
@@ -1297,6 +1379,8 @@ export async function createFencing(container) {
     renderer.getDrawingBufferSize(rtSize);
     bloom.setSize(Math.round(rtSize.x / 2), Math.round(rtSize.y / 2));
     aspect = w / h;
+    viewW = w;
+    viewH = h;
     camera.aspect = aspect;
     camera.updateProjectionMatrix();
     salle.setMoteScale(rtSize.y * 0.05);
@@ -1306,25 +1390,49 @@ export async function createFencing(container) {
   ro.observe(canvasHost);
   resize();
 
-  /* ---- Frame-time watchdog: drop bloom, then resolution --------------- */
-  const perf = { acc: 0, n: 0, level: 0 };
+  /* ---- Frame-time watchdog: drop bloom, then resolution, then shadows -- */
+  const perf = { acc: 0, n: 0, level: 0, slow: 0 };
   function watchPerf(realDt) {
     // Skip the first seconds: shader compiles and texture uploads stall frames
-    if (!adaptive || perf.level >= 2 || clock < 4) return;
+    if (!adaptive || perf.level >= 3 || clock < 4) return;
     perf.acc += realDt;
     perf.n++;
     if (perf.acc < 2.5) return;
     const avg = perf.acc / perf.n;
     perf.acc = 0;
     perf.n = 0;
-    if (avg > 0.028) {
-      perf.level++;
-      if (perf.level === 1) bloom.enabled = false;
-      else {
-        pixelRatio = Math.max(1, pixelRatio * 0.7);
-        renderer.setPixelRatio(pixelRatio);
-        resize();
+    if (avg <= 0.028) {
+      perf.slow = 0;
+      return;
+    }
+    // Two slow windows in a row before stepping down: one hitch (a GC, a
+    // notification sliding in) does not make a slow device
+    perf.slow++;
+    if (perf.slow < 2) return;
+    perf.slow = 0;
+    perf.level++;
+    // Only ever down. A step with nothing to give (bloom already off on a
+    // GPU without float targets) passes straight on to the next one.
+    if (perf.level === 1) {
+      if (bloom.enabled) {
+        bloom.enabled = false;
+        return;
       }
+      perf.level = 2;
+    }
+    if (perf.level === 2 && pixelRatio > 1.01) {
+      pixelRatio = Math.max(1, pixelRatio * 0.75);
+      renderer.setPixelRatio(pixelRatio);
+      resize();
+      return;
+    }
+    perf.level = 3;
+    // Half the shadow map: a uniform change, no shader recompiles
+    const { key } = salle.lights;
+    key.shadow.mapSize.multiplyScalar(0.5);
+    if (key.shadow.map) {
+      key.shadow.map.dispose();
+      key.shadow.map = null;
     }
   }
 
@@ -1504,6 +1612,7 @@ export async function createFencing(container) {
     if (renderBudget <= 0) return;
     renderBudget--;
     if (camOverride) {
+      applyShift(0.5, 0.5);
       camera.position.copy(camOverride.pos);
       camera.lookAt(camOverride.look);
       camera.fov = camOverride.fov;
@@ -1629,6 +1738,25 @@ export async function createFencing(container) {
         pixelRatio,
         people: { me: me.name, foe: foe.name, meTris: me.triangles, foeTris: foe.triangles, crowdCalls: salle.crowd.drawCalls }
       };
+    },
+    /** The animators (footwork, actions) for tests. */
+    anims() {
+      return { me: animMe, ai: animAi };
+    },
+    /** Both feet of a fencer: [x, y, pitch] in its own frame (no sliding checks). */
+    feet(mine = true) {
+      const p = (mine ? me : foe).pose;
+      const r = (v) => Math.round(v * 1000) / 1000;
+      return { front: [r(p[P.ffx]), r(p[P.ffy]), r(p[P.ffp])], back: [r(p[P.bfx]), r(p[P.bfy]), r(p[P.bfp])], px: r(p[P.px]) };
+    },
+    /** Make the referee give a signal now (tests). */
+    referee(kind, side = 0) {
+      salle.referee.signal(kind, side);
+    },
+    /** Force frame-time adaptation on (tests); returns its state. */
+    perf(on = true) {
+      adaptive = on;
+      return { ...perf, bloom: bloom.enabled, pixelRatio, shadowSize: salle.lights.key.shadow.mapSize.x };
     },
     /** The two fencers (people, masks, foils) for close inspection in tests. */
     fencers() {

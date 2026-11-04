@@ -33,7 +33,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { guardRenderer, postTarget, addSanitize, RenderWatchdog, gfxNotice, precompile } from '../shared/gfx.js';
 import { Sfx } from './audio.js';
-import { N, H, R_MIN, R_MAX, ClayBody, ringMaps, clayMaterial, glazeMaterial } from './clay.js';
+import { N, H, R_MIN, R_MAX, ClayBody, ringMaps, glazeMaps, clayMaterial, glazeMaterial } from './clay.js';
 import { mulberry, buildStudio, buildWheel, buildHand, buildSponge, buildEnvScene, disposeScene } from './studio.js';
 import { buildFx, HeatHazeShader } from './fx.js';
 import { buildGuide } from './guide.js';
@@ -72,7 +72,7 @@ const PIECES = [
     id: 'skal',
     name: 'Skålen',
     brief: 'En öppen skål — bred mun, mjuk buk, stadig fot.',
-    glaze: { color: 0xd89a2c, rim: 0x6e3414, metal: false },
+    glaze: { color: 0xd89a2c, rim: 0x6e3414, metal: false, tex: 'speckle' },
     css: '#d4952f',
     glazeName: 'honungsglasyr',
     profile: profileOf([[0, 0.62], [0.14, 0.5], [0.35, 0.62], [0.7, 0.95], [1, 1.18]])
@@ -81,7 +81,7 @@ const PIECES = [
     id: 'vas',
     name: 'Vasen',
     brief: 'En klassisk vas — fyllig buk, smal hals, liten läpp.',
-    glaze: { color: 0x163f8e, rim: 0x8a6a52, metal: false },
+    glaze: { color: 0x163f8e, rim: 0x8a6a52, metal: false, tex: 'mottle' },
     css: '#3d6fc0',
     glazeName: 'koboltglasyr',
     profile: profileOf([[0, 0.58], [0.16, 0.82], [0.38, 1.02], [0.62, 0.62], [0.82, 0.34], [0.93, 0.36], [1, 0.5]])
@@ -90,7 +90,7 @@ const PIECES = [
     id: 'amfora',
     name: 'Amforan',
     brief: 'En amfora som på museet — hög buk, lång smal hals, utsvängd mynning.',
-    glaze: { color: 0x86b496, rim: 0xd9e4cf, metal: false },
+    glaze: { color: 0x86b496, rim: 0xd9e4cf, metal: false, tex: 'crackle' },
     css: '#8fc4a0',
     glazeName: 'seladonglasyr',
     profile: profileOf([[0, 0.4], [0.1, 0.62], [0.3, 1.08], [0.52, 0.92], [0.74, 0.3], [0.9, 0.26], [1, 0.56]])
@@ -294,6 +294,8 @@ export async function createClay(container) {
   const view = { aspect: 1, portrait: false, tan: Math.tan(THREE.MathUtils.degToRad(19)) };
   // Free screen region (fractions: x0, x1, y0 from the top, y1) beside the summary card
   const summaryFree = new THREE.Vector4(0, 0.6, 0, 1);
+  // ...and the one the verdict card leaves (on a phone held upright: above it)
+  const verdictFree = new THREE.Vector4(0, 1, 0.1, 0.5);
 
   /* ---- World ------------------------------------------------------------ */
 
@@ -352,6 +354,7 @@ export async function createClay(container) {
   /* ---- The clay ---------------------------------------------------------- */
 
   const maps = ringMaps();
+  const glazeTex = glazeMaps(maps);
   const body = new ClayBody();
   const clayMat = clayMaterial(maps, lowTier);
 
@@ -763,7 +766,7 @@ export async function createClay(container) {
     // The fired twin, waiting in the kiln
     body.open = 1;
     const geo = body.firedGeometry(r, p.glaze);
-    const mat = glazeMaterial(maps, p.glaze.metal);
+    const mat = glazeMaterial(maps, p.glaze.metal, glazeTex[p.glaze.tex] || null);
     const mesh = new THREE.Mesh(geo, mat);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
@@ -799,6 +802,7 @@ export async function createClay(container) {
     hud.verdict.classList.remove('grade-hi', 'grade-mid', 'grade-lo');
     hud.verdict.classList.add(res.grade >= 9 ? 'grade-hi' : res.grade <= 3 ? 'grade-lo' : 'grade-mid');
     hud.verdict.classList.add('show');
+    measureVerdict();
     // Stars land one at a time
     const stars = hud.vStars.querySelectorAll('.lr-star');
     for (let i = 0; i < res.stars; i++) {
@@ -810,6 +814,22 @@ export async function createClay(container) {
     if (res.grade >= 9) later(() => sfx.fanfare(), 420 + res.stars * 340);
     keramiker.cue('verdict', res.grade);
     renderChips();
+  }
+
+  /** Where on screen the judging scene has room: above the card (portrait), beside it (wide). */
+  function measureVerdict() {
+    const host = canvasHost.getBoundingClientRect();
+    if (!host.height) return;
+    const card = hud.verdict.getBoundingClientRect();
+    const chips = hud.chips.getBoundingClientRect();
+    if (view.portrait) {
+      const y0 = clamp01((chips.bottom - host.top + 6) / host.height);
+      const y1 = Math.max(y0 + 0.25, (card.top - host.top - 8) / host.height);
+      verdictFree.set(0, 1, Math.min(0.2, y0), Math.min(1, y1));
+    } else {
+      const x0 = Math.min(0.5, Math.max(0, (card.right - host.left + 12) / host.width));
+      verdictFree.set(x0, 1, 0.06, 1);
+    }
   }
 
   /** From the verdict: the piece goes to the window, the next lump lands. */
@@ -1046,6 +1066,16 @@ export async function createClay(container) {
     lookGoal.y -= shift[1] * d * view.tan;
   }
 
+  /**
+   * frame() into part of the screen: f = (x0, x1, y0 from the top, y1) as
+   * fractions. The box fills that region and is centred in it.
+   */
+  function frameIn(look, dir, hw, hh, fill, f) {
+    const wX = Math.max(0.3, f.y - f.x);
+    const wY = Math.max(0.15, f.w - f.z);
+    frame(look, dir, hw / wX, hh / wY, fill, [f.x + f.y - 1, 1 - (f.z + f.w)]);
+  }
+
   const DIR_THROW = new THREE.Vector3(0, 0.2, 1);
   const DIR_KILN = new THREE.Vector3(-0.35, 0.5, 1); // a little from above, so the glowing seam reads
   const DIR_SHOW = new THREE.Vector3(0.05, 0.12, 1);
@@ -1089,16 +1119,17 @@ export async function createClay(container) {
       REVEAL_LOOK.copy(studio.reveal);
       REVEAL_LOOK.x += 0.15;
       REVEAL_LOOK.y += 0.45;
-      frame(REVEAL_LOOK, DIR_REVEAL, P ? 0.75 : 1.3, 0.7, P ? 0.9 : 0.75,
-        ph === 'judge' ? (P ? [0, 0.42] : [0.3, 0]) : [0, P ? 0.1 : 0]);
+      if (ph === 'judge' && P) {
+        // Above the verdict card: the piece AND keramikern, beret and all
+        REVEAL_LOOK.y += 0.17;
+        frameIn(REVEAL_LOOK, DIR_REVEAL, 0.66, 0.68, 0.94, verdictFree);
+      } else {
+        frame(REVEAL_LOOK, DIR_REVEAL, P ? 0.75 : 1.3, 0.7, P ? 0.9 : 0.75,
+          ph === 'judge' ? [0.3, 0] : [0, P ? 0.1 : 0]);
+      }
     } else if (ph === 'over') {
       // The sill (half-width ~1.3 with its pieces, plus margin) fills the free region
-      const f = summaryFree;
-      const halfX = f.y - f.x;
-      const halfY = f.w - f.z;
-      const cx = f.x + f.y - 1;
-      const cy = 1 - (f.z + f.w);
-      frame(SHOW_LOOK, DIR_SHOW, 1.5 / Math.max(0.3, halfX), 0.42 / Math.max(0.15, halfY), 0.92, [cx, cy]);
+      frameIn(SHOW_LOOK, DIR_SHOW, 1.5, 0.42, 0.92, summaryFree);
     }
     const k = 1 - Math.exp(-dt * (ph === 'fire' ? 2.4 : 2.0));
     camera.position.lerp(camGoal, k);
@@ -1136,6 +1167,7 @@ export async function createClay(container) {
     hudHost.classList.toggle('lr-wide', view.aspect >= 1.15);
     hudHost.classList.toggle('lr-tall', view.portrait);
     if (state.phase === 'throw' || state.phase === 'intro') renderMatch();
+    if (state.phase === 'judge') measureVerdict();
   }
   const ro = new ResizeObserver(resize);
   ro.observe(canvasHost);
@@ -1364,7 +1396,8 @@ export async function createClay(container) {
     state.heat = h;
     const { kiln } = studio;
     kiln.chamberMat.emissiveIntensity = 0.06 + h * 3.2;
-    heatCol.setRGB(1.0, 0.32 + h * 0.5, 0.08 + h * 0.3).multiplyScalar(h * 6);
+    // Cherry red → orange → the yellow of 1 240 °C, never a flat white
+    heatCol.setRGB(1.0, 0.22 + h * 0.36, 0.04 + h * 0.1).multiplyScalar(h * (0.6 + h * 3.4));
     kiln.glowMat.color.copy(heatCol);
     sfx.setKiln(h);
   }
@@ -1710,6 +1743,8 @@ export async function createClay(container) {
   // lämna en svart duk. Laddkortet ligger kvar medan det kompilerar.
   // The composer draws the scene into its own (linear, untonemapped) target,
   // which needs different program variants from the screen — warm those
+  // The glaze patterns are uploaded now too, not when the first piece comes out
+  glazeTex.list.forEach((tx) => renderer.initTexture(tx));
   await precompile(renderer, scene, camera, { target: usePost ? composer.renderTarget1 : null });
   hidden.forEach((o) => {
     o.visible = false;
@@ -1807,6 +1842,7 @@ export async function createClay(container) {
     body.dispose();
     maps.normal.dispose();
     maps.albedo.dispose();
+    glazeTex.list.forEach((tx) => tx.dispose());
     if (envRT) envRT.dispose();
     composer.passes.forEach((pass) => pass.dispose?.());
     composer.dispose(); // frigör även renderingsmålen

@@ -237,6 +237,7 @@ const LAYERS = [
   ['cheer', POSES.cheer], ['armUp', armUp], ['thumb', thumbsUp], ['shrug', shrug], ['lean', leanIn]
 ];
 const THUMB_UP = new THREE.Quaternion().setFromEuler(new THREE.Euler(-1.45, 0.1, 0.2));
+const IDENTITY = new THREE.Quaternion();
 
 /**
  * @param {object} o
@@ -301,6 +302,8 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
   const ax = new THREE.Vector3();
   const ay = new THREE.Vector3();
   const az = new THREE.Vector3();
+  const v1 = new THREE.Vector3();
+  const v2 = new THREE.Vector3();
 
   /** World quaternion for a bone whose local X and Y should point along x and y (orthonormalised). */
   function basisQuat(x, y, out) {
@@ -506,8 +509,25 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
     st.rim += ((plan.lean ? 1 : 0) - st.rim) * k(5);
     st.chin += ((plan.lean ? 1 : 0) - st.chin) * k(3.5);
     const pointW = ctx.attention ? w.point : 0;
-    if (st.rim < 0.004 && st.chin < 0.004 && pointW < 0.004) return;
+    const foldW = w.crossed;
+    if (st.rim < 0.004 && st.chin < 0.004 && pointW < 0.004 && foldW < 0.004) return;
     root.updateMatrixWorld(true);
+    if (foldW > 0.004) {
+      // Arms folded the way people fold them — not an X at the wrists: the
+      // left forearm lies over the right, its hand resting on the right upper
+      // arm; the right hand is tucked in under the left arm against the ribs.
+      // Both forearms clear the apron by a couple of centimetres.
+      bones.chest.getWorldQuaternion(qa);
+      const C = (x, y, z, out) => bones.chest.localToWorld(out.set(x * s, y * s, z * s));
+      C(-0.05, -0.03, 0.285, target);
+      basisQuat(v1.set(0, 0.6, 0.8).applyQuaternion(qa), v2.set(0.85, 0.45, 0.25).applyQuaternion(qa), handQ);
+      C(0.6, -0.2, 0.35, pole);
+      reachFor('L', target, handQ, pole, foldW);
+      C(0.06, -0.095, 0.205, target);
+      basisQuat(v1.set(0, 0, -1).applyQuaternion(qa), v2.set(-0.9, 0, 0.3).applyQuaternion(qa), handQ);
+      C(-0.6, -0.25, 0.3, pole);
+      reachFor('R', target, handQ, pole, foldW);
+    }
     if (st.rim > 0.004) {
       // The rim point on his left, riding round with the wheel and back
       const left = tmp2.set(Math.cos(root.rotation.y), 0, -Math.sin(root.rotation.y));
@@ -550,8 +570,11 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
    *   attention: what he watches while you throw (your hand, or the clay)
    *   piece: the fired piece while it is judged · camera: the viewer · heat: kiln glow 0..1
    */
-  function update(dt, t, ctx) {
-    st.now = t;
+  function update(dt, tWall, ctx) {
+    // His own clock runs on frame time, so a fast-forwarded firing (or a
+    // slow test machine) plays every gesture at the speed of the game
+    st.now += dt;
+    const t = st.now;
     const { phase } = ctx;
     for (const [name] of LAYERS) goalW[name] = 0;
     plan.look = null;
@@ -572,7 +595,11 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
     pose(dt, t);
     hands(dt, t, ctx);
     // The thumbs-up thumb: straight out of the top of the fist
-    if (w.thumb > 0.01) bones.thumbR.quaternion.slerp(THUMB_UP, ease(w.thumb));
+    // (guarded: the shared hand rig may grow or rename finger bones)
+    if (w.thumb > 0.01 && bones.thumbR) {
+      bones.thumbR.quaternion.slerp(THUMB_UP, ease(w.thumb));
+      for (const n of ['thumbMidR', 'thumbTipR']) if (bones[n]) bones[n].quaternion.slerp(IDENTITY, ease(w.thumb));
+    }
     // Nods, shakes and tilts on top (people.update keeps them and adds look-at)
     if (plan.nod) bones.head.rotation.x += plan.nod;
     if (plan.shake) {
@@ -590,7 +617,7 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
       st.talking = talk;
       person.talk(talk);
     }
-    person.update(dt, t);
+    person.update(dt, tWall);
   }
 
   return {

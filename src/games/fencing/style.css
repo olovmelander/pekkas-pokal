@@ -579,6 +579,9 @@
   transform: none;
 }
 
+/* The salute: the board is up, the controls slide in at »En garde« */
+.fen[data-mode='intro'] .fen-board { opacity: 1; }
+
 .fen[data-mode='duel'] .fen-pad { pointer-events: auto; }
 .fen[data-mode='duel'] .fen-board { transform: translateX(-50%); }
 
@@ -949,6 +952,44 @@
   text-transform: uppercase;
   color: var(--dim);
 }
+
+/* The bracket and the verdict sit beside the person they are about:
+   on the right in landscape (the camera frames the next opponent or the
+   winner on the left third), at the bottom in portrait */
+.fen[data-orient='landscape'][data-mode='bracket'] .fen-screen,
+.fen[data-orient='landscape'][data-mode='result'] .fen-screen {
+  justify-content: flex-end;
+  padding-right: max(3vw, 16px);
+  background: linear-gradient(270deg, rgba(6, 4, 3, 0.88) 0%, rgba(6, 4, 3, 0.6) 42%, rgba(6, 4, 3, 0.12) 72%, rgba(6, 4, 3, 0) 100%);
+}
+
+.fen[data-orient='landscape'][data-mode='bracket'] .fen-panel { width: min(580px, 60%); }
+.fen[data-orient='landscape'][data-mode='result'] .fen-panel { width: min(440px, 56%); }
+
+.fen[data-orient='portrait'][data-mode='bracket'] .fen-screen,
+.fen[data-orient='portrait'][data-mode='result'] .fen-screen {
+  align-items: flex-end;
+  padding: 20px 12px calc(var(--safe-b) + 4px);
+  background: linear-gradient(0deg, rgba(6, 4, 3, 0.92) 0%, rgba(6, 4, 3, 0.7) 45%, rgba(6, 4, 3, 0) 66%);
+}
+
+.fen[data-orient='portrait'][data-mode='bracket'] .fen-panel,
+.fen[data-orient='portrait'][data-mode='result'] .fen-panel {
+  max-height: 60%;
+  padding: 14px 12px 12px;
+}
+
+.fen[data-orient='portrait'][data-mode='bracket'] .fen-bracket { margin-top: 8px; gap: 5px; }
+.fen[data-orient='portrait'][data-mode='bracket'] .fen-bm-row { padding: 3px 6px; font-size: 0.64rem; }
+.fen[data-orient='portrait'][data-mode='bracket'] .fen-bms,
+.fen[data-orient='portrait'][data-mode='bracket'] .fen-bcol { gap: 4px; }
+.fen[data-orient='portrait'][data-mode='bracket'] .fen-opp { margin-top: 10px; padding: 9px 12px; gap: 10px; }
+.fen[data-orient='portrait'][data-mode='bracket'] .fen-opp-text p { font-size: 0.74rem; margin-top: 3px; }
+.fen[data-orient='portrait'][data-mode='bracket'] .fen-go,
+.fen[data-orient='portrait'][data-mode='result'] .fen-go { margin-top: 12px; }
+.fen[data-orient='portrait'][data-mode='result'] .fen-big-score { font-size: 2.4rem; margin-top: 6px; }
+.fen[data-orient='portrait'][data-mode='result'] .fen-stats { margin-top: 10px; }
+.fen[data-orient='portrait'][data-mode='result'] .fen-lead { font-size: 0.8rem; margin-top: 8px; }
 
 /* ---- Portrait / phones ---- */
 

@@ -30,6 +30,21 @@ const TRIM = {
   'Viktor Jones': 0xe8b84a // guld
 };
 
+/**
+ * How each of them carries a point. Henrik is the steady one: a nod and a
+ * low "kom igen" when he wins one, and he studies and wipes his rubber
+ * when he loses one. Rickard plays on emotion: a double fist pump and a
+ * shout, a slap on the thigh when it goes the other way. Viktor, the
+ * champion, holds up one finger ("en till") and wipes his brow with his
+ * wrist when you take one off him.
+ */
+const STYLE = {
+  'Henrik Lundqvist': { point: 'nod', lost: 'wipe', won: 'modest', hype: 0.45 },
+  'Rickard Nilsson': { point: 'pump', lost: 'slap', won: 'roar', hype: 1 },
+  'Viktor Jones': { point: 'finger', lost: 'brow', won: 'arms', hype: 0.7 },
+  default: { point: 'nod', lost: 'brow', won: 'arms', hype: 0.6 }
+};
+
 /** Where the bat stands relative to the body (index.js keeps him there). */
 export const BAT_OFFSET = { fh: 0.342, bh: -0.114 };
 
@@ -38,7 +53,9 @@ export const BAT_OFFSET = { fh: 0.342, bh: -0.114 };
    hitting face's normal. The contact key comes from the ball. */
 const KEYS = [0, 0.7, 1, 1.5, 2];
 const READY_P = [-0.14, 1.08, 0.4];
-const FH_P = [READY_P, [-0.58, 0.94, 0.0], null, [0.08, 1.58, 0.34], READY_P];
+// The forehand finishes up by the LEFT temple (a salute), not in front of
+// the face — the old key hid his face behind the blade on every drive
+const FH_P = [READY_P, [-0.58, 0.94, 0.0], null, [0.3, 1.5, 0.3], READY_P];
 const BH_P = [READY_P, [0.12, 1.0, 0.22], null, [-0.42, 1.34, 0.54], READY_P];
 const READY_O = [[-0.35, 0.8, 0.45], [0, 0.05, 1]];
 const FH_O = [READY_O, [[-0.75, 0.5, -0.25], [0.2, -0.2, 1]], [[-0.8, 0.5, 0.2], [0.05, -0.32, 1]], [[0.25, 0.9, 0.25], [0.75, -0.2, 0.6]], READY_O];
@@ -66,6 +83,8 @@ function bladeQuat([dir, face], backhand, out = new THREE.Quaternion()) {
 const FH_Q = FH_O.map((o) => bladeQuat(o, false));
 const BH_Q = BH_O.map((o, i) => bladeQuat(o, i > 0 && i < 4));
 const READY_Q = bladeQuat(READY_O, false);
+// Applauding: the bat up in front of the chest, its red face to his left hand
+const PAT_O = [[0.15, 0.95, 0.2], [0.95, 0.0, 0.3]];
 
 const ease = {
   // wind-up eases in and out; the swing accelerates INTO the ball and
@@ -76,14 +95,39 @@ const ease = {
   3: (k) => k * k * (3 - 2 * k)
 };
 
-/* The paddle in the fist: its handle across the palm, the blade out of the
-   thumb side (socket +Z) and the red rubber on the palm side (socket +X).
-   Columns are the paddle's axes in the socket's frame. */
+/* The shakehand grip. The handle runs DIAGONALLY across the palm — from
+   the heel of the hand up to the root of the index finger — so the blade
+   leaves the fist through the V between thumb and index, angled 30° from
+   the thumb toward the fingers. The red (forehand) rubber faces the palm
+   side (socket +X), as a forehand is a palm-forward stroke; the index
+   finger lies straight along the black (backhand) rubber and the thumb
+   rests on the red one by the shoulder of the blade. Columns are the
+   paddle's axes in the socket's frame (socket: +Z out of the thumb side,
+   +Y up the forearm, +X the palm). */
+const GRIP_TILT = Math.PI / 6;
 const PADDLE_IN_HAND = new THREE.Quaternion().setFromRotationMatrix(
-  new THREE.Matrix4().makeBasis(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(1, 0, 0))
+  new THREE.Matrix4().makeBasis(
+    new THREE.Vector3(0, Math.cos(GRIP_TILT), Math.sin(GRIP_TILT)),
+    new THREE.Vector3(0, -Math.sin(GRIP_TILT), Math.cos(GRIP_TILT)),
+    new THREE.Vector3(1, 0, 0)
+  )
 );
+/* A few millimetres toward the back of the hand, so the black rubber
+   rests ON the extended index finger instead of floating beside it */
+const PADDLE_IN_HAND_POS = new THREE.Vector3(-0.0015, 0.004, 0);
 const PADDLE_IN_HAND_INV = PADDLE_IN_HAND.clone().invert();
 const BLADE_Y = 0.112; // blade centre above the grip (hall.js buildPaddle)
+
+/* The open, flat palm the rules ask for: palm (hand −X) up, the fingers
+   forward and a little in, the thumb out to the side */
+const PALM_UP_L = (() => {
+  const f = new THREE.Vector3(-0.25, 0.05, 1).normalize(); // fingers (hand −Y)
+  const x = new THREE.Vector3(0, -1, 0); // hand +X: the back of the hand, down
+  x.addScaledVector(f, -x.dot(f)).normalize();
+  const y = f.clone().negate();
+  const z = new THREE.Vector3().crossVectors(x, y);
+  return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+})();
 
 const smoothstep = (a, b, x) => {
   const k = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -106,9 +150,11 @@ export class Foe {
     this.root = p.root;
     this.s = p.scale;
     this.paddle = paddle;
-    p.attach(paddle, 'gripR', { quaternion: PADDLE_IN_HAND });
+    const gripPos = PADDLE_IN_HAND_POS.clone().multiplyScalar(this.s);
+    p.attach(paddle, 'gripR', { quaternion: PADDLE_IN_HAND, position: gripPos });
     // Where the blade centre sits in the hand's frame
-    this.bladeInHand = p.sockets.gripR.position.clone().add(new THREE.Vector3(0, BLADE_Y, 0).applyQuaternion(PADDLE_IN_HAND));
+    this.bladeInHand = p.sockets.gripR.position.clone().add(gripPos).add(new THREE.Vector3(0, BLADE_Y, 0).applyQuaternion(PADDLE_IN_HAND));
+    this.style = STYLE[opp.name] ?? STYLE.default;
 
     this.pose = POSES.ready(0);
     this.pos = new THREE.Vector3();
@@ -135,11 +181,16 @@ export class Foe {
   /**
    * A moment to react to: 'point' (his), 'lost', 'smash', 'matchWon',
    * 'matchLost'. `power` (0..1) is how much the point meant — a long rally
-   * gets a grin, not a smile.
+   * gets a grin, not a smile, and a bigger celebration.
    */
   cue(kind, power = 0.5) {
-    const dur = { point: 1.3, lost: 1.2, smash: 0.7, matchWon: 3, matchLost: 2.5 }[kind] ?? 1;
-    this.react = { kind, t: 0, dur, power };
+    const dur = { point: 1.5, lost: 1.5, smash: 0.7, matchWon: 3.2, matchLost: 3 }[kind] ?? 1;
+    // A smash is a face, not a body reaction: never cut a celebration short for it
+    if (kind === 'smash' && this.react.t < this.react.dur && this.react.kind !== 'smash') {
+      this.react.shout = 0.7;
+      return;
+    }
+    this.react = { kind, t: 0, dur, power, shout: 0 };
   }
 
   setExpr(name, amount = 1) {
@@ -158,7 +209,9 @@ export class Foe {
     const p = this.person;
     const { bones } = p;
     const r = this.react;
+    const st = this.style;
     r.t += dt;
+    if (r.shout) r.shout = Math.max(0, r.shout - dt);
     const reacting = r.t < r.dur ? r.kind : '';
     const env = reacting ? smoothstep(0, 0.12, r.t) * (1 - smoothstep(r.dur - 0.35, r.dur, r.t)) : 0;
 
@@ -179,18 +232,25 @@ export class Foe {
 
     /* Trunk and legs from the pose library */
     const { pose } = this;
-    const celebrate = v.mode === 'clap' || reacting === 'matchWon';
-    if (v.mode === 'clap') POSES.clap(t, pose);
-    else if (reacting === 'matchWon') POSES.cheer(t, pose);
+    const won = reacting === 'matchWon';
+    const celebrate = v.mode === 'clap' || won;
+    const patting = v.mode === 'clap' || reacting === 'matchLost';
+    if (won && st.won !== 'modest') POSES.cheer(t * (st.won === 'roar' ? 1.25 : 0.8), pose);
     else if (v.mode === 'menu') POSES.idle(t, pose);
     else POSES.ready(t, pose);
-    const play = v.mode === 'play' || v.mode === 'intro';
-    pose.gripR = 0.95; // the bat never leaves his hand
-    if (reacting === 'point') pose.gripL = 1;
+    const play = (v.mode === 'play' || v.mode === 'intro') && !celebrate;
+    pose.gripR = 0.95; // the bat never leaves his hand…
+    pose.pointR = 1; // …and the index finger lies straight along its back
+    if (v.toss >= 0) pose.gripL = 0.04; // the ball rests on an OPEN palm
     const fhTarget = v.fh > 0 ? 1 : 0;
     this.fhW += (fhTarget - this.fhW) * Math.min(1, dt * 9);
     let reachLean = 0;
-    if (play && !celebrate) {
+    if (won) {
+      // Rickard bounces on his toes; Henrik just straightens up, satisfied
+      if (st.won === 'roar') pose.hipsPos[1] += Math.abs(Math.sin(r.t * 7)) * 0.05 * env;
+      if (st.won === 'modest') pose.spine[0] -= 0.06 * env;
+    }
+    if (play) {
       // Split-step: the knees keep a rhythm between shots (the feet are
       // planted, so lowering the hips is what bends them)
       const moving = Math.min(1, Math.abs(this.vx) / 1.2);
@@ -201,6 +261,14 @@ export class Foe {
       pose.hips[1] += yaw * 0.3;
       pose.spine[1] += yaw * 0.3;
       pose.chest[1] += yaw * 0.4;
+      // Weight transfer: he sits into the back leg on the backswing (the
+      // right one on a forehand) and drives through onto the other as he
+      // hits, the knees loading and releasing with it
+      const load = this.strokeLoad(v.stroke);
+      const side = this.fhW * 2 - 1; // +1 forehand … −1 backhand
+      pose.hipsPos[0] += load * side * 0.045;
+      pose.hipsPos[1] -= Math.abs(load) * 0.035;
+      pose.hips[2] += load * side * 0.06;
       // Lean into the direction of travel (moving to world +x = his left)
       const lean = THREE.MathUtils.clamp(-this.vx * 0.07, -0.14, 0.14);
       pose.spine[2] += lean;
@@ -214,14 +282,11 @@ export class Foe {
         pose.hipsPos[1] -= reachLean * 0.12;
       }
       if (v.mode === 'intro') {
-        // A nod to the camera as the card comes up
+        // A nod to the camera as the card comes up, then a bounce on the toes
         pose.head[0] += Math.sin(smoothstep(0.5, 1.1, this.modeT) * Math.PI) * 0.2;
+        pose.hipsPos[1] += Math.abs(Math.sin(this.modeT * 5.2)) * 0.015 * smoothstep(1.2, 1.6, this.modeT);
       }
-      if (reacting === 'lost') {
-        // Shoulders drop, a shake of the head
-        pose.chest[0] += 0.12 * env;
-        pose.head[1] += Math.sin(r.t * 13) * 0.16 * env;
-      }
+      this.reactPose(reacting, env, r.t, pose);
     }
     p.setPose(pose, jump ? 1 : 1 - Math.exp(-dt * 18));
 
@@ -231,32 +296,170 @@ export class Foe {
     bones.footR.getWorldPosition(this._desired[1]);
     this.stepFeet(dt);
 
-    /* The bat */
-    if (v.mode === 'clap') {
-      // Applauding the new champion: the left hand pats the bat face
-      p.lookAt(v.look || null, 1);
-    } else if (celebrate) {
+    /* The bat, and the free hand */
+    if (patting) {
+      // Sporting applause: the bat held up, the free hand patting its face
+      this.patBat(t, reacting === 'matchLost' ? env : 1);
+      p.lookAt(v.look || null, 0.9);
+    } else if (won) {
+      if (st.won === 'modest') this.freeHand(0.2, 1.62 + Math.sin(r.t * 6) * 0.03, 0.22, env);
       p.lookAt(v.look || null, 0.6);
     } else if (v.mode === 'menu') {
       p.lookAt(v.look || null, 0.5);
     } else {
       this.swingArm(v, reachLean);
+      let look = v.ball || v.look || null;
+      let lookW = v.ball ? 1 : 0.8;
       if (v.toss >= 0) this.tossArm(v);
-      else if (reacting === 'point') this.fistPump(env, r.t);
-      p.lookAt(v.ball || v.look || null, v.ball ? 1 : 0.8);
+      else if (reacting === 'point' || reacting === 'lost') {
+        const at = this.reactArm(reacting, env, r.t);
+        if (at) {
+          look = at;
+          lookW = 0.85;
+        }
+      }
+      p.lookAt(look, lookW);
     }
 
     /* Face */
-    if (reacting === 'point') this.setExpr(r.power > 0.65 ? 'grin' : 'smile', 0.9);
-    else if (reacting === 'lost') this.setExpr('frown', 0.8);
+    const big = r.power > 0.65;
+    if (r.shout > 0) this.setExpr('shout', 0.85);
+    else if (reacting === 'point') {
+      const shout = st.point === 'pump' && big && r.t < 0.9;
+      this.setExpr(shout ? 'shout' : big || st.point === 'finger' ? 'grin' : 'smile', 0.9);
+    } else if (reacting === 'lost') this.setExpr('frown', st.lost === 'brow' ? 0.55 : 0.8);
     else if (reacting === 'smash') this.setExpr('shout', 0.9);
-    else if (reacting === 'matchWon') this.setExpr('grin', 1);
+    else if (won) this.setExpr(st.won === 'roar' && r.t < 1.6 ? 'shout' : 'grin', 1);
     else if (reacting === 'matchLost' || v.mode === 'clap') this.setExpr('smile', 0.8);
-    else if (v.mode === 'intro') this.setExpr('smile', 0.55);
+    else if (v.mode === 'intro') this.setExpr(this.modeT > 1.2 ? 'grin' : 'smile', 0.6);
     else if (v.mode === 'play' && v.focus > 0) this.setExpr('focus', Math.round(v.focus * 10) / 10);
     else this.setExpr('neutral', 0);
 
     p.update(dt, t);
+  }
+
+  /** Body language for a point won or lost, layered on the ready pose. */
+  reactPose(kind, env, rt, pose) {
+    if (!kind || env <= 0) return;
+    const st = this.style;
+    if (kind === 'point') {
+      if (st.point === 'pump') {
+        // Two hard pumps, each with a dip of the knees and a crunch forward
+        const beat = Math.max(0, Math.sin(Math.min(1, rt / 0.8) * Math.PI * 2));
+        pose.hipsPos[1] -= beat * 0.06 * env;
+        pose.spine[0] += beat * 0.16 * env;
+        pose.chest[1] -= 0.25 * env;
+      } else if (st.point === 'finger') {
+        // Chin up, chest open: the champion's swagger
+        pose.chest[0] -= 0.08 * env;
+        pose.head[0] -= 0.1 * env;
+        pose.chest[1] -= 0.18 * env;
+      } else {
+        // A small satisfied nod
+        pose.head[0] += Math.sin(Math.min(1, rt / 0.5) * Math.PI) * 0.22 * env;
+        pose.chest[1] -= 0.12 * env;
+      }
+    } else if (kind === 'lost') {
+      if (st.lost === 'slap') {
+        // Head thrown back at the ceiling, then a shake
+        const back = smoothstep(0, 0.25, rt) * (1 - smoothstep(0.6, 0.9, rt));
+        pose.head[0] -= back * 0.45 * env;
+        pose.head[1] += Math.sin(rt * 12) * 0.14 * smoothstep(0.7, 0.9, rt) * env;
+        pose.chest[0] -= back * 0.1 * env;
+      } else if (st.lost === 'wipe') {
+        // Shoulders drop; he looks down at his bat (lookAt does the head)
+        pose.chest[0] += 0.14 * env;
+        pose.spine[0] += 0.06 * env;
+      } else {
+        // A long breath out, a slight shake of the head
+        pose.chest[0] += 0.08 * env;
+        pose.head[1] += Math.sin(rt * 9) * 0.1 * smoothstep(0.5, 0.8, rt) * env;
+      }
+    }
+  }
+
+  /**
+   * The free (left) hand for a point won or lost. Returns a point to look
+   * at when the gesture wants his eyes (the bat he is wiping), else null.
+   */
+  reactArm(kind, env, rt) {
+    const st = this.style;
+    const p = this.person;
+    const style = kind === 'point' ? st.point : st.lost;
+    if (style === 'pump') {
+      // Fist from the hip to the shoulder, twice, snapping at the top
+      const k = Math.max(0, Math.sin(Math.min(1, rt / 0.8) * Math.PI * 2));
+      this.freeHand(0.24, 1.0 + k * 0.42, 0.22 + k * 0.08, env);
+    } else if (style === 'finger') {
+      // One finger up at shoulder height: "en till"
+      const up = smoothstep(0, 0.3, rt);
+      this.freeHand(0.3, 1.2 + up * 0.38, 0.28, env, 1);
+    } else if (style === 'nod') {
+      // A low, contained "kom igen" by the hip
+      const k = Math.sin(Math.min(1, rt / 0.45) * Math.PI);
+      this.freeHand(0.22, 1.02 + k * 0.12, 0.3, env);
+    } else if (style === 'slap') {
+      // The free hand comes down flat on the thigh
+      const down = smoothstep(0.55, 0.75, rt);
+      this.freeHand(0.2, 1.12 - down * 0.26, 0.2 - down * 0.08, env, 0, 0.2);
+    } else if (style === 'brow') {
+      // The back of the wrist across the forehead
+      const k = smoothstep(0.15, 0.9, rt);
+      this.freeHand(0.02 + k * 0.14, 1.7 - k * 0.02, 0.16, env, 0, 0.35);
+    } else if (style === 'wipe') {
+      // He studies the rubber and wipes it with his palm
+      const blade = this._wipe || (this._wipe = new THREE.Vector3());
+      this.paddle.localToWorld(blade.set(0, BLADE_Y, 0.04));
+      const hand = this._v.copy(blade);
+      hand.x += Math.sin(rt * 14) * 0.035;
+      hand.z += 0.05;
+      p.bones.handL.getWorldPosition(this._w);
+      this._w.lerp(hand, env * smoothstep(0.1, 0.4, rt));
+      p.ikArm('L', this._w, null);
+      return blade;
+    }
+    return null;
+  }
+
+  /** The left hand to a point in his own frame, blended in by `env`. */
+  freeHand(x, y, z, env, point = 0, grip = 1) {
+    const p = this.person;
+    const { s } = this;
+    const hand = this._v.set(x * s, y * s, z * s).add(this.pos);
+    p.bones.handL.getWorldPosition(this._w);
+    this._w.lerp(hand, env);
+    p.ikArm('L', this._w, null);
+    // Fingers after the fact (the pose went in before the IK); the left
+    // hand curls about −Z, as in people-rig's fingerRot
+    const k = Math.min(1, env * 1.5);
+    const curl = (bone, a) => bone.rotation.set(0, 0, -a * k);
+    curl(p.bones.indexL, 0.06 + grip * (1 - point) * 1.4);
+    curl(p.bones.indexTipL, 0.1 + grip * (1 - point) * 1.6);
+    curl(p.bones.fingersL, 0.1 + grip * 1.5);
+    curl(p.bones.fingersTipL, 0.14 + grip * 1.7);
+  }
+
+  /** Applause the table tennis way: the free hand patting the bat's face. */
+  patBat(t, env) {
+    const p = this.person;
+    const { s } = this;
+    const blade = this._fist;
+    blade.set(-0.02 * s, 1.24 * s, 0.36 * s).add(this.pos);
+    bladeQuat(PAT_O, false, this._q);
+    const hq = this._hq.copy(this._q).multiply(PADDLE_IN_HAND_INV);
+    const wrist = this._w.copy(this.bladeInHand).applyQuaternion(hq);
+    wrist.subVectors(blade, wrist);
+    const pole = this._pole.set(-0.6, -0.6, -0.4).multiplyScalar(s);
+    p.bones.chest.updateWorldMatrix(true, false);
+    pole.applyMatrix4(p.bones.chest.matrixWorld);
+    p.ikArm('R', wrist, pole, hq);
+    // The left palm meets the red face in a steady patter
+    this.paddle.updateWorldMatrix(true, false);
+    const face = this._v.set(0, BLADE_Y, 0.03 + Math.max(0, Math.sin(t * 8.5)) * 0.07);
+    this.paddle.localToWorld(face);
+    p.bones.handL.getWorldPosition(this._w);
+    this._w.lerp(face, env);
+    p.ikArm('L', this._w, null);
   }
 
   strokeYaw(stroke) {
@@ -268,6 +471,15 @@ export class Foe {
     const a = fh[i] + (fh[i + 1] - fh[i]) * k;
     const b = bh[i] + (bh[i + 1] - bh[i]) * k;
     return b + (a - b) * this.fhW;
+  }
+
+  /** −1 weight on the back leg (backswing) … +1 driven through (follow-through). */
+  strokeLoad(stroke) {
+    const w = [0, -1, 0.35, 1, 0];
+    let i = 0;
+    while (i < 3 && stroke > KEYS[i + 1]) i++;
+    const k = smoothstep(0, 1, (stroke - KEYS[i]) / (KEYS[i + 1] - KEYS[i]));
+    return w[i] + (w[i + 1] - w[i]) * k;
   }
 
   /** Blade centre (world) and orientation for a stroke phase. */
@@ -329,37 +541,36 @@ export class Foe {
     p.ikArm('R', wrist, pole, hq);
   }
 
-  /** His serve: the ball sits in the left palm, is tossed, and falls to the bat. */
+  /**
+   * His serve, by the rules: the ball rests still on the flat, open palm,
+   * is tossed near-vertically, and is struck as it falls.
+   */
   tossArm(v) {
     const p = this.person;
     const { s } = this;
     const k = v.toss;
-    // The palm, in front of him and a little to his right
-    const palm = this._v.set(-0.12 * s, 1.0 * s, 0.42 * s).add(this.pos);
-    const lift = k < 0.3 ? 0 : smoothstep(0.3, 0.55, k) * (1 - smoothstep(0.75, 1, k));
-    const hand = this._w.copy(palm);
-    hand.y += smoothstep(0, 0.3, k) * 0.16 + lift * 0.12;
-    p.ikArm('L', hand, null);
-    // The ball: in the palm, then up and down onto the serve point
-    if (v.tossBall && v.servePoint) {
-      if (k <= 0) v.tossBall.copy(palm).y += 0.05;
-      else {
-        const u = smoothstep(0, 1, k);
-        v.tossBall.copy(palm).lerp(v.servePoint, u);
-        v.tossBall.y += 0.05 * (1 - u) + Math.sin(Math.min(1, k * 1.05) * Math.PI) * 0.34;
-      }
+    // The palm, in front of him and a little to his left of the bat
+    const palm = this._v.set(0.02 * s, 0.98 * s, 0.38 * s).add(this.pos);
+    // Lift with the ball (k < 0.35), release, follow up a touch, then drop
+    const lift = smoothstep(0.05, 0.38, k) * 0.2 - smoothstep(0.5, 0.95, k) * 0.16;
+    palm.y += lift;
+    p.ikArm('L', palm, null, PALM_UP_L);
+    if (!v.tossBall || !v.servePoint) return;
+    // Where the ball sits: on the palm's centre, not in the wrist
+    p.bones.handL.updateWorldMatrix(true, false);
+    const onPalm = this._w.set(-0.036 * s, -0.052 * s, 0.006 * s);
+    p.bones.handL.localToWorld(onPalm);
+    const rel = this._release || (this._release = new THREE.Vector3());
+    const REL = 0.36;
+    if (k < REL) {
+      v.tossBall.copy(onPalm);
+      rel.copy(onPalm);
+    } else {
+      // Up off the palm and back down onto the serve point
+      const u = (k - REL) / (1 - REL);
+      v.tossBall.copy(rel).lerp(v.servePoint, smoothstep(0, 1, u));
+      v.tossBall.y = THREE.MathUtils.lerp(rel.y, v.servePoint.y, u) + Math.sin(u * Math.PI) * 0.3;
     }
-  }
-
-  /** A quick "kom igen" with the free hand. */
-  fistPump(env, rt) {
-    const p = this.person;
-    const { s } = this;
-    const pump = Math.sin(Math.min(1, rt / 0.5) * Math.PI) * 0.12;
-    const hand = this._v.set(0.22 * s, (1.3 + pump) * s, 0.28 * s).add(this.pos);
-    p.bones.handL.getWorldPosition(this._w);
-    this._w.lerp(hand, env);
-    p.ikArm('L', this._w, null);
   }
 
   stepFeet(dt) {

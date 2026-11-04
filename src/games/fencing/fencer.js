@@ -841,12 +841,25 @@ const ACTIONS = {
   },
 
   parry(a, out, ctx, k) {
-    // The beat: a short sharp sweep into the line, then back
+    // The beat, in the line it closes: a short sharp wrist action out
+    // and back, the hand moving only a few centimetres.
+    //  HÖG  sixte: point up, the hand lifts and turns out
+    //  MITT quarte: the blade sweeps across the body, point at the eyes
+    //  LÅG  octave: a half circle down, point towards the knee
     a.guardPose(out, ctx);
+    const { s } = a.f;
     const b = bell(clamp(k * 1.6, 0, 1));
-    out[P.fa] += 0.38 * b * (a.line === 2 ? -1 : 1);
-    out[P.fyaw] = 0.04 + 0.42 * b;
-    out[P.hx] += 0.04 * b * a.f.s;
+    const set = [
+      { fa: 0.42, yaw: 0.36, hy: 0.05, hx: 0.03 },
+      { fa: 0.26, yaw: 0.58, hy: 0.02, hx: 0.02 },
+      { fa: -0.72, yaw: 0.3, hy: -0.06, hx: 0.04 }
+    ][a.line];
+    out[P.fa] += set.fa * b;
+    out[P.fyaw] = 0.04 + set.yaw * b;
+    out[P.hx] += set.hx * b * s;
+    out[P.hy] += set.hy * b * s;
+    // The body stays still: only the rear arm answers the beat
+    out[P.back] = 0.12 * b;
     return 44;
   },
 
@@ -973,7 +986,9 @@ export class Animator {
     this.opts = {};
     this.line = 1;
     this.phase = seed;
-    this.ox = 0; // footwork offset along the piste
+    this.ox = 0; // footwork offset along the piste (the pelvis)
+    this.oxF = 0; // … and of each foot: a step moves one foot, then the other
+    this.oxB = 0;
     this.step = null; // { from, to, t, dur }
     this.flash = 0;
     this.hold = -1; // target line while the point is in contact
@@ -997,10 +1012,16 @@ export class Animator {
     this.vel.fill(0);
   }
 
-  /** Small advance (+) or retreat (−) step, front foot leads on advance. */
-  stepBy(dx, dur = 0.3) {
-    if (this.step) return;
+  /**
+   * Small advance (+) or retreat (−) step. Real footwork: on the advance
+   * the front foot goes first — toes up, heel lands — and the back foot
+   * follows; on the retreat the back foot leads. Never both at once, and
+   * never a slide.
+   */
+  stepBy(dx, dur = 0.34) {
+    if (this.step) return false;
     this.step = { from: this.ox, to: this.ox + dx, t: 0, dur };
+    return true;
   }
 
   /** Physical jolt: push a channel's velocity (hit reactions). */
@@ -1025,10 +1046,10 @@ export class Animator {
     out[P.px] = this.ox + Math.sin(ph * 2.6) * 0.012 * s;
     out[P.py] = (PELVIS + bob * 0.014) * s;
     out[P.lean] = 0.05 + bob * 0.008;
-    out[P.ffx] = this.ox + FRONT_FOOT * s;
+    out[P.ffx] = this.oxF + FRONT_FOOT * s;
     out[P.ffy] = ANKLE_H * s;
     out[P.ffp] = 0;
-    out[P.bfx] = this.ox + BACK_FOOT * s;
+    out[P.bfx] = this.oxB + BACK_FOOT * s;
     out[P.bfy] = ANKLE_H * s;
     out[P.bfp] = 0;
     // The hand drifts between lines rather than snapping
@@ -1056,12 +1077,12 @@ export class Animator {
     // How far the body has to travel for the point to land. The rear foot
     // slides up a little (a step-lunge), which is what lets the back leg
     // stay on the floor at full stretch.
-    const need = clamp(ctx.dist - ctx.oppPx - ctx.front - 1.76 * s, 0.15 * s, 0.72 * s) * depth;
+    const need = clamp(ctx.dist - ctx.oppPx - ctx.front - 1.76 * s - this.ox, 0.15 * s, 0.8 * s) * depth;
     out[P.px] += need * e;
     out[P.py] = (PELVIS - 0.16 * e * depth) * s;
     out[P.lean] = 0.05 + 0.24 * e;
     out[P.ffx] += (need + 0.1 * s) * e;
-    out[P.bfx] += need * 0.4 * smooth(clamp(k * 1.3, 0, 1));
+    out[P.bfx] += need * 0.22 * smooth(clamp(k * 1.3, 0, 1));
     const flight = clamp(k * 1.25, 0, 1);
     out[P.ffy] = (ANKLE_H + 0.12 * bell(flight) * depth) * s;
     out[P.ffp] = 0.45 * bell(flight * 0.9) - (k > 0.75 ? 0.1 * bell((k - 0.75) * 4) : 0);
@@ -1109,25 +1130,63 @@ export class Animator {
     const k = this.dur > 0 ? this.t / this.dur : 1;
     this.hold = -1;
 
+    let leadK = 0;
+    let trailK = 0;
+    let fwd = true;
     if (this.step) {
       const st = this.step;
       st.t += dt;
       const sk = clamp(st.t / st.dur, 0, 1);
-      this.ox = st.from + (st.to - st.from) * smooth(sk);
-      if (sk >= 1) this.step = null;
+      fwd = st.to > st.from;
+      const d = st.to - st.from;
+      // The pelvis glides through the whole step; the lead foot travels in
+      // the first 60 %, the trailing foot in the last 60 %
+      leadK = clamp(sk / 0.6, 0, 1);
+      trailK = clamp((sk - 0.4) / 0.6, 0, 1);
+      this.ox = st.from + d * smooth(sk);
+      const lead = st.from + d * smooth(leadK);
+      const trail = st.from + d * smooth(trailK);
+      this.oxF = fwd ? lead : trail;
+      this.oxB = fwd ? trail : lead;
+      if (sk >= 1) {
+        this.step = null;
+        this.oxF = this.ox;
+        this.oxB = this.ox;
+      }
+    } else {
+      this.oxF = this.ox;
+      this.oxB = this.ox;
     }
 
     const w = (ACTIONS[act] || ACTIONS.guard)(this, out, ctx, k);
+    const { s } = this.f;
 
-    // Footwork: the moving foot lifts in a small arc, the other follows
+    // Footwork: the moving foot clears the piste in a low arc; the front
+    // foot leads with the toes up so the heel lands first
     if (this.step) {
-      const st = this.step;
-      const sk = clamp(st.t / st.dur, 0, 1);
-      const fwd = st.to > st.from;
-      const lead = bell(clamp(sk * 1.6, 0, 1)) * 0.05 * this.f.s;
-      const trail = bell(clamp(sk * 1.6 - 0.6, 0, 1)) * 0.04 * this.f.s;
-      out[fwd ? P.ffy : P.bfy] += lead;
-      out[fwd ? P.bfy : P.ffy] += trail;
+      const lift = bell(leadK) * 0.045 * s;
+      const follow = bell(trailK) * 0.035 * s;
+      out[fwd ? P.ffy : P.bfy] += lift;
+      out[fwd ? P.bfy : P.ffy] += follow;
+      if (fwd) out[P.ffp] += 0.3 * bell(leadK * 0.9);
+      else out[P.ffp] += 0.18 * bell(trailK);
+    }
+
+    // No foot ever slides: one that still has ground to cover lifts while
+    // it travels and lands as it arrives (recovering from a lunge, a
+    // stagger, the step back after a touch). The planted back foot of a
+    // lunge is the exception — it stays flat on the piste.
+    if (out[P.relax] < 0.5) {
+      const lunging = act === 'lunge' || act === 'attack';
+      const travel = (x, y, pch, front) => {
+        const d = Math.abs(out[x] - this.f.pose[x]);
+        const up = clamp((d - 0.025 * s) * 0.55, 0, 0.065 * s);
+        if (up <= 0) return;
+        out[y] = Math.max(out[y], ANKLE_H * s + up);
+        if (front) out[pch] = Math.max(out[pch], up * 3);
+      };
+      travel(P.ffx, P.ffy, P.ffp, true);
+      if (!lunging) travel(P.bfx, P.bfy, P.bfp, false);
     }
 
     // Spring the real pose to the target

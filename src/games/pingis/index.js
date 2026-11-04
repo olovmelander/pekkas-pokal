@@ -1817,9 +1817,17 @@ export async function createPingis(container) {
   const view = {
     t: 0, bx: 0, by: 1, bz: HITZ, bvis: false, st: 0, ss: 0, vz: 0, live: false, smash: false,
     meX: 0, meVx: 0, meDVX: 0, meDVY: 0, meSwing: 0, meSpin: 0, aiX: 0, foeX: 0, foeZ: FOE_Z, stroke: 0, fh: 1,
-    hc: false, cx: 0, cy: 0, cz: 0, toss: -1
+    hc: false, cx: 0, cy: 0, cz: 0, toss: -1, mpX: 0, mpY: PADDLE_Y, mpZ: HITZ, mpReach: 0
   };
   const foeAnim = { x: 0, z: FOE_Z, fh: 1, stroke: 0, read: -1, swing: 0, hc: false, c: new THREE.Vector3() };
+  /* Your bat goes to MEET the ball. The rules hit it wherever it drops to
+     bat height, which can be a metre in front of a bat parked at the end
+     of the table — so for the picture the bat reads where the ball will be
+     met (the same pure prediction the bot reads with) and rises and
+     reaches there over the last third of a second, then follows through
+     and settles back. Sideways it only leans toward the ball: x stays the
+     bat you are steering, so a ball out of reach is visibly missed. */
+  const meAnim = { read: -1, c: new THREE.Vector3(), tHit: 0, swing: 0, follow: 0 };
 
   function liveView(dt) {
     const src = dead.on ? dead.pos : b.pos;
@@ -1840,6 +1848,28 @@ export async function createPingis(container) {
     if (me.swing > 0) me.swing = Math.max(0, me.swing - dt * 5);
     view.meSwing = me.swing;
     view.meSpin = me.swingSpin;
+    const toMe = b.live && b.vel.z > 0 && b.lastHitter === 'ai' && state.phase === 'rally';
+    if (toMe && meAnim.read !== state.rallyHits) {
+      meAnim.read = state.rallyHits;
+      const r = predictStrike(1);
+      meAnim.c.set(r.x, r.y, r.z);
+      meAnim.tHit = simT + r.t;
+    }
+    let reach = 0;
+    if (toMe && meAnim.read === state.rallyHits) reach = 1 - smooth(0.03, 0.32, meAnim.tHit - simT);
+    if (me.swing > meAnim.swing + 0.5) {
+      // Contact (or your serve): the ball is exactly where the bat met it
+      meAnim.c.copy(b.pos);
+      meAnim.follow = 1;
+    }
+    meAnim.swing = me.swing;
+    meAnim.follow = Math.max(0, meAnim.follow - dt * 2.4);
+    reach = Math.max(reach, smooth(0, 0.55, meAnim.follow));
+    const leanX = THREE.MathUtils.clamp(meAnim.c.x - me.x, -0.36, 0.36) * 0.6;
+    view.mpReach = reach;
+    view.mpX = me.x + leanX * reach;
+    view.mpY = THREE.MathUtils.lerp(PADDLE_Y, THREE.MathUtils.clamp(meAnim.c.y - 0.1, PADDLE_Y, 1.5), reach);
+    view.mpZ = THREE.MathUtils.lerp(HITZ, THREE.MathUtils.clamp(meAnim.c.z + 0.06, 0.25, HITZ), reach);
     view.aiX = ai.x;
     // The opponent's stroke: wind up as the ball arrives, follow through
     // after contact. Forehand unless it is coming well to his backhand.
@@ -1916,7 +1946,7 @@ export async function createPingis(container) {
     const c = rec[i];
     const k = THREE.MathUtils.clamp((replay.t - a.t) / Math.max(1e-5, c.t - a.t), 0, 1);
     Object.assign(rv, c);
-    ['bx', 'by', 'bz', 'meX', 'meVx', 'aiX', 'foeX', 'foeZ', 'stroke', 'meSwing'].forEach((f) => {
+    ['bx', 'by', 'bz', 'meX', 'meVx', 'aiX', 'foeX', 'foeZ', 'stroke', 'meSwing', 'mpX', 'mpY', 'mpZ', 'mpReach'].forEach((f) => {
       rv[f] = a[f] + (c[f] - a[f]) * k;
     });
     if (Math.abs(c.stroke - a.stroke) > 0.8) rv.stroke = c.stroke;
@@ -2058,13 +2088,19 @@ export async function createPingis(container) {
        SEE what you would play if the ball arrived now. */
     const preSpin = THREE.MathUtils.clamp(-v.meDVY * 0.3, -1, 1);
     const preSide = THREE.MathUtils.clamp(v.meDVX * 0.16, -1, 1);
-    myPaddle.position.x = v.meX;
-    myPaddle.rotation.y = THREE.MathUtils.clamp(v.meVx * 0.06, -0.35, 0.35);
-    myPaddle.rotation.z = THREE.MathUtils.clamp(-v.meVx * 0.09 - v.meDVX * 0.06, -0.6, 0.6);
+    // A bat with no player behind it only belongs in the player's own view
+    myPaddle.visible = camMode === 'play' || camMode === 'replay';
+    const lean = v.mpX - v.meX;
+    myPaddle.position.x = v.mpX;
+    myPaddle.position.z = v.mpZ;
+    myPaddle.rotation.y = THREE.MathUtils.clamp(v.meVx * 0.06 - lean * 0.5, -0.45, 0.45);
+    myPaddle.rotation.z = THREE.MathUtils.clamp(-v.meVx * 0.09 - v.meDVX * 0.06 - lean * 1.2, -0.7, 0.7);
     const sw = Math.sin(v.meSwing * Math.PI);
     const dir = v.meSpin < -0.25 ? -1 : 1;
-    myPaddle.position.y = PADDLE_Y + Math.sin(t * 2.1) * 0.008 + sw * 0.07 * dir;
-    myPaddle.rotation.x = -0.4 - preSpin * 0.22 - sw * 0.8 * dir;
+    const idle = Math.sin(t * 2.1) * 0.008 * (1 - v.mpReach);
+    myPaddle.position.y = v.mpY + idle + sw * 0.07 * dir;
+    // Squared up to the ball as it arrives (the face turns to the net)
+    myPaddle.rotation.x = -0.4 + v.mpReach * 0.22 - preSpin * 0.22 - sw * 0.8 * dir;
     const flick = Math.min(1, Math.hypot(preSpin, preSide) * 1.3);
     spinColor(preSpin, preSide, rubber.emissive);
     rubber.emissiveIntensity = flick * 0.55;

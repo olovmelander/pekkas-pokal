@@ -470,7 +470,26 @@ function headTint(p, ctx, n) {
   let tint = [r * k, g * k, bl * k];
   if (ctx.stubble) tint = ctx.stubble(p, tint);
   if (ctx.hairShadow) tint = ctx.hairShadow(p, tint);
+  if (ctx.look.shaved && !ctx.crowd) tint = scalpShadow(p, tint, ctx);
   return tint;
+}
+
+/** A shaved head: a faint shadow of stubble wherever the hair would grow. */
+function scalpShadow(p, tint, ctx) {
+  const L = ctx.look;
+  if (!ctx.scalpRatio) {
+    ctx.scalpRatio = [0, 1, 2].map((i) => {
+      const h = [L.hairColor.r, L.hairColor.g, L.hairColor.b][i];
+      const sk = [L.skin.r, L.skin.g, L.skin.b][i];
+      return Math.min(1.1, (h + 0.03) / (sk + 0.03));
+    });
+  }
+  const len = Math.hypot(p[0], p[1], p[2]) || 1;
+  const psi = Math.atan2(p[0], p[2]) / DEG;
+  const elev = Math.asin(clamp(p[1] / len, -1, 1)) / DEG;
+  const hl = HAIRLINE(psi);
+  const m = sstep(hl - 3, hl + 4, elev) * (0.2 + 0.06 * noise3(p[0] * 90, p[1] * 90, p[2] * 90));
+  return tint.map((v, i) => v * (1 + (ctx.scalpRatio[i] - 1) * m));
 }
 
 function buildMouthInside(b, ctx) {
@@ -773,7 +792,16 @@ export const HAIR_STYLES = {
   curly: { h: 0.02, side: 0.0145, ramp: 0.07, crown: [0, 0.9, -0.43], groove: 0, curls: 0.0055, front: 0.004 },
   long: { h: 0.0105, side: 0.0115, ramp: 0.05, crown: [0, 0.6, -0.8], groove: 0.0012, long: true, front: 0.003, part: 0 },
   bun: { h: 0.0058, side: 0.0048, ramp: 0.05, crown: [0, 0.35, -0.94], groove: 0.0016, bun: true },
-  balding: { h: 0.0048, side: 0.0045, ramp: 0.08, crown: [0, 0.9, -0.43], groove: 0.0006, balding: true }
+  balding: { h: 0.0048, side: 0.0045, ramp: 0.08, crown: [0, 0.9, -0.43], groove: 0.0006, balding: true },
+  // Short, a little unruly on top
+  messy: { h: 0.0115, side: 0.0045, ramp: 0.075, crown: [0.05, 0.92, -0.38], groove: 0.0013, noise: 0.0042, clumps: 0.0048, front: 0.0045, tufts: 3.2, jag: 3.4 },
+  // Medium length, wavy, tucked behind the ears and over the collar at the back
+  wavy: {
+    h: 0.0165, side: 0.0105, ramp: 0.06, crown: [0.12, 0.85, -0.5], groove: 0.0016, noise: 0.003, clumps: 0.004, front: 0.006,
+    part: 24, waves: 0.0035, lower: 9, fringe: 0.0035
+  },
+  // A neat short cut with the temples receding
+  receding: { h: 0.0068, side: 0.0036, ramp: 0.11, crown: [0, 0.9, -0.43], groove: 0.0007, front: 0.0028, recede: 9 }
 };
 export const HAIR_STYLE_NAMES = Object.keys(HAIR_STYLES);
 
@@ -792,6 +820,7 @@ export function hatEdge(kind) {
 export function buildHair(b, ctx) {
   const { look, res, field, toModel } = ctx;
   const st = HAIR_STYLES[look.hair];
+  if (look.shades === 'up' && !ctx.crowd && !ctx.hatEdge) buildShadesUp(b, ctx);
   if (!st) return;
   const { high } = res;
   const hat = ctx.hatEdge;
@@ -819,7 +848,11 @@ export function buildHair(b, ctx) {
       const jit = high ? (hash01(j * 7 + 3) - 0.5) * (st.jag ?? 2.5) : 0;
       const tk = hash01(j * 13 + 5);
       const tuft = high ? (tk > 0.4 ? 0.45 + tk * 0.75 : 0) * ((st.tufts ?? 2.6) * fr * fr + 2.2 * nape * nape) : 0;
-      const elev = (line(psiDeg) + jit - tuft) * DEG;
+      let lineDeg = line(psiDeg);
+      // Receding temples; longer styles grow lower over the ears and the nape
+      if (st.recede) lineDeg += st.recede * gauss((Math.abs(((psiDeg + 540) % 360) - 180) - 46) / 20, 1);
+      if (st.lower) lineDeg -= st.lower * sstep(55, 100, Math.abs(((psiDeg + 540) % 360) - 180));
+      const elev = (lineDeg + jit - tuft) * DEG;
       let tt = t;
       let bandMax = 1;
       if (st.balding) {
@@ -847,6 +880,11 @@ export function buildHair(b, ctx) {
       if (st.noise) h += st.noise * noise3(d[0] * 9 + 3, d[1] * 9, d[2] * 9);
       // Clumps that lift off the scalp and break the outline
       if (high) h += (st.clumps ?? 0.0025) * Math.max(0, noise3(d[0] * 7 + 11, d[1] * 7, d[2] * 7) * 1.6 - 0.25) * sstep(0.05, 0.3, tt);
+      if (st.waves && high) {
+        // Broad S-waves that run from the parting down to the ends
+        const w = Math.sin(tt * 14 + noise3(psi * 3, 1.3, 0.4) * 2.5 + psi * 2);
+        h += st.waves * (0.6 * w + 0.4 * noise3(d[0] * 14, d[1] * 14, d[2] * 14)) * sstep(0.04, 0.2, tt);
+      }
       if (st.curls && high) {
         const n1 = noise3(d[0] * 26, d[1] * 26, d[2] * 26);
         const n2 = noise3(d[0] * 52 + 7, d[1] * 52, d[2] * 52);
@@ -1024,6 +1062,7 @@ export function buildFacialHair(b, ctx, kind) {
       pts, rows: rows.length, cols, wrap: false, center: new THREE.Vector3(...toModel([0, -0.04, 0.0])),
       weight: (p, q) => faceWeights(q.hp, ctx.H)
     });
+    if (full && ctx.look.beardLong) buildLongBeard(b, ctx);
   }
   // Moustache (on its own, or joining the beard)
   const O2 = [0, my, 0.0];
@@ -1061,39 +1100,117 @@ export function buildFacialHair(b, ctx, kind) {
   });
 }
 
+/**
+ * The hanging part of a long beard: a tapered, slightly flattened tube from
+ * inside the chin down over the chest. The top rides the jaw; lower down it
+ * hands over to the neck and chest so it rests on the shirt when the head
+ * turns.
+ */
+function buildLongBeard(b, ctx) {
+  const { toModel, res } = ctx;
+  const { high } = res;
+  const rowsT = high ? [0, 0.1, 0.22, 0.36, 0.5, 0.64, 0.77, 0.88, 0.96, 1] : [0, 0.35, 0.7, 1];
+  const cols = high ? 12 : 6;
+  const pts = [];
+  for (const t of rowsT) {
+    const y = lerp(-0.082, -0.262, t);
+    // Bows forward over the chest, then tucks in a little at the tip
+    const zc = lerp(0.046, 0.094, sstep(0, 0.75, t)) - 0.006 * sstep(0.8, 1, t);
+    const wHalf = lerp(0.05, 0.013, Math.pow(t, 1.25)) * (1 + 0.08 * Math.sin(t * Math.PI));
+    const dHalf = lerp(0.034, 0.011, Math.pow(t, 0.9));
+    for (let j = 0; j < cols; j++) {
+      const a = (j / cols) * Math.PI * 2;
+      const ca = Math.cos(a);
+      const sa = Math.sin(a);
+      // Strand clumps run down the beard; the front is fuller than the back
+      const clump = high ? 0.0022 * Math.sin(a * 5 + t * 3 + noise3(a * 2, t * 4, 3.1) * 1.5) * sstep(0.05, 0.3, t) * (1 - t * 0.6) : 0;
+      const front = ca > 0 ? 1 : 0.7;
+      const x = sa * (wHalf + clump);
+      const z = zc + ca * (dHalf + clump * 0.5) * front;
+      const shade = (0.72 + 0.28 * Math.max(0, ca)) * (1 + 0.1 * Math.sin(a * 5 + t * 3)) * (t > 0.95 ? 0.85 : 1);
+      pts.push({ p: toModel([x, y, z]), region: REGION.HAIR, tint: [shade, shade * 0.98, shade * 0.97], mat: MAT.SKIN, t });
+    }
+  }
+  emitGrid(b, {
+    pts, rows: rowsT.length, cols, center: new THREE.Vector3(...toModel([0, -0.16, 0.06])), poles: [rowsT.length - 1],
+    weight: (p, q) => {
+      const k = sstep(0.12, 0.55, q.t);
+      const c = sstep(0.4, 0.95, q.t);
+      return [['jaw', (1 - k) * 0.7], ['head', (1 - k) * 0.3], ['neck', k * (1 - c)], ['chest', k * c]];
+    }
+  });
+}
+
 /* ------------------------------------------------------------ glasses */
 
-export function buildGlasses(b, ctx, kind) {
-  const { field, toModel, res, look } = ctx;
+export function buildGlasses(b, ctx, kind, opts = {}) {
+  const { field, res, look } = ctx;
   const { high } = res;
-  const nrm = [0, 0, 0];
-  const frame = look.glassesTint;
+  const sun = kind === 'sun';
+  const frame = sun && !opts.tint ? look.glassesTint : opts.tint || look.glassesTint;
+  // Pushed up onto the head: the whole pair turns back about the ear axis
+  // and lifts clear of the hair
+  const up = opts.up || 0;
+  const lift = opts.lift || 0;
+  const cu = Math.cos(up);
+  const su = Math.sin(up);
+  const xf = (p) => {
+    if (!up) return p;
+    const y = p[1] * cu + p[2] * su;
+    const z = -p[1] * su + p[2] * cu;
+    const l = Math.hypot(p[0], y, z) || 1;
+    const k = (l + lift) / l;
+    return [p[0] * k, y * k, z * k];
+  };
+  const toModel = (p) => ctx.toModel(xf(p));
   const zEye = FACE.eyeZ + FACE.eyeR;
   let zFront = 0;
   for (const x of [0.015, 0.03, 0.045]) zFront = Math.max(zFront, field.faceZ(x, 0.0));
   zFront = Math.max(zFront + 0.006, zEye + 0.011);
-  const cy = FACE.eyeY + 0.001;
+  const cy = FACE.eyeY + (sun ? 0.002 : 0.001);
   const round = kind === 'round';
-  const hw = round ? 0.0185 : 0.0245;
-  const hh = round ? 0.0185 : 0.0165;
-  const rr = round ? 0.0016 : 0.0019;
+  const hw = round ? 0.0185 : sun ? 0.0255 : 0.0245;
+  const hh = round ? 0.0185 : sun ? 0.0175 : 0.0165;
+  const rr = round ? 0.0016 : sun ? 0.0027 : 0.0019;
   const n = high ? 16 : 7;
   const w = () => [['head', 1]];
+  const rimPt = (cx, a, shrink = 1) => {
+    const ca = Math.cos(a);
+    const sa = Math.sin(a);
+    const e = round ? 2 : 4.2;
+    let x = Math.sign(ca) * Math.pow(Math.abs(ca), 2 / e) * hw * shrink;
+    const y = Math.sign(sa) * Math.pow(Math.abs(sa), 2 / e) * hh * shrink;
+    // Wayfarers: wider across the brow, the outer top corner swept up
+    if (sun) x *= 1 + 0.1 * (y / hh);
+    const lift2 = sun ? 0.003 * sstep(0, 1, (x * Math.sign(cx)) / hw) * sstep(0, 1, y / hh) : 0;
+    const X = cx + x;
+    const Y = cy + y + lift2;
+    // Lenses wrap gently with the face
+    return [X, Y, zFront - Math.abs(X) * 0.12];
+  };
   const rim = (s) => {
     const cx = s * (round ? 0.0322 : 0.0328);
     const path = [];
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2;
-      const ca = Math.cos(a);
-      const sa = Math.sin(a);
-      const e = round ? 2 : 4.2;
-      const x = cx + Math.sign(ca) * Math.pow(Math.abs(ca), 2 / e) * hw;
-      const y = cy + Math.sign(sa) * Math.pow(Math.abs(sa), 2 / e) * hh;
-      // Lenses wrap gently with the face
-      const z = zFront - Math.abs(x) * 0.12;
-      path.push(new THREE.Vector3(...toModel([x, y, z])));
+    for (let i = 0; i < n; i++) path.push(new THREE.Vector3(...toModel(rimPt(cx, (i / n) * Math.PI * 2))));
+    const thick = sun ? (u) => rr * (1 + 0.45 * Math.max(0, Math.sin(u * Math.PI * 2))) : rr;
+    sweep(b, {
+      path, radius: typeof thick === 'function' ? (u) => thick(u) * ctx.scale : rr * ctx.scale, cols: high ? 5 : 3, closed: true,
+      region: REGION.FIXED, tint: frame, mat: MAT.GLOSS, weight: w
+    });
+    if (sun) {
+      // Dark lens: a fan from the lens centre out to just inside the rim
+      const pts = [];
+      const nl = high ? 12 : 6;
+      const c0 = rimPt(cx, 0, 0);
+      for (let i = 0; i < nl; i++) pts.push({ p: toModel([c0[0], c0[1], c0[2] + 0.0006]), region: REGION.FIXED, tint: [0.03, 0.035, 0.04], mat: MAT.GLOSS });
+      for (let i = 0; i < nl; i++) {
+        const q = rimPt(cx, (i / nl) * Math.PI * 2, 0.93);
+        pts.push({ p: toModel(q), region: REGION.FIXED, tint: [0.045, 0.05, 0.055], mat: MAT.GLOSS });
+      }
+      emitGrid(b, {
+        pts, rows: 2, cols: nl, center: new THREE.Vector3(...toModel([c0[0], c0[1], c0[2] - 0.06])), poles: [0], weight: w
+      });
     }
-    sweep(b, { path, radius: rr * ctx.scale, cols: high ? 5 : 3, closed: true, region: REGION.FIXED, tint: frame, mat: MAT.GLOSS, weight: w });
     return cx;
   };
   const cxL = rim(1);
@@ -1106,32 +1223,38 @@ export function buildGlasses(b, ctx, kind) {
   for (let i = 0; i <= nb; i++) {
     const u = i / nb;
     const x = lerp(-(Math.abs(cxL) - hw * (round ? 0.92 : 1)), Math.abs(cxL) - hw * (round ? 0.92 : 1), u);
-    const y = cy + (round ? 0.006 : 0.008) + 0.003 * Math.sin(u * Math.PI);
+    const y = cy + (round ? 0.006 : sun ? 0.0095 : 0.008) + 0.003 * Math.sin(u * Math.PI);
     bridge.push(new THREE.Vector3(...toModel([x, y, zFront - Math.abs(x) * 0.12 + 0.0005])));
   }
-  sweep(b, { path: bridge, radius: rr * 0.85 * ctx.scale, cols: high ? 5 : 3, region: REGION.FIXED, tint: frame, mat: MAT.GLOSS, weight: w });
-  // Temples: hug the side of the head back to the ears
+  sweep(b, { path: bridge, radius: rr * (sun ? 1 : 0.85) * ctx.scale, cols: high ? 5 : 3, region: REGION.FIXED, tint: frame, mat: MAT.GLOSS, weight: w });
+  // Temples: hug the side of the head back to the ears (or over the hair)
   for (const s of [1, -1]) {
     const path = [];
-    const x0 = s * (Math.abs(cxL) + hw);
+    const x0 = s * (Math.abs(cxL) + hw * (sun ? 1.08 : 1));
     const steps = high ? 7 : 3;
     for (let i = 0; i <= steps; i++) {
       const u = i / steps;
-      const z = lerp(zFront - Math.abs(x0) * 0.12, -0.012, u);
-      const y = cy + 0.006 + 0.004 * u - (u > 0.85 ? (u - 0.85) * 0.12 : 0);
+      const z = lerp(zFront - Math.abs(x0) * 0.12, up ? -0.002 : -0.012, u);
+      const y = cy + (sun ? 0.009 : 0.006) + 0.004 * u - (u > 0.85 && !up ? (u - 0.85) * 0.12 : 0);
       // Find the head's side at this (y, z) and sit just outside it
       let x = Math.abs(x0);
       for (let k = 0; k < 40; k++) {
-        if (field.sdf(x, y, z) > 0.0035) break;
+        const q = xf([x, y, z]);
+        if (field.sdf(q[0], q[1], q[2]) > 0.0035 + lift) break;
         x += 0.0015;
       }
       if (i === 0) x = Math.abs(x0);
-      else x = Math.max(x, lerp(Math.abs(x0), 0, 0));
-      field.normal(x, y, z, nrm);
       path.push(new THREE.Vector3(...toModel([s * x, y, z])));
     }
-    sweep(b, { path, radius: rr * 0.8 * ctx.scale, cols: high ? 4 : 3, region: REGION.FIXED, tint: frame, mat: MAT.GLOSS, weight: w, flat: 0.7 });
+    sweep(b, { path, radius: rr * (sun ? 0.75 : 0.8) * ctx.scale, cols: high ? 4 : 3, region: REGION.FIXED, tint: frame, mat: MAT.GLOSS, weight: w, flat: 0.7 });
   }
+}
+
+/** Sunglasses pushed up onto the hair (spec.shades === 'up'). */
+export function buildShadesUp(b, ctx) {
+  const st = HAIR_STYLES[ctx.look.hair];
+  const hairH = st ? st.h + (st.front || 0) + (st.quiff || 0) * 0.6 : 0;
+  buildGlasses(b, ctx, 'sun', { up: 0.86, lift: ctx.hairUnder + hairH + 0.0045, tint: [0.03, 0.03, 0.035] });
 }
 
 /* ------------------------------------------------------------ headwear */

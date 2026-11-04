@@ -935,11 +935,33 @@ class Spectators {
 const v3p = (x = 0, y = 0, z = 0) => [x, y, z];
 
 /**
- * The referee (domaren) stands across the piste and runs every phrase:
- * arms out for »En garde«, a sweep together for »Kör!«, and a raised arm
- * towards whoever earned the touch — saying it out loud, jaw and all. He
- * faces the camera, so his right hand is your side.
+ * The referee (domaren) stands across the piste and runs every phrase
+ * with the real FIE hand signals, saying each call out loud (jaw and all):
+ *
+ *  - »En garde!«  both arms out to the sides, pointing at the two
+ *    en-garde lines; »Prêts?« a small lift of the hands;
+ *  - »Allez!«     the hands chop in and down together in front;
+ *  - »Halte!«     one hand raised high, palm to the fencers — every phrase
+ *    that ends in a light starts here;
+ *  - the analysis, when there is one: »Attaque de …« (forearm raised
+ *    towards the attacker, a beckoning push) or »parade — riposte« (one
+ *    hand taps the other forearm, then the hand turns towards the
+ *    scorer);
+ *  - »Touché!«    the arm raised high on the scorer's side.
+ *
+ * He faces the camera, so his right hand is your side.
  */
+const REF_SEQ = {
+  idle: [['idle', 0]],
+  engarde: [['engarde', 0.7], ['ready', 0]],
+  allez: [['allez', 0]],
+  halt: [['halt', 0]],
+  point: [['halt', 0.3], ['point', 0]],
+  award: [['point', 0]],
+  parry: [['halt', 0.26], ['parry', 0.46], ['point', 0]],
+  attack: [['halt', 0.26], ['attack', 0.44], ['point', 0]]
+};
+
 class Referee {
   constructor(high) {
     this.person = createPerson({
@@ -957,6 +979,7 @@ class Referee {
     this.group = this.person.root;
     this.cur = POSES.stand(0);
     this.target = emptyPose();
+    this.seq = REF_SEQ.idle.slice();
     this.kind = 'idle';
     this.side = 0;
     this.t = 0;
@@ -964,48 +987,92 @@ class Referee {
     this.person.setExpression('focus', 0.4);
   }
 
-  /** idle | engarde | allez | point (side −1 your side / +1 theirs) | halt */
+  /**
+   * idle | engarde | allez | halt | point | parry | attack; `side` −1 for
+   * your side, +1 for theirs. point/parry/attack run »Halte!« first, then
+   * the analysis, then the arm for the touch.
+   */
   signal(kind, side = 0) {
-    this.kind = kind;
+    this.seq = (REF_SEQ[kind] || REF_SEQ.idle).slice();
+    this.kind = this.seq[0][0];
     this.side = side;
     this.t = 0;
-    if (kind !== 'idle') {
-      this.person.talk(1);
-      this.talkT = kind === 'engarde' ? 0.7 : 0.45;
-    }
+    this.say(kind === 'engarde' ? 0.7 : kind === 'idle' ? 0 : 0.42);
+  }
+
+  say(sec) {
+    if (sec <= 0) return;
+    this.person.talk(1);
+    this.talkT = sec;
   }
 
   /** Target pose for the current signal (he faces +z: his right is −x). */
   pose(t) {
     const p = POSES.stand(0, this.target);
+    const k = this.t;
     p.hips[2] += Math.sin(t * 0.6) * 0.02;
-    const arm = (S, x, y, z, fore = -0.15) => {
+    const arm = (S, x, y, z, fore = -0.15, hand = [0, 0, 0]) => {
       p[`upperArm${S}`] = v3p(x, y, z);
       p[`forearm${S}`] = v3p(fore, 0, 0);
-      p[`hand${S}`] = v3p(0, 0, 0);
+      p[`hand${S}`] = v3p(hand[0], hand[1], hand[2]);
     };
-    if (this.kind === 'engarde') {
-      arm('L', 0.05, 0, 1.45);
-      arm('R', 0.05, 0, -1.45);
-      p.gripL = 0.1;
-      p.gripR = 0.1;
-    } else if (this.kind === 'allez') {
-      const s = Math.min(1, this.t / 0.22);
-      const drop = Math.min(1, Math.max(0, (this.t - 0.7) / 0.5));
-      arm('L', -1.1 * s * (1 - drop), 0, 1.45 - 1.2 * s - 0.15 * drop, -0.1);
-      arm('R', -1.1 * s * (1 - drop), 0, -1.45 + 1.2 * s + 0.15 * drop, -0.1);
-      p.gripL = 0.1;
-      p.gripR = 0.1;
-    } else if (this.kind === 'point' && this.side) {
-      const S = this.side < 0 ? 'R' : 'L';
-      const k = this.side < 0 ? -1 : 1;
-      arm(S, -0.25, 0, k * 2.25, -0.08);
-      p[`grip${S}`] = 0.1;
-      p.chest = v3p(-0.03, -k * 0.18, k * 0.04);
-      p.head = v3p(-0.06, -k * 0.2, 0);
-    } else if (this.kind === 'halt') {
-      arm('R', -0.1, 0, -2.85, -0.05);
+    const ease = (d) => Math.min(1, k / d) ** 0.6;
+    // Side of the touch: his right arm (R) points at you (−x)
+    const S = this.side < 0 ? 'R' : 'L';
+    const O = S === 'R' ? 'L' : 'R';
+    const sg = S === 'L' ? 1 : -1; // z sign that raises arm S sideways
+    const { kind } = this;
+    if (kind === 'engarde' || kind === 'ready') {
+      // Arms out to the sides, a touch forward, at the en-garde lines
+      const lift = kind === 'ready' ? 0.08 * Math.min(1, k / 0.25) : 0;
+      const e = ease(0.25);
+      arm('L', -0.3 * e, 0, (0.15 + 1.12 * e) + lift, -0.12);
+      arm('R', -0.3 * e, 0, -(0.15 + 1.12 * e) - lift, -0.12);
+      p.gripL = 0.05;
       p.gripR = 0.05;
+    } else if (kind === 'allez') {
+      // The chop: in and down together, fast, then the arms drop
+      const s = Math.min(1, k / 0.16);
+      const drop = Math.min(1, Math.max(0, (k - 0.55) / 0.5));
+      const zl = 1.27 - 1.05 * s;
+      arm('L', (-0.3 - 0.55 * s) * (1 - drop), 0, zl * (1 - drop) + 0.1 * drop, -0.35 * s * (1 - drop) - 0.1);
+      arm('R', (-0.3 - 0.55 * s) * (1 - drop), 0, -zl * (1 - drop) - 0.1 * drop, -0.35 * s * (1 - drop) - 0.1);
+      p.chest = v3p(0.05 * s * (1 - drop), 0, 0);
+      p.gripL = 0.1;
+      p.gripR = 0.1;
+    } else if (kind === 'halt') {
+      // »Halte!« — the right hand up high in front, palm out
+      const e = ease(0.14);
+      arm('R', -2.55 * e, -0.5 * e, -0.25 * e, -0.2, [0.25 * e, 0, 0]);
+      arm('L', 0, 0, 0.05, -0.1);
+      p.gripR = 0;
+      p.chest = v3p(-0.04 * e, 0, 0);
+    } else if (kind === 'parry') {
+      // »Parade«: the far forearm across the chest, the scorer-side hand
+      // taps it twice; then the hand turns towards the scorer (»riposte«)
+      // (an upper-arm twist about its own axis lays the forearm across the body)
+      const tap = Math.max(0, Math.sin(Math.min(k, 0.3) / 0.3 * Math.PI * 2)) * 0.3;
+      arm(O, -0.95, O === 'L' ? -1.4 : 1.4, 0, -1.55);
+      arm(S, -0.95 + tap * 0.35, 0, sg * 0.12, -1.0 - tap);
+      p.gripL = 0.15;
+      p.gripR = 0.15;
+      p.chest = v3p(0.04, 0, 0);
+    } else if (kind === 'attack') {
+      // »Attaque de …«: forearm up towards the attacker, a little push
+      const push = Math.sin(Math.min(1, k / 0.35) * Math.PI) * 0.25;
+      arm(S, -0.5 - push * 0.5, 0, sg * 1.3, -1.45 + push, [0, 0, 0]);
+      arm(O, 0, 0, -sg * 0.08, -0.1);
+      p[`grip${S}`] = 0.05;
+      p.head = v3p(0, sg * 0.25, 0);
+      p.chest = v3p(0, sg * 0.1, 0);
+    } else if (kind === 'point' && this.side) {
+      // »Touché!« — the arm raised high on the scorer's side
+      const e = ease(0.18);
+      arm(S, -0.25 * e, 0, sg * 2.3 * e, -0.08);
+      arm(O, 0, 0, -sg * 0.06, -0.12);
+      p[`grip${S}`] = 0.05;
+      p.chest = v3p(-0.03, sg * 0.18 * e, -sg * 0.04 * e);
+      p.head = v3p(-0.06, sg * 0.2 * e, 0);
     } else {
       // At rest: hands loosely clasped behind the back
       arm('L', 0.28, 0.25, 0.1, -0.55);
@@ -1016,13 +1083,21 @@ class Referee {
 
   update(dt, focus) {
     this.t += dt;
+    // Walk the signal sequence: »Halte!« → analysis → »Touché!«
+    while (this.seq.length > 1 && this.t >= this.seq[0][1]) {
+      this.t -= this.seq[0][1];
+      this.seq.shift();
+      this.kind = this.seq[0][0];
+      if (this.kind === 'point' || this.kind === 'parry' || this.kind === 'attack') this.say(0.4);
+    }
     if (this.talkT > 0) {
       this.talkT -= dt;
       if (this.talkT <= 0) this.person.talk(0);
     }
     // Ease our own copy of the pose (setPose(…, 1) each frame keeps the
-    // look-at layered cleanly on top)
-    mixPoses(this.cur, this.pose(this.t), 1 - Math.exp(-dt * 10), this.cur);
+    // look-at layered cleanly on top); signals are snappy, rest is slow
+    const rate = this.kind === 'idle' ? 6 : this.kind === 'allez' || this.kind === 'halt' ? 22 : 14;
+    mixPoses(this.cur, this.pose(this.t), 1 - Math.exp(-dt * rate), this.cur);
     this.person.setPose(this.cur, 1);
     this.person.lookAt(focus || null, 0.85);
     this.person.update(dt);

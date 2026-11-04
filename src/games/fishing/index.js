@@ -28,10 +28,11 @@ import { guardRenderer, RenderWatchdog, gfxNotice, precompile } from '../shared/
 import { Sfx } from './audio.js';
 import { SPECIES, JUNK, fishAssets, Shoal, spawnJunk, disposeAssets, speciesSvg } from './species.js';
 import {
-  BOTTOM, causticTexture, noiseTexture, particleAtlas, buildSky, buildShore, buildWater, buildVolume,
+  BOTTOM, causticTexture, noiseTexture, particleAtlas, buildSky, buildWater, buildVolume,
   makeEnvironment, buildBasin, buildKelp, buildSeabed, buildShafts, buildLilies,
-  buildLure, buildLine, waveHeight, WATER_FOG
+  buildLure, buildLine, waveHeight, WATER_FOG, SUN_DIR
 } from './world.js';
+import { buildShore } from './scenery.js';
 import { buildBoat, BARREL, WATERLINE } from './boat.js';
 import { createAngler } from './angler.js';
 import { Pool, CELL, buildSnow, buildRipples, pointScale, pointCap } from './fx.js';
@@ -215,9 +216,9 @@ export async function createFishing(container) {
 
   const sky = buildSky(noise);
   scene.add(sky.dome);
-  const shore = buildShore();
+  const shore = buildShore({ sunDir: SUN_DIR, noise, timeU, lite: LITE });
   scene.add(shore);
-  const water = buildWater(caustics, noise);
+  const water = buildWater(caustics, noise, shore.userData.reflect);
   scene.add(water.mesh);
   const volume = buildVolume(noise);
   scene.add(volume.mesh);
@@ -1738,7 +1739,10 @@ export async function createFishing(container) {
     volume.uniforms.uTime.value = t;
     shafts.uniforms.uTime.value = t;
     snow.uniforms.uTime.value = t;
-    shore.userData.vimpel.rotation.y = Math.sin(t * 2.3) * 0.3 + Math.sin(t * 5.1) * 0.08;
+    if (shore.visible) {
+      shore.userData.vimpel.rotation.y = Math.sin(t * 2.3) * 0.3 + Math.sin(t * 5.1) * 0.08;
+      shore.userData.birds.update(t);
+    }
     seabed.userData.pokal.material.emissiveIntensity = 0.85 + Math.sin(t * 2.1) * 0.3;
     lilies.userData.update(t);
 
@@ -2089,6 +2093,7 @@ export async function createFishing(container) {
       if (o.isInstancedMesh) o.dispose();
     });
     disposeAssets();
+    shore.userData.dispose();
     caustics.dispose();
     noise.dispose();
     atlas.dispose();
