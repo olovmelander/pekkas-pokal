@@ -312,6 +312,12 @@ export function createPerson(specIn = {}) {
     detail, scale: s, H,
 
     setPose(pose, blend = 1) {
+      // Blend from last frame's pose, not from it plus last frame's look-at and
+      // breathing: those layers would otherwise feed back into the base every
+      // frame and grow by 1/blend (a head turned 140° at 60+ fps).
+      if (blend < 1) {
+        for (const L of layered) if (L.bone.quaternion.equals(L.written)) L.bone.quaternion.copy(L.base);
+      }
       applyPose(bones, pose, blend, restPos, s);
     },
 
