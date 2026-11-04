@@ -546,7 +546,17 @@ export async function mountTrophy(canvas, opts = {}) {
   ro.observe(canvas);
 
   // Kompilera före första bilden så inbländningen inte hackar
-  renderer.compile(scene, camera);
+  // Asynkront där drivrutinen kan kompilera parallellt (Chrome/Edge på
+  // Windows): inget block som kan trigga GPU-vakthunden
+  if (renderer.extensions.has('KHR_parallel_shader_compile')) {
+    try {
+      await renderer.compileAsync(scene, camera);
+    } catch (e) {
+      /* kompileras vid första bilden i stället */
+    }
+  } else {
+    renderer.compile(scene, camera);
+  }
   start();
   render();
 

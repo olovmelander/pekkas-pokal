@@ -31,7 +31,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { guardRenderer, postTarget, addSanitize, RenderWatchdog, gfxNotice } from '../shared/gfx.js';
+import { guardRenderer, postTarget, addSanitize, RenderWatchdog, gfxNotice, precompile } from '../shared/gfx.js';
 import { Sfx } from './audio.js';
 import { HAZE, SUN_DIR, LIGHT_DIR, SUN_COLOR, buildSky, bakeEnvironment, buildHaze, buildHills } from './sky.js';
 import { mulberry, glowTexture, starTexture, buildRange, buildClay } from './range.js';
@@ -1512,6 +1512,11 @@ export async function createShooting(container) {
     adapt(realDt);
   }
 
+  // Kompilera alla shaders innan första bilden, utan att låsa GPU:n —
+  // annars kompileras himlen, ängen och geväret i ett block vid första
+  // render-anropet, vilket kan återställa grafiken på Windows (Direct3D).
+  await precompile(renderer, scene, camera);
+  last = performance.now();
   raf = requestAnimationFrame(tick);
 
   const onVisibility = () => {
