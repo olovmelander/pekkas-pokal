@@ -30,6 +30,10 @@ function ell(x, y, z, cx, cy, cz, rx, ry, rz) {
   const k1 = Math.sqrt((px * px) / (rx * rx) + (py * py) / (ry * ry) + (pz * pz) / (rz * rz));
   return k1 > 1e-9 ? (k0 * (k0 - 1)) / k1 : -Math.min(rx, ry, rz);
 }
+/** Ellipsoid with different radii above/below and in front of/behind its centre. */
+function ell2(x, y, z, cx, cy, cz, rx, ryUp, ryDown, rzFront, rzBack) {
+  return ell(x, y, z, cx, cy, cz, rx, y > cy ? ryUp : ryDown, z > cz ? rzFront : rzBack);
+}
 function sph(x, y, z, cx, cy, cz, r) {
   return Math.sqrt((x - cx) ** 2 + (y - cy) ** 2 + (z - cz) ** 2) - r;
 }
@@ -61,19 +65,34 @@ export function headField(F) {
   const { nose } = F;
   const my = FACE.mouthY;
   const nl = 0.006 * (F.noseLen - 1);
+  // Extended likeness knobs (all default to 1, jawSq to 0.5)
+  const faceL = F.faceL ?? 1;
+  const noseW = F.noseW ?? 1;
+  const jawSq = F.jawSq ?? 0.5;
+  const cb = F.cheekbone ?? 1;
+  const cs = 0.075 * (faceL - 1);
   const sdf = (x, y, z) => {
     // Cranium and the block of the face: a broad, round skull over a
     // compact lower face (the toy proportions read friendly at any size)
     const ax = Math.abs(x);
-    let d = ell(x, y, z, 0, 0.02, -0.016, 0.0835 * F.headW, 0.097, 0.097 * F.headL);
-    d = smin(d, ell(x, y, z, 0, 0.042, 0.026, 0.064 * F.headW, 0.05, 0.056), 0.03);
-    d = smin(d, ell(x, y, z, 0, -0.024, 0.034, 0.067 * F.cheek, 0.07, 0.06), 0.036);
-    d = smin(d, ell(x, y, z, 0, -0.057 - 0.008 * (F.jaw - 1), 0.02, 0.053 * F.jaw ** 1.5, 0.038 * F.jaw, 0.062), 0.026);
-    d = smin(d, ell(x, y, z, 0, -0.0815, 0.064 + 0.004 * (F.chin - 1), 0.0255 * F.chin, 0.0192, 0.0225 * F.chin), 0.019);
+    // The skull: a short occiput that curves down and in towards the neck,
+    // and a forehead that slopes back from the brow
+    let d = ell2(x, y, z, 0, 0.02, -0.012, 0.0835 * F.headW, 0.097, 0.084, 0.095, 0.087 * F.headL);
+    d = smin(d, ell(x, y, z, 0, 0.045, 0.019, 0.064 * F.headW, 0.05, 0.058), 0.03);
+    d = smin(d, ell(x, y, z, 0, -0.024 - cs * 0.4, 0.035, 0.067 * F.cheek, 0.07 + cs * 0.4, 0.057), 0.036);
+    // The jaw: a clear lower edge rising from the chin to the angle of the
+    // jaw below the ear, so the neck reads under it
+    const jy = -0.057 - 0.008 * (F.jaw - 1) - cs * 0.7;
+    d = smin(d, ell(x, y, z, 0, jy, 0.027, 0.053 * F.jaw ** 1.5, 0.038 * F.jaw, 0.055), 0.024);
+    if (jawSq > 0.05) {
+      const gk = 0.55 + 0.45 * jawSq;
+      d = smin(d, ell(ax, y, z, 0.044 * F.jaw * (1 + 0.05 * jawSq), jy - 0.006, -0.008, 0.013 * gk, 0.014 * gk, 0.018 * gk), 0.014);
+    }
+    d = smin(d, ell(x, y, z, 0, -0.0815 - cs, 0.064 + 0.004 * (F.chin - 1), 0.0255 * F.chin * (1 + 0.12 * (jawSq - 0.5)), 0.0192, 0.0225 * F.chin), 0.019);
     // Brow ridge: soft, a little stronger over the outer eye
     d = smin(d, ell(x, y, z, 0, 0.0305, 0.07, 0.062, 0.0125 * F.brow, 0.0195), 0.013);
     // Cheekbones and the full, soft pads below them
-    d = smin(d, ell(ax, y, z, 0.049, -0.011, 0.05, 0.025, 0.015, 0.023), 0.016);
+    d = smin(d, ell(ax, y, z, 0.049 + 0.003 * (cb - 1), -0.011, 0.05 + 0.006 * (cb - 1), 0.025 * cb ** 0.5, 0.015 * cb ** 0.5, 0.023 * cb ** 0.5), 0.016);
     d = smin(d, ell(ax, y, z, 0.036, -0.036, 0.057, 0.0305, 0.0275, 0.027), 0.022);
     // The mouth mound and the lips
     d = smin(d, ell(x, y, z, 0, my + 0.002, 0.069, 0.029, 0.024, 0.024), 0.016);
@@ -84,8 +103,8 @@ export function headField(F) {
     // Nose: a soft, short bridge, a round button tip, two small wings
     if (F.sockets !== false) d = smin(d, cap(x, y, z, 0, 0.008, 0.0842, 0, -0.022, 0.1015 + nl, 0.0058, 0.0082 * nose), 0.007);
     else d = smin(d, cap(x, y, z, 0, -0.006, 0.084, 0, -0.022, 0.094, 0.005, 0.0075), 0.008);
-    d = smin(d, sph(x, y, z, 0, -0.0272 - 0.004 * (nose - 1), 0.0998 + nl + 0.006 * (nose - 1), 0.0108 * nose ** 1.4), 0.0055);
-    d = smin(d, sph(ax, y, z, 0.0108 * nose, -0.0338, 0.0893, 0.0078 * nose), 0.0055);
+    d = smin(d, sph(x, y, z, 0, -0.0272 - 0.004 * (nose - 1), 0.0998 + nl + 0.006 * (nose - 1), 0.0108 * nose ** 1.4 * noseW ** 0.3), 0.0055);
+    d = smin(d, sph(ax, y, z, 0.0108 * nose * noseW, -0.0338, 0.0893, 0.0078 * nose * noseW ** 0.5), 0.0055);
     // Eye sockets, just bigger than the lids so the lids frame the eye
     if (F.sockets !== false) {
       d = smax(d, -sph(x, y, z, ex, ey, ez, FACE.eyeR + 0.0019), 0.004);
@@ -457,6 +476,12 @@ function headTint(p, ctx, n) {
   r -= lips * 0.05;
   g -= lips * 0.29;
   bl -= lips * 0.25;
+  // The lower lip casts a soft shadow on the chin; a pale roll edges the upper lip
+  const lipShadow = lipX * gauss(y - (my0 - 0.0142), 0.0026) * sstep(0.07, 0.085, z) * 0.12;
+  const lipRoll = (1 - sstep(0.012, 0.021, ax)) * gauss(y - (my0 + 0.0101), 0.0011) * sstep(0.075, 0.088, z) * 0.035;
+  r += lipRoll - lipShadow;
+  g += lipRoll - lipShadow * 1.1;
+  bl += lipRoll - lipShadow * 1.1;
   // A soft sheen on the middle of the lower lip
   const lipHL = lower * gauss(ax, 0.008) * gauss(y - (my0 - 0.0068), 0.002) * 0.06;
   r += lipHL;
@@ -468,7 +493,9 @@ function headTint(p, ctx, n) {
   r += bone * 0.04 - hollow * 0.03;
   g += bone * 0.04 - hollow * 0.04;
   bl += bone * 0.04 - hollow * 0.04;
-  const under = sstep(-0.085, -0.11, y) * (1 - sstep(0.02, 0.06, z)) * 0.16;
+  // Under the jaw: skin that faces down sits in shadow, which draws the jawline
+  const under = sstep(-0.085, -0.11, y) * (1 - sstep(0.02, 0.06, z)) * 0.12 +
+    (n ? sstep(-0.25, -0.75, n[1]) * sstep(-0.03, -0.07, y) * 0.14 : 0);
   const socket = gauss(ax - FACE.eyeX, 0.017) * gauss(y - 0.006, 0.014) * sstep(0.055, 0.075, z) * 0.12;
   // Soft occlusion in the folds: beside the nose, under it, the mouth corners, the lid crease
   const my = FACE.mouthY;
@@ -649,6 +676,8 @@ function buildLid(b, ctx, s, c, upper) {
   const R = FACE.eyeR;
   // The upper lid is a thick, soft fold with a dark lash line along its
   // edge (it frames the eye from any distance); the lower lid is thinner
+  const eyeOpen = Math.min(1.04, ctx.face.eyeOpen ?? 1);
+  const eyeTilt = ctx.face.eyeTilt ?? 0;
   const rOut = R + (upper ? 0.0021 : 0.0011);
   const rIn = R + 0.0003;
   const cols = 10;
@@ -668,7 +697,10 @@ function buildLid(b, ctx, s, c, upper) {
       const az = lerp(-azMax, azMax, j / (cols - 1));
       const outer = sstep(0.2, 1.1, az * s);
       // Almond: the upper edge dips towards the corners, the lower one rises
-      const e = edgeE + dir * de - dir * (upper ? 0.085 : 0.06) * az * az;
+      // Per-person eye shape: a heavier (lower) upper lid narrows the eye;
+      // tilt lifts or drops the outer corners
+      const shape = (upper ? -0.9 : 0.35) * (1 - eyeOpen) + eyeTilt * az * s;
+      const e = edgeE + dir * de - dir * (upper ? 0.085 : 0.06) * az * az + shape;
       // The lash line thickens and flicks out a little at the outer corner
       const rr = rr0 + (upper && key !== 'lid' ? 0.0007 * outer : 0);
       const lp = [Math.sin(az) * Math.cos(e) * rr, Math.sin(e) * rr, Math.cos(az) * Math.cos(e) * rr];
@@ -743,7 +775,9 @@ export function buildBrows(b, ctx) {
     for (let i = 0; i < n; i++) {
       const u = i / (n - 1);
       const x = s * lerp(FACE.eyeX - 0.021, FACE.eyeX + 0.0235, u);
-      const y = FACE.browY - 0.004 + 0.009 * Math.sin(Math.min(1, u * 1.25) * Math.PI * 0.62) - 0.008 * u * u + look.browArch * Math.sin(u * Math.PI) * 0.004;
+      // Arch (+ arched, − straight) and tilt (+ inner ends lower: a stern, level brow)
+      const y = FACE.browY - 0.004 + 0.009 * Math.sin(Math.min(1, u * 1.25) * Math.PI * 0.62) - 0.008 * u * u +
+        look.browArch * Math.sin(u * Math.PI) * 0.0055 + (look.face.browTilt ?? 0) * (u - 0.45) * 0.008;
       const z = field.faceZ(x, y);
       field.normal(x, y, z, nrm);
       const off = 0.0004;
@@ -760,30 +794,70 @@ export function buildBrows(b, ctx) {
 export function buildEars(b, ctx) {
   const { toModel, res, face } = ctx;
   const es = face.ears;
+  // Skin-matched and a touch warmer: light through a thin ear reads red
+  const warm = [1.05, 0.9, 0.86];
   for (const s of [1, -1]) {
     const c = [s * 0.0775, -0.012, -0.012];
     const rot = new THREE.Euler(0.2, s * -0.3, s * -0.04);
     const m = new THREE.Matrix4().makeRotationFromEuler(rot);
     const tmp = new THREE.Vector3();
+    // Ear space → model space (x out of the head, y up, z forward)
+    const place = (x, y, z) => {
+      tmp.set(x, y, z).applyMatrix4(m);
+      return toModel([c[0] + tmp.x, c[1] + tmp.y, c[2] + tmp.z]);
+    };
+    const w = () => [['head', 1]];
+    // The shell: wide at the top, narrowing to the lobe, with the bowl of the
+    // concha hollowed out of its outer face and shaded
     addBlob(b, {
-      c: [0, 0, 0], r: [0.0102 * es, 0.0295 * es, 0.0172 * es], n: [2.1, 2.3], cols: res.high ? 10 : 4, rows: res.high ? 6 : 2,
+      c: [0, 0, 0], r: [0.0092 * es, 0.0292 * es, 0.0168 * es], n: [2.1, 2.3], cols: res.high ? 10 : 4, rows: res.high ? 6 : 2,
       region: REGION.SKIN, mat: MAT.SKIN,
       tint: (p) => {
-        const inner = p[0] * s > 0.002 ? 1 - 0.25 * gauss(Math.hypot(p[1] / 0.03, p[2] / 0.016), 0.6) : 1;
-        // Ears are thin: light through them reads warm and a little red
-        return [1.04 * inner, 0.88 * inner, 0.85 * inner];
+        if (!res.high) return warm;
+        const q = ctx.toHead(p);
+        // Distance from the concha's centre in ear space (approximate: the ear is small)
+        const lx = (q[0] - c[0]) * s;
+        const ly = q[1] - c[1] + 0.003;
+        const lz = q[2] - c[2] - 0.002;
+        const bowl = lx > 0.0015 ? gauss(Math.hypot(ly / 0.017, lz / 0.0095), 0.75) : 0;
+        const k = 1 - 0.24 * bowl;
+        return [warm[0] * k, warm[1] * (k - 0.04 * bowl), warm[2] * (k - 0.05 * bowl)];
       },
       warp: (p) => {
-        // Hollow the outer face (the concha) and roll the rim
         let [x] = p;
-        const [, y, z] = p;
-        const rr = Math.hypot(y / (0.03 * es), z / (0.0165 * es));
-        if (x * s > 0) x -= s * 0.0045 * es * Math.max(0, 1 - rr * rr) ** 1.5;
-        x += s * 0.0025 * es * sstep(0.55, 0.95, rr);
-        tmp.set(x, y, z).applyMatrix4(m);
-        return toModel([c[0] + tmp.x, c[1] + tmp.y, c[2] + tmp.z]);
+        const [, y] = p;
+        let [, , z] = p;
+        // Narrower towards the lobe
+        z *= 0.78 + 0.22 * sstep(-0.024, 0.006, y);
+        const rr = Math.hypot(y / (0.029 * es), z / (0.0165 * es));
+        if (x * s > 0) x -= s * 0.0052 * es * Math.max(0, 1 - rr * rr) ** 1.3;
+        return place(x, y, z);
       },
-      weight: () => [['head', 1]]
+      weight: w
+    });
+    if (!res.high) continue;
+    // Helix: the rolled rim, from where it leaves the head over the top and
+    // down the back to the lobe, thinning as it goes
+    const helix = [
+      [0.002, 0.012, 0.0125], [0.0035, 0.024, 0.0085], [0.0045, 0.0295, 0.0015], [0.0048, 0.028, -0.0075],
+      [0.0048, 0.019, -0.0145], [0.0045, 0.006, -0.0165], [0.004, -0.008, -0.0135], [0.0035, -0.018, -0.0085]
+    ].map(([x, y, z]) => new THREE.Vector3(...place(s * x * es, y * es, z * es)));
+    sweep(b, {
+      path: helix, radius: (u) => lerp(0.0021, 0.0026, Math.sin(Math.min(1, u * 1.6) * Math.PI * 0.5)) * (1 - 0.3 * sstep(0.7, 1, u)) * es * ctx.scale,
+      cols: 5, region: REGION.SKIN, tint: [warm[0] * 1.01, warm[1] * 0.99, warm[2] * 0.98], mat: MAT.SKIN, weight: w
+    });
+    // Antihelix: a soft ridge inside the rim
+    const anti = [[0.0032, 0.019, 0.004], [0.0036, 0.017, -0.0055], [0.0034, 0.006, -0.009], [0.003, -0.006, -0.0075]]
+      .map(([x, y, z]) => new THREE.Vector3(...place(s * x * es, y * es, z * es)));
+    sweep(b, { path: anti, radius: 0.0014 * es * ctx.scale, cols: 4, region: REGION.SKIN, tint: warm, mat: MAT.SKIN, weight: w, flat: 0.6 });
+    // The lobe, fleshy and a little redder, and the tragus in front of the bowl
+    addBlob(b, {
+      c: place(s * 0.0012 * es, -0.0225 * es, -0.0015 * es), r: [0.0042 * es, 0.0072 * es, 0.0062 * es].map((v) => v * ctx.scale),
+      cols: 6, rows: 3, region: REGION.SKIN, tint: [warm[0] * 1.02, warm[1] * 0.95, warm[2] * 0.93], mat: MAT.SKIN, weight: w
+    });
+    addBlob(b, {
+      c: place(s * 0.0022 * es, -0.004 * es, 0.0118 * es), r: [0.0026 * es, 0.0038 * es, 0.0028 * es].map((v) => v * ctx.scale),
+      cols: 5, rows: 3, region: REGION.SKIN, tint: warm, mat: MAT.SKIN, weight: w
     });
   }
 }
@@ -1232,28 +1306,35 @@ export function buildFacialHair(b, ctx, kind) {
 function buildLongBeard(b, ctx) {
   const { toModel, res } = ctx;
   const { high } = res;
-  const rowsT = high ? [0, 0.1, 0.22, 0.36, 0.5, 0.64, 0.77, 0.88, 0.96, 1] : [0, 0.35, 0.7, 1];
-  const cols = high ? 12 : 6;
+  const rowsT = high ? [0, 0.07, 0.16, 0.27, 0.39, 0.51, 0.63, 0.74, 0.84, 0.92, 0.97, 1] : [0, 0.35, 0.7, 1];
+  const cols = high ? 16 : 6;
   const pts = [];
   for (const t of rowsT) {
-    const y = lerp(-0.062, -0.262, t);
-    // Starts inside the beard shell, bows forward over the chest, then tucks in a little at the tip
-    const zc = lerp(0.034, 0.094, sstep(0, 0.75, t)) - 0.006 * sstep(0.8, 1, t);
-    // Full and wide from jaw to jaw, tapering to a rounded point on the chest
-    const wHalf = lerp(0.062, 0.017, Math.pow(t, 1.35)) * (1 + 0.08 * Math.sin(t * Math.PI));
-    const dHalf = lerp(0.048, 0.014, Math.pow(t, 1.15));
     for (let j = 0; j < cols; j++) {
       const a = (j / cols) * Math.PI * 2;
       const ca = Math.cos(a);
       const sa = Math.sin(a);
-      // Strand clumps run down the beard; the front is fuller than the back
-      const clump = high ? 0.0034 * Math.sin(a * 7 + t * 3 + noise3(a * 2, t * 4, 3.1) * 1.5) * sstep(0.05, 0.3, t) * (1 - t * 0.5) : 0;
-      const front = ca > 0 ? 1 : 0.7;
+      // Each column is a lock: its own length, so the point is ragged, not cut
+      const lock = high ? hash01(j * 3 + 7) : 0.5;
+      const tl = Math.min(1, t * (1 + 0.1 * (lock - 0.5) * sstep(0.6, 1, t)));
+      const y = lerp(-0.066, -0.268, tl) - (high ? 0.014 * (lock - 0.5) * sstep(0.85, 1, t) : 0);
+      // Starts wide and deep round the jaw inside the beard shell, bows out
+      // over the chest and closes to a rounded point
+      const zc = lerp(0.03, 0.093, sstep(0, 0.7, tl)) - 0.005 * sstep(0.85, 1, tl);
+      const round = Math.sqrt(Math.max(0, 1 - sstep(0.8, 1, t) ** 2 * 0.95));
+      const wHalf = lerp(0.071, 0.02, Math.pow(tl, 1.25)) * (1 + 0.07 * Math.sin(tl * Math.PI)) * round;
+      const dHalf = lerp(0.05, 0.016, Math.pow(tl, 1.05)) * round;
+      // Strand clumps: ridges and furrows running down the beard, stronger in front
+      const ridge = high ? Math.sin(a * 7 + tl * 2.5 + noise3(a * 1.7, tl * 3, 3.1) * 1.6) : 0;
+      const clump = 0.0042 * ridge * sstep(0.04, 0.25, t) * (0.6 + 0.4 * Math.max(0, ca)) + (high ? 0.0016 * noise3(a * 5, tl * 9, 1.3) : 0);
+      const front = ca > 0 ? 1 : 0.72;
       const x = sa * (wHalf + clump);
-      const z = zc + ca * (dHalf + clump * 0.5) * front;
-      // Matches the beard shell above (its shading tops out around 0.9)
-      const shade = (0.7 + 0.18 * Math.max(0, ca)) * (1 + 0.14 * Math.sin(a * 7 + t * 3 + noise3(a * 2, t * 4, 3.1) * 1.5)) * (t > 0.95 ? 0.85 : 1);
-      pts.push({ p: toModel([x, y, z]), region: REGION.HAIR, tint: [shade, shade * 0.98, shade * 0.97], mat: MAT.SKIN, t });
+      const z = zc + ca * (dHalf + clump * 0.6) * front;
+      // Copper-brown with lighter, sun-caught locks on the front, deeper in
+      // the furrows and underneath
+      const hl = Math.max(0, ridge) * Math.max(0, ca) * 0.22 + (lock - 0.5) * 0.12;
+      const shade = (0.68 + 0.2 * Math.max(0, ca)) * (1 + hl) * (1 - 0.12 * Math.max(0, -ridge)) * (t > 0.95 ? 0.88 : 1);
+      pts.push({ p: toModel([x, y, z]), region: REGION.HAIR, tint: [shade * 1.04, shade, shade * 0.95], mat: MAT.SKIN, t });
     }
   }
   emitGrid(b, {

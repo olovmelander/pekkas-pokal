@@ -317,7 +317,7 @@ export function resolveLook(spec = {}) {
     iris: eyes,
     face,
     browThick: spec.browThick ?? 0.95 + r() * 0.25,
-    browArch: r() * 2 - 1,
+    browArch: faceIn.browArch ?? r() * 2 - 1,
     browTint: [0.75, 0.75, 0.75],
     seed: spec.seed ?? hashName(spec.name || 'x'),
     outfit

@@ -408,7 +408,7 @@ export function createPerson(specIn = {}) {
   const mkHand = (S) => ({
     S, grip: null, opts: null, solved: null, object: null, anchor: null, key: '',
     from: new Float32Array(HAND_BONE_COUNT * 4), cfg: new Float32Array(HAND_BONE_COUNT * 4),
-    k: 1, dur: 0.2
+    k: 1, dur: 0.2, thumbWritten: new THREE.Quaternion()
   });
   const hands = { L: mkHand('L'), R: mkHand('R') };
   let posedSinceUpdate = false;
@@ -428,6 +428,7 @@ export function createPerson(specIn = {}) {
       mixConfigs(h.from, target, easeInOut(h.k), h.cfg);
       writeConfig(bones, h.S, h.cfg, 1);
     } else writeConfig(bones, h.S, target, blend);
+    h.thumbWritten.copy(bones[`thumb${h.S}`].quaternion);
   };
   const anchorFor = (h) => {
     if (!h.anchor) {
@@ -809,6 +810,16 @@ export function createPerson(specIn = {}) {
         const h = hands[S];
         if (h.k < 1) h.k = Math.min(1, h.k + d / Math.max(1e-3, h.dur));
         if (!posedSinceUpdate && (h.solved || h.k < 1)) writeHand(h, lastPose, 1);
+      }
+      // A game that turns the thumb's base itself (clay's thumbs-up writes bones.thumbR)
+      // gets a straight thumb: the curled joints of the fist open in proportion
+      for (const S of ['L', 'R']) {
+        const ang = hands[S].thumbWritten.angleTo(bones[`thumb${S}`].quaternion);
+        if (ang > 0.25) {
+          const kk = Math.min(1, (ang - 0.25) / 0.6);
+          bones[`thumbMid${S}`].quaternion.slerp(IDENTITY_Q, kk);
+          bones[`thumbTip${S}`].quaternion.slerp(IDENTITY_Q, kk * 0.9);
+        }
       }
       posedSinceUpdate = false;
       // Forearm roll: the twist bone takes half the hand's twist about the forearm

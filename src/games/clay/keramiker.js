@@ -280,6 +280,14 @@ export function createKeramiker({
   root.add(blob.mesh);
   const beret = buildBeret(s);
   person.attach(beret, 'headTop', { position: [-0.006 * s, -0.028 * s, -0.004 * s], rotation: [-0.16, 0, -0.3] });
+  // Solve every grip he will use now, while the game loads (each first
+  // setGrip runs a 5–50 ms finger solve that people.js then caches), so
+  // none of them costs a hitch mid-game
+  for (const g of ['thumbsUp', 'point', 'fist']) person.setGrip('R', g, { blend: 0 });
+  person.setGrip('L', 'fist', { blend: 0 });
+  person.setGrip('L', 'power', { diameter: 0.05, blend: 0 });
+  person.setGrip('R', null, { blend: 0 });
+  person.setGrip('L', null, { blend: 0 });
   root.position.copy(greet || home);
   root.rotation.y = greet ? 0 : Math.atan2(wheel.x - home.x, wheel.z - home.z);
 

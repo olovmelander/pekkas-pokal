@@ -382,10 +382,10 @@ function torsoKeys(build) {
     [1.465, 0.151, 0.064, 0.074, -0.022, 2.4],
     [1.485, 0.117, 0.06, 0.068, -0.022, 2.25],
     [1.505, 0.08, 0.059, 0.063, -0.02, 2.05],
-    [1.53, 0.066, 0.058, 0.061, -0.016, 2.0],
-    [1.56, 0.062, 0.056, 0.059, -0.01, 2.0],
-    [1.595, 0.058, 0.053, 0.056, -0.004, 2.0],
-    [1.62, 0.04, 0.038, 0.04, 0.0, 2.0],
+    [1.53, 0.066, 0.056, 0.061, -0.018, 2.0],
+    [1.56, 0.062, 0.053, 0.059, -0.016, 2.0],
+    [1.595, 0.058, 0.05, 0.056, -0.014, 2.0],
+    [1.62, 0.04, 0.036, 0.04, -0.012, 2.0],
     [1.632, 0.004, 0.004, 0.004, 0.0, 2.0]
   ];
   const wb = build.w;
@@ -579,7 +579,8 @@ function shadeTorso(tint, y, th, region, outfit) {
   // The crotch faces down into shadow; lift it so it does not read as a hole
   ao *= 1 + 0.25 * sstep(0.85, 0.8, y);
   ao *= 1 - 0.12 * gauss(y - 1.47, 0.03);
-  if (region === REGION.SKIN && y > 1.47) ao *= 1 - 0.1 * sstep(1.5, 1.58, y) * Math.max(0, Math.cos(th));
+  // The throat sits in the jaw's shadow
+  if (region === REGION.SKIN && y > 1.47) ao *= 1 - 0.17 * sstep(1.51, 1.6, y) * Math.max(0, Math.cos(th));
   // Side seams on shirts and tops: a fine shadow line down each flank
   if (region === REGION.TOP && y < 1.36) ao *= 1 - 0.07 * gauss(side - 1, 0.035);
   // Fabric character: linen is slubby, knits a touch heathered

@@ -2257,25 +2257,14 @@ export function buildTable(THREE, mergeGeometries, materials) {
     body.castShadow = true;
     g.add(body);
 
-    // Eyes so it reads as a creature, not a peg
-    [-1, 1].forEach((side) => {
-      const eye = new THREE.Mesh(
-        new THREE.SphereGeometry(0.13, 12, 8),
-        materials.trollEye
-      );
-      eye.position.set(side * 0.24, 1.42, t.r * 0.72);
-      g.add(eye);
-    });
-    // Club-like horns
-    [-1, 1].forEach((side) => {
-      const horn = new THREE.Mesh(
-        new THREE.ConeGeometry(0.11, 0.42, 8),
-        materials.stoneDark
-      );
-      horn.position.set(side * 0.36, 1.78, 0);
-      horn.rotation.z = side * 0.4;
-      g.add(horn);
-    });
+    // Eyes so it reads as a creature, not a peg, and club-like horns —
+    // each pair one mesh (a troll is drawn every frame of a gren)
+    const eyes = mergeGeometries([-1, 1].map((side) =>
+      new THREE.SphereGeometry(0.13, 12, 8).translate(side * 0.24, 1.42, t.r * 0.72)), false);
+    g.add(new THREE.Mesh(eyes, materials.trollEye));
+    const horns = mergeGeometries([-1, 1].map((side) =>
+      new THREE.ConeGeometry(0.11, 0.42, 8).rotateZ(side * 0.4).translate(side * 0.36, 1.78, 0)), false);
+    g.add(new THREE.Mesh(horns, materials.stoneDark));
 
     // Retracted below the playfield until the mode raises them
     g.position.y = -2.2;
