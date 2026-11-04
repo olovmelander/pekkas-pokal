@@ -422,6 +422,7 @@ export function createAngler(boat) {
   return {
     person,
     rod,
+    knob,
     update,
     trigger,
     /** World position of the rod tip (where the line leaves). */

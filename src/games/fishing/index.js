@@ -1747,6 +1747,7 @@ export async function createFishing(container) {
   }
 
   let loonIn = 6;
+  let frozen = null; // test hook: null = live, else the fixed dt per frame (0 = stopped)
   let vakIn = 2.5;
 
   function tick(now) {
@@ -1756,6 +1757,9 @@ export async function createFishing(container) {
     last = now;
     if (!running) return;
     adapt(rawMs);
+    // Test hook: time can be frozen (or stepped by a fixed amount) so a
+    // close-up can be taken mid-motion — the frame still renders
+    if (frozen !== null) dt = frozen;
     const rdt = dt; // real time, for the camera and UI
     clockT = (clockT + rdt) % CLOCK_WRAP;
     const t = clockT;
@@ -2066,6 +2070,21 @@ export async function createFishing(container) {
     },
     skipBetween() {
       skipCard();
+    },
+    /**
+     * Freeze the game clock (dt = 0 every frame), or step it by a fixed dt
+     * per frame; freeze(false) goes live again. Rendering carries on.
+     */
+    freeze(on = true, step = 0) {
+      frozen = on ? step : null;
+    },
+    /** Metres between the left hand's grip and the crank knob (≈0 when it holds it). */
+    crankGap() {
+      const hold = angler.person.sockets.holdL;
+      if (!hold) return null;
+      const a = hold.getWorldPosition(new THREE.Vector3());
+      const b = angler.knob.getWorldPosition(new THREE.Vector3());
+      return a.distanceTo(b);
     },
     /** Pin the camera (world position and look-at point, arrays); null releases. */
     pinCamera(pos, look) {
