@@ -1010,8 +1010,11 @@
     bottom: calc(14px + env(safe-area-inset-bottom));
   }
 
+  /* On its side the phone has no room under the table: the hint goes up
+     under the score bug (it is gone long before any match point) */
   .pg-ui .pg-keys.touch {
-    bottom: calc(50px + env(safe-area-inset-bottom));
+    top: calc(max(8px, env(safe-area-inset-top)) + 74px);
+    bottom: auto;
   }
 
   .pg-ui .fg-phase {

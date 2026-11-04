@@ -1062,7 +1062,8 @@ export async function createPingis(container) {
     spinColor(b.st * 2, b.ss * 1.8, tmpC);
     if (onTable) {
       const speed = b.vel.length();
-      rings.spawn(tmpV.set(p.x, T.height + 0.028, p.z), tmpC, 0.14 + speed * 0.012 + (b.smash ? 0.18 : 0), b.smash ? 0.6 : 0.45);
+      const size = 0.14 + speed * 0.012 + (b.smash ? 0.18 : 0);
+      rings.spawn(tmpV.set(p.x, T.height + 0.028, p.z), tmpC, size, b.smash ? 0.6 : 0.45);
       if (b.smash) sparks.burst(p, tmpC, 16, 1.4, vrand);
     } else {
       rings.spawn(tmpV.set(p.x, 0.012, p.z), tmpC.multiplyScalar(0.5), 0.2, 0.5);
@@ -1836,8 +1837,14 @@ export async function createPingis(container) {
      (follow-through), 2 (ready again). Positive pitch swings the arm
      forward, positive roll takes it out to his right, positive yaw turns
      his shoulders to his left. */
-  const FH = [[0.72, -0.42, 0.5, 0], [-0.25, 0.65, 0.4, -0.55], [0.9, 0.35, 0.45, -0.1], [2.05, -0.5, 1.25, 0.5], [0.72, -0.42, 0.5, 0]];
-  const BH = [[0.72, -0.42, 0.5, 0], [0.75, -1.05, 1.55, 0.4], [1.15, -0.65, 0.65, 0.05], [1.45, -0.05, 0.25, -0.3], [0.72, -0.42, 0.5, 0]];
+  const FH = [
+    [0.72, -0.42, 0.5, 0], [-0.25, 0.65, 0.4, -0.55], [0.9, 0.35, 0.45, -0.1],
+    [2.05, -0.5, 1.25, 0.5], [0.72, -0.42, 0.5, 0]
+  ];
+  const BH = [
+    [0.72, -0.42, 0.5, 0], [0.75, -1.05, 1.55, 0.4], [1.15, -0.65, 0.65, 0.05],
+    [1.45, -0.05, 0.25, -0.3], [0.72, -0.42, 0.5, 0]
+  ];
   const KEYS = [0, 0.7, 1, 1.5, 2];
   const pose4 = [0, 0, 0, 0];
   function strokePose(stroke, fh) {
@@ -2093,10 +2100,12 @@ export async function createPingis(container) {
       trophy.rotation.y = t * 0.6;
       trophyShaft.material.uniforms.uIntensity.value = 0.12 * rise;
       if (rise > 0.5 && vrand() < dt * 14) {
-        sparks.burst(tmpV.set((vrand() - 0.5) * 0.4, T.height + 0.2 + vrand() * 0.5, 0.45 + (vrand() - 0.5) * 0.4), tmpC.setHex(0xffd166), 3, 0.6, vrand);
+        tmpV.set((vrand() - 0.5) * 0.4, T.height + 0.2 + vrand() * 0.5, 0.45 + (vrand() - 0.5) * 0.4);
+        sparks.burst(tmpV, tmpC.setHex(0xffd166), 3, 0.6, vrand);
       }
     }
-    confetti.update(dt, t, (x, z) => (Math.abs(x) < T.width / 2 && Math.abs(z) < T.length / 2 ? T.height + 0.003 : 0.004));
+    const overTop = (x, z) => Math.abs(x) < T.width / 2 && Math.abs(z) < T.length / 2;
+    confetti.update(dt, t, (x, z) => (overTop(x, z) ? T.height + 0.003 : 0.004));
 
     updateCamera(v, t, dt);
     hall.updateReflections(camera.position);

@@ -718,7 +718,8 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
     { w: HALL_D, x: HALL_W / 2, z: 0, ry: -Math.PI / 2 },
     { w: HALL_W, x: 0, z: HALL_D / 2, ry: Math.PI }
   ].forEach((def) => {
-    const upper = add(new THREE.Mesh(new THREE.PlaneGeometry(def.w, HALL_H - 1.1), wallMat), def.x, 1.1 + (HALL_H - 1.1) / 2, def.z);
+    const upperGeo = new THREE.PlaneGeometry(def.w, HALL_H - 1.1);
+    const upper = add(new THREE.Mesh(upperGeo, wallMat), def.x, 1.1 + (HALL_H - 1.1) / 2, def.z);
     upper.rotation.y = def.ry;
     const wain = add(new THREE.Mesh(new THREE.PlaneGeometry(def.w, 1.1), wainMat), def.x, 0.55, def.z);
     wain.rotation.y = def.ry;
@@ -970,7 +971,8 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
   group.add(stage);
   // Two steps up on the right
   [0, 1].forEach((i) => {
-    add(new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.17 * (i + 1), 0.3), stageTop), 3.7, 0.085 * (i + 1), STAGE_Z + 0.45 - i * 0.3);
+    const step = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.17 * (i + 1), 0.3), stageTop);
+    add(step, 3.7, 0.085 * (i + 1), STAGE_Z + 0.45 - i * 0.3);
   });
 
   const velvetMat = (folds) => standard(0xffffff, 0.86, { map: velvetTexture(folds) });
@@ -998,11 +1000,16 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
   const OPEN_TOP = 3.3;
   [-1, 1].forEach((s) => {
     const w = HALL_W / 2 - OPEN;
-    add(new THREE.Mesh(new THREE.BoxGeometry(w, HALL_H - STAGE_H, 0.3), proMat), s * (OPEN + w / 2), STAGE_H + (HALL_H - STAGE_H) / 2, STAGE_Z - 0.2);
+    const side = new THREE.Mesh(new THREE.BoxGeometry(w, HALL_H - STAGE_H, 0.3), proMat);
+    add(side, s * (OPEN + w / 2), STAGE_H + (HALL_H - STAGE_H) / 2, STAGE_Z - 0.2);
   });
-  add(new THREE.Mesh(new THREE.BoxGeometry(OPEN * 2, HALL_H - OPEN_TOP, 0.3), proMat), 0, OPEN_TOP + (HALL_H - OPEN_TOP) / 2, STAGE_Z - 0.2);
+  const header = new THREE.Mesh(new THREE.BoxGeometry(OPEN * 2, HALL_H - OPEN_TOP, 0.3), proMat);
+  add(header, 0, OPEN_TOP + (HALL_H - OPEN_TOP) / 2, STAGE_Z - 0.2);
   const goldMat = standard(0xc9963a, 0.35, { metalness: 0.8 });
-  [-1, 1].forEach((s) => add(new THREE.Mesh(new THREE.BoxGeometry(0.06, OPEN_TOP - STAGE_H, 0.06), goldMat), s * OPEN, (OPEN_TOP + STAGE_H) / 2, STAGE_Z - 0.04));
+  [-1, 1].forEach((s) => {
+    const bead = new THREE.Mesh(new THREE.BoxGeometry(0.06, OPEN_TOP - STAGE_H, 0.06), goldMat);
+    add(bead, s * OPEN, (OPEN_TOP + STAGE_H) / 2, STAGE_Z - 0.04);
+  });
   add(new THREE.Mesh(new THREE.BoxGeometry(OPEN * 2 + 0.06, 0.06, 0.06), goldMat), 0, OPEN_TOP, STAGE_Z - 0.04);
   // The main curtain (ridå), drawn and gathered at each side
   [-1, 1].forEach((s) => {
@@ -1034,7 +1041,8 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
     depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false
   });
   [-2.4, -0.8, 0.8, 2.4].forEach((x) => {
-    const can = add(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.2, 10), canMat), x, OPEN_TOP - 0.5, STAGE_Z - 0.55);
+    const canGeo = new THREE.CylinderGeometry(0.07, 0.09, 0.2, 10);
+    const can = add(new THREE.Mesh(canGeo, canMat), x, OPEN_TOP - 0.5, STAGE_Z - 0.55);
     can.rotation.x = -0.6;
     const halo = add(new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.5), spotGlow), x, OPEN_TOP - 0.56, STAGE_Z - 0.44);
     halo.renderOrder = 3;
@@ -1190,7 +1198,10 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
       leg.position.set(x, 0.35, z);
       fika.add(leg);
     });
-    const thermos = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 0.26, 12), standard(0xb8422e, 0.4, { metalness: 0.3 }));
+    const thermos = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.07, 0.08, 0.26, 12),
+      standard(0xb8422e, 0.4, { metalness: 0.3 })
+    );
     thermos.position.set(-0.4, 0.88, 0);
     fika.add(thermos);
     const bulleMat = standard(0xc9903e, 0.75);
