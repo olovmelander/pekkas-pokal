@@ -74,23 +74,26 @@ export const fmtKg = (kg) => `${kg.toLocaleString('sv-SE', { minimumFractionDigi
 
 /**
  * The uppdrag. `test` reads the cast record the game keeps:
- * { dodges, deepest, haul, tapped, perfect, peakMult, bottom, species{} }.
+ * { dodges, near, chain, deepest, haul, tapped, perfect, peakMult, bottom, species{} }.
  */
 const MISSIONS = [
   { id: 'dodge4', tier: 0, text: 'Väj för 4 fiskar på vägen ner', test: (c) => c.dodges >= 4 },
   { id: 'abborre', tier: 0, text: 'Fånga en abborre', test: (c) => (c.species.abborre || 0) >= 1 },
   { id: 'haul4', tier: 0, text: 'Få upp minst 4 fiskar', test: (c) => c.haul >= 4 },
   { id: 'deep25', tier: 0, text: 'Nå 25 meters djup', test: (c) => c.deepest >= 25 },
+  { id: 'near2', tier: 0, text: 'Två snäva passeringar på vägen ner', test: (c) => c.near >= 2 },
   { id: 'sik', tier: 1, text: 'Fånga en sik', test: (c) => (c.species.sik || 0) >= 1 },
   { id: 'dodge8', tier: 1, text: 'Väj för 8 fiskar på vägen ner', test: (c) => c.dodges >= 8 },
   { id: 'gadda', tier: 1, text: 'Fånga en gädda', test: (c) => (c.species.gadda || 0) >= 1 },
   { id: 'tap4', tier: 1, text: 'Tryck in 4 fiskar i tunnan', test: (c) => c.tapped >= 4 },
   { id: 'deep40', tier: 1, text: 'Nå 40 meters djup', test: (c) => c.deepest >= 40 },
+  { id: 'chain3', tier: 1, text: 'Trippelnapp — tre fiskar i snabb följd', test: (c) => c.chain >= 3 },
   { id: 'lax', tier: 2, text: 'Fånga en lax', test: (c) => (c.species.lax || 0) >= 1 },
   { id: 'perfect', tier: 2, text: 'Perfekt kast med minst tre fiskar', test: (c) => c.perfect && c.haul >= 3 },
   { id: 'haul8', tier: 2, text: 'Få upp minst 8 fiskar', test: (c) => c.haul >= 8 },
   { id: 'mult5', tier: 2, text: 'Samla ×5 i multiplikator', test: (c) => c.peakMult >= 5 },
-  { id: 'bottom', tier: 2, text: 'Bottenkänning — nå botten utan att nudda något', test: (c) => c.bottom }
+  { id: 'bottom', tier: 2, text: 'Bottenkänning — nå botten utan att nudda något', test: (c) => c.bottom },
+  { id: 'near5', tier: 2, text: 'Fem snäva passeringar på ett kast', test: (c) => c.near >= 5 }
 ];
 
 export const MISSION_BONUS = [800, 1500, 2500];

@@ -367,7 +367,7 @@ export function buildBoat() {
   fb.add(stick, (p) => (p.y > 0.18 ? C(0xffd34a) : C(0xd8302a)));
   const bobber = new THREE.Mesh(fb.geometry(), material);
 
-  group.userData = { barrel, foam, bobber, material, mask };
+  group.userData = { barrel, foam, bobber, material, mask, hull: boatMesh.geometry };
   return group;
 }
 

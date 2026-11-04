@@ -253,10 +253,13 @@ export const SPECIES = [
     back: 0x4d6f96,
     belly: 0xeef4fb,
     fin: 0xd2452f,
+    finD: 0x8a6a5a, // the back fin is greyer; the low fins burn red
     tail: 'fork',
     dorsal: { at: -0.02, h: 0.4, w: 0.34 },
     eye: 0.16,
-    iris: 0xd2452f
+    iris: 0xd2452f,
+    metal: 0.4,
+    rough: 0.28
   },
   {
     id: 'abborre',
@@ -274,12 +277,15 @@ export const SPECIES = [
     back: 0x33591f,
     belly: 0xf0e6bd,
     mark: bars(C(0x14290c)),
-    fin: 0xe06010,
+    fin: 0xe2581a,
+    finD: 0x5a5a3c, // spiny grey-olive dorsal; belly fins and tail orange-red
     tail: 'fan',
     dorsal: { at: 0.1, h: 0.46, w: 0.5, spiny: true },
     dorsal2: { at: -0.28, h: 0.26, w: 0.24 },
     eye: 0.17,
-    iris: 0xe0a020
+    iris: 0xe0a020,
+    metal: 0.06,
+    rough: 0.5
   },
   {
     id: 'sik',
@@ -302,7 +308,9 @@ export const SPECIES = [
     dorsal: { at: 0.02, h: 0.32, w: 0.28 },
     adipose: -0.42,
     eye: 0.15,
-    iris: 0xc8d4e0
+    iris: 0xc8d4e0,
+    metal: 0.5,
+    rough: 0.24
   },
   {
     id: 'gadda',
@@ -325,7 +333,9 @@ export const SPECIES = [
     dorsal: { at: -0.52, h: 0.42, w: 0.34 },
     snout: true,
     eye: 0.14,
-    iris: 0xd8c040
+    iris: 0xd8c040,
+    metal: 0.05,
+    rough: 0.48
   },
   {
     id: 'lax',
@@ -340,15 +350,17 @@ export const SPECIES = [
     blurb: 'Insjölaxen i det kalla djupvattnet. Snabbast av dem alla.',
     profile: makeProfile([[0, 0.05], [0.16, 0.3], [0.4, 0.38], [0.76, 0.13], [1, 0.045]],
       { height: 1.3, width: 0.68, nose: 1.15, tail: -0.82 }),
-    back: 0x3f5f8c,
-    belly: 0xf7d8cb,
-    mark: specks(C(0x1a2436)),
-    fin: 0x6f7f9c,
+    back: 0x34507c,
+    belly: 0xf4f6f8, // bright silver: a lake salmon fresh from the deep
+    mark: specks(C(0x141c2c)),
+    fin: 0x5f6f8c,
     tail: 'fork',
     dorsal: { at: 0.0, h: 0.36, w: 0.3 },
     adipose: -0.44,
     eye: 0.16,
-    iris: 0xb8c0d0
+    iris: 0xb8c0d0,
+    metal: 0.55,
+    rough: 0.22
   },
   {
     id: 'pekka',
@@ -440,8 +452,9 @@ function buildSpecies(sp) {
     });
   }
 
-  dorsalBlades(sp.dorsal, backY).forEach((g) => parts.push({ geometry: g, color: finC }));
-  dorsalBlades(sp.dorsal2, backY).forEach((g) => parts.push({ geometry: g, color: finC }));
+  const finDC = sp.finD ? C(sp.finD) : finC;
+  dorsalBlades(sp.dorsal, backY).forEach((g) => parts.push({ geometry: g, color: finDC }));
+  dorsalBlades(sp.dorsal2, backY).forEach((g) => parts.push({ geometry: g, color: finDC }));
 
   // Pectorals and pelvics, one each side, swept back
   [1, -1].forEach((s) => {
@@ -510,8 +523,8 @@ function buildSpecies(sp) {
 
   const material = new THREE.MeshStandardMaterial({
     vertexColors: true,
-    roughness: 0.36,
-    metalness: 0.18,
+    roughness: sp.rough ?? 0.36,
+    metalness: sp.metal ?? 0.18,
     emissive: sp.rare ? 0x8a5c00 : 0x000000,
     emissiveIntensity: sp.rare ? 0.7 : 0
   });
@@ -754,12 +767,42 @@ export function speciesSvg(sp, known = true) {
   const ey = -p.radius(0.15) * p.height * 0.3;
   const minX = tx - 0.7;
   const w = nose - minX + 0.1;
+  const body = `${top.join(' ')} ${bot.join(' ')} ${nose},0`;
+  // The species' own markings, clipped to the body: the perch's bars, the
+  // pike's pale beans, the salmon's black crosses, the sik's silver flank
+  let marks = '';
+  if (known) {
+    const len = nose - tx;
+    if (sp.id === 'abborre') {
+      for (let i = 0; i < 6; i++) {
+        const x = tx + len * (0.2 + i * 0.12);
+        marks += `<path d="M${x.toFixed(3)},-0.6 l0.07,0 l-0.04,0.75 l-0.06,0 z" fill="#14290c" opacity="0.7"/>`;
+      }
+    } else if (sp.id === 'gadda' || sp.id === 'pekka') {
+      for (let i = 0; i < 14; i++) {
+        const x = tx + len * (0.12 + (i % 7) * 0.11) + (i > 6 ? 0.05 : 0);
+        const y = i > 6 ? 0.04 : -0.12;
+        marks += `<ellipse cx="${x.toFixed(3)}" cy="${y}" rx="0.05" ry="0.025" fill="${sp.id === 'pekka' ? '#fff6d8' : '#c8d880'}" opacity="0.75"/>`;
+      }
+    } else if (sp.id === 'lax') {
+      for (let i = 0; i < 10; i++) {
+        const x = tx + len * (0.3 + (i % 5) * 0.12) + (i > 4 ? 0.06 : 0);
+        const y = i > 4 ? -0.1 : -0.2;
+        marks += `<path d="M${(x - 0.025).toFixed(3)},${y - 0.025} l0.05,0.05 m0,-0.05 l-0.05,0.05" stroke="#141c2c" stroke-width="0.018"/>`;
+      }
+    } else if (sp.id === 'sik' || sp.id === 'mort') {
+      marks = `<rect x="${tx}" y="-0.06" width="${len}" height="0.05" fill="#ffffff" opacity="0.28"/>`;
+    }
+  }
+  const dorsalFill = known && sp.finD ? hex(sp.finD) : fin;
   return `<svg viewBox="${minX.toFixed(2)} -0.75 ${w.toFixed(2)} 1.5" aria-hidden="true">
     <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="${back}"/><stop offset="0.62" stop-color="${belly}"/></linearGradient></defs>
+      <stop offset="0" stop-color="${back}"/><stop offset="0.62" stop-color="${belly}"/></linearGradient>
+      <clipPath id="${id}c"><polygon points="${body}"/></clipPath></defs>
     <polygon points="${tail}" fill="${fin}"/>
-    <polygon points="${dorsal}" fill="${fin}"/>
-    <polygon points="${top.join(' ')} ${bot.join(' ')} ${nose},0" fill="url(#${id})"/>
+    <polygon points="${dorsal}" fill="${dorsalFill}"/>
+    <polygon points="${body}" fill="url(#${id})"/>
+    ${marks ? `<g clip-path="url(#${id}c)">${marks}</g>` : ''}
     ${known ? `<circle cx="${ex}" cy="${ey}" r="${sp.eye * 0.75}" fill="${hex(sp.iris)}"/><circle cx="${ex + 0.015}" cy="${ey}" r="${sp.eye * 0.42}" fill="#05080f"/>` : ''}
     ${sp.crown && known ? `<polygon points="0.16,${-p.radius(0.32) * p.height - 0.02} 0.2,${-p.radius(0.32) * p.height - 0.26} 0.28,${-p.radius(0.32) * p.height - 0.12} 0.34,${-p.radius(0.32) * p.height - 0.3} 0.4,${-p.radius(0.32) * p.height - 0.12} 0.48,${-p.radius(0.32) * p.height - 0.26} 0.5,${-p.radius(0.32) * p.height - 0.02}" fill="#ffd34d"/>` : ''}
   </svg>`;

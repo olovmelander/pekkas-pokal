@@ -72,6 +72,14 @@
     linear-gradient(to bottom, rgba(8, 5, 3, 0.4), rgba(0, 0, 0, 0) 18%, rgba(0, 0, 0, 0) 80%, rgba(8, 5, 3, 0.45));
 }
 
+/* The replay closes in: a deeper, warmer vignette while time slows */
+.fen-vignette { transition: box-shadow 0.6s ease; }
+
+.fen[data-mode='replay'] .fen-vignette,
+.fen[data-mode='ceremony'] .fen-vignette {
+  box-shadow: inset 0 0 22vmin 6vmin rgba(12, 6, 2, 0.75);
+}
+
 .fen-flash {
   position: absolute;
   inset: 0;
@@ -263,7 +271,10 @@
 .fen-call.teal { color: #c6fff4; text-shadow: 0 0 36px rgba(94, 234, 212, 0.7), 0 3px 14px rgba(0, 0, 0, 0.7); }
 .fen-call.name { font-size: clamp(1.1rem, 5vmin, 2.4rem); letter-spacing: 0.12em; }
 .fen-call.gold { color: var(--gold); text-shadow: 0 0 40px rgba(242, 193, 78, 0.8), 0 3px 14px rgba(0, 0, 0, 0.7); }
-.fen-call.big { font-size: clamp(2rem, 10vmin, 4.6rem); }
+.fen-call.big {
+  font-size: clamp(2rem, 10vmin, 4.6rem);
+  text-shadow: 0 0 40px rgba(242, 193, 78, 0.8), 0 0 4px rgba(60, 30, 0, 0.9), 0 4px 22px rgba(0, 0, 0, 0.9);
+}
 .fen-call.gold.show { animation-duration: 4.5s; }
 
 @keyframes fen-call {
@@ -461,7 +472,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: 108px;
+  width: 118px;
   height: 46px;
   padding: 0 12px 0 16px;
   border-radius: 13px;
@@ -483,6 +494,17 @@
   background: rgba(255, 255, 255, 0.14);
   transition: background 0.15s ease, box-shadow 0.15s ease;
 }
+
+.fen-line > span { flex: 1; text-align: left; }
+
+.fen-line-ico {
+  flex: none;
+  width: 22px;
+  height: 16px;
+  opacity: 0.75;
+}
+
+.fen-line.on .fen-line-ico { opacity: 1; }
 
 .fen-line.on {
   color: #0d2228;
@@ -703,7 +725,7 @@
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.14);
   cursor: pointer;
-  transition: all 0.18s ease;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
 .fen button.fen-chip:hover { border-color: rgba(242, 193, 78, 0.5); }
@@ -979,14 +1001,16 @@
    on the right in landscape (the camera frames the next opponent or the
    winner on the left third), at the bottom in portrait */
 .fen[data-orient='landscape'][data-mode='bracket'] .fen-screen,
-.fen[data-orient='landscape'][data-mode='result'] .fen-screen {
+.fen[data-orient='landscape'][data-mode='result'] .fen-screen,
+.fen[data-orient='landscape'][data-mode='final'] .fen-screen {
   justify-content: flex-end;
   padding-right: max(3vw, 16px);
   background: linear-gradient(270deg, rgba(6, 4, 3, 0.88) 0%, rgba(6, 4, 3, 0.6) 42%, rgba(6, 4, 3, 0.12) 72%, rgba(6, 4, 3, 0) 100%);
 }
 
 .fen[data-orient='landscape'][data-mode='bracket'] .fen-panel { width: min(580px, 60%); }
-.fen[data-orient='landscape'][data-mode='result'] .fen-panel { width: min(440px, 56%); }
+.fen[data-orient='landscape'][data-mode='result'] .fen-panel,
+.fen[data-orient='landscape'][data-mode='final'] .fen-panel { width: min(440px, 56%); }
 
 .fen[data-orient='portrait'][data-mode='bracket'] .fen-screen,
 .fen[data-orient='portrait'][data-mode='result'] .fen-screen {
@@ -1053,6 +1077,11 @@
   .fen-big-score { font-size: 2.6rem; }
 }
 
+/* Narrow desktop windows: the key strip would run under the attack buttons */
+@media (max-width: 960px) {
+  .fen .fen-keys { display: none; }
+}
+
 @media (max-height: 520px) {
   .fen-steps,
   .fen-opp,
@@ -1076,6 +1105,14 @@
   .fen[data-mode='title'] .fen-chips { flex-wrap: nowrap; gap: 5px; }
   .fen[data-mode='title'] button.fen-chip { padding: 0.4rem 0.62rem; font-size: 0.74rem; }
   .fen-foot { margin-top: 6px; }
+  /* The verdict screen in one screenful too */
+  .fen[data-mode='final'] .fen-lead { display: none; }
+  .fen[data-mode='final'] .fen-medal-big svg { width: 46px; height: 46px; }
+  .fen[data-mode='final'] .fen-h { font-size: 1.5rem; margin-top: 2px; }
+  .fen-recap { margin-top: 8px; gap: 3px; }
+  .fen-recap div { padding: 4px 10px; font-size: 0.72rem; }
+  .fen-total { margin-top: 8px; }
+  .fen-total b { font-size: 1.7rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

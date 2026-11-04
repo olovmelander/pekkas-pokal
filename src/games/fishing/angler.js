@@ -49,16 +49,22 @@ class Spring {
  * w/z: the spring that carries him there.
  */
 const ACT = {
-  rest: { grip: [0.0, 0.69, 0.32], pitch: 32, yaw: 9, lean: 0.03, hint: [-0.66, 0.64, -0.4], pole: [-0.5, -0.6, -0.9], left: 'fore', w: 6, z: 0.9 },
-  drop: { grip: [0.0, 0.7, 0.35], pitch: 18, yaw: 8, lean: 0.12, hint: [-0.66, 0.64, -0.4], pole: [-0.5, -0.6, -0.9], left: 'fore', w: 7, z: 0.9 },
-  reel: { grip: [-0.06, 0.74, 0.34], pitch: 24, yaw: 10, lean: 0.1, hint: [-0.66, 0.64, -0.4], pole: [-0.5, -0.6, -0.9], left: 'crank', w: 8, z: 0.85 },
-  heave: { grip: [-0.1, 1.0, 0.26], pitch: 74, yaw: 8, lean: -0.22, hint: [-0.75, 0.1, -0.65], pole: [-0.6, -0.5, -0.6], left: 'butt', w: 16, z: 0.55 },
-  watch: { grip: [-0.08, 0.86, 0.3], pitch: 50, yaw: 12, lean: -0.08, hint: [-0.72, 0.4, -0.55], pole: [-0.55, -0.6, -0.7], left: 'butt', w: 7, z: 0.85 },
-  windup: { grip: [-0.2, 1.2, 0.08], pitch: 120, yaw: 16, lean: -0.16, hint: [-0.45, -0.75, 0.45], pole: [-0.6, -0.4, 0.6], left: 'butt', w: 9, z: 0.8 },
-  throw: { grip: [-0.08, 0.86, 0.54], pitch: 6, yaw: 10, lean: 0.24, hint: [-0.6, 0.55, -0.55], pole: [-0.5, -0.6, -0.6], left: 'butt', w: 24, z: 0.42 },
-  cheer: { grip: [-0.26, 1.58, 0.2], pitch: 80, yaw: 18, lean: -0.1, hint: [-0.35, -0.9, -0.2], pole: [-0.9, -0.3, 0.1], left: 'fist', w: 10, z: 0.6 }
+  rest: { grip: [0.0, 0.69, 0.32], pitch: 32, yaw: 9, lean: 0.03, twist: 0, hint: [-0.66, 0.64, -0.4], pole: [-0.5, -0.6, -0.9], left: 'fore', w: 6, z: 0.9 },
+  drop: { grip: [0.0, 0.7, 0.35], pitch: 18, yaw: 8, lean: 0.12, twist: 0, hint: [-0.66, 0.64, -0.4], pole: [-0.5, -0.6, -0.9], left: 'fore', w: 7, z: 0.9 },
+  reel: { grip: [-0.06, 0.74, 0.34], pitch: 24, yaw: 10, lean: 0.1, twist: 0.04, hint: [-0.66, 0.64, -0.4], pole: [-0.5, -0.6, -0.9], left: 'crank', w: 8, z: 0.85 },
+  heave: { grip: [-0.1, 1.0, 0.26], pitch: 74, yaw: 8, lean: -0.22, twist: -0.06, hint: [-0.75, 0.1, -0.65], pole: [-0.6, -0.5, -0.6], left: 'butt', w: 16, z: 0.55 },
+  watch: { grip: [-0.08, 0.86, 0.3], pitch: 50, yaw: 12, lean: -0.08, twist: 0, hint: [-0.72, 0.4, -0.55], pole: [-0.55, -0.6, -0.7], left: 'butt', w: 7, z: 0.85 },
+  // The back cast: shoulders turn to his right, the rod goes back over
+  // the right shoulder to one o'clock and the weight shifts back…
+  windup: { grip: [-0.22, 1.2, 0.06], pitch: 118, yaw: 18, lean: -0.18, twist: -0.3, hint: [-0.45, -0.75, 0.45], pole: [-0.6, -0.4, 0.6], left: 'butt', w: 9, z: 0.8 },
+  // …then the forward stroke: everything unwinds toward the bow, the rod
+  // stops at ten o'clock and follows the lure down
+  throw: { grip: [-0.06, 0.86, 0.56], pitch: 6, yaw: 8, lean: 0.26, twist: 0.12, hint: [-0.6, 0.55, -0.55], pole: [-0.5, -0.6, -0.6], left: 'butt', w: 24, z: 0.42 },
+  cheer: { grip: [-0.26, 1.58, 0.2], pitch: 80, yaw: 18, lean: -0.1, twist: -0.05, hint: [-0.35, -0.9, -0.2], pole: [-0.9, -0.3, 0.1], left: 'fist', w: 10, z: 0.6 }
 };
-const LEFT_MODES = ['fore', 'butt', 'crank', 'fist'];
+const LEFT_MODES = ['fore', 'butt', 'crank', 'fist', 'cap'];
+/** Where a gull might be wheeling — somewhere to look while he waits. */
+const SKY_POINT = new THREE.Vector3(30, 16, -60);
 
 export function createAngler(boat) {
   const person = createPerson(appearanceFor('Erik Vallgren', {
@@ -87,6 +93,7 @@ export function createAngler(boat) {
   sp.pitch = new Spring(start.pitch * DEG);
   sp.yaw = new Spring(start.yaw * DEG);
   sp.lean = new Spring(0);
+  sp.twist = new Spring(0);
   sp.bend = new Spring(0);
   LEFT_MODES.forEach((m) => { sp[m] = new Spring(m === 'fore' ? 1 : 0); });
 
@@ -173,20 +180,28 @@ export function createAngler(boat) {
     let look = ctx.look || null;
     let expr = ctx.expr || 'neutral';
     let jig = 0;
+    let capOn = false;
 
     // Waiting: now and then do something, so the menu has a living angler
     if (ctx.idle) {
       idle.t -= dt;
       if (idle.t <= 0 && !idle.kind) {
         const r = Math.random();
-        idle.kind = r < 0.35 ? 'jig' : r < 0.7 ? 'crank' : 'glance';
-        idle.left = idle.kind === 'jig' ? 1.1 : idle.kind === 'crank' ? 1.8 : 1.7;
+        idle.kind = r < 0.26 ? 'jig' : r < 0.48 ? 'crank' : r < 0.66 ? 'glance' : r < 0.84 ? 'cap' : 'sky';
+        idle.left = { jig: 1.1, crank: 1.8, glance: 1.7, cap: 1.5, sky: 2.4 }[idle.kind];
       }
       if (idle.kind) {
         idle.left -= dt;
         if (idle.kind === 'jig') jig = Math.max(0, Math.sin((1.1 - idle.left) * 11)) * 0.2;
         else if (idle.kind === 'crank') crank = 1.1;
-        else if (ctx.camera) {
+        else if (idle.kind === 'cap') {
+          // Left hand up to the brim: a nod to the camera
+          capOn = idle.left > 0.35;
+          if (ctx.camera) look = ctx.camera;
+          expr = 'smile';
+        } else if (idle.kind === 'sky') {
+          look = SKY_POINT;
+        } else if (ctx.camera) {
           look = ctx.camera;
           expr = 'smile';
         }
@@ -218,10 +233,12 @@ export function createAngler(boat) {
     const pitch = sp.pitch.step(action.pitch * DEG + jig + pumping, dt, w, z);
     const yaw = sp.yaw.step(action.yaw * DEG, dt, w, z);
     const lean = sp.lean.step(action.lean + (crank ? Math.sin(crankAngle) * 0.025 : 0), dt, w * 0.7, 0.8);
-    const leftMode = crank ? 'crank' : action.left;
+    const twist = sp.twist.step(action.twist || 0, dt, w * 0.75, 0.75);
+    const leftMode = crank ? 'crank' : capOn ? 'cap' : action.left;
     LEFT_MODES.forEach((m) => sp[m].step(m === leftMode ? 1 : 0, dt, 11, 1));
-    // The tip lags the swing: pitching down fast flexes it up, and back
-    const bend = sp.bend.step(-(ctx.load || 0) * 0.42 + sp.pitch.v * 0.05, dt, 15, 0.32);
+    // The tip lags the swing: a fast forward stroke (pitch falling) leaves
+    // it trailing up and back, then it whips through when the rod stops
+    const bend = sp.bend.step(-(ctx.load || 0) * 0.42 - sp.pitch.v * 0.05, dt, 15, 0.32);
 
     crankSpeed += (crank - crankSpeed) * Math.min(1, dt * 8);
     crankAngle = (crankAngle + crankSpeed * Math.PI * 2 * dt) % (Math.PI * 2);
@@ -230,6 +247,9 @@ export function createAngler(boat) {
     POSES.sitRod(t, base);
     base.spine[0] += lean * 0.55;
     base.chest[0] += lean * 0.45;
+    base.spine[1] += twist * 0.4;
+    base.chest[1] += twist * 0.6;
+    base.head[1] -= twist * 0.5; // the eyes stay on the target
     if (ctx.action === 'cheer') base.hipsPos[1] += Math.abs(Math.sin(t * 7.5)) * 0.025;
     base.gripL = 0.9 - sp.crank.x * 0.25;
     person.setPose(base);
@@ -260,7 +280,8 @@ export function createAngler(boat) {
     const wb = sp.butt.x;
     const wc = sp.crank.x;
     const wfi = sp.fist.x;
-    const wsum = Math.max(1e-3, wf + wb + wc + wfi);
+    const wcap = sp.cap.x;
+    const wsum = Math.max(1e-3, wf + wb + wc + wfi + wcap);
     tgtL.set(0, 0, 0);
     zL.set(0, 0, 0);
     yL.set(0, 0, 0);
@@ -291,13 +312,21 @@ export function createAngler(boat) {
       zL.addScaledVector(dirW(-1, 0, 0.25, v), wfi);
       yL.addScaledVector(dirW(0.15, -1, -0.1, v), wfi);
     }
+    if (wcap > 1e-3) {
+      // Fingers to the cap's brim, palm down
+      person.bones.head.getWorldPosition(v);
+      v.addScaledVector(dirW(0.02, 0.1, 0.16, lookV), s);
+      tgtL.addScaledVector(v, wcap);
+      zL.addScaledVector(dirW(-1, 0.1, 0.2, lookV), wcap);
+      yL.addScaledVector(dirW(0.35, -0.75, -0.3, lookV), wcap);
+    }
     tgtL.multiplyScalar(1 / wsum);
     zL.normalize();
     basisQ(zL, yL, qL);
     wrist.copy(sockL.position).applyQuaternion(qL);
     wrist.subVectors(tgtL, wrist);
     person.bones.upperArmL.getWorldPosition(pole);
-    pole.add(dirW(0.5 + wfi * 0.4, -0.6 + wfi * 0.4, -0.9 + wfi * 0.9, v).multiplyScalar(s));
+    pole.add(dirW(0.5 + wfi * 0.4 + wcap * 0.5, -0.6 + wfi * 0.4 + wcap * 0.1, -0.9 + wfi * 0.9 + wcap * 0.6, v).multiplyScalar(s));
     person.ikArm('L', wrist, pole, qL);
 
     /* Face and gaze */

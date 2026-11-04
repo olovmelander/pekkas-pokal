@@ -223,6 +223,7 @@ export class Dmd {
     this.base = null; // (dmd, t) => void: what shows between callouts
     this.clock = 0;
     this.acc = 1;
+    this.attractLap = 0;
   }
 
   /* ------------------------------------------------------------ drawing */
@@ -798,6 +799,8 @@ export class Dmd {
         d.text('SENASTE SPEL', 64, 1, { align: 'center', v: 160 });
         d.text(fmtScore(data.last), 64, 12, { s: 2, align: 'center' });
       }] : []),
+      // One gren's picture per lap of the attract cycle
+      (d, tt) => d.modeAnim(['gokart', 'femkamp', 'pingis', 'skytte', 'fiske'][this.attractLap % 5], Math.min(1, tt / 2.4)),
       (d, tt) => d.text(MARQUEE, 128 - tt * MARQUEE_SPEED, 9, { s: 2 }),
       (d, tt) => {
         d.icon('castle', 4, 9 + Math.round(Math.sin(tt * 3)), 255, 2);
@@ -810,6 +813,7 @@ export class Dmd {
     const marquee = (this.measure(MARQUEE, 2) + W) / MARQUEE_SPEED;
     const durs = pages.map((_, i) => (i === pages.length - 2 ? marquee : 3.2));
     const cycle = durs.reduce((a, b) => a + b, 0);
+    this.attractLap = Math.floor(t / cycle);
     let tt = t % cycle;
     let i = 0;
     while (tt > durs[i]) {

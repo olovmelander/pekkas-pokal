@@ -514,6 +514,59 @@ export function createPlayfieldCanvas(_participants = [], logo = null) {
   pool(-8.2, 20, 260, 'rgba(94,234,212,.2)');
   pool(4.6, 20, 260, 'rgba(242,109,141,.18)');
 
+  /* ---- Heraldic lattice: a faint diamond trellis over the whole print,
+     the texture of a printed playfield rather than a flat gradient ---- */
+  g.save();
+  g.strokeStyle = 'rgba(255,214,120,.055)';
+  g.lineWidth = 2;
+  const step = 64;
+  for (let k = -TEX_H; k < TEX_W + TEX_H; k += step) {
+    g.beginPath();
+    g.moveTo(k, 0);
+    g.lineTo(k - TEX_H * 0.5, TEX_H);
+    g.moveTo(k, 0);
+    g.lineTo(k + TEX_H * 0.5, TEX_H);
+    g.stroke();
+  }
+  g.restore();
+
+  /* ---- Sunburst behind the castle ---- */
+  g.save();
+  g.translate(toU(cx), toV(28.6));
+  for (let i = 0; i < 24; i++) {
+    g.rotate((Math.PI * 2) / 24);
+    if (i % 2) continue;
+    const ray = g.createLinearGradient(0, 0, 0, -unitsY(9));
+    ray.addColorStop(0, 'rgba(242,193,78,.16)');
+    ray.addColorStop(1, 'rgba(242,193,78,0)');
+    g.fillStyle = ray;
+    g.beginPath();
+    g.moveTo(0, 0);
+    g.lineTo(-unitsX(0.7), -unitsY(9));
+    g.lineTo(unitsX(0.7), -unitsY(9));
+    g.closePath();
+    g.fill();
+  }
+  g.restore();
+
+  /* ---- Shot names printed along their lanes ---- */
+  const laneLabel = (text, x, y, color, size = 17) => {
+    g.save();
+    g.translate(toU(x), toV(y));
+    g.rotate(-Math.PI / 2);
+    g.fillStyle = color;
+    g.font = `800 ${size}px "Space Grotesk", Inter, sans-serif`;
+    g.letterSpacing = '5px';
+    g.shadowColor = 'rgba(0,0,0,.6)';
+    g.shadowBlur = 6;
+    g.fillText(text, 0, 0);
+    g.restore();
+  };
+  laneLabel('SNURRAN', -8.95, 24.6, 'rgba(160,176,255,.75)');
+  laneLabel('KUNGSVÄGEN', -6.7, 16.95, 'rgba(255,214,120,.8)', 15);
+  laneLabel('VALLGRAVEN', 5.45, 20.6, 'rgba(255,214,120,.8)', 15);
+  g.letterSpacing = '0px';
+
   /* ---- Dome arcs (centred on the dome, not the playfield) ---- */
   g.strokeStyle = GOLD_DIM;
   g.lineWidth = 2;
@@ -592,8 +645,8 @@ export function createPlayfieldCanvas(_participants = [], logo = null) {
   /* ---- Lamp cluster over the flippers: grenar row and bonus row ---- */
   g.save();
   const plate = (y0, y1, color) => {
-    const x0 = toU(cx - 3.85);
-    const x1 = toU(cx + 3.85);
+    const x0 = toU(cx - 2.62);
+    const x1 = toU(cx + 2.62);
     const r = unitsY(0.5);
     g.beginPath();
     g.roundRect(x0, toV(y1), x1 - x0, toV(y0) - toV(y1), r);
@@ -603,21 +656,16 @@ export function createPlayfieldCanvas(_participants = [], logo = null) {
     g.lineWidth = 2;
     g.stroke();
   };
-  plate(9.12, 11.02, 'rgba(242,193,78,.4)');
-  g.fillStyle = 'rgba(214,224,255,.7)';
-  g.font = '700 12px Inter, sans-serif';
-  g.letterSpacing = '4px';
-  g.fillText('GRENAR', toU(cx - 3.35), toV(11.25));
-  g.fillText('BONUS ×', toU(cx + 3.15), toV(8.9));
-  g.letterSpacing = '0px';
+  plate(8.86, 10.8, 'rgba(242,193,78,.4)');
   g.restore();
 
   /* ---- Hero logo, centred in the lower playfield ---- */
   if (logo && logo.width) {
-    const w = 7.6;
+    // Sized and lifted to clear the lamp cluster over the flippers
+    const w = 6.5;
     const h = (w * logo.height) / logo.width;
     const px = toU(cx - w / 2);
-    const py = toV(11.9 + h / 2);
+    const py = toV(13.45 + h / 2);
     g.save();
     // A halo behind it: the logo is dark gold, and on a bright print it needs
     // something to sit against. Kept tight to the logo — an earlier version

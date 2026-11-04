@@ -952,7 +952,7 @@ export function buildKelp(count, timeUniform) {
 
 /* --------------------------------------------------------------- seabed */
 
-export function buildSeabed() {
+export function buildSeabed(hull) {
   const g = new THREE.Group();
   const rand = mulberry(19);
 
@@ -964,13 +964,11 @@ export function buildSeabed() {
   const c = new THREE.Color();
   const silt = new THREE.Color(0x1d2536);
   const sand = new THREE.Color(0x5c5a52);
+  const bedH = (x, z) => Math.sin(x * 0.11) * 1.1 + Math.cos(z * 0.17 + 1.2) * 0.8 + Math.sin(x * 0.31 + z * 0.21) * 0.45;
   for (let i = 0; i < bp.count; i++) {
     const x = bp.getX(i);
     const z = bp.getZ(i);
-    const hgt =
-      Math.sin(x * 0.11) * 1.1 +
-      Math.cos(z * 0.17 + 1.2) * 0.8 +
-      Math.sin(x * 0.31 + z * 0.21) * 0.45;
+    const hgt = bedH(x, z);
     bp.setY(i, hgt);
     // Silt in the hollows, pale sand ripples on the crests
     const k = Math.min(1, Math.max(0, hgt * 0.3 + 0.45 + Math.sin(x * 1.3 + z * 0.4) * 0.12));
@@ -999,7 +997,12 @@ export function buildSeabed() {
     const r = 0.5 + rand() * 1.6;
     let p;
     if (i < 22) {
-      p = new THREE.Vector3(-32 + rand() * 64, r * 0.35, -14 + rand() * 18);
+      const x = -32 + rand() * 64;
+      const z = -14 + rand() * 18;
+      // Bedded in the silt, and clear of the wreck and the pokal
+      const clear = Math.hypot(x - 1.9, z + 1.4) < 2.6 || Math.hypot(x + 5.4, z + 4.4) < 3.4;
+      p = new THREE.Vector3(clear ? x + 9 : x, 0, z);
+      p.y = bedH(p.x, p.z) + r * 0.12;
     } else {
       const th = sideAngle(rand);
       const y = -6 - rand() * 50;
@@ -1014,27 +1017,31 @@ export function buildSeabed() {
   }
   g.add(stones);
 
-  // A sunken eka, half buried — a landmark that says "you made it down"
-  const wreck = new THREE.Group();
-  const wshape = new THREE.Shape();
-  wshape.moveTo(-1.8, 0.4);
-  wshape.lineTo(1.9, 0.5);
-  wshape.lineTo(2.1, 0.1);
-  wshape.quadraticCurveTo(0, -0.5, -1.8, -0.05);
-  wshape.closePath();
-  const wg = new THREE.ExtrudeGeometry(wshape, { depth: 1.4, bevelEnabled: false, curveSegments: 4 });
-  wg.translate(0, 0, -0.7);
-  const wreckMat = new THREE.MeshLambertMaterial({ color: 0x3b4a44, flatShading: true });
-  wreckMat.onBeforeCompile = fogWithReach(1);
-  wreckMat.customProgramCacheKey = () => 'fiske-rock-plain';
-  wreck.add(new THREE.Mesh(wg, wreckMat));
-  const plank = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.08, 0.3), wreckMat);
-  plank.position.set(0.2, 0.5, 0.2);
-  plank.rotation.y = 0.3;
-  wreck.add(plank);
-  wreck.position.set(-9, 0.5, -3);
-  wreck.rotation.set(0.2, 0.5, 0.35);
-  g.add(wreck);
+  // A sunken eka on its side, half buried — the same clinker boat Erik
+  // sits in, gone green with years down here: a landmark that says "you
+  // made it down"
+  if (hull) {
+    const wreckMat = new THREE.MeshLambertMaterial({ vertexColors: true, color: 0x6a8270 });
+    wreckMat.onBeforeCompile = fogWithReach(1);
+    wreckMat.customProgramCacheKey = () => 'fiske-wreck';
+    const wreck = new THREE.Mesh(hull, wreckMat);
+    wreck.position.set(-5.4, bedH(-5.4, -4.4) + 0.42, -4.4);
+    wreck.rotation.set(0.15, 0.55, 0.55);
+    wreck.scale.setScalar(1.15);
+    g.add(wreck);
+    // A loose thwart and an oar beside it
+    const plankMat = new THREE.MeshLambertMaterial({ color: 0x4a5a48, flatShading: true });
+    plankMat.onBeforeCompile = fogWithReach(1);
+    plankMat.customProgramCacheKey = () => 'fiske-rock-plain';
+    const plank = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.06, 0.26), plankMat);
+    plank.position.set(-2.6, bedH(-2.6, -2.2) + 0.05, -2.2);
+    plank.rotation.set(0.05, -0.6, 0.12);
+    g.add(plank);
+    const oar = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.06, 0.08), plankMat);
+    oar.position.set(-8.4, bedH(-8.4, -2.4) + 0.05, -2.4);
+    oar.rotation.set(0, 0.35, 0.06);
+    g.add(oar);
+  }
 
   // …and next to it, something nobody expected to find down here
   const pts = [];
@@ -1045,7 +1052,8 @@ export function buildSeabed() {
     new THREE.LatheGeometry(pts, 18),
     new THREE.MeshStandardMaterial({ color: 0xf2c14e, metalness: 0.85, roughness: 0.25, emissive: 0xb07a12, emissiveIntensity: 0.9 })
   );
-  pokal.position.set(-5.2, -0.15, -2.4);
+  // Placed where a lure on the bottom has it in view, half sunk in the silt
+  pokal.position.set(1.9, bedH(1.9, -1.4) - 0.12, -1.4);
   pokal.rotation.set(0.5, 0, -0.9);
   pokal.scale.setScalar(1.25);
   g.add(pokal);

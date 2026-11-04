@@ -187,21 +187,23 @@ function barcelonaTexture() {
   const [cv, ctx] = canvas(w, h);
   const rand = mulberry(9);
   const sky = ctx.createLinearGradient(0, 0, 0, h);
-  sky.addColorStop(0, '#f3b77a');
-  sky.addColorStop(0.42, '#ffcf8f');
-  sky.addColorStop(0.66, '#ffb06a');
-  sky.addColorStop(1, '#e58450');
+  // A deep sunset rather than a white-out, so the skyline reads against it
+  sky.addColorStop(0, '#b8685a');
+  sky.addColorStop(0.3, '#e08a62');
+  sky.addColorStop(0.55, '#f7a964');
+  sky.addColorStop(0.7, '#ffb868');
+  sky.addColorStop(1, '#e07a48');
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, w, h);
 
   // The low sun, a big soft bloom around a hot core
   const sx = w * 0.58;
   const sy = h * 0.6;
-  let g = ctx.createRadialGradient(sx, sy, 2, sx, sy, 230);
+  let g = ctx.createRadialGradient(sx, sy, 2, sx, sy, 200);
   g.addColorStop(0, 'rgba(255,250,232,1)');
-  g.addColorStop(0.08, 'rgba(255,240,200,0.95)');
-  g.addColorStop(0.35, 'rgba(255,214,150,0.35)');
-  g.addColorStop(1, 'rgba(255,200,140,0)');
+  g.addColorStop(0.07, 'rgba(255,236,190,0.95)');
+  g.addColorStop(0.3, 'rgba(255,200,130,0.32)');
+  g.addColorStop(1, 'rgba(255,190,120,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
 
@@ -695,19 +697,28 @@ function buildKiln(metal) {
   [-0.62, 0.62].forEach((x) => [-0.52, 0.52].forEach((z) => {
     steel.add(new THREE.BoxGeometry(0.07, 0.35, 0.07), 0x2b2a2e, [x, 0.175, z]);
   }));
-  steel.add(new THREE.BoxGeometry(0.3, 1.6, 1.4), 0x46454b, [-0.6, 1.15, 0]);
-  steel.add(new THREE.BoxGeometry(0.3, 1.6, 1.4), 0x46454b, [0.6, 1.15, 0]);
-  steel.add(new THREE.BoxGeometry(0.9, 0.28, 1.4), 0x46454b, [0, 1.81, 0]);
-  steel.add(new THREE.BoxGeometry(0.9, 0.27, 1.4), 0x46454b, [0, 0.485, 0]);
-  steel.add(new THREE.BoxGeometry(0.9, 1.05, 0.2), 0x46454b, [0, 1.15, -0.6]);
+  steel.add(new THREE.BoxGeometry(0.3, 1.6, 1.4), 0x77767c, [-0.6, 1.15, 0]);
+  steel.add(new THREE.BoxGeometry(0.3, 1.6, 1.4), 0x77767c, [0.6, 1.15, 0]);
+  steel.add(new THREE.BoxGeometry(0.9, 0.28, 1.4), 0x77767c, [0, 1.81, 0]);
+  steel.add(new THREE.BoxGeometry(0.9, 0.27, 1.4), 0x77767c, [0, 0.485, 0]);
+  steel.add(new THREE.BoxGeometry(0.9, 1.05, 0.2), 0x77767c, [0, 1.15, -0.6]);
   [0.52, 1.15, 1.78].forEach((y) => {
-    steel.add(new THREE.BoxGeometry(1.55, 0.05, 1.45), 0x6a6970, [0, y, 0]);
+    steel.add(new THREE.BoxGeometry(1.55, 0.05, 1.45), 0xa3a2a8, [0, y, 0]);
   });
   // Flue pipe and hood
   steel.add(new THREE.CylinderGeometry(0.09, 0.09, 1.5, 10), 0x3a393e, [0.3, 2.7, -0.3]);
   steel.add(new THREE.CylinderGeometry(0.16, 0.2, 0.14, 10), 0x55545a, [0.3, 2.0, -0.3]);
-  // Controller box on the right pillar
+  // Controller box on the right pillar, and its armoured cable to the wall
   steel.add(new THREE.BoxGeometry(0.3, 0.42, 0.08), 0x1e1d22, [0.6, 1.45, 0.73]);
+  steel.add(new THREE.CylinderGeometry(0.025, 0.025, 1.3, 6), 0x2a2a2e, [0.78, 0.9, 0.2], [0.6, 0, 0.12]);
+  // Bolts along the bands, and a peephole plug in each side
+  [-0.74, 0.74].forEach((x) => [0.84, 1.47].forEach((y) => [-0.45, 0, 0.45].forEach((z) => {
+    steel.add(new THREE.SphereGeometry(0.022, 6, 4), 0xc8c7cc, [x + Math.sign(x) * 0.02, y, z]);
+  })));
+  [-0.76, 0.76].forEach((x) => steel.add(new THREE.CylinderGeometry(0.05, 0.05, 0.06, 8), 0xd9d2c4, [x, 1.4, -0.2], [0, 0, Math.PI / 2]));
+  // A hand-painted warning plate on the right pillar: HOT
+  steel.add(new THREE.BoxGeometry(0.17, 0.13, 0.012), 0xe2b72e, [0.655, 0.95, 0.718]);
+  steel.add(new THREE.BoxGeometry(0.12, 0.03, 0.012), 0x2a2420, [0.655, 0.95, 0.729]);
   const body = steel.mesh(metal);
   body.castShadow = true;
   body.receiveShadow = true;
@@ -731,7 +742,7 @@ function buildKiln(metal) {
   const hinge = new THREE.Group();
   hinge.position.set(0.54, 1.15, 0.72);
   const db = new Batch();
-  db.add(new THREE.BoxGeometry(1.04, 1.18, 0.13), 0x4f4e55, [-0.52, 0, 0]);
+  db.add(new THREE.BoxGeometry(1.04, 1.18, 0.13), 0x85848a, [-0.52, 0, 0]);
   db.add(new THREE.BoxGeometry(0.9, 1.02, 0.03), 0x9c8467, [-0.52, 0, -0.075]);
   db.add(new THREE.CylinderGeometry(0.025, 0.025, 0.32, 6), 0x9a9aa2, [-0.95, 0, 0.12]);
   db.add(new THREE.BoxGeometry(0.04, 0.04, 0.1), 0x9a9aa2, [-0.95, 0.13, 0.08]);
@@ -801,7 +812,8 @@ export function buildStudio() {
   /* Barcelona outside, behind the hole */
   const outside = new THREE.Mesh(
     new THREE.PlaneGeometry(4.6, 5.0),
-    new THREE.MeshBasicMaterial({ map: barcelonaTexture(), color: new THREE.Color(1.6, 1.45, 1.3), fog: false })
+    // Bright enough to read as the light source, not so bright that the skyline burns out
+    new THREE.MeshBasicMaterial({ map: barcelonaTexture(), color: new THREE.Color(1.25, 1.14, 1.04), fog: false })
   );
   outside.position.set(WIN.x + 0.2, 3.3, -6.6);
   g.add(outside);
@@ -810,7 +822,8 @@ export function buildStudio() {
   /* Contact shadows under the furniture: [x, z, width, depth, turn] */
   g.add(contactShadows([
     [0, 0, 2.9, 2.9], [4.5, -2.6, 2.3, 2.1, -0.55], [2.55, -0.75, 1.2, 1.2], [-4.6, -1.9, 2.6, 1.6, 0.35],
-    [-7.3, -2.6, 3.6, 1.3, 1.1], [6.6, -4.4, 3.6, 1.2, -0.38], [-1.75, 1.0, 0.75, 0.75], [-1.7, -4.9, 2.0, 0.9]
+    [-7.3, -2.6, 3.6, 1.3, 1.1], [6.6, -4.4, 3.6, 1.2, -0.38], [-1.75, 1.0, 0.75, 0.75], [-1.7, -4.9, 2.0, 0.9],
+    [3.12, -4.95, 2.5, 0.75], [-6.1, -4.7, 0.95, 0.95], [5.75, -1.25, 1.0, 0.9, 0.3], [-0.62, -4.88, 1.1, 0.85]
   ]));
 
   /* Shelves with fired pots, framing the room */
@@ -843,6 +856,65 @@ export function buildStudio() {
   steel.add(new THREE.CylinderGeometry(0.24, 0.19, 0.38, 14, 1, true), 0x5c6670, [-1.75, 0.19, 1.0]);
   steel.add(new THREE.CircleGeometry(0.19, 14), 0x5c6670, [-1.75, 0.005, 1.0], [-Math.PI / 2, 0, 0]);
   glossy.add(new THREE.CircleGeometry(0.22, 14), 0x6e5a40, [-1.75, 0.3, 1.0], [-Math.PI / 2, 0, 0]);
+
+  /*
+   * The evening's story in the corners (all merged into the batches above,
+   * so none of it costs a draw call):
+   *  - a ware board on a bracket over the clay bags: this afternoon's pots
+   *    drying, leather-hard (darker, matte) to bone-dry (pale)
+   *  - bisque pots waiting for glaze on the floor by the bags
+   *  - the four glaze buckets of the game by the kiln, lids off, drips
+   *    down their sides, a dipping ladle hooked over one
+   *  - kiln furniture stacked beside the kiln: shelves and posts
+   *  - a potted olive by the window, as in every Barcelona courtyard
+   */
+  wood.add(new THREE.BoxGeometry(2.1, 0.06, 0.38), 0x7b5634, [-1.6, 1.95, -5.28]);
+  [-2.45, -0.75].forEach((bx) => wood.add(new THREE.BoxGeometry(0.05, 0.22, 0.3), 0x4a2e1c, [bx, 1.83, -5.34]));
+  const potRand = mulberry(77);
+  [[-2.4, 0.42, 0x9a6444], [-2.0, 0.34, 0x9e6a48], [-1.62, 0.5, 0xa7765a], [-1.2, 0.3, 0xc39c80], [-0.85, 0.38, 0xd5b9a0]].forEach(([px, h, c]) => {
+    const lathe = new THREE.LatheGeometry(potProfile(potRand, potRand() < 0.3 ? 'bowl' : 'pot'), 14);
+    lathe.scale(h, h, h);
+    wood.add(lathe, c, [px, 1.98, -5.28]);
+  });
+  [[-0.7, -4.95, 0.42], [-0.3, -5.05, 0.36], [-0.95, -4.6, 0.3]].forEach(([px, pz, h]) => {
+    const lathe = new THREE.LatheGeometry(potProfile(potRand, 'pot'), 14);
+    lathe.scale(h, h, h);
+    wood.add(lathe, 0xe3b392, [px, 0, pz]);
+  });
+  const GLAZE_BUCKETS = [[0xd89a2c, 2.3], [0x163f8e, 2.85], [0x86b496, 3.4], [0xe0ac3c, 3.95]];
+  GLAZE_BUCKETS.forEach(([gc, bx], i) => {
+    const bz = -5.0 + (i % 2) * 0.12;
+    steel.add(new THREE.CylinderGeometry(0.21, 0.18, 0.42, 14, 1, true), 0xd9d6cf, [bx, 0.21, bz]);
+    steel.add(new THREE.CircleGeometry(0.18, 14), 0xd9d6cf, [bx, 0.005, bz], [-Math.PI / 2, 0, 0]);
+    glossy.add(new THREE.CircleGeometry(0.2, 14), gc, [bx, 0.39, bz], [-Math.PI / 2, 0, 0]);
+    // drips down the front of the bucket, each a thin tapering streak
+    for (let d = 0; d < 3; d++) {
+      const a = -0.5 + d * 0.5 + (i % 3) * 0.1;
+      const len = 0.08 + ((i * 3 + d) % 4) * 0.05;
+      glossy.add(new THREE.CapsuleGeometry(0.012, len, 2, 5), gc,
+        [bx + Math.sin(a) * 0.212, 0.42 - len / 2 - 0.01, bz + Math.cos(a) * 0.212]);
+    }
+  });
+  steel.add(new THREE.CylinderGeometry(0.012, 0.012, 0.62, 5), 0x8a8a90, [2.85, 0.55, -4.78], [0.35, 0, 0]);
+  steel.add(new THREE.SphereGeometry(0.07, 8, 6, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), 0x8a8a90, [2.85, 0.26, -4.68]);
+  for (let k = 0; k < 5; k++) {
+    wood.add(new THREE.BoxGeometry(0.62, 0.03, 0.5), 0xd8cfc0, [5.75, 0.05 + k * 0.035, -1.35], [0, 0.2 + k * 0.07, 0]);
+  }
+  [[5.55, -1.0], [5.75, -0.95], [5.95, -1.02]].forEach(([px, pz], k) => {
+    wood.add(new THREE.CylinderGeometry(0.035, 0.035, 0.12 + k * 0.05, 6), 0xcfc6b6, [px, 0.24 + (0.12 + k * 0.05) / 2, pz]);
+  });
+  const olive = new THREE.LatheGeometry([
+    new THREE.Vector2(0.18, 0), new THREE.Vector2(0.24, 0.05), new THREE.Vector2(0.3, 0.48), new THREE.Vector2(0.34, 0.52), new THREE.Vector2(0.33, 0.56)
+  ], 16);
+  wood.add(olive, 0xa8573a, [-6.1, 0, -4.7]);
+  wood.add(new THREE.CylinderGeometry(0.028, 0.04, 1.0, 6), 0x5a4632, [-6.1, 1.0, -4.7], [0.05, 0, -0.08]);
+  const leafRand = mulberry(31);
+  for (let k = 0; k < 9; k++) {
+    const a = leafRand() * Math.PI * 2;
+    const rr = 0.12 + leafRand() * 0.3;
+    wood.add(new THREE.SphereGeometry(0.2 + leafRand() * 0.12, 8, 6), leafRand() < 0.5 ? 0x5b6b3c : 0x6f7d4a,
+      [-6.1 + Math.cos(a) * rr - 0.04, 1.45 + leafRand() * 0.45, -4.7 + Math.sin(a) * rr * 0.7], [0, a, 0], [1.3, 0.7, 1]);
+  }
 
   /* The reveal stand: a stool with a banding wheel, by the kiln */
   const reveal = new THREE.Vector3(2.55, 1.05, -0.75);
@@ -1065,7 +1137,7 @@ export function buildHand() {
   const nail = new THREE.Color(0xe8c0a8);
   const linen = new THREE.Color(0xd9ccb2);
   const linenShade = new THREE.Color(0xc4b496);
-  const slip = new THREE.Color(0x83492b);
+  const slip = new THREE.Color(0x8f5432);
   const V = (x, y, z) => new THREE.Vector3(x, y, z);
   // [knuckle y, knuckle x, segment lengths, radius, curl per joint]. With the
   // back of a right hand to us and the fingers pointing left, the thumb is
@@ -1167,7 +1239,7 @@ export function buildHand() {
     if (x > 0.75) continue; // the sleeve stays clean
     c.setRGB(col.getX(i), col.getY(i), col.getZ(i));
     const isNail = c.r > 0.85 && c.g > 0.5;
-    c.lerp(slip, Math.min(isNail ? 0.5 : 0.88, k * 0.95));
+    c.lerp(slip, Math.min(isNail ? 0.45 : 0.8, k * 0.9));
     col.setXYZ(i, c.r, c.g, c.b);
   }
   // The middle finger's pad sits on the origin

@@ -220,7 +220,7 @@ function stoneTexture(THREE) {
   cv.width = N;
   cv.height = N;
   const g = cv.getContext('2d');
-  g.fillStyle = '#4a4a4e';
+  g.fillStyle = '#5c5a58';
   g.fillRect(0, 0, N, N);
   let seed = 11;
   const rnd = () => {
@@ -235,11 +235,11 @@ function stoneTexture(THREE) {
     const off = r % 2 ? cw / 2 : 0;
     for (let c = -1; c <= cols; c++) {
       const x = c * cw + off;
-      const v = 168 + Math.round(rnd() * 60);
-      g.fillStyle = `rgb(${v},${v},${v + 4})`;
+      const v = 150 + Math.round(rnd() * 46);
+      g.fillStyle = `rgb(${v + 6},${v},${v - 8})`;
       g.fillRect(x + 1.5, r * rh + 1.5, cw - 3, rh - 3);
       // A lit top edge and a shaded bottom: the blocks stand proud of the mortar
-      g.fillStyle = 'rgba(255,255,255,0.16)';
+      g.fillStyle = 'rgba(255,255,255,0.12)';
       g.fillRect(x + 1.5, r * rh + 1.5, cw - 3, 2);
       g.fillStyle = 'rgba(0,0,0,0.22)';
       g.fillRect(x + 1.5, r * rh + rh - 3.5, cw - 3, 2);
@@ -409,13 +409,13 @@ export function createMaterials(THREE, playfieldTexture) {
     // Dressed stone: the block map is grey, the colour tints it (a cool
     // moonlit limestone, darker for the corbels and merlons)
     stone: new THREE.MeshStandardMaterial({
-      color: 0xb4bbd2,
+      color: 0xa3a6b8,
       roughness: 0.84,
       metalness: 0.05,
       envMapIntensity: 0.25
     }),
     stoneDark: new THREE.MeshStandardMaterial({
-      color: 0x7a83a3,
+      color: 0x737a96,
       roughness: 0.86,
       metalness: 0.05,
       envMapIntensity: 0.2
@@ -543,6 +543,26 @@ export function createMaterials(THREE, playfieldTexture) {
     })
   };
   [m.chrome, m.rail, m.armour].forEach((mat) => tameGlints(mat));
+  // The GI lamps mirrored in the clearcoat were blowing out to white discs
+  // with a bloom halo. Capped (hue kept), they still read as bulbs in a
+  // glossy coat but no longer bleach the print under them.
+  m.playfield.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <lights_fragment_end>',
+      `#include <lights_fragment_end>
+      #ifdef USE_CLEARCOAT
+      {
+        float pc = max(max(clearcoatSpecularDirect.r, clearcoatSpecularDirect.g), clearcoatSpecularDirect.b);
+        clearcoatSpecularDirect *= min(1.0, 1.5 / max(pc, 1e-4));
+      }
+      #endif
+      {
+        float pd = max(max(reflectedLight.directSpecular.r, reflectedLight.directSpecular.g), reflectedLight.directSpecular.b);
+        reflectedLight.directSpecular *= min(1.0, 1.5 / max(pd, 1e-4));
+      }`
+    );
+  };
+  m.playfield.customProgramCacheKey = () => 'pb-playfield-coat';
   const stone = stoneTexture(THREE);
   [m.stone, m.stoneDark].forEach((mat) => {
     mat.map = stone;
@@ -1365,11 +1385,11 @@ function plasticsTexture(THREE, pieces) {
     g.clip(path);
     const bg = g.createLinearGradient(bx0, by0, bx1, by1);
     if (isSling) {
-      bg.addColorStop(0, '#2b3aa8');
-      bg.addColorStop(1, '#141a5e');
+      bg.addColorStop(0, '#4560ea');
+      bg.addColorStop(1, '#1d278a');
     } else {
-      bg.addColorStop(0, '#b01d3a');
-      bg.addColorStop(1, '#5e0c1f');
+      bg.addColorStop(0, '#d92c4c');
+      bg.addColorStop(1, '#721126');
     }
     g.fillStyle = bg;
     g.fillRect(bx0, by0, bx1 - bx0, by1 - by0);
@@ -1494,8 +1514,8 @@ function buildFlashers(THREE, materials) {
     { id: 'left', x: -10.15, y: 22.6, color: 0xff3b4e },
     { id: 'right', x: 6.6, y: 21.2, color: 0xffb02e }
   ].map((f) => {
-    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.5, 0.16, 16), materials.rubber);
-    base.position.set(f.x, L.wallH + 0.08, -f.y);
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.56, 0.6, 0.18, 16), materials.rubber);
+    base.position.set(f.x, L.wallH + 0.11, -f.y);
     group.add(base);
     const mat = new THREE.MeshStandardMaterial({
       color: f.color,
@@ -1507,8 +1527,8 @@ function buildFlashers(THREE, materials) {
       emissiveIntensity: 0.18,
       envMapIntensity: 1.2
     });
-    const dome = new THREE.Mesh(new THREE.SphereGeometry(0.42, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), mat);
-    dome.position.set(f.x, L.wallH + 0.16, -f.y);
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(0.52, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), mat);
+    dome.position.set(f.x, L.wallH + 0.2, -f.y);
     dome.scale.y = 1.25;
     dome.renderOrder = 3;
     dome.userData.keep = true;
@@ -1532,9 +1552,9 @@ function buildFlashers(THREE, materials) {
 const LAMP_DEFS = [
   // Grenar, a row over the flippers, left to right in the order they come
   ...["'12", "'13", "'19", "'22", "'24"].map((label, i) => ({
-    id: `gren${i}`, x: -3.3 + i * 0.84, y: 10.55, r: 0.34, color: 0x7c8cf8, label
+    id: `gren${i}`, x: -3.3 + i * 0.84, y: 10.3, r: 0.33, color: 0x7c8cf8, label
   })),
-  { id: 'gren5', x: -3.3 + 5 * 0.84, y: 10.55, r: 0.34, color: 0xffd166, label: 'crown' },
+  { id: 'gren5', x: -3.3 + 5 * 0.84, y: 10.3, r: 0.33, color: 0xffd166, label: 'crown' },
   // The letters, just in front of each drop target
   ...L.targets.map((t, i) => ({
     id: `pokal${i}`, x: t.x + Math.sin(t.a) * 1.05, y: t.y - Math.cos(t.a) * 1.05, r: 0.36, color: 0xf26d8d, label: t.letter
@@ -1545,7 +1565,7 @@ const LAMP_DEFS = [
   // Bonus multipliers: a second row under the grenar, clear of the
   // raised flippers
   ...[2, 3, 4, 5, 6].map((n, i) => ({
-    id: `bx${n}`, x: L.centerX + (i - 2) * 0.84, y: 9.55, r: 0.27, color: 0xffb347, label: `${n}×`
+    id: `bx${n}`, x: L.centerX + (i - 2) * 0.84, y: 9.38, r: 0.27, color: 0xffb347, label: `${n}×`
   })),
   { id: 'kickback', x: -8.05, y: 11.75, r: 0.3, color: 0xf2c14e, label: 'K' },
   { id: 'inL', x: -6.15, y: 11.55, r: 0.26, color: 0x5eead4, label: '' },
@@ -1709,7 +1729,7 @@ function buildLamps(THREE, materials, mergeGeometries) {
         const c = tint[i] || base[i];
         // Unlit: the dark tinted plastic. Lit: a bright lens, peak kept
         // just under the bloom threshold.
-        tmp.copy(c).multiplyScalar(0.16 + cur * 0.95);
+        tmp.copy(c).multiplyScalar(0.24 + cur * 0.9);
         tmp.r += cur * 0.12;
         tmp.g += cur * 0.12;
         tmp.b += cur * 0.12;
@@ -1946,9 +1966,31 @@ export function buildTable(THREE, mergeGeometries, materials) {
     const g = new THREE.Group();
     g.position.set(t.x, 0, -t.y);
     g.rotation.y = t.a;
+    // The decal: each target wears its letter, printed dark on a light
+    // face so the game's colour (lit pink, dropped slate) tints the plastic
+    // and the letter stays legible either way
+    const cv = document.createElement('canvas');
+    cv.width = 128;
+    cv.height = 128;
+    const dg = cv.getContext('2d');
+    dg.fillStyle = '#ffffff';
+    dg.fillRect(0, 0, 128, 128);
+    dg.fillStyle = '#cfcfcf';
+    dg.fillRect(0, 0, 128, 12);
+    dg.fillRect(0, 116, 128, 12);
+    dg.fillStyle = '#2a0b16';
+    dg.font = '900 84px "Schibsted Grotesk", Inter, Arial, sans-serif';
+    dg.textAlign = 'center';
+    dg.textBaseline = 'middle';
+    dg.fillText(t.letter, 64, 70);
+    const decal = new THREE.CanvasTexture(cv);
+    decal.colorSpace = THREE.SRGBColorSpace;
+    const tmat = materials.targetUp.clone();
+    tmat.map = decal;
+    tmat.emissiveMap = decal;
     const face = new THREE.Mesh(
       new THREE.BoxGeometry(t.half * 2, 1.15, 0.42),
-      materials.targetUp.clone()
+      tmat
     );
     face.position.y = 0.58;
     face.castShadow = true;
@@ -2016,6 +2058,20 @@ export function buildTable(THREE, mergeGeometries, materials) {
     arch.userData.keep = true;
     group.add(arch);
     refs.rampArches[side] = arch;
+
+    // The entrance flap: a steel lip from the wood up to where the wires
+    // start, so a captured ball is seen to roll on rather than jump
+    const flat = new THREE.Vector3(tan.x, 0, tan.z).normalize();
+    const run = 0.75;
+    const rise = Math.max(0.05, p0.y - 0.08);
+    const flap = new THREE.Group();
+    flap.position.set(p0.x - flat.x * run * 0.5, rise * 0.5 + 0.01, p0.z - flat.z * run * 0.5);
+    flap.rotation.order = 'YXZ';
+    flap.rotation.y = Math.atan2(flat.x, flat.z);
+    flap.rotation.x = -Math.atan2(rise, run);
+    const lip = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.035, Math.hypot(run, rise) + 0.06), materials.chrome);
+    flap.add(lip);
+    group.add(flap);
   });
 
   /* ---- Apron: the angled plate over the drain ---- */
@@ -2086,12 +2142,43 @@ export function buildTable(THREE, mergeGeometries, materials) {
       [1, 'rgba(255,255,255,0)']
     ]);
     const poolGeo = flatten(new THREE.PlaneGeometry(1, 1));
+    // The lens: a frosted insert is brightest where the bulb sits under it
+    // and falls off toward its edge, with a thin bright rim where the light
+    // escapes the cut — the difference between a lit plastic and a sticker.
+    const lensCanvas = document.createElement('canvas');
+    lensCanvas.width = 128;
+    lensCanvas.height = 128;
+    {
+      const lg = lensCanvas.getContext('2d');
+      const grad = lg.createRadialGradient(64, 60, 4, 64, 64, 70);
+      grad.addColorStop(0, '#ffffff');
+      grad.addColorStop(0.5, '#cfcfcf');
+      grad.addColorStop(0.82, '#707070');
+      grad.addColorStop(0.9, '#bdbdbd');
+      grad.addColorStop(1, '#4a4a4a');
+      lg.fillStyle = grad;
+      lg.fillRect(0, 0, 128, 128);
+    }
+    const lensFor = (disc) => {
+      const t = new THREE.CanvasTexture(lensCanvas);
+      t.colorSpace = THREE.SRGBColorSpace;
+      if (!disc) {
+        // Arrow caps carry shape coordinates: x −0.72…0.72, y −0.5…0.86
+        t.repeat.set(1 / 1.44, 1 / 1.36);
+        t.offset.set(0.5, 0.5 / 1.36);
+      }
+      return t;
+    };
+    const arrowLens = lensFor(false);
+    const discLens = lensFor(true);
     refs.inserts = {};
     SPOTS.forEach((s) => {
       const mat = materials.insert.clone();
       mat.color = new THREE.Color(s.color);
       mat.emissive = new THREE.Color(s.color);
       mat.emissiveIntensity = 0.12;
+      mat.emissiveMap = s.disc ? discLens : arrowLens;
+      mat.map = s.disc ? discLens : arrowLens;
 
       const bezel = new THREE.Mesh(s.disc ? bezelDisc : bezelGeo, materials.bezel);
       bezel.position.set(s.x, 0.016, -s.y);

@@ -15,6 +15,7 @@
 
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { mulberry } from './range.js';
 
 /** Walnut: warm base, dark wavy grain, a few figure flecks. */
@@ -202,6 +203,77 @@ export function buildShotgun({ envMap, glow, star }) {
   pad.rotation.x = 0.12;
   g.add(pad);
 
+  /* The shooter's hands: gloved, in an olive shooting-jacket sleeve. The
+     left hand cradles the forend from below — thumb along the near side,
+     fingers curled up over the far side — and the right hand wraps the
+     grip with the index finger along the guard. Two merged meshes (glove,
+     sleeve), built in the gun's own units so they recoil with it. */
+  const gloveParts = [];
+  const sleeveParts = [];
+  const up = new THREE.Vector3(0, 1, 0);
+  const seg = (list, a, b, r0, r1 = r0, sides = 8) => {
+    const A = new THREE.Vector3(...a);
+    const B = new THREE.Vector3(...b);
+    const dir = new THREE.Vector3().subVectors(B, A);
+    const len = dir.length();
+    const geo = new THREE.CylinderGeometry(r1, r0, len, sides, 1);
+    geo.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(up, dir.normalize()));
+    geo.translate((A.x + B.x) / 2, (A.y + B.y) / 2, (A.z + B.z) / 2);
+    list.push(geo);
+    // Rounded ends so joints read as knuckles, not pipe cuts
+    [[A, r0], [B, r1]].forEach(([p, r]) => {
+      const cap = new THREE.SphereGeometry(r, sides, 5);
+      cap.translate(p.x, p.y, p.z);
+      list.push(cap);
+    });
+  };
+  const blob = (list, size, at, rot = [0, 0, 0]) => {
+    const geo = new RoundedBoxGeometry(size[0], size[1], size[2], 2, Math.min(...size) * 0.45);
+    geo.rotateX(rot[0]);
+    geo.rotateY(rot[1]);
+    geo.rotateZ(rot[2]);
+    geo.translate(at[0], at[1], at[2]);
+    list.push(geo);
+  };
+  // Left hand under the forend (forend: centre y −0.042, radius ~0.052, z −0.58…−0.22)
+  blob(gloveParts, [0.1, 0.05, 0.16], [-0.012, -0.1, -0.4], [0, 0, 0.32]);
+  [-0.462, -0.427, -0.392, -0.357].forEach((z, i) => {
+    const r = i === 3 ? 0.0115 : 0.0135;
+    seg(gloveParts, [0.032, -0.108, z], [0.07, -0.062, z + 0.004], r);
+    seg(gloveParts, [0.07, -0.062, z + 0.004], [0.066, -0.016, z + 0.006], r * 0.95);
+    seg(gloveParts, [0.066, -0.016, z + 0.006], [0.046, 0.006, z + 0.006], r * 0.85);
+  });
+  seg(gloveParts, [-0.05, -0.098, -0.345], [-0.066, -0.06, -0.4], 0.016);
+  seg(gloveParts, [-0.066, -0.06, -0.4], [-0.062, -0.034, -0.452], 0.014);
+  // Wrist and the left forearm, running back and down out of the frame
+  seg(gloveParts, [-0.02, -0.12, -0.33], [-0.04, -0.15, -0.27], 0.036, 0.038);
+  seg(sleeveParts, [-0.045, -0.155, -0.265], [-0.3, -0.5, 0.3], 0.05, 0.075, 10);
+  seg(sleeveParts, [-0.042, -0.152, -0.272], [-0.05, -0.164, -0.25], 0.056, 0.056, 10);
+  // Right hand round the grip (pistol grip ~ z 0.1…0.2, y −0.09…−0.13)
+  blob(gloveParts, [0.088, 0.1, 0.1], [0.0, -0.105, 0.145], [-0.5, 0, 0]);
+  seg(gloveParts, [0.03, -0.075, 0.1], [0.032, -0.07, 0.035], 0.012);
+  seg(gloveParts, [0.032, -0.07, 0.035], [0.008, -0.078, 0.022], 0.011);
+  seg(gloveParts, [-0.035, -0.06, 0.15], [-0.03, -0.045, 0.085], 0.015);
+  seg(gloveParts, [0.0, -0.15, 0.2], [0.02, -0.18, 0.26], 0.04);
+  seg(sleeveParts, [0.02, -0.18, 0.26], [0.25, -0.5, 0.75], 0.055, 0.08, 10);
+  const glove = new THREE.MeshStandardMaterial({
+    color: 0x8a5634, roughness: 0.62, metalness: 0, envMap, envMapIntensity: 0.5
+  });
+  const sleeve = new THREE.MeshStandardMaterial({ color: 0x46533a, roughness: 0.9, metalness: 0 });
+  const merge = (list) => {
+    const out = mergeGeometries(list.map((x) => {
+      const n = x.index ? x.toNonIndexed() : x;
+      if (n !== x) x.dispose();
+      n.deleteAttribute('uv');
+      return n;
+    }));
+    list.forEach((x) => x.dispose());
+    return out;
+  };
+  const gloveMesh = new THREE.Mesh(merge(gloveParts), glove);
+  const sleeveMesh = new THREE.Mesh(merge(sleeveParts), sleeve);
+  g.add(gloveMesh, sleeveMesh);
+
   /* Muzzle flash: glow + star petals + a real point light */
   const muzzle = new THREE.Object3D();
   muzzle.position.set(0, 0.028, -1.27);
@@ -226,11 +298,11 @@ export function buildShotgun({ envMap, glow, star }) {
   // on its own materials (setFlash). A real point light would do the same
   // but add a light to every shader in the scene for the whole game — and
   // toggling it with the gun's visibility would recompile them all.
-  const glowMats = [blued, silver, walnut];
+  const glowMats = [blued, silver, walnut, glove, sleeve];
   glowMats.forEach((m) => m.emissive.set(0xffa955));
   function setFlash(k) {
     glowMats.forEach((m) => {
-      m.emissiveIntensity = k * (m === walnut ? 0.5 : 0.9);
+      m.emissiveIntensity = k * (m === walnut || m === glove ? 0.5 : m === sleeve ? 0.3 : 0.9);
     });
   }
   setFlash(0);

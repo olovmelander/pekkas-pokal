@@ -341,11 +341,47 @@
 }
 
 @media (pointer: coarse) {
-  /* Big enough to stay visible around a fingertip */
+  /* The sight rides above the finger now (see touchOffset), so it only
+     needs to be big enough to read at a glance */
   .sk-ui .sk-cross {
-    width: 84px;
-    height: 84px;
+    width: 70px;
+    height: 70px;
   }
+}
+
+/* Where the finger is while it aims: a soft ring, and a thread up to the
+   sight so the offset reads as one tool, not two cursors */
+.sk-ui .sk-finger {
+  position: absolute;
+  width: 38px;
+  height: 38px;
+  margin: -19px 0 0 -19px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 246, 222, 0.45);
+  background: radial-gradient(circle, rgba(255, 246, 222, 0.16), rgba(255, 246, 222, 0) 70%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.sk-ui .sk-finger::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  width: 1.5px;
+  height: max(0px, calc(var(--lift, 0px) - 19px - 36px));
+  margin-left: -0.75px;
+  margin-bottom: 0;
+  background: linear-gradient(to top, rgba(255, 246, 222, 0.42), rgba(255, 246, 222, 0.08));
+}
+
+.sk-ui .sk-finger.show {
+  opacity: 1;
+}
+
+.sk-ui .sk-hud.reaction .sk-finger {
+  opacity: 0;
 }
 
 /* Lead feedback after a miss */

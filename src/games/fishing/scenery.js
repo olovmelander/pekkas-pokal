@@ -125,10 +125,18 @@ function makeRank(spec, lite) {
   const r = rng(spec.seed);
   if (spec.trees) {
     const lump = noise1(spec.seed + 9);
+    // Stands and clearings: a slow noise makes the forest taller in some
+    // stretches, lower and thinner in others, so the skyline never reads
+    // as a row of identical teeth
+    const stand = noise1(spec.seed + 4);
     let x = spec.x0 + r() * 2;
     while (x < spec.x1) {
       const t = spec.trees(x, r);
+      const k = fbm(stand, x * 0.035, 3);
+      if (t && k < 0.28 && r() < 0.6) t.H *= 0.55; // a clearing: scrub and young trees
       if (t) {
+        t.H *= 0.72 + k * 0.62;
+        t.W *= 0.85 + k * 0.3;
         const g = spec.ground(x);
         const i0 = Math.max(0, Math.floor((x - t.W - spec.x0) / step));
         const i1 = Math.min(n - 1, Math.ceil((x + t.W - spec.x0) / step));
@@ -720,7 +728,7 @@ export function buildShore({ sunDir, noise, timeU, lite = false }) {
       gap: (x, r) => 1.2 + r() * 1.6
     },
     {
-      name: 'far forest', z: -178, x0: -440, x1: 440, step: 0.32, base: 0, seed: 23, mistH: 5, glow: 0.7,
+      name: 'far forest', z: -178, x0: -440, x1: 440, step: 0.32, base: 0, seed: 23, mistH: 4, midMix: 0.18, glow: 0.7,
       top: 0x2a3550, mist: 0xc99c92, birchTint: 0x48604e,
       ground: (x) => 1.2 + 4.5 * smooth(0.3, 0.9, fbm(landN, x * 0.02 + 7, 3)),
       trees: (x, r) => {
@@ -730,7 +738,7 @@ export function buildShore({ sunDir, noise, timeU, lite = false }) {
       gap: (x, r) => 1.6 + r() * 2.4
     },
     {
-      name: 'near forest', z: -121, x0: -320, x1: 320, step: 0.2, base: -0.5, seed: 31, mistH: 3.2, midMix: 0.3, glow: 0.4,
+      name: 'near forest', z: -121, x0: -320, x1: 320, step: 0.2, base: -0.5, seed: 31, mistH: 2.6, midMix: 0.06, glow: 0.4,
       top: 0x131c26, mist: 0xae8a86, birchTint: 0x3a5440,
       ground: (x) => 0.5 + 2.2 * smooth(0.3, 0.9, fbm(landN, x * 0.03 + 21, 3)),
       trees: (x, r) => {
@@ -741,7 +749,7 @@ export function buildShore({ sunDir, noise, timeU, lite = false }) {
       gap: (x, r) => 1.7 + r() * 2.6
     },
     {
-      name: 'holme', z: -86, x0: -76, x1: -26, step: 0.15, base: -0.7, seed: 41, mistH: 1.6, midMix: 0.25, glow: 0.3,
+      name: 'holme', z: -86, x0: -76, x1: -26, step: 0.15, base: -0.7, seed: 41, mistH: 1.4, midMix: 0.05, glow: 0.3,
       top: 0x0f171c, mist: 0x9a8280,
       ground: (x) => {
         const k = 1 - ((x + 51) / 24) ** 2;

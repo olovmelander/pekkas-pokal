@@ -275,13 +275,18 @@ export function buildSky() {
   cv.width = 4;
   cv.height = 256;
   const ctx = cv.getContext('2d');
+  // The dome's equator is the canvas's middle row: everything below 0.5 is
+  // under the horizon and never seen, so the gradient's whole range — deep
+  // zenith blue to the warm haze the fog fades into — lives in the top half
   const g = ctx.createLinearGradient(0, 0, 0, 256);
-  g.addColorStop(0, '#2c67a6');
-  g.addColorStop(0.3, '#5e9bc9');
-  g.addColorStop(0.56, '#95c0dc');
-  g.addColorStop(0.76, '#c6d9de');
-  g.addColorStop(0.9, '#e6dfc9');
-  g.addColorStop(1, '#f0dcb4');
+  g.addColorStop(0, '#2a62a2');
+  g.addColorStop(0.16, '#4a88c0');
+  g.addColorStop(0.3, '#78acd4');
+  g.addColorStop(0.41, '#a7c9de');
+  g.addColorStop(0.47, '#cddcdc');
+  g.addColorStop(0.5, '#e4dfcc');
+  g.addColorStop(0.53, '#e8dcc0');
+  g.addColorStop(1, '#c9cfb4');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 4, 256);
   const tex = new THREE.CanvasTexture(cv);
@@ -315,8 +320,33 @@ function cloudTexture() {
     ctx.fillStyle = g;
     ctx.fillRect(x - r, y - r, r * 2, r * 2);
   }
-  const tex = new THREE.CanvasTexture(cv);
+  // A canvas stores fully transparent pixels as BLACK, and filtering drags
+  // that black into the cloud: at a distance, where a low mip is used, it
+  // became a grey veil the size of the billboard across the sky. So the
+  // invisible pixels get the cloud's own colour, and the pixels go up as
+  // data (a canvas upload would premultiply the colour away again). Rows are
+  // flipped by hand, so no driver has to flip a data upload.
+  const W = cv.width;
+  const H = cv.height;
+  const src = ctx.getImageData(0, 0, W, H).data;
+  const data = new Uint8Array(W * H * 4);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      const o = ((H - 1 - y) * W + x) * 4;
+      const a = src[i + 3];
+      data[o] = a ? src[i] : 226;
+      data[o + 1] = a ? src[i + 1] : 233;
+      data[o + 2] = a ? src[i + 2] : 241;
+      data[o + 3] = a;
+    }
+  }
+  const tex = new THREE.DataTexture(data, W, H);
   tex.colorSpace = THREE.SRGBColorSpace;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.generateMipmaps = true;
+  tex.needsUpdate = true;
   return tex;
 }
 
@@ -336,14 +366,23 @@ function canopyTexture() {
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, N, N);
   ctx.fillStyle = '#fff';
-  for (let i = 0; i < 520; i++) {
+  for (let i = 0; i < 460; i++) {
     const x = rand() * N;
     const y = rand() * N;
     // Dense on the left, broken toward the right-hand edge of the crown
-    if (rand() > 1.05 - x / N * 0.95) continue;
-    const r = 3 + rand() * 9;
+    if (rand() > 1.0 - (x / N) * 0.95) continue;
+    const r = 2.5 + rand() * 7.5;
     ctx.beginPath();
     ctx.ellipse(x, y, r, r * (0.5 + rand() * 0.5), rand() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Sunflecks: the gaps between leaves that make shade read as dappled
+  // light rather than as a dark patch on the lawn
+  ctx.fillStyle = '#000';
+  for (let i = 0; i < 300; i++) {
+    const r = 1 + rand() * 2.6;
+    ctx.beginPath();
+    ctx.ellipse(rand() * N, rand() * N, r, r * (0.6 + rand() * 0.4), rand() * Math.PI, 0, Math.PI * 2);
     ctx.fill();
   }
   const tex = new THREE.CanvasTexture(cv);
@@ -501,21 +540,85 @@ export function buildGarden({ lowTier = false } = {}) {
     refs.windy.push(hedge);
     group.add(hedge);
 
-    // A bed of summer flowers along the foot of the hedge
-    const flowers = [];
+    // A bed of summer flowers along the foot of the hedge: stems, open
+    // five-petal heads turned to the light, lupin spikes, and a band of
+    // leaves to stand them in. The heads ride the same wind as their stems
+    // (same phase, same oscillators), so a gust bends each flower whole.
+    const stems = [];
+    const heads = [];
     const cols = [0xc8414f, 0xe8b84e, 0xece6d6, 0x9c5aa6, 0xd8743f, 0x6a84c8, 0xc8414f, 0xece6d6];
     for (let i = 0; i < (lowTier ? 160 : 320); i++) {
+      // (Five draws from the shared stream, as before, so nothing after moves)
       const s = 0.045 + rand() * 0.04;
-      flowers.push({
-        pos: [-13 + rand() * 26, 0.06 + rand() * 0.34, -8.75 + rand() * 0.4],
-        scale: [s, s * 0.8, s],
-        color: cols[Math.floor(rand() * cols.length)]
-      });
+      const x = -13 + rand() * 26;
+      const h = 0.12 + rand() * 0.34;
+      const z = -8.75 + rand() * 0.4;
+      const color = cols[Math.floor(rand() * cols.length)];
+      stems.push({ pos: [x, 0, z], scale: [s, h, s], color: 0x3f6a2a });
+      heads.push({ pos: [x, h, z], scale: [s * 0.8, s * 0.8, s * 0.8], color });
     }
-    const bedMat = windify(lambert(0xffffff), wind, { amp: 0.6, base: -1, span: 2, freq: 1.4, key: 'bed' });
-    const bed = instanced(new THREE.SphereGeometry(1, 6, 4), flowers, bedMat);
-    refs.windy.push(bed);
-    group.add(bed);
+    const rf = mulberry(8128);
+    const spikes = [];
+    const lupins = [0x7b5aa8, 0xd77aa8, 0xeee8e0, 0x6a72c0, 0x9a62b8];
+    for (let i = 0; i < (lowTier ? 18 : 40); i++) {
+      const x = -12.5 + rf() * 25;
+      const z = -8.95 + rf() * 0.35;
+      const h = 0.3 + rf() * 0.25;
+      stems.push({ pos: [x, 0, z], scale: [0.07, h, 0.07], color: 0x3a6428 });
+      spikes.push({ pos: [x, h, z], scale: [0.042, 0.045 + rf() * 0.02, 0.042], color: lupins[Math.floor(rf() * lupins.length)] });
+    }
+    const leaves = [];
+    for (let x = -13.2; x <= 13.2; x += 0.42) {
+      const r = 0.16 + rf() * 0.1;
+      leaves.push({ pos: [x + (rf() - 0.5) * 0.2, r * 0.35, -8.8 + (rf() - 0.5) * 0.3], rot: [0, rf() * 3, 0], scale: [r * 1.4, r * 0.7, r], color: 0x2f5a26 + Math.floor(rf() * 3) * 0x030502 });
+    }
+    const wcfg = { base: 0, span: 1, freq: 1.4 };
+    const stemGeo = new THREE.CylinderGeometry(0.05, 0.08, 1, 4, 1, true);
+    stemGeo.translate(0, 0.5, 0);
+    const stemMesh = instanced(stemGeo, stems, windify(lambert(0xffffff), wind, { ...wcfg, amp: 0.55, key: 'stem' }));
+    // A head: a five-pointed petal disc round a domed centre, built flat
+    const petals = new THREE.CircleGeometry(1, 10);
+    const pp = petals.attributes.position;
+    for (let k = 1; k < pp.count; k++) {
+      const f = k % 2 ? 1 : 0.5;
+      pp.setXYZ(k, pp.getX(k) * f, pp.getY(k) * f, 0.12 * (1 - f));
+    }
+    petals.rotateX(-Math.PI / 2);
+    const disc = shadeByHeight(petals, -0.1, 0.1, 1, 1, 0.04);
+    const eye = new THREE.SphereGeometry(0.32, 6, 3, 0, Math.PI * 2, 0, Math.PI / 2);
+    eye.scale(1, 0.55, 1);
+    const ec = new Float32Array(eye.attributes.position.count * 3);
+    for (let k = 0; k < ec.length; k += 3) ec.set([1, 0.78, 0.3], k);
+    eye.setAttribute('color', new THREE.BufferAttribute(ec, 3));
+    const headGeo = mergeGeometries([disc.toNonIndexed(), eye.toNonIndexed()].map((g) => {
+      g.deleteAttribute('uv');
+      return g;
+    }));
+    headGeo.computeVertexNormals();
+    // Turned up and a little toward the lawn, where the light and the eye are
+    headGeo.rotateX(0.4);
+    // The head swings exactly as its stem's top does (the sway is in each
+    // instance's own units, so the amplitude is divided by the size ratio;
+    // no instance is rotated, or the sway would point another way)
+    const headMat = windify(lambert(0xffffff, { vertexColors: true, side: THREE.DoubleSide }), wind, { ...wcfg, base: -1e3, span: 1e-3, amp: 0.55 / 0.8, key: 'head' });
+    const headMesh = instanced(headGeo, heads, headMat);
+    // Lupin spikes: a lumpy cone of florets, paler toward the tip
+    const spikeGeo = new THREE.ConeGeometry(1, 4, 7, 6);
+    spikeGeo.translate(0, 2, 0);
+    const sp = spikeGeo.attributes.position;
+    for (let k = 0; k < sp.count; k++) {
+      const bump = 1 + 0.18 * Math.sin(sp.getY(k) * 9 + Math.atan2(sp.getZ(k), sp.getX(k)) * 3);
+      sp.setXYZ(k, sp.getX(k) * bump, sp.getY(k), sp.getZ(k) * bump);
+    }
+    spikeGeo.computeVertexNormals();
+    shadeByHeight(spikeGeo, 0, 4, 0.72, 1.15, 0.05);
+    const spikeMesh = instanced(spikeGeo, spikes, windify(lambert(0xffffff, { vertexColors: true }), wind, { ...wcfg, base: -1e3, span: 1e-3, amp: (0.55 * 0.07) / 0.042, key: 'spike' }));
+    const leafMesh = instanced(shadeByHeight(lumpy(1, 0.22, 11), -1, 1, 0.55, 1.15), leaves, windify(lambert(0xffffff, { vertexColors: true }), wind, { amp: 0.05, base: 0, span: 1, freq: 1.1, key: 'leaves' }));
+    [stemMesh, headMesh, spikeMesh, leafMesh].forEach((m) => {
+      m.receiveShadow = true;
+      refs.windy.push(m);
+      group.add(m);
+    });
   }
 
   /* The house — Terrassvägen 47: falu red with white knots, as it should be */
@@ -565,8 +668,92 @@ export function buildGarden({ lowTier = false } = {}) {
     const step = new THREE.Mesh(new THREE.BoxGeometry(2, 0.16, 0.9), lambert(0xb8b0a0));
     step.position.set(0, 0.08, 3.7);
     house.add(step);
+    // A stone plinth, white sills, a porch roof on two posts over the door
+    // and a plastered chimney: the details that make a box a Norrland house
+    const plinth = new THREE.Mesh(new THREE.BoxGeometry(10.24, 0.42, 6.74), lambert(0x8d8a82));
+    plinth.position.y = 0.2;
+    house.add(plinth);
+    [-3.4, -1.15, 1.15, 3.4].forEach((wx) => {
+      const sill = new THREE.Mesh(new THREE.BoxGeometry(1.34, 0.08, 0.22), lambert(0xf2efe6));
+      sill.position.set(wx, 1.29, 3.33);
+      house.add(sill);
+      const head = new THREE.Mesh(new THREE.BoxGeometry(1.34, 0.1, 0.16), lambert(0xf2efe6));
+      head.position.set(wx, 2.83, 3.3);
+      house.add(head);
+    });
+    const porch = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.1, 1.15), lambert(0x4a4348));
+    porch.position.set(0, 2.62, 3.82);
+    porch.rotation.x = 0.22;
+    house.add(porch);
+    [-0.85, 0.85].forEach((px) => {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.1, 2.5, 0.1), lambert(0xf2efe6));
+      post.position.set(px, 1.25, 4.25);
+      house.add(post);
+    });
+    const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.62, 1.7, 0.62), lambert(0xe6e1d6));
+    chimney.position.set(2.2, 5.2, -0.9);
+    house.add(chimney);
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.12, 0.76), lambert(0x3a3a3e));
+    cap.position.set(2.2, 6.1, -0.9);
+    house.add(cap);
     bake(house);
     group.add(house);
+  }
+
+  /* The flagpole, flying the long blue-and-yellow vimpel: a Swedish garden
+     on a summer Saturday. The pennant streams east with the clouds. */
+  {
+    const pole = new THREE.Group();
+    pole.position.set(1.6, 0, -13.4);
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.085, 9, 8), lambert(0xf2efe6));
+    shaft.position.y = 4.5;
+    pole.add(shaft);
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), lambert(0xd8b04a));
+    knob.position.y = 9.06;
+    pole.add(knob);
+    bake(pole);
+    group.add(pole);
+    const L = 4.4;
+    const geo = new THREE.PlaneGeometry(L, 0.44, 20, 2);
+    geo.translate(L / 2, 0, 0);
+    const p = geo.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const k = p.getX(i) / L;
+      // Tapering toward a forked tail
+      const fork = k > 0.86 ? Math.max(0, 1 - Math.abs(p.getY(i)) / 0.22) * (k - 0.86) * 2.2 : 0;
+      p.setX(i, p.getX(i) - fork * L * 0.18);
+      p.setY(i, p.getY(i) * (1 - 0.72 * k));
+    }
+    const cv = document.createElement('canvas');
+    cv.width = 128;
+    cv.height = 16;
+    const c2 = cv.getContext('2d');
+    c2.fillStyle = '#1e5aa6';
+    c2.fillRect(0, 0, 128, 16);
+    c2.fillStyle = '#f2c230';
+    c2.fillRect(0, 6, 128, 4);
+    c2.fillRect(9, 0, 4, 16);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const mat = lambert(0xffffff, { map: tex, side: THREE.DoubleSide });
+    const ph = phaseUniform(wind, [5.2, 2.3, 0]);
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.uVimPh = ph;
+      shader.uniforms.uGust = wind.uGust;
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nuniform vec3 uVimPh;\nuniform float uGust;')
+        .replace('#include <begin_vertex>', `#include <begin_vertex>
+          float vk = clamp(position.x / ${L.toFixed(2)}, 0.0, 1.0);
+          transformed.z += sin(uVimPh.x - position.x * 2.1) * 0.32 * vk * (0.6 + uGust * 0.6);
+          transformed.y += sin(uVimPh.y - position.x * 1.3) * 0.12 * vk - vk * vk * (0.9 - uGust * 0.7);`);
+    };
+    mat.customProgramCacheKey = () => 'pm-vimpel';
+    mat.userData.windy = true;
+    const vimpel = new THREE.Mesh(geo, mat);
+    vimpel.position.set(1.6, 8.75, -13.4);
+    vimpel.rotation.y = -0.35;
+    refs.windy.push(vimpel);
+    group.add(vimpel);
   }
 
   /* Three ranks of spruce, each paler than the last. Distance is sold with
@@ -1085,10 +1272,15 @@ export function buildBrush() {
  * of a subdivided quad — at this distance a 16×18 grid of soft colour
  * reads as paint, and it costs no texture.
  */
+export const FIELD_W = 0.6;
+export const FIELD_H = 0.65;
+export const FIELD_SCALE = 0.88;
 export function buildFieldEasels(list) {
   const field = new THREE.Group();
-  const W = 0.78;
-  const H = 0.6;
+  // Portrait, like the motifs: a Mona Lisa squeezed into a landscape board
+  // read as somebody painting a different picture
+  const W = FIELD_W;
+  const H = FIELD_H;
   list.forEach(({ x, z, ry, art }, i) => {
     const e = buildEasel(null, W, H);
     if (art) {
@@ -1102,7 +1294,7 @@ export function buildFieldEasels(list) {
     }
     e.position.set(x, 0, z);
     e.rotation.y = ry;
-    e.scale.setScalar(0.88);
+    e.scale.setScalar(FIELD_SCALE);
     field.add(e);
     // Per Vikman's brief: ten beers each. One is open at every easel.
     const side = i % 2 ? 1 : -1;

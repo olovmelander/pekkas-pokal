@@ -20,7 +20,7 @@
  */
 
 import * as THREE from 'three';
-import { createPerson, appearanceFor, POSES } from '../shared/people.js';
+import { createPerson, appearanceFor, POSES, WALK_STRIDE } from '../shared/people.js';
 
 /** Anundsjö IF red, and a trim per podium place. */
 const CLUB_RED = 0xa8202c;
@@ -115,8 +115,8 @@ const PADDLE_IN_HAND = new THREE.Quaternion().setFromRotationMatrix(
 /* A few millimetres toward the back of the hand, so the black rubber
    rests ON the extended index finger instead of floating beside it */
 const PADDLE_IN_HAND_POS = new THREE.Vector3(-0.0015, 0.004, 0);
-const PADDLE_IN_HAND_INV = PADDLE_IN_HAND.clone().invert();
 const BLADE_Y = 0.112; // blade centre above the grip (hall.js buildPaddle)
+const BLADE_R = 0.098;
 
 /* The open, flat palm the rules ask for: palm (hand −X) up, the fingers
    forward and a little in, the thumb out to the side */
@@ -128,6 +128,10 @@ const PALM_UP_L = (() => {
   const z = new THREE.Vector3().crossVectors(x, y);
   return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
 })();
+
+/* The walk-on at the intro card: in from his left, along the barrier, a
+   turn to face you, then into his stance */
+const WALK_IN = { dist: 1.7, dur: 1.45, turn: 0.35 };
 
 const smoothstep = (a, b, x) => {
   const k = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -152,10 +156,32 @@ export class Foe {
     this.root = p.root;
     this.s = p.scale;
     this.paddle = paddle;
-    const gripPos = PADDLE_IN_HAND_POS.clone().multiplyScalar(this.s);
-    p.attach(paddle, 'gripR', { quaternion: PADDLE_IN_HAND, position: gripPos });
+    if (typeof p.hold === 'function') {
+      // The shared shakehand grip: the fingers are solved closed around
+      // THIS handle and the index laid along THIS blade's back. Our bat
+      // follows its conventions (origin at the grip, +Y up the handle into
+      // the blade, +Z the red rubber); it is nudged so the blade sits where
+      // the grip expects a blade of this radius, and toward the palm by the
+      // half of the blade's thickness the grip's thinner one lacks.
+      p.hold(paddle, 'R', 'racket', {
+        handle: [0.034, 0.0245], blade: BLADE_R, blend: 0,
+        offset: { position: [0, 0.05 + BLADE_R * 0.92 - BLADE_Y, 0.0035] }
+      });
+      const anchor = p.sockets.holdR;
+      this.paddleInHand = anchor.quaternion.clone().multiply(paddle.quaternion);
+      this.bladeInHand = paddle.position.clone().applyQuaternion(anchor.quaternion).add(anchor.position);
+      this.holder = anchor;
+    } else {
+      const gripPos = PADDLE_IN_HAND_POS.clone().multiplyScalar(this.s);
+      p.attach(paddle, 'gripR', { quaternion: PADDLE_IN_HAND, position: gripPos });
+      this.paddleInHand = PADDLE_IN_HAND.clone();
+      this.bladeInHand = p.sockets.gripR.position.clone().add(gripPos);
+      this.holder = p.sockets.gripR;
+    }
     // Where the blade centre sits in the hand's frame
-    this.bladeInHand = p.sockets.gripR.position.clone().add(gripPos).add(new THREE.Vector3(0, BLADE_Y, 0).applyQuaternion(PADDLE_IN_HAND));
+    this.bladeInHand.add(new THREE.Vector3(0, BLADE_Y, 0).applyQuaternion(this.paddleInHand));
+    this.paddleInHandInv = this.paddleInHand.clone().invert();
+    this.leftShape = undefined;
     this.style = STYLE[opp.name] ?? STYLE.default;
 
     this.pose = POSES.ready(0);
@@ -167,6 +193,8 @@ export class Foe {
     }));
     this.planted = false;
     this.fresh = true;
+    this.split = 0;
+    this.wasReading = false;
     this.mode = '';
     this.react = { kind: '', t: 9, dur: 0, power: 0 };
     this.modeT = 0;
@@ -223,6 +251,20 @@ export class Foe {
     this.vx += (vx - this.vx) * Math.min(1, dt * 10);
     this.pos.set(v.x, 0, v.z);
     this.root.position.copy(this.pos);
+    // The walk-on: only while the card comes up, and only from a standstill
+    const walkT = v.mode === 'intro' ? (this.mode === 'intro' ? this.modeT + dt : 0) : 99;
+    const walking = walkT < WALK_IN.dur;
+    if (walking) {
+      const k = walkT / WALK_IN.dur;
+      const along = 1 - smoothstep(0, 1, k);
+      this.root.position.x += along * WALK_IN.dist;
+      // Facing the way he walks (world −x), turning to you at the end
+      this.root.rotation.y = -Math.PI / 2 * (1 - smoothstep(1 - WALK_IN.turn / WALK_IN.dur, 1, k));
+      this.walkPhase = (this.walkPhase || 0) + (dt * (6 * k * (1 - k) * WALK_IN.dist / WALK_IN.dur) / (WALK_STRIDE * this.s)) * Math.PI * 2;
+    } else if (this.root.rotation.y !== 0) {
+      this.root.rotation.y = 0;
+      this.planted = false;
+    }
     // A new stance (or a teleport) puts the feet down where the pose has them
     if (jump || this.mode !== v.mode) {
       this.planted = false;
@@ -237,13 +279,15 @@ export class Foe {
     const won = reacting === 'matchWon';
     const celebrate = v.mode === 'clap' || won;
     const patting = v.mode === 'clap' || reacting === 'matchLost';
-    if (won && st.won !== 'modest') POSES.cheer(t * (st.won === 'roar' ? 1.25 : 0.8), pose);
+    if (walking) POSES.walk(this.walkPhase, pose);
+    else if (won && st.won !== 'modest') POSES.cheer(t * (st.won === 'roar' ? 1.25 : 0.8), pose);
     else if (v.mode === 'menu') POSES.idle(t, pose);
     else POSES.ready(t, pose);
-    const play = (v.mode === 'play' || v.mode === 'intro') && !celebrate;
-    pose.gripR = 0.95; // the bat never leaves his hand…
+    const play = (v.mode === 'play' || v.mode === 'intro') && !celebrate && !walking;
+    pose.gripR = 0.95; // without the shared grip: the bat never leaves his hand…
     pose.pointR = 1; // …and the index finger lies straight along its back
     if (v.toss >= 0) pose.gripL = 0.04; // the ball rests on an OPEN palm
+    this.leftHand(this.leftShapeFor(v, reacting, won, patting, walking));
     const fhTarget = v.fh > 0 ? 1 : 0;
     this.fhW += (fhTarget - this.fhW) * Math.min(1, dt * 9);
     let reachLean = 0;
@@ -253,10 +297,20 @@ export class Foe {
       if (st.won === 'modest') pose.spine[0] -= 0.06 * env;
     }
     if (play) {
-      // Split-step: the knees keep a rhythm between shots (the feet are
-      // planted, so lowering the hips is what bends them)
+      // The knees keep a rhythm between shots (the feet are planted, so
+      // lowering the hips is what bends them)…
       const moving = Math.min(1, Math.abs(this.vx) / 1.2);
       pose.hipsPos[1] -= Math.abs(Math.sin(t * 4.4)) * (0.012 + moving * 0.012);
+      // …and a real split-step the moment you strike: a drop onto the balls
+      // of the feet, loaded to push off whichever way the ball comes
+      const reading = !!v.contact && v.toss < 0;
+      if (reading && !this.wasReading) this.split = 1;
+      this.wasReading = reading;
+      if (this.split > 0) {
+        this.split = Math.max(0, this.split - dt * 3.6);
+        pose.hipsPos[1] -= Math.sin(this.split * Math.PI) * 0.045;
+        pose.spine[0] += Math.sin(this.split * Math.PI) * 0.06;
+      }
       // The trunk turns with the stroke: away on the backswing, through
       // and past the ball on the follow-through
       const yaw = this.strokeYaw(v.stroke);
@@ -292,14 +346,20 @@ export class Foe {
     }
     p.setPose(pose, jump ? 1 : 1 - Math.exp(-dt * 18));
 
-    /* Feet: planted, and they step when the body has moved off them */
+    /* Feet: planted, and they step when the body has moved off them (the
+       walk-on's feet are the walk cycle's own) */
     this.root.updateMatrixWorld(true);
-    bones.footL.getWorldPosition(this._desired[0]);
-    bones.footR.getWorldPosition(this._desired[1]);
-    this.stepFeet(dt);
+    if (walking) this.planted = false;
+    else {
+      bones.footL.getWorldPosition(this._desired[0]);
+      bones.footR.getWorldPosition(this._desired[1]);
+      this.stepFeet(dt);
+    }
 
     /* The bat, and the free hand */
-    if (patting) {
+    if (walking) {
+      p.lookAt(v.look || null, smoothstep(0.4, 0.9, walkT / WALK_IN.dur) * 0.9);
+    } else if (patting) {
       // Sporting applause: the bat held up, the free hand patting its face
       this.patBat(t, reacting === 'matchLost' ? env : 1);
       p.lookAt(v.look || null, 0.9);
@@ -347,7 +407,7 @@ export class Foe {
     if (kind === 'point') {
       if (st.point === 'pump') {
         // Two hard pumps, each with a dip of the knees and a crunch forward
-        const beat = Math.max(0, Math.sin(Math.min(1, rt / 0.8) * Math.PI * 2));
+        const beat = rt < 0.72 ? Math.abs(Math.sin((rt / 0.36) * Math.PI)) : 0;
         pose.hipsPos[1] -= beat * 0.06 * env;
         pose.spine[0] += beat * 0.16 * env;
         pose.chest[1] -= 0.25 * env;
@@ -389,9 +449,9 @@ export class Foe {
     const p = this.person;
     const style = kind === 'point' ? st.point : st.lost;
     if (style === 'pump') {
-      // Fist from the hip to the shoulder, twice, snapping at the top
-      const k = Math.max(0, Math.sin(Math.min(1, rt / 0.8) * Math.PI * 2));
-      this.freeHand(0.24, 1.0 + k * 0.42, 0.22 + k * 0.08, env);
+      // "JA!": the fist cocked at the shoulder, yanked down to the hip — twice
+      const pull = rt < 0.72 ? Math.abs(Math.sin((rt / 0.36) * Math.PI)) : 0.45;
+      this.freeHand(0.25, 1.44 - pull * 0.34, 0.3 - pull * 0.1, env);
     } else if (style === 'finger') {
       // One finger up at shoulder height: "en till"
       const up = smoothstep(0, 0.3, rt);
@@ -423,6 +483,25 @@ export class Foe {
     return null;
   }
 
+  /** What the free hand is doing: a shape from the shared grip library, or null (the pose). */
+  leftShapeFor(v, reacting, won, patting, walking) {
+    if (walking) return null;
+    if (v.toss >= 0 || patting) return 'open';
+    if (won) return this.style.won === 'modest' ? 'fist' : 'open';
+    const style = reacting === 'point' ? this.style.point : reacting === 'lost' ? this.style.lost : '';
+    if (style === 'pump' || style === 'nod') return 'fist';
+    if (style === 'finger') return 'point';
+    if (style === 'slap' || style === 'wipe') return 'open';
+    if (style === 'brow') return 'relaxed';
+    return null;
+  }
+
+  leftHand(shape) {
+    if (shape === this.leftShape) return;
+    this.leftShape = shape;
+    if (typeof this.person.setGrip === 'function') this.person.setGrip('L', shape, { blend: 0.12 });
+  }
+
   /** The left hand to a point in his own frame, blended in by `env`. */
   freeHand(x, y, z, env, point = 0, grip = 1) {
     const p = this.person;
@@ -431,6 +510,7 @@ export class Foe {
     p.bones.handL.getWorldPosition(this._w);
     this._w.lerp(hand, env);
     p.ikArm('L', this._w, null);
+    if (typeof p.setGrip === 'function') return; // the grip library shapes the fingers
     // Fingers after the fact (the pose went in before the IK); the left
     // hand curls about −Z, as in people-rig's fingerRot
     const k = Math.min(1, env * 1.5);
@@ -448,7 +528,7 @@ export class Foe {
     const blade = this._fist;
     blade.set(-0.02 * s, 1.24 * s, 0.36 * s).add(this.pos);
     bladeQuat(PAT_O, false, this._q);
-    const hq = this._hq.copy(this._q).multiply(PADDLE_IN_HAND_INV);
+    const hq = this._hq.copy(this._q).multiply(this.paddleInHandInv);
     const wrist = this._w.copy(this.bladeInHand).applyQuaternion(hq);
     wrist.subVectors(blade, wrist);
     const pole = this._pole.set(-0.6, -0.6, -0.4).multiplyScalar(s);
@@ -531,7 +611,7 @@ export class Foe {
       q.copy(READY_Q);
     }
     // Hand orientation from the blade's, then the wrist from the blade centre
-    const hq = this._hq.copy(q).multiply(PADDLE_IN_HAND_INV);
+    const hq = this._hq.copy(q).multiply(this.paddleInHandInv);
     const wrist = this._w.copy(this.bladeInHand).applyQuaternion(hq);
     wrist.subVectors(blade, wrist);
     // Elbow: down and back on the forehand, out to the side on the backhand
@@ -560,7 +640,7 @@ export class Foe {
     if (!v.tossBall || !v.servePoint) return;
     // Where the ball sits: on the palm's centre, not in the wrist
     p.bones.handL.updateWorldMatrix(true, false);
-    const onPalm = this._w.set(-0.036 * s, -0.052 * s, 0.006 * s);
+    const onPalm = this._w.set(-0.036 * s, -0.046 * s, 0.006 * s);
     p.bones.handL.localToWorld(onPalm);
     const rel = this._release || (this._release = new THREE.Vector3());
     const REL = 0.36;
@@ -635,7 +715,7 @@ export class Foe {
     // holds it, the person's dispose (which lets go of everything it was
     // handed) would pull it out of HIS hand — so put it back there.
     const holder = this.paddle.parent;
-    const ours = holder === this.person.sockets.gripR;
+    const ours = holder === this.holder;
     this.person.dispose();
     if (holder && !ours) holder.add(this.paddle);
   }

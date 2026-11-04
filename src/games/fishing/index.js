@@ -133,6 +133,9 @@ function clampDt(ms) {
 function framing(aspect) {
   const w = clamp01((aspect - 0.62) / 0.9);
   const wide = aspect > 1.15;
+  // A phone on its side is wider still: the start card takes the left
+  // two thirds, so the boat moves out to the right third
+  const xwide = clamp01((aspect - 1.7) / 0.45);
   return {
     fov: lerp(64, 50, w),
     dist: lerp(11.5, 13.8, w),
@@ -142,7 +145,9 @@ function framing(aspect) {
     // sits left and the boat right; in portrait the panel docks low and the
     // boat and sun sit above
     idleCam: wide ? [-7.0, 3.4, 14.8] : [-3.6, 3.4, 13.5],
-    idleLook: wide ? [-4.2, 2.3, 0] : [0, -3.4, 0]
+    idleLook: wide ? [lerp(-4.2, -7.6, xwide), 2.3, 0] : [0, -3.4, 0],
+    // Between casts: a portrait screen comes in closer so the throw reads
+    betweenCam: wide ? [-0.4, 3.4, 15.2] : [-0.2, 2.9, 10.6]
   };
 }
 
@@ -235,7 +240,7 @@ export async function createFishing(container) {
   scene.add(basin);
   const kelp = buildKelp(LITE ? 80 : 130, timeU);
   scene.add(kelp);
-  const seabed = buildSeabed();
+  const seabed = buildSeabed(boat.userData.hull);
   scene.add(seabed);
   const shafts = buildShafts(noise, LITE ? 16 : 22);
   scene.add(shafts.mesh);
@@ -641,7 +646,7 @@ export async function createFishing(container) {
     state.mission = state.nextMission;
     state.missionDone = false;
     if (state.mission) state.missionsUsed.push(state.mission.id);
-    state.rec = { dodges: 0, deepest: 0, haul: 0, tapped: 0, perfect: false, peakMult: 1, bottom: false, species: {} };
+    state.rec = { dodges: 0, near: 0, chain: 0, deepest: 0, haul: 0, tapped: 0, perfect: false, peakMult: 1, bottom: false, species: {} };
     spawnFishSet();
     sfx.splash(1.1);
     ripples.spawn(0, 0, 2.6, 0.8, 1.3);
@@ -670,11 +675,16 @@ export async function createFishing(container) {
     // swing wide around everything
     if (Math.abs(dx) < rx + 0.6) {
       state.mult = Math.min(10, state.mult + 0.25);
+      state.rec.near++;
       sfx.nearMiss();
       popScore('SNÄVT!', f.mesh.position, 'near');
       glow.burst(state.lureX, -state.depth, 0.3, 10, 3, { color: 0x9ff3ff, size: 0.18, life: 0.45 });
-    } else if (state.dodges % 4 === 0) {
-      popScore(`×${state.mult.toFixed(1)}`, f.mesh.position, 'mult');
+      // Time catches its breath for a moment as the fish slides past
+      kick(0.18, 55, 1.2);
+    } else {
+      if (state.dodges % 4 === 0) popScore(`×${state.mult.toFixed(1)}`, f.mesh.position, 'mult');
+      // A small wake of light where it slipped by
+      glow.burst(f.mesh.position.x * 0.5 + state.lureX * 0.5, -state.depth + 0.6, 0.2, 5, 1.6, { color: 0x8fe3f2, size: 0.12, life: 0.35 });
     }
     renderMult();
     bumpMult();
@@ -697,6 +707,7 @@ export async function createFishing(container) {
     }
     if (fish) catchOne(fish, true);
     angler.trigger(reason === 'junk' ? 'junk' : reason === 'bottom' ? 'big' : 'strike');
+    boatRock(0.08, -0.32, -0.12); // the strike snatches the bow down
     if (reason === 'bottom') {
       const bonus = 1500 * state.mult;
       addScore(bonus, lure.position, `BOTTEN +${fmt(bonus)}`, 'gold');
@@ -729,6 +740,7 @@ export async function createFishing(container) {
     const quick = state.clock - state.lastCatchT < 0.9;
     state.reelChain = quick ? state.reelChain + 1 : 1;
     state.lastCatchT = state.clock;
+    state.rec.chain = Math.max(state.rec.chain, state.reelChain);
     const chainK = 1 + (state.reelChain - 1) * 0.1;
     const pts = Math.round(f.sp.pts * state.mult * chainK);
     if (!first) state.mult = Math.min(12, state.mult + 0.25);
@@ -800,6 +812,7 @@ export async function createFishing(container) {
     const n = state.caught.length;
     state.tossLeft = n;
     angler.trigger(n ? 'erupt' : 'miss');
+    if (n) boatRock(0.22, -0.22, -0.3);
     if (n === 0) {
       setPhaseLabel('Tomt nät den här gången');
       later(endCast, 1100);
@@ -1173,6 +1186,7 @@ export async function createFishing(container) {
   let eyeUnder = false;    // last frame: was the camera under the surface?
   let anglerAct = 'rest';  // for the test hook
   let lureGlow = 0.7;
+  const boatMotion = { y: 0, vy: 0, p: 0, vp: 0, r: 0, vr: 0 };
   const tmpColor = new THREE.Color();
   const tmpColor2 = new THREE.Color();
   const rodTip = new THREE.Vector3();
@@ -1365,7 +1379,8 @@ export async function createFishing(container) {
     } else if (state.phase === 'between') {
       // Lift off the water and put the boat in frame — the round card reads
       // over a wide shot, and the throw that follows needs the rod visible.
-      camGoal.set(boat.position.x - 0.4, 3.4, 15.2);
+      camGoal.fromArray(frame.betweenCam);
+      camGoal.x += boat.position.x;
       const at = state.castOut ? (boat.position.x + state.castOut.x) * 0.5 : boat.position.x + 0.9;
       lookGoal.set(at, state.castOut ? 1.4 : 1.9, 0);
     } else {
@@ -1497,6 +1512,7 @@ export async function createFishing(container) {
         sfx.tunna(state.tunnaN);
         boat.userData.barrel.userData.squash = 1;
         angler.trigger('tunna');
+        boatRock(-0.06, 0.14, -0.06); // a wet fish lands at the stern
         spray.burst(top.x, top.y + 0.2, top.z, 12, 3, { cell: CELL.DROP, color: 0xdff2ff, grav: -14, size: 0.1, life: 0.6, lift: 0.8 });
         return;
       }
@@ -1638,15 +1654,28 @@ export async function createFishing(container) {
   }
 
   function updateBoat(dt, t) {
-    // Ride the swell: follow the lake's own waves at the boat, a little
-    // damped, and tilt with their slope (the dry mask keeps the lake out)
+    // Ride the swell: the hull is a mass on the lake's own waves — it is
+    // pulled toward the wave height and slope under it but carries its own
+    // momentum, so it lags a beat behind the swell and rocks on when Erik
+    // throws his weight about (boatRock). The dry mask keeps the lake out.
     const bx = boat.position.x;
     const h = waveHeight(bx, 0, t);
-    const slopeX = (waveHeight(bx + 1.2, 0, t) - waveHeight(bx - 1.2, 0, t)) / 2.4;
+    const slopeX = (waveHeight(bx + 1.4, 0, t) - waveHeight(bx - 1.4, 0, t)) / 2.8;
     const slopeZ = (waveHeight(bx, 0.8, t) - waveHeight(bx, -0.8, t)) / 1.6;
-    boat.position.y = -WATERLINE + h * 0.8;
-    boat.rotation.z = Math.atan(slopeX) * 0.6;
-    boat.rotation.x = -Math.atan(slopeZ) * 0.6;
+    const hull = boatMotion;
+    const n = Math.max(1, Math.ceil(dt / 0.012));
+    const hdt = dt / n;
+    for (let i = 0; i < n; i++) {
+      hull.vy += ((h * 0.85 - hull.y) * 30 - hull.vy * 5.5) * hdt;
+      hull.vp += ((Math.atan(slopeX) * 0.75 - hull.p) * 26 - hull.vp * 4.2) * hdt;
+      hull.vr += ((-Math.atan(slopeZ) * 0.7 - hull.r) * 22 - hull.vr * 3.2) * hdt;
+      hull.y += hull.vy * hdt;
+      hull.p += hull.vp * hdt;
+      hull.r += hull.vr * hdt;
+    }
+    boat.position.y = -WATERLINE + hull.y;
+    boat.rotation.z = hull.p;
+    boat.rotation.x = hull.r;
     const { foam, barrel, bobber } = boat.userData;
     foam.position.set(bx, h + 0.05, 0);
     foam.material.opacity = 0.06 + Math.sin(t * 2.2) * 0.02;
@@ -1668,6 +1697,13 @@ export async function createFishing(container) {
       angler.update(dt, t, anglerContext());
       anglerAct = anglerCtx.action;
     }
+  }
+
+  /** Erik shifting his weight: roll (to his side), pitch (bow down) and heave impulses. */
+  function boatRock(roll, pitch = 0, heave = 0) {
+    boatMotion.vr += roll;
+    boatMotion.vp += pitch;
+    boatMotion.vy += heave;
   }
 
   /** The lure on a short line under the tip while the card is up: a pendulum. */
@@ -1810,6 +1846,7 @@ export async function createFishing(container) {
           // The lure leaves from where it swung to behind his shoulder
           const p0 = dangling ? dangle : rodTip;
           state.castOut = { x: p0.x, y: p0.y, z: p0.z, x0: p0.x, y0: p0.y, z0: p0.z };
+          boatRock(0.1, -0.16, -0.05); // his weight goes into the throw
         }
         const c = state.castOut;
         const k = Math.min(1, (state.betweenT - BETWEEN_HOLD) / CAST_OUT);

@@ -23,7 +23,7 @@
   background:
     radial-gradient(ellipse 75% 70% at 50% 45%, rgba(0, 0, 0, 0) 45%, rgba(1, 6, 14, 0.7) 100%),
     linear-gradient(to bottom, rgba(2, 10, 20, 0.3), rgba(0, 0, 0, 0) 22%);
-  opacity: calc(0.45 + var(--deep) * 0.55);
+  opacity: calc(0.3 + var(--deep) * 0.7);
   transition: opacity 0.4s ease;
 }
 
@@ -338,7 +338,7 @@
 .fiske-ui .fi-zone {
   position: absolute;
   left: 50%;
-  top: 30%;
+  top: 39%; /* under the lure, which rides in the upper third */
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -862,8 +862,8 @@
   justify-content: flex-start;
   padding-left: max(6vw, 36px);
   background:
-    linear-gradient(90deg, rgba(3, 10, 18, 0.72) 0%, rgba(3, 10, 18, 0.42) 38%, rgba(3, 10, 18, 0) 66%),
-    linear-gradient(180deg, rgba(4, 12, 22, 0.2), rgba(3, 8, 16, 0.35));
+    linear-gradient(90deg, rgba(3, 10, 18, 0.62) 0%, rgba(3, 10, 18, 0.3) 34%, rgba(3, 10, 18, 0) 58%),
+    linear-gradient(180deg, rgba(4, 12, 22, 0) 40%, rgba(3, 8, 16, 0.28));
   backdrop-filter: none;
 }
 
@@ -1063,7 +1063,7 @@
 /* Telefon på tvären: låg skärm — kompaktare paneler, kortet centrerat */
 @media (max-height: 520px) {
   .fiske-ui .fi-panel {
-    width: min(560px, 100%);
+    width: min(500px, 62vw);
     padding: 14px 18px 12px;
   }
 

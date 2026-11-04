@@ -401,6 +401,8 @@ export function buildShafts(rand) {
     transparent: true,
     depthWrite: false,
     fog: false,
+    // The strip turns to face the camera, so its winding flips with the view
+    side: THREE.DoubleSide,
     blending: THREE.AdditiveBlending,
     vertexShader: /* glsl */`
       uniform vec3 uAxis;
@@ -440,7 +442,7 @@ export function buildShafts(rand) {
         float streak = 0.75 + 0.25 * sin(vAlong * 9.0 + vSeed * 3.0);
         float vl = max(length(vView), 1e-3);
         float toward = max(dot(vView / vl, uSunDir), 0.0);
-        float a = across * across * fade * breathe * streak * toward * toward * 0.45 * uStrength;
+        float a = across * across * fade * breathe * streak * toward * toward * 0.6 * uStrength;
         gl_FragColor = vec4(uSunColor, a);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>

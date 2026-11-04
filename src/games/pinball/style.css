@@ -442,6 +442,40 @@
   color: rgba(226, 218, 204, 0.8);
 }
 
+/* How to play, in three steps */
+.pbf-steps {
+  list-style: none;
+  margin: 12px auto 0;
+  padding: 0;
+  max-width: 340px;
+  display: grid;
+  gap: 6px;
+  text-align: left;
+}
+
+.pbf-steps li {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.84rem;
+  line-height: 1.35;
+  color: rgba(226, 218, 204, 0.88);
+}
+
+.pbf-steps b {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-family: var(--display);
+  font-size: 0.85rem;
+  color: #1d1404;
+  background: var(--pbf-metal);
+  box-shadow: 0 0 10px rgba(242, 193, 78, 0.35);
+}
+
 .pbf-sheet .pbf-sheet-hint {
   margin-top: 10px;
   font-size: 0.74rem;
@@ -1211,6 +1245,15 @@
 
   .pbf[data-orient='land'] .pbf-btn {
     margin-top: 10px;
+  }
+
+  .pbf[data-orient='land'] .pbf-steps {
+    margin-top: 8px;
+    gap: 4px;
+  }
+
+  .pbf[data-orient='land'] .pbf-steps li {
+    font-size: 0.74rem;
   }
 
   .pbf[data-orient='land'] .pbf-goal {

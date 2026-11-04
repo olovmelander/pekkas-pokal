@@ -230,6 +230,63 @@ export async function createFencing(container) {
   [me, foe].forEach((f) => f.group.traverse((o) => {
     if (o.isMesh) o.receiveShadow = true;
   }));
+  /* ---- Body cords: electric foil, wired from each fencer's back to the
+     reel at his end of the piste (one line each) ---- */
+  const CORD_N = 28;
+  const cordMat = new THREE.LineBasicMaterial({ color: 0x1b1c21 });
+  const cords = [me, foe].map((f, i) => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(CORD_N * 3), 3));
+    const line = new THREE.Line(geo, cordMat);
+    line.frustumCulled = false;
+    scene.add(line);
+    return { f, line, reel: new THREE.Vector3(i ? 7.25 : -7.25, 0.24, -1.05) };
+  });
+  const cordA = new THREE.Vector3();
+  const cordB = new THREE.Vector3();
+  const cordC = new THREE.Vector3();
+  /** The cord hangs from the back of the jacket to the piste, then runs along it to the reel. */
+  function updateCords() {
+    cords.forEach(({ f, line, reel }) => {
+      const on = f.pose[P.relax] < 0.5;
+      line.visible = on;
+      if (!on) return;
+      const hip = f.person.bones.hips.getWorldPosition(cordA);
+      hip.x -= f.mx * 0.11;
+      hip.y += 0.12;
+      hip.z -= 0.05;
+      // Where it meets the piste, behind the fencer; a little slack swing
+      const land = cordB.set(hip.x - f.mx * 0.85, PISTE_TOP + 0.006, -0.32);
+      const ctrl = cordC.set(hip.x - f.mx * 0.32, hip.y * 0.3, hip.z - 0.12);
+      const arr = line.geometry.attributes.position.array;
+      for (let i = 0; i < CORD_N; i++) {
+        const u = i / (CORD_N - 1);
+        let x;
+        let y;
+        let z;
+        if (u < 0.4) {
+          const k = u / 0.4;
+          const a = (1 - k) * (1 - k);
+          const b = 2 * k * (1 - k);
+          const c = k * k;
+          x = a * hip.x + b * ctrl.x + c * land.x;
+          y = a * hip.y + b * ctrl.y + c * land.y;
+          z = a * hip.z + b * ctrl.z + c * land.z;
+        } else {
+          const k = (u - 0.4) / 0.6;
+          x = land.x + (reel.x - land.x) * k;
+          z = land.z + (reel.z - land.z) * k;
+          // Flat on the piste, rising off the floor only into the reel
+          y = land.y + Math.max(0, (k - 0.93) / 0.07) * (reel.y - land.y);
+        }
+        arr[i * 3] = x;
+        arr[i * 3 + 1] = y;
+        arr[i * 3 + 2] = z;
+      }
+      line.geometry.attributes.position.needsUpdate = true;
+    });
+  }
+
   const animMe = new Animator(me, 0);
   const animAi = new Animator(foe, 1.7);
   me.setFlashColor(0xff4d3c); // your lamé flashes red: their lamp
@@ -420,7 +477,15 @@ export async function createFencing(container) {
 
   /* ---- Screens and flow ----------------------------------------------- */
 
+  /** The champion hands Pekkas Pokal back to its table. */
+  function putTrophyBack() {
+    if (!me.trophy) return;
+    me.dropTrophy();
+    salle.returnTrophy();
+  }
+
   function showTitle() {
+    putTrophyBack();
     state.phase = 'title';
     state.phaseT = 0;
     hud.setMode('title');
@@ -744,6 +809,8 @@ export async function createFencing(container) {
     hud.sub(`${fencerName} · Stockholm 2023`, 'gold');
     animMe.play('champion', 1);
     animAi.play('lose', 1);
+    // Pekkas Pokal comes off its table and goes up in the champion's hand
+    me.holdTrophy(salle.lendTrophy());
     me.setBaseExpression('grin');
     foe.setBaseExpression('smile');
     salle.crowd.react('stand');
@@ -772,7 +839,7 @@ export async function createFencing(container) {
     state.phase = 'final';
     state.phaseT = 0;
     hud.setMode('final');
-    animMe.play('ease');
+    animMe.play(medal === 1 ? 'champion' : 'ease');
     animAi.play('ease');
     me.setBaseExpression(medal ? 'smile' : 'neutral');
     foe.setBaseExpression('smile');
@@ -1224,7 +1291,7 @@ export async function createFencing(container) {
   function duelFrame(out) {
     const k = smoothstep(0.62, 1.25, aspect);
     out.pos.set(lerp(-5.0, 0, k), lerp(2.1, 1.4, k), lerp(4.7, 7.1, k));
-    out.look.set(lerp(0.2, 0, k), lerp(1.08, 1.62, k), lerp(-0.1, 0, k));
+    out.look.set(lerp(0.02, 0, k), lerp(1.08, 1.62, k), lerp(-0.1, 0, k));
     out.fov = lerp(44, 36, k);
     // Phone landscape is short: come closer, the duel fits the width anyway
     out.pos.z -= smoothstep(1.7, 2.2, aspect) * 0.9;
@@ -1243,6 +1310,7 @@ export async function createFencing(container) {
     if (ph === 'bracket') return foe;
     if (ph === 'result') return state.results.length && state.results[state.results.length - 1].won ? me : foe;
     if (ph === 'title' && portrait) return me;
+    if (ph === 'final' && !portrait) return me;
     return null;
   }
 
@@ -1263,8 +1331,10 @@ export async function createFencing(container) {
         goal.shift.set(0.5, ph === 'title' ? 0.27 : 0.24);
       } else {
         // Closer on short landscape phones: the person fills the height
-        const d = lerp(4.6, 3.9, smoothstep(1.6, 2.1, aspect));
-        goal.look.set(v3.x, 1.02, 0);
+        // (the champion holds the cup up high: frame a little taller)
+        const tall = ph === 'final' ? 1 : 0;
+        const d = lerp(4.6, 3.9, smoothstep(1.6, 2.1, aspect)) + tall * 0.7;
+        goal.look.set(v3.x, 1.02 + tall * 0.3, 0);
         goal.pos.set(v3.x + 0.35 + drift, 1.32, d);
         goal.fov = 34;
         goal.shift.set(lerp(0.3, 0.26, smoothstep(1.6, 2.1, aspect)), 0.5);
@@ -1272,13 +1342,18 @@ export async function createFencing(container) {
       goal.rate = 1.6;
     } else if (ph === 'title' || ph === 'bracket' || ph === 'final' || ph === 'result') {
       // Slow drift, pulled back, the salle as the backdrop for the panels
-      const k = smoothstep(0.62, 1.25, aspect);
-      goal.pos.x += Math.sin(t * 0.08) * 1.1 + (ph === 'title' ? lerp(0, 2.2, k) : 0);
+      goal.pos.x += Math.sin(t * 0.08) * 1.1;
       goal.pos.y += 0.35;
       goal.pos.z += 1.2;
       goal.look.y += 0.35;
-      goal.look.x += ph === 'title' ? lerp(0, 1.6, k) : 0;
       goal.rate = 1.2;
+      if (ph === 'title' && aspect >= 0.9) {
+        // The title panel is on the left: the two of you, at ease, stand in
+        // the right half with the windows and the benches behind
+        goal.look.set(0, 1.28, 0);
+        goal.pos.set(0.7 + Math.sin(t * 0.08) * 0.7, 1.7, 7.4);
+        goal.shift.set(lerp(0.63, 0.78, smoothstep(1.4, 2.1, aspect)), 0.5);
+      }
     } else if (ph === 'touch' && state.lastTouch) {
       // Punch in on the point of contact, a slight Dutch angle
       const { at } = state.lastTouch;
@@ -1305,11 +1380,12 @@ export async function createFencing(container) {
       goal.rate = state.phaseT < 0.05 ? 60 : 4;
     } else if (ph === 'ceremony') {
       me.j.torso.getWorldPosition(v3);
+      // A slow orbit, low, looking up at the cup held high
       const a = 0.75 + state.phaseT * 0.12;
-      goal.look.copy(v3).setY(1.45);
-      const d = aspect < 0.9 ? 4.2 : 3.4;
-      goal.pos.set(v3.x + Math.sin(a) * d, 1.2, v3.z + Math.cos(a) * d);
-      goal.fov = aspect < 0.9 ? 50 : 38;
+      goal.look.copy(v3).setY(1.62);
+      const d = aspect < 0.9 ? 4.8 : 3.9;
+      goal.pos.set(v3.x + Math.sin(a) * d, 1.15, v3.z + Math.cos(a) * d);
+      goal.fov = aspect < 0.9 ? 52 : 40;
       goal.rate = 2;
     } else {
       // Live: follow the centre of the action a little; lean in on telegraphs
@@ -1330,6 +1406,7 @@ export async function createFencing(container) {
       cam.pos.set(v3.x - 1.3, v3.y + 0.05, v3.z + (portrait ? 1.9 : 1.5));
       cam.look.copy(v3);
       cam.fov = portrait ? 44 : 30;
+      cam.shift.set(0.5, 0.5);
       camCut = '';
     } else if (camCut === 'ceremony') {
       camCut = '';
@@ -1394,11 +1471,13 @@ export async function createFencing(container) {
   resize();
 
   /* ---- Frame-time watchdog: drop bloom, then resolution, then shadows -- */
-  const perf = { acc: 0, n: 0, level: 0, slow: 0 };
-  function watchPerf(realDt) {
+  const perf = { acc: 0, n: 0, level: 0, slow: 0, age: 0 };
+  /** `frameDt`: the real time this frame took (not the simulation's clamped step). */
+  function watchPerf(frameDt) {
+    perf.age += frameDt;
     // Skip the first seconds: shader compiles and texture uploads stall frames
-    if (!adaptive || perf.level >= 3 || clock < 4) return;
-    perf.acc += realDt;
+    if (!adaptive || perf.level >= 3 || perf.age < 4) return;
+    perf.acc += frameDt;
     perf.n++;
     if (perf.acc < 2.5) return;
     const avg = perf.acc / perf.n;
@@ -1583,6 +1662,7 @@ export async function createFencing(container) {
       foe.update(dt);
       if (state.phase === 'ready' || state.phase === 'live' || state.phase === 'touch') record();
     }
+    updateCords();
     // Trails only for strikes and beats — a salute should not leave a smear
     trailMe.gain = STRIKES.has(animMe.act) ? 1 : 0;
     trailAi.gain = STRIKES.has(animAi.act) ? 1 : 0;
@@ -1599,8 +1679,6 @@ export async function createFencing(container) {
     else if (ph === 'replay') focus.copy(replay.at);
     else focus.copy(tipMe).add(tipAi).multiplyScalar(0.5);
     salle.update(t, ph === 'replay' ? realDt * 0.3 : dt, ph === 'title' || ph === 'final' ? null : focus);
-    if (ph === 'ceremony' && Math.floor(state.phaseT * 3) % 2 === 0) salle.score.flash(0);
-    else if (ph === 'ceremony') salle.score.clear();
 
     updateCamera(realDt, t);
   }
@@ -1608,9 +1686,12 @@ export async function createFencing(container) {
   function tick(now) {
     raf = requestAnimationFrame(tick);
     const realDt = clampDt(now - last);
+    // Capped: one long hitch (a GC, a late compile) must not outvote a whole
+    // window of good frames; a hidden tab resets `last` (onVisibility)
+    const frameDt = Math.min(0.5, Math.max(0, (now - last) / 1000));
     last = now;
     if (!running) return;
-    watchPerf(realDt);
+    watchPerf(frameDt);
     if (!frozen) simulate(realDt);
     if (renderBudget <= 0) return;
     renderBudget--;
@@ -1803,6 +1884,7 @@ export async function createFencing(container) {
     gfx.dispose();
     watchdog.dispose();
 
+    putTrophyBack();
     me.dispose();
     foe.dispose();
     sparks.dispose();

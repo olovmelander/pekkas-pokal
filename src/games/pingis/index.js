@@ -224,7 +224,7 @@ export async function createPingis(container) {
   renderer.setPixelRatio(pixelRatio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
+  renderer.toneMappingExposure = 1.06;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   canvasHost.appendChild(renderer.domElement);
@@ -1241,6 +1241,7 @@ export async function createPingis(container) {
   /* ---- Flow ------------------------------------------------------------- */
 
   let camMode = 'menu';
+  let camCut = false;
   let celebT = 0;
   let singleIdx = 0;
 
@@ -1502,6 +1503,7 @@ export async function createPingis(container) {
     replay.t = replay.start;
     replay.ev = events.findIndex((e) => e.t >= replay.start);
     camMode = 'replay';
+    camCut = true; // a broadcast replay CUTS to its camera, it does not pan there
     trail.clear();
     hud.replay(true);
     hud.phase('');
@@ -1514,6 +1516,7 @@ export async function createPingis(container) {
     state.replayWanted = false;
     state.phase = 'point';
     camMode = 'play';
+    camCut = true;
     trail.clear();
     if (state.decided) endMatch(state.myPts > state.aiPts);
     else beginPoint();
@@ -2059,11 +2062,20 @@ export async function createPingis(container) {
       fov = wide ? 32 : 48;
       rate = 2.2;
     } else if (camMode === 'replay') {
-      // A low broadcast angle from the side, far enough back to hold both
-      // ends of the table, drifting with the ball
-      tPos.set(2.9, 1.45, THREE.MathUtils.clamp(v.bz * 0.3, -0.9, 0.9) + 0.35);
-      tLook.set(v.bx * 0.25, 0.92, v.bz * 0.45 - 0.15);
-      fov = camera.aspect < 0.8 ? 62 : 42;
+      if (camera.aspect < 0.8) {
+        // A tall frame: straight across from the side, wide, drifting with the ball
+        tPos.set(2.9, 1.45, THREE.MathUtils.clamp(v.bz * 0.3, -0.9, 0.9) + 0.35);
+        tLook.set(v.bx * 0.25, 0.92, v.bz * 0.45 - 0.15);
+        fov = 62;
+      } else {
+        // The broadcast three-quarter: low from your right-hand corner,
+        // looking up the table at him — the ball's curve and his stroke in
+        // one frame — creeping in as the rally plays out
+        const k = THREE.MathUtils.clamp((replay.t - replay.start) / Math.max(0.1, replay.end - replay.start), 0, 1);
+        tPos.set(2.75 - k * 0.25, 1.42 - k * 0.06, 2.25 + THREE.MathUtils.clamp(v.bz * 0.18, -0.35, 0.35) - k * 0.2);
+        tLook.set(v.bx * 0.3, 0.96, -0.55 + v.bz * 0.28);
+        fov = 41;
+      }
       rate = 4;
     } else if (camMode === 'celebrate') {
       celebT += dt;
@@ -2076,7 +2088,9 @@ export async function createPingis(container) {
       fov = camera.aspect < 0.8 ? 56 : 44;
       rate = celebT < 1.5 ? 1.5 : 3;
     }
-    const k = 1 - Math.exp(-dt * rate);
+    const k = camCut ? 1 : 1 - Math.exp(-dt * rate);
+    if (camCut) camFov = fov;
+    camCut = false;
     camPos.lerp(tPos, k);
     camLook.lerp(tLook, k);
     camFov += (fov - camFov) * k;

@@ -10,7 +10,8 @@
  * looks the same in every game (appearanceFor).
  *
  * Files: people.js (this API) · people-rig.js (skeleton, poses, IK) ·
- * people-build.js (body, clothes) · people-head.js (head, face, hair, hats) ·
+ * people-hands.js (finger bones, grip library, grip solver) ·
+ * people-build.js (body, hands, clothes) · people-head.js (head, face, hair, hats) ·
  * people-look.js (appearances, outfits) · people-assemble.js (mesh assembly) ·
  * people-crowd.js (crowds).
  *
@@ -33,7 +34,8 @@
  *   fencer.setPose(POSES.ready(t));
  *   fencer.ikLeg('L', frontAnkleWorld);                  // knee pole defaults to forward
  *   fencer.ikArm('R', swordHandWorld, elbowPoleWorld, handWorldQuat);
- *   fencer.attach(foil, 'gripR');            // fist socket: +Z runs out of the thumb side
+ *   fencer.hold(foil, 'R', 'foil');          // French grip: fingers close on the handle
+ *   coach.hold(mug, 'L', 'hook');            // fingers through the handle, thumb on top
  *   fencer.materials.lame.emissive.set(0x40ff40);        // hit flash (own material)
  *
  * ── createPerson(spec) ──────────────────────────────────────────────────
@@ -56,7 +58,9 @@
  *       shoes: 'sneakers'|'leather'|'boots', shoeColor,
  *       accent                     // apron, jersey trims, knicker socks (and hats without a colour)
  *     },
- *     detail: 'high'|'low',         // ≈8.5–10k vs ≈0.9–1.2k triangles
+ *     gloves: null | 0xf1efe8 | true | { side: 'R'|'L'|'both', color, cuff: true },
+ *                                   // glove colour on a cloth region, no nails, optional gauntlet cuff
+ *     detail: 'high'|'low',         // ≈10–12k vs ≈1.0–1.5k triangles
  *     ownMaterials: false           // materials are SHARED between people (vertex colours carry
  *                                   //   all colour); true gives this person private ones to tint
  *   }
@@ -66,6 +70,7 @@
  *     mesh,        // the SkinnedMesh (castShadow/receiveShadow on; generous bounding sphere)
  *     bones,       // by name, see below
  *     sockets,     // gripL, gripR (in the fist; +Z out of the thumb side, +Y up the forearm),
+ *                  // holdL, holdR (the current grip's object frame, see hold()),
  *                  // headTop (crown), face (in front of the eyes)
  *     height, triangles, materials { skin, cloth, gloss, lame? }, look (resolved spec),
  *     setPose(pose, blend = 1),
@@ -77,15 +82,53 @@
  *     blink(), talk(0..1)  // talk flaps the jaw irregularly until talk(0)
  *     update(dt, t),       // once per frame AFTER posing/IK (also drives lids, eyes, forearm roll)
  *     attach(object, boneOrSocket, { position, rotation, quaternion, scale } | Matrix4),
- *     dispose()            // geometry, skeleton texture, materials (refcounted), detaches attachments
+ *     hold(object, side, grip, opts), release(side), setGrip(side, grip, opts), gripOf(side),
+ *     holdWith(side, object, opts)   // see "Hands and holding"
+ *     dispose()            // geometry, skeleton texture, materials (refcounted); detaches what
+ *                          //   is still attached to THIS person (not objects handed on)
  *   }
+ *
+ * ── Hands and holding (people-hands.js) ─────────────────────────────────
+ *
+ *   person.hold(object, side = 'R', grip = 'power', opts = {}) → object
+ *     Parents `object` to sockets.holdL/holdR and closes every finger joint on its surface
+ *     (signed-distance solve, cached per grip + size) over opts.blend seconds (default 0.2).
+ *     OBJECT CONVENTION: origin = the grip centre; +Y = the long axis, pointing to the business
+ *     end (bat barrel, rod tip, blade, brush tip, the cup's rim); +Z = the way the palm faces.
+ *     Sizes are world metres.
+ *       'power'    cylinder handle (bat, rod, umbrella): diameter (0.032), length
+ *       'racket'   shakehand table tennis: +Y handle→blade, +Z the forehand rubber;
+ *                  handle [width, thickness] (0.026, 0.022), blade (radius 0.078)
+ *       'foil'     French grip: +Y pommel→blade, +Z the flat under the thumb; handle [w, t]
+ *       'pinch'    tripod for a pen or brush, +Y towards the tip: diameter (0.009)
+ *       'hook'     through a mug handle: origin = middle of the handle bar, +Y the mug's up,
+ *                  +Z towards the mug body: bar (0.008), handle (inner height 0.04)
+ *       'cup'      around a cup without a handle: origin on its axis, +Y up: diameter (0.075), height
+ *       'flat'     notebook/clipboard/scorecard: origin = the held edge's middle at mid-thickness,
+ *                  +Y the top face (thumb side), the board extends along +Z: thickness (0.01)
+ *       'palette'  thumb up through the hole: origin = the hole's centre, +Y the paint side, the
+ *                  board reaches out along +X (as painting/cast.js builds it): thickness
+ *       'ball'     a small ball in the fingertips (ping-pong toss): origin = centre: diameter (0.04)
+ *       'relaxed' 'open' 'fist' 'point' 'thumbsUp'   hand shapes, no object needed
+ *     opts.offset = { position, rotation | quaternion } nudges the object inside the grip frame.
+ *   person.release(side, { detach = true, blend = 0.25 }) → the object; the pose drives the fingers again
+ *   person.setGrip(side, grip | null, opts) → sockets.holdX   fingers only (null hands them back)
+ *   person.gripOf(side) → grip name | null
+ *   person.holdWith(side, object, { at: [x, y, z], roll, grip = 'power', pole, ...opts }) → metres short
+ *     Two-handed holds (rod, oar, foil salute): IKs the `side` arm so that hand grips `object` at
+ *     `at` (object space; roll turns the hand about the object's +Y). Call every frame after
+ *     posing the holding arm and before update().
+ *   Without a grip the legacy pose fields still drive the fingers: gripL/gripR (0 open,
+ *   0.25 relaxed, 1 fist — its hole is on the gripL/gripR socket) and pointL/pointR.
  *
  * ── Skeleton ────────────────────────────────────────────────────────────
  *
  *   hips → spine → chest → neck → head
  *   chest → shoulderL/R (clavicle) → upperArmL/R → forearmL/R → handL/R
  *           forearmTwistL/R (driven by update: half the hand's twist, for a clean wrist)
- *           handL/R → thumb, index → indexTip, fingers → fingersTip (driven by grip/point)
+ *           handL/R → thumb (CMC) → thumbMid → thumbTip; index → indexMid → indexTip;
+ *                     middle → middleMid → middleTip; palm (arch) → ring…, pinky… (…Mid, …Tip)
+ *           (driven by grips / gripX / pointX; old names fingers = middle, fingersTip = middleMid)
  *   hips → thighL/R → shinL/R → footL/R
  *   head → jaw, lipUpper, mouthL/R, browL/R, eyeL/R, lidUpL/R, lidLoL/R (driven by expressions)
  *
@@ -125,10 +168,14 @@ import { LID_CLOSED_UP, LID_CLOSED_LO, HAIR_STYLE_NAMES } from './people-head.js
 import { appearanceFor, resolveLook, PARTICIPANT_NAMES, SKIN_TONES, HAIR_COLORS, EYE_COLORS } from './people-look.js';
 import { buildPersonData, toBindPose, toGeometry, makeSkeleton } from './people-assemble.js';
 import { createCrowd } from './people-crowd.js';
+import {
+  solveGrip, legacyConfig, writeConfig, readConfig, mixConfigs, GRIP_NAMES, HAND_BONES, HAND_BONE_COUNT
+} from './people-hands.js';
 
 export {
   POSES, mixPoses, mirrorPose, emptyPose, SEAT_HEIGHT, SEAT_BACK, WALK_STRIDE, BONE_DEFS, A_POSE,
-  appearanceFor, PARTICIPANT_NAMES, SKIN_TONES, HAIR_COLORS, EYE_COLORS, HAIR_STYLE_NAMES, createCrowd
+  appearanceFor, PARTICIPANT_NAMES, SKIN_TONES, HAIR_COLORS, EYE_COLORS, HAIR_STYLE_NAMES, createCrowd,
+  GRIP_NAMES, HAND_BONES
 };
 
 /* ------------------------------------------------------------ materials */
@@ -216,12 +263,35 @@ const LID_LO_REST = 0.6 + LID_CLOSED_LO;
 
 let personCount = 0;
 const IDENTITY_Q = new THREE.Quaternion();
+const NO_HANDS = { L: true, R: true };
+const SIZE_KEYS = ['diameter', 'length', 'blade', 'bar', 'handle', 'thickness', 'height'];
+const easeInOut = (x) => x * x * (3 - 2 * x);
+
+/** Grip options in world metres → model metres (÷ person scale). */
+function modelOpts(opts, s) {
+  const o = {};
+  for (const k of SIZE_KEYS) {
+    const v = opts[k];
+    if (v === undefined) continue;
+    o[k] = Array.isArray(v) ? v.map((x) => x / s) : v / s;
+  }
+  return o;
+}
+
+/** Is `o` still somewhere under `root`? */
+function isUnder(o, root) {
+  for (let p = o.parent; p; p = p.parent) if (p === root) return true;
+  return false;
+}
 
 export function createPerson(specIn = {}) {
   const look = resolveLook(specIn);
+  // Gloves ride along on the look (people-build reads look.gloves)
+  look.gloves = specIn.gloves ?? specIn.outfit?.gloves ?? null;
   const detail = specIn.detail === 'low' ? 'low' : 'high';
   const s = look.height / 1.8;
-  const { b, joints, H } = buildPersonData(look, detail);
+  const { b, joints, H, build } = buildPersonData(look, detail);
+  const handScale = build.hand ?? 1.09;
   toBindPose(b, joints);
   const geometry = toGeometry(b, s);
   const triangles = b.triangleCount();
@@ -298,6 +368,62 @@ export function createPerson(specIn = {}) {
   };
   for (const n of Object.keys(EXPRESSIONS)) state.expr[n] = n === 'neutral' ? 1 : 0;
   const attached = new Set();
+  /* Hands: a grip override per side (hold / setGrip) and eased transitions */
+  const mkHand = (S) => ({
+    S, grip: null, opts: null, solved: null, object: null, anchor: null,
+    from: new Float32Array(HAND_BONE_COUNT * 4), cfg: new Float32Array(HAND_BONE_COUNT * 4),
+    k: 1, dur: 0.2
+  });
+  const hands = { L: mkHand('L'), R: mkHand('R') };
+  let posedSinceUpdate = false;
+  let lastPose = null;
+  const sideOf = (side) => (side === 'L' || side === 1 || side === 'left' ? 'L' : 'R');
+  const startHandBlend = (h, dur) => {
+    readConfig(bones, h.S, h.from);
+    h.k = dur > 0 ? 0 : 1;
+    h.dur = dur;
+  };
+  /** Write one side's fingers: the override (or the pose's legacy grip), through any transition. */
+  const writeHand = (h, pose, blend) => {
+    let target;
+    if (h.solved) target = h.solved.config;
+    else target = legacyConfig(pose ? pose[`grip${h.S}`] ?? 0.25 : 0.25, pose ? pose[`point${h.S}`] ?? 0 : 0, h.cfg);
+    if (h.k < 1) {
+      mixConfigs(h.from, target, easeInOut(h.k), h.cfg);
+      writeConfig(bones, h.S, h.cfg, 1);
+    } else writeConfig(bones, h.S, target, blend);
+  };
+  const anchorFor = (h) => {
+    if (!h.anchor) {
+      h.anchor = new THREE.Object3D();
+      h.anchor.name = `hold${h.S}`;
+      bones[`hand${h.S}`].add(h.anchor);
+      sockets[`hold${h.S}`] = h.anchor;
+    }
+    const sv = h.solved;
+    const m = h.S === 'R' ? -1 : 1;
+    if (sv && sv.pos) {
+      h.anchor.position.set(sv.pos.x * s * m, sv.pos.y * s, sv.pos.z * s);
+      h.anchor.quaternion.set(sv.quat.x, sv.quat.y * m, sv.quat.z * m, sv.quat.w);
+    } else {
+      h.anchor.position.copy(sockets[`grip${h.S}`].position);
+      h.anchor.quaternion.identity();
+    }
+    return h.anchor;
+  };
+  const setOverride = (h, grip, opts = {}) => {
+    const name = grip && GRIP_NAMES.includes(grip) ? grip : grip ? 'relaxed' : null;
+    startHandBlend(h, opts.blend ?? 0.2);
+    h.grip = name;
+    h.opts = opts;
+    h.solved = name ? solveGrip(name, modelOpts(opts, s), handScale) : null;
+    if (name) anchorFor(h);
+    if (!posedSinceUpdate || h.k >= 1) writeHand(h, lastPose, 1);
+  };
+  const tmpHQ = new THREE.Quaternion();
+  const tmpHQ2 = new THREE.Quaternion();
+  const tmpHV = new THREE.Vector3();
+  const tmpHV2 = new THREE.Vector3();
   const layered = ['spine', 'chest', 'neck', 'head', 'shoulderL', 'shoulderR'].map((n) => ({
     bone: bones[n], base: new THREE.Quaternion(), written: new THREE.Quaternion(0, 0, 0, 0)
   }));
@@ -318,7 +444,93 @@ export function createPerson(specIn = {}) {
       if (blend < 1) {
         for (const L of layered) if (L.bone.quaternion.equals(L.written)) L.bone.quaternion.copy(L.base);
       }
-      applyPose(bones, pose, blend, restPos, s);
+      applyPose(bones, pose, blend, restPos, s, NO_HANDS);
+      writeHand(hands.L, pose, blend);
+      writeHand(hands.R, pose, blend);
+      lastPose = pose;
+      posedSinceUpdate = true;
+    },
+
+    /**
+     * Hold `object` in a hand with a grip from the grip library (see the
+     * header for the object conventions). The fingers close around it over
+     * opts.blend seconds. Returns the object.
+     */
+    hold(object, side = 'R', grip = 'power', opts = {}) {
+      const h = hands[sideOf(side)];
+      if (h.object && h.object !== object && isUnder(h.object, root)) h.object.parent.remove(h.object);
+      setOverride(h, grip, opts);
+      const anchor = anchorFor(h);
+      if (object) {
+        anchor.add(object);
+        object.position.set(0, 0, 0);
+        object.quaternion.identity();
+        const off = opts.offset;
+        if (off) {
+          if (off.position) object.position.fromArray(off.position.toArray ? off.position.toArray() : off.position);
+          if (off.quaternion) object.quaternion.copy(off.quaternion);
+          else if (off.rotation) object.rotation.fromArray(off.rotation.toArray ? off.rotation.toArray() : off.rotation);
+        }
+        if (opts.scale !== undefined) object.scale.setScalar(opts.scale);
+        attached.add(object);
+      }
+      h.object = object || null;
+      return object;
+    },
+
+    /** Let go: detaches the held object (if still ours) and returns it; the pose drives the fingers again. */
+    release(side = 'R', { detach = true, blend = 0.25 } = {}) {
+      const h = hands[sideOf(side)];
+      const o = h.object;
+      if (o && detach && isUnder(o, root)) o.parent.remove(o);
+      if (o) attached.delete(o);
+      h.object = null;
+      setOverride(h, null, { blend });
+      return o;
+    },
+
+    /**
+     * Fingers only: shape a hand with a grip (null hands it back to the
+     * pose's gripX/pointX). Returns the grip anchor (sockets.holdL/R), the
+     * frame an object would sit in.
+     */
+    setGrip(side, grip, opts = {}) {
+      const h = hands[sideOf(side)];
+      if (!grip) {
+        setOverride(h, null, opts);
+        return null;
+      }
+      setOverride(h, grip, opts);
+      return anchorFor(h);
+    },
+
+    /** The grip a hand is in (null = driven by the pose). */
+    gripOf(side) {
+      return hands[sideOf(side)].grip;
+    },
+
+    /**
+     * Two-handed holds: reach the `side` hand to a point on an object the
+     * other hand holds and close it there. at: [x, y, z] in the object's
+     * space (default on its long axis, 0.25 m below the origin), roll:
+     * turn of the hand about the object's +Y, grip/opts as hold(), pole:
+     * world elbow pole. Call every frame after posing the other arm.
+     * Returns metres out of reach.
+     */
+    holdWith(side, object, { at = [0, -0.25, 0], roll = 0, grip = 'power', pole, ...opts } = {}) {
+      const S = sideOf(side);
+      const h = hands[S];
+      if (h.grip !== grip || JSON.stringify(h.opts && modelOpts(h.opts, s)) !== JSON.stringify(modelOpts(opts, s))) setOverride(h, grip, opts);
+      const anchor = anchorFor(h);
+      object.updateWorldMatrix(true, false);
+      tmpHV.fromArray(at).applyMatrix4(object.matrixWorld);
+      object.getWorldQuaternion(tmpHQ);
+      if (roll) tmpHQ.multiply(tmpHQ2.setFromAxisAngle(tmpHV2.set(0, 1, 0), roll));
+      // hand = point × anchor⁻¹
+      tmpHQ.multiply(tmpHQ2.copy(anchor.quaternion).invert());
+      tmpHV2.copy(anchor.position).applyQuaternion(tmpHQ);
+      tmpHV.sub(tmpHV2);
+      return person.ikArm(S, tmpHV, pole, tmpHQ);
     },
 
     ikArm(side, target, pole, handWorldQuat) {
@@ -434,6 +646,13 @@ export function createPerson(specIn = {}) {
         bones.head.quaternion.premultiply(tmpQ);
       }
       for (const L of layered) L.written.copy(L.bone.quaternion);
+      // Hands: advance grip transitions (and write them if nobody posed this frame)
+      for (const S of ['L', 'R']) {
+        const h = hands[S];
+        if (h.k < 1) h.k = Math.min(1, h.k + d / Math.max(1e-3, h.dur));
+        if (!posedSinceUpdate && (h.solved || h.k < 1)) writeHand(h, lastPose, 1);
+      }
+      posedSinceUpdate = false;
       // Forearm roll: the twist bone takes half the hand's twist about the forearm
       for (const S of ['L', 'R']) {
         const hq = bones[`hand${S}`].quaternion;
@@ -557,7 +776,8 @@ export function createPerson(specIn = {}) {
     },
 
     dispose() {
-      for (const o of attached) if (o.parent) o.parent.remove(o);
+      // Only what is still ours: an object handed on to someone else stays with them
+      for (const o of attached) if (o.parent && isUnder(o, root)) o.parent.remove(o);
       attached.clear();
       if (root.parent) root.parent.remove(root);
       geometry.dispose();

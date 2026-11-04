@@ -456,6 +456,7 @@ export async function createShooting(container) {
   const pending = []; // shots in flight: { t, records, shotDir, gold }
   const timers = new Set();
   const aim = { x: 0, y: 0.12 }; // NDC
+  const finger = { x: 0, y: 0, touch: false }; // NDC of the finger under a touch aim
   const swingLog = []; // { t, dir } — the last ~150 ms of aim directions
   let tracking = false;
   const lead = { t: 0, center: new THREE.Vector3(), clay: new THREE.Vector3(), dots: [], radius: 0 };
@@ -720,15 +721,18 @@ export async function createShooting(container) {
     m.material.color.copy(state.isGold ? GOLD : ORANGE);
     m.material.emissive.set(state.isGold ? 0x5a3c00 : 0x6b2400);
 
-    const speed = s.speed * (state.isGold ? 1.5 : 1) * (0.92 + rand() * 0.16);
+    // A first-timer's first three birds come a little gentler while they find the swing
+    const rookie = !best.score && state.serieNo === 1 && state.throwNo < 3 ? 0.82 : 1;
+    const speed = s.speed * rookie * (state.isGold ? 1.5 : 1) * (0.92 + rand() * 0.16);
     if (side === 0 && !state.isGold && s.incomers && s.incomers.includes(state.throwNo)) {
       // Incomer from the tower: aimed to pass a few metres up and to one
       // side of the station, so it grows out of the treeline toward you
       // and climbs out of the top of the frame if you let it.
       clay.incomer = true;
       m.position.copy(TOWER_TOP);
-      const T = 3.3 / speed;
-      tmpV.set((rand() - 0.5) * 7, 6.5 + rand() * 2.5, 2);
+      // Fast and flat enough to stay in the frame until it is close
+      const T = 2.2 / speed;
+      tmpV.set((rand() - 0.5) * 7, 4 + rand() * 1.5, 6);
       clay.vel.set((tmpV.x - m.position.x) / T, (tmpV.y - m.position.y) / T + 0.5 * GRAVITY * T, (tmpV.z - m.position.z) / T);
       for (let i = 0; i < 6; i++) {
         soft.spawn({
@@ -831,6 +835,7 @@ export async function createShooting(container) {
     renderScore();
     renderStreak();
     const word = q < 0.32 ? 'RÖKBOLL' : 'KROSS';
+    if (q < 0.32 && !clay.gold) state.stats.smoke = (state.stats.smoke || 0) + 1;
     popScore(clay.gold ? `GULDDUVAN +${fmt(pts)}` : `${word} +${fmt(pts)}`, at, clay.gold ? 'gold' : q < 0.32 ? 'smoke' : '');
     sfx.shatter(clay.gold);
     sfx.streak(state.streak);
@@ -1224,14 +1229,37 @@ export async function createShooting(container) {
 
   const UI = '.pb-overlay, .pb-mute, .pb-info, .pb-help, .sk-pull';
 
+  /**
+   * On a touch screen the sight rides a thumb's width ABOVE the finger, so
+   * the finger never covers the bird it is tracking (the classic mistake
+   * of phone shooters: aim under the fingertip and you shoot blind). The
+   * offset eases off near the top edge so the whole sky stays reachable.
+   */
+  function touchOffset(fingerY) {
+    const px = Math.min(92, view.h * 0.12);
+    // fingerY is NDC (+1 = top). Within the top band, shrink the lift.
+    const topRoom = ((1 - fingerY) / 2) * view.h;
+    return (Math.min(px, Math.max(0, topRoom - 8)) * 2) / view.h;
+  }
+
+  function setAimFrom(e, p) {
+    aim.x = p.x;
+    aim.y = p.y;
+    if (e.pointerType !== 'mouse') {
+      aim.y = Math.min(0.99, p.y + touchOffset(p.y));
+      finger.x = p.x;
+      finger.y = p.y;
+    }
+  }
+
   function onPointerDown(e) {
     sfx.resume();
     if (helpOpen || e.target.closest(UI) || camBlend < 0.9) return;
     const p = pointerNdc(e);
     // A touch teleports the aim; its jump must not count as swing speed
     if (e.pointerType !== 'mouse' || Math.hypot(p.x - aim.x, p.y - aim.y) > 0.05) resetSwing();
-    aim.x = p.x;
-    aim.y = p.y;
+    finger.touch = e.pointerType !== 'mouse';
+    setAimFrom(e, p);
     tracking = true;
     // Tap-to-pull: press, keep the finger down, track, release to fire —
     // the whole call-and-shoot in one gesture.
@@ -1240,9 +1268,7 @@ export async function createShooting(container) {
 
   function onPointerMove(e) {
     if (!tracking && e.pointerType !== 'mouse') return;
-    const p = pointerNdc(e);
-    aim.x = p.x;
-    aim.y = p.y;
+    setAimFrom(e, pointerNdc(e));
   }
 
   function onPointerUp(e) {
@@ -1349,7 +1375,7 @@ export async function createShooting(container) {
       hits: state.stats.hits, base: state.stats.base, bonus: state.stats.bonus,
       pairs: state.stats.pairs, clean: state.stats.clean,
       gold: state.gold === true, goldPts: state.stats.goldPts, goldHit: state.gold,
-      bestStreak: state.bestStreak, card: state.card, ludvig: LUDVIG
+      bestStreak: state.bestStreak, card: state.card, ludvig: LUDVIG, smoke: state.stats.smoke || 0
     };
     // Let the last shards fall, then pull back out to the gang
     later(() => {
@@ -1414,6 +1440,7 @@ export async function createShooting(container) {
   const lookAt = new THREE.Vector3();
   const euler = new THREE.Euler(0, 0, 0, 'YXZ');
   const applied = { fov: 0, ox: -1, oy: -1, w: 0, h: 0 };
+  let debugCam = null;
 
   /**
    * The establishing shot: behind the gang, up and to the right — the whole
@@ -1518,6 +1545,13 @@ export async function createShooting(container) {
       camera.position.x += (rand() - 0.5) * shakeP * 0.03;
       camera.position.y += (rand() - 0.5) * shakeP * 0.03;
     }
+    if (debugCam) {
+      // Test hook only: a fixed close-up camera
+      camera.position.fromArray(debugCam.pos);
+      lookM.lookAt(camera.position, lookAt.fromArray(debugCam.look), THREE.Object3D.DEFAULT_UP);
+      camera.quaternion.setFromRotationMatrix(lookM);
+      ({ fov } = debugCam);
+    }
     const ox = Math.round(vista.ox * (1 - e) * 4) / 4;
     const oy = Math.round(vista.oy * (1 - e) * 4) / 4;
     if (fov !== applied.fov || ox !== applied.ox || oy !== applied.oy || view.w !== applied.w || view.h !== applied.h) {
@@ -1601,6 +1635,9 @@ export async function createShooting(container) {
     // Placement tracks the frame so the gun sits in the same corner on any aspect
     const tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
     gun.group.visible = raise > 0.01;
+    // A tall phone frame has a wide vertical view that shrinks the gun to a
+    // toothpick in the corner; grow it back about halfway
+    gun.group.scale.setScalar(THREE.MathUtils.clamp(0.55 * Math.sqrt(tanV / 0.43), 0.52, 0.7));
     const portrait = view.aspect < 1;
     gunBase.set(0.66 * tanV * view.aspect * (portrait ? 0.62 : 0.6), -0.66 * tanV * (portrait ? 0.86 : 0.98), -0.66);
     gunBase.y -= (1 - raise) * 0.45;
@@ -1623,6 +1660,13 @@ export async function createShooting(container) {
     hud.cross.style.top = `${(-aim.y * 0.5 + 0.5) * 100}%`;
     hud.cross.classList.toggle('show', live && reaction.k < 0.05 && (state.phase === 'flight' || state.phase === 'delay' || !touch));
     hud.cross.classList.toggle('hold', tracking);
+    const showFinger = live && tracking && finger.touch && reaction.k < 0.05;
+    hud.finger.classList.toggle('show', showFinger);
+    if (showFinger) {
+      hud.finger.style.left = `${(finger.x * 0.5 + 0.5) * 100}%`;
+      hud.finger.style.top = `${(-finger.y * 0.5 + 0.5) * 100}%`;
+      hud.finger.style.setProperty('--lift', `${Math.max(0, (aim.y - finger.y) * 0.5 * view.h)}px`);
+    }
     // Arrows at the frame edge for a clay that's coming but not yet in view
     let left = null;
     let right = null;
@@ -1901,6 +1945,10 @@ export async function createShooting(container) {
     },
     clays,
     shafts,
+    /** Test hook: { pos: [x,y,z], look: [x,y,z], fov } pins the camera; null releases it. */
+    setDebugCam(c) {
+      debugCam = c;
+    },
     /** Show the between-series reaction shot for a given result (hits of 8); `hold` keeps it up. */
     reactionShot(hits = 8, hold = false) {
       reactToSeries(hits, 8);

@@ -219,6 +219,7 @@ export function buildHud(root, { mouse }) {
     },
     replay(on) {
       el.replay.classList.toggle('show', on);
+      root.classList.toggle('pg-replaying', on); // the broadcast HUD steps aside
     },
     hideIntro() {
       el.intro.classList.remove('show');

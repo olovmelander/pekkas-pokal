@@ -479,7 +479,7 @@ export function buildRange(rand, { envMap, lite = false } = {}) {
   berm.closePath();
   const bermGeo = new THREE.ExtrudeGeometry(berm, { depth: 4.4, bevelEnabled: false, curveSegments: 6 });
   bermGeo.translate(0, 0, -2.2);
-  props.put(bermGeo, 0x8c9446, { at: [0, -0.02, -15.92], rot: [0, -Math.PI / 2, 0], darken: 0.25 });
+  props.put(bermGeo, 0xccd07a, { at: [0, -0.02, -15.92], rot: [0, -Math.PI / 2, 0], darken: 0.15 });
   props.put(box(0.04, 0.9, 0.7), 0x6a4a2c, { at: [1.83, 0.45, -17.6] });
   props.put(box(0.03, 0.06, 0.06), 0xb9bec4, { at: [1.86, 0.48, -17.35] });
   [-2.05, 2.05].forEach((x) => {
@@ -572,6 +572,8 @@ export function buildRange(rand, { envMap, lite = false } = {}) {
       const fz = cz + (rand() - 0.5) * 1.6;
       if (Math.abs(fx) < 1.4 && Math.abs(fz) < 1.8) continue;
       if (Math.abs(fx) < 2.6 && fz < -13.2 && fz > -19) continue;
+      // Not right under the muzzle: up close a flower is a dark stick across the view
+      if (fz < 0 && fz > -7 && Math.abs(fx) < 4 + -fz * 0.6) continue;
       flowerAt(fx, fz, rand() < 0.8 ? kind : rand());
     }
   }

@@ -293,6 +293,12 @@ export class Sfx {
   }
 
   /** Time slows: a deep breath in */
+  /** A flasher firing: the relay's click and the bulb's dull thwack */
+  flasher(k = 1) {
+    this.noise(0.02, { gain: 0.2 * k, freq: 3800, q: 1.4, wet: 0.05 });
+    this.thump(120, 60, 0.07, 0.22 * k);
+  }
+
   slowmo() {
     this.tone(70, 0.7, { type: 'sine', gain: 0.4, sweep: -38, wet: 0.6, attack: 0.04 });
     this.noise(0.6, { gain: 0.16, freq: 1800, to: 240, q: 0.8, wet: 0.6 });

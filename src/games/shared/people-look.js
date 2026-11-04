@@ -229,12 +229,18 @@ function shoeDef(kind, color) {
     }
     default: {
       const white = [0.82, 0.82, 0.8];
+      const gum = [0.62, 0.6, 0.56];
       return {
         length: 0.285, width: 1.0, height: 1.0, mat: MAT.CLOTH,
         tint: (z, q, y) => {
-          if (q.sole || y < 0.018) return white;
-          if (z > 0.17) return white.map((v) => v * 0.95);
-          if (y > 0.06 && Math.abs(q.x || 0) < 0.02 && z > 0.0 && z < 0.14) return Math.sin(z * 250) > 0 ? white : c.map((v) => v * 0.7);
+          // Grippy outsole, a white midsole band, a rubber toe cap, laces
+          if (q.sole) return gum;
+          if (y < 0.012) return white.map((v) => v * 0.9);
+          if (y < 0.024) return white;
+          if (z > 0.172) return white.map((v) => v * 0.95);
+          if (y > 0.058 && Math.abs(q.x || 0) < 0.021 && z > 0.0 && z < 0.14) return Math.sin(z * 250) > 0 ? white : c.map((v) => v * 0.7);
+          // A heel tab, a shade darker
+          if (z < -0.05 && y > 0.06) return c.map((v) => v * 0.8);
           return c;
         }
       };
@@ -283,6 +289,9 @@ export function resolveLook(spec = {}) {
   const hairColor = new THREE.Color(hair.color ?? HAIR_COLORS.brown);
   const eyes = Array.isArray(spec.eyes) ? spec.eyes : EYE_COLORS[spec.eyes] || EYE_COLORS.brown;
   const outfit = finishOutfit(resolveOutfit(spec.outfit || {}));
+  const hsl = hairColor.getHSL({ h: 0, s: 0, l: 0 });
+  // Grey or salt-and-pepper hair: a little older, so a few age lines
+  const age = spec.age ?? (hsl.s < 0.14 && hsl.l > 0.3 ? 1 : 0);
   const browBase = hairColor.clone().multiplyScalar(0.72);
   if (hair.style === 'balding' || hairColor.getHSL({ h: 0, s: 0, l: 0 }).l > 0.45) browBase.lerp(new THREE.Color(0x3b2a20), 0.35);
   return {
@@ -299,6 +308,7 @@ export function resolveLook(spec = {}) {
     glassesTint: lin(spec.glassesColor ?? 0x1a1a1e),
     shades: spec.shades || null,
     smile: spec.smile || 0,
+    age,
     headwear: head ? head.style : null,
     headwearColor: head && head.color !== undefined ? new THREE.Color(head.color) : null,
     iris: eyes,

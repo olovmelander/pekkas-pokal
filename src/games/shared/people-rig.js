@@ -25,16 +25,20 @@
  * touching the finger bones directly.
  */
 import * as THREE from 'three';
+import { HAND_BONES, HAND_PARENT, DIGITS, THUMB, PALM_PIVOT, legacyConfig, writeConfig, HAND_BONE_COUNT } from './people-hands.js';
 
 export const A_POSE = 0.7;
+
+/** Finger bones of one side, [name, parent] (see people-hands.js for the anatomy). */
+const handDefs = (S) => HAND_BONES.map((n) => [n + S, HAND_PARENT[n] + S]);
 
 /** [name, parent] in creation order — parents always come first. */
 export const BONE_DEFS = [
   ['hips', null], ['spine', 'hips'], ['chest', 'spine'], ['neck', 'chest'], ['head', 'neck'],
   ['shoulderL', 'chest'], ['upperArmL', 'shoulderL'], ['forearmL', 'upperArmL'], ['forearmTwistL', 'forearmL'], ['handL', 'forearmL'],
-  ['thumbL', 'handL'], ['indexL', 'handL'], ['indexTipL', 'indexL'], ['fingersL', 'handL'], ['fingersTipL', 'fingersL'],
+  ...handDefs('L'),
   ['shoulderR', 'chest'], ['upperArmR', 'shoulderR'], ['forearmR', 'upperArmR'], ['forearmTwistR', 'forearmR'], ['handR', 'forearmR'],
-  ['thumbR', 'handR'], ['indexR', 'handR'], ['indexTipR', 'indexR'], ['fingersR', 'handR'], ['fingersTipR', 'fingersR'],
+  ...handDefs('R'),
   ['thighL', 'hips'], ['shinL', 'thighL'], ['footL', 'shinL'],
   ['thighR', 'hips'], ['shinR', 'thighR'], ['footR', 'shinR'],
   ['jaw', 'head'], ['lipUpper', 'head'], ['mouthL', 'head'], ['mouthR', 'head'],
@@ -49,8 +53,8 @@ export const BODY_BONES = [
   'shoulderL', 'upperArmL', 'forearmL', 'handL', 'shoulderR', 'upperArmR', 'forearmR', 'handR',
   'thighL', 'shinL', 'footL', 'thighR', 'shinR', 'footR'
 ];
-const FINGER_BONES = ['thumbL', 'indexL', 'indexTipL', 'fingersL', 'fingersTipL',
-  'thumbR', 'indexR', 'indexTipR', 'fingersR', 'fingersTipR'];
+/** Every bone that moves rigidly with an arm (carried into the A-pose bind). */
+export const armChain = (S) => ['upperArm', 'forearm', 'forearmTwist', 'hand', ...HAND_BONES].map((n) => n + S);
 
 /** Head centre relative to the head bone, in the 1.80 m model. */
 export const HEAD_C = [0, 0.1, 0.022];
@@ -67,7 +71,7 @@ export const FACE = {
  * Joint positions (model space, zero pose) for the 1.80 m model.
  * `w` scales the shoulders, `hw` the hips.
  */
-export function jointTable(w = 1, hw = 1) {
+export function jointTable(w = 1, hw = 1, hs = 1.09) {
   const J = {};
   const set = (n, x, y, z) => { J[n] = new THREE.Vector3(x, y, z); };
   const off = (n, from, x, y, z) => { J[n] = J[from].clone().add(new THREE.Vector3(x, y, z)); };
@@ -83,11 +87,18 @@ export function jointTable(w = 1, hw = 1) {
     off(`forearm${S}`, `upperArm${S}`, 0, -0.288, 0);
     off(`hand${S}`, `forearm${S}`, 0, -0.262, 0.004);
     off(`forearmTwist${S}`, `forearm${S}`, 0, -0.16, 0.002);
-    off(`thumb${S}`, `hand${S}`, -s * 0.009, -0.026, 0.022);
-    off(`index${S}`, `hand${S}`, -s * 0.002, -0.094, 0.024);
-    off(`indexTip${S}`, `index${S}`, 0, -0.038, 0);
-    off(`fingers${S}`, `hand${S}`, -s * 0.002, -0.097, -0.008);
-    off(`fingersTip${S}`, `fingers${S}`, 0, -0.04, 0);
+    // Hands: the digits of people-hands.js, scaled by the build's hand size
+    const hd = (n, from, v, k = 1) => off(n, from, s * v[0] * hs * k, v[1] * hs * k, v[2] * hs * k);
+    hd(`thumb${S}`, `hand${S}`, THUMB.cmc);
+    hd(`thumbMid${S}`, `thumb${S}`, THUMB.dir, THUMB.len[0]);
+    hd(`thumbTip${S}`, `thumbMid${S}`, THUMB.dir, THUMB.len[1]);
+    hd(`palm${S}`, `hand${S}`, PALM_PIVOT);
+    for (const f of ['index', 'middle', 'ring', 'pinky']) {
+      const D = DIGITS[f];
+      hd(`${f}${S}`, `hand${S}`, D.mcp);
+      hd(`${f}Mid${S}`, `${f}${S}`, [0, -D.len[0], 0]);
+      hd(`${f}Tip${S}`, `${f}Mid${S}`, [0, -D.len[1], 0]);
+    }
     set(`thigh${S}`, s * 0.088 * hw, 0.905, -0.014);
     off(`shin${S}`, `thigh${S}`, 0, -0.415, 0.01);
     off(`foot${S}`, `shin${S}`, 0, -0.41, -0.014);
@@ -453,26 +464,13 @@ export const WALK_STRIDE = 1.3;
 const _e = new THREE.Euler();
 const _q = new THREE.Quaternion();
 
-/** Finger rotations for a grip/point amount, per side (+1 = L, −1 = R). */
-function fingerRot(name, side, grip, point) {
-  const s = side;
-  const g = Math.max(0, Math.min(1, grip));
-  const idx = g * (1 - point);
-  switch (name) {
-    case 'fingers': return [0, 0, -s * (0.1 + g * 1.5)];
-    case 'fingersTip': return [0, 0, -s * (0.14 + g * 1.7)];
-    case 'index': return [0, 0, -s * (0.06 + idx * 1.4)];
-    case 'indexTip': return [0, 0, -s * (0.1 + idx * 1.6)];
-    case 'thumb': return [0.15 + g * 0.35, s * (0.2 + g * 0.55), -s * (0.15 + g * 0.55)];
-    default: return [0, 0, 0];
-  }
-}
-
 /**
  * Write a pose into the bones. `blend` (0..1) slerps from the current
  * rotations; 1 snaps. `restPos` holds the bind positions (for hipsPos).
  */
-export function applyPose(bones, pose, blend, restPos, scale) {
+const _cfg = new Float32Array(HAND_BONE_COUNT * 4);
+
+export function applyPose(bones, pose, blend, restPos, scale, skipHands) {
   const k = blend === undefined ? 1 : blend;
   for (const n of BODY_BONES) {
     const r = pose[n];
@@ -492,16 +490,13 @@ export function applyPose(bones, pose, blend, restPos, scale) {
   const hp = bones.hips.position;
   if (k >= 1) hp.set(tx, ty, tz);
   else hp.set(hp.x + (tx - hp.x) * k, hp.y + (ty - hp.y) * k, hp.z + (tz - hp.z) * k);
-  for (const fb of FINGER_BONES) {
-    const side = fb.endsWith('L') ? 1 : -1;
-    const base = fb.slice(0, -1);
-    const grip = side > 0 ? pose.gripL ?? 0.25 : pose.gripR ?? 0.25;
-    const point = side > 0 ? pose.pointL ?? 0 : pose.pointR ?? 0;
-    const r = fingerRot(base, side, grip, point);
-    _q.setFromEuler(_e.set(r[0], r[1], r[2]));
-    const b = bones[fb];
-    if (k >= 1) b.quaternion.copy(_q);
-    else b.quaternion.slerp(_q, k);
+  // Fingers: the legacy grip/point amounts become a hand config (people-hands.js).
+  // `skipHands` = { L, R }: sides whose fingers a grip override drives instead.
+  for (const S of ['L', 'R']) {
+    if (skipHands && skipHands[S]) continue;
+    const grip = S === 'L' ? pose.gripL ?? 0.25 : pose.gripR ?? 0.25;
+    const point = S === 'L' ? pose.pointL ?? 0 : pose.pointR ?? 0;
+    writeConfig(bones, S, legacyConfig(grip, point, _cfg), k);
   }
 }
 

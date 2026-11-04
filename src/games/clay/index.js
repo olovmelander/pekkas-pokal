@@ -412,6 +412,13 @@ export async function createClay(container) {
   const sponge = buildSponge();
   sponge.visible = false;
   guide.group.add(sponge);
+  // The guide draws without depth test, over everything; the hand and the
+  // sponge are IN FRONT of it, so they join the transparent pass (fully
+  // opaque, still depth-tested against the clay) and draw after it
+  [hand, sponge].forEach((m) => {
+    m.material.transparent = true;
+    m.renderOrder = 40;
+  });
 
   /* ---- Keramikern -------------------------------------------------------- */
 
@@ -432,7 +439,10 @@ export async function createClay(container) {
     // Beside the door on its free (left) side, clear of its swing, within reach of the handle
     kilnSpot: studio.kiln.group.localToWorld(new THREE.Vector3(-0.7, 0, 1.1)).setY(0),
     kilnHinge: studio.kiln.hinge,
-    kilnHandle: studio.kiln.handle
+    kilnHandle: studio.kiln.handle,
+    kilnBack: studio.kiln.group.localToWorld(new THREE.Vector3(-1.25, 0, 0.95)).setY(0),
+    // On the start screen he waits by the wheel, right of the lump, to welcome you
+    greet: new THREE.Vector3(1.45, 0, -1.55)
   });
   scene.add(keramiker.root);
   const attention = new THREE.Vector3();
@@ -557,6 +567,7 @@ export async function createClay(container) {
   }
 
   const piece = () => state.pieces[state.slot];
+  let ghostFlash = 0; // the target's ghost flares when a star is earned
 
   /* Fired pieces: the one in the kiln / on the stand, and the gallery */
   let fired = null; // { mesh, def }
@@ -599,6 +610,7 @@ export async function createClay(container) {
         if (stars === 3) toast('Keramikern höjer ögonbrynen!', true);
         else if (stars === 2) toast('Nu liknar det något!');
         keramiker.cue('star', stars);
+        ghostFlash = 1;
       }
       state.stars = stars;
     }
@@ -813,6 +825,8 @@ export async function createClay(container) {
       later(() => {
         stars[i].classList.add('on', 'pop');
         sfx.star(i);
+        // Fresh glaze winks with every star the piece earns
+        for (let g = 0; g <= i; g++) emitGlint();
       }, 420 + i * 340);
     }
     if (res.grade >= 9) later(() => sfx.fanfare(), 420 + res.stars * 340);
@@ -1389,6 +1403,20 @@ export async function createClay(container) {
         const s = 0.85 + 0.15 * hand.userData.k;
         hand.scale.set(s, s, s);
       }
+    } else if (!b && state.coached < 1.2 && state.phase === 'throw' && guide.worst.d > 0.11) {
+      // First time at the wheel: until you have worked the clay for a moment,
+      // a hand shows the move at the spot that needs it most — in to push,
+      // out to pull — and lifts away between goes
+      const { j } = guide.worst;
+      const cyc = (t * 0.7) % 1;
+      const reach = Math.sin(Math.min(1, cyc / 0.7) * Math.PI);
+      const dir = guide.worst.sign > 0 ? -1 : 1;
+      handPos.set(r[j] + 0.015 + (1 - reach) * 0.35 + dir * reach * 0.06, (j / (N - 1)) * H, 0.08);
+      hand.position.copy(handPos);
+      hand.rotation.z = 0;
+      const s = 0.6 + 0.4 * reach;
+      hand.scale.set(s, s, s);
+      hand.visible = reach > 0.05;
     } else if (!b) {
       hand.visible = false;
     }
@@ -1417,7 +1445,7 @@ export async function createClay(container) {
     const { kiln } = studio;
     kiln.chamberMat.emissiveIntensity = 0.06 + h * 3.2;
     // Cherry red → orange → the yellow of 1 240 °C, never a flat white
-    heatCol.setRGB(1.0, 0.22 + h * 0.36, 0.04 + h * 0.1).multiplyScalar(h * (0.6 + h * 3.4));
+    heatCol.setRGB(1.0, 0.24 + h * 0.34, 0.04 + h * 0.1).multiplyScalar(h * (0.5 + h * 1.6));
     kiln.glowMat.color.copy(heatCol);
     sfx.setKiln(h);
   }
@@ -1521,7 +1549,7 @@ export async function createClay(container) {
     // Closed, the glow leaks round the door; open, it pours out of the chamber
     accent.position.copy(ft < FIRE.heat ? kilnFront : kilnOpen);
     accent.color.setRGB(1, 0.45 + state.heat * 0.2, 0.15);
-    accent.intensity = state.heat * (ft < FIRE.heat ? 3.5 : 2.4) + flash * 3;
+    accent.intensity = state.heat * (ft < FIRE.heat ? 4.5 : 3.5) + flash * 1.4;
     haze.enabled = state.heat > 0.15;
     if (haze.enabled) {
       tmpV.copy(kilnFlue).add(kilnLook).multiplyScalar(0.5).project(camera);
@@ -1530,7 +1558,7 @@ export async function createClay(container) {
       haze.uniforms.uStrength.value = state.heat;
       haze.uniforms.uTime.value = t % 600;
     }
-    bloom.strength = 0.3 + state.heat * 0.45 + flash * 0.25;
+    bloom.strength = 0.3 + state.heat * 0.4 + flash * 0.12;
   }
 
   function emitGlint() {
@@ -1590,6 +1618,7 @@ export async function createClay(container) {
       phase: ph,
       opened: ph === 'fire' && state.t >= FIRE.open,
       fireT: ph === 'fire' ? state.t : undefined,
+      doorOpening: ph === 'fire' && state.t >= FIRE.heat + 0.1,
       attention,
       piece: fired ? pieceMid : null,
       camera: camera.position,
@@ -1687,7 +1716,9 @@ export async function createClay(container) {
 
     // The guide plane turns to face the camera
     guide.group.rotation.y = Math.atan2(camera.position.x, camera.position.z);
-    guide.setGhostTime(tw, state.phase === 'intro' ? smooth(0.5, 1.4, state.t) : 0.9);
+    // A new star makes the ghost flare for a moment: "yes, that's the shape"
+    ghostFlash = Math.max(0, ghostFlash - dt * 1.8);
+    guide.setGhostTime(tw, state.phase === 'intro' ? smooth(0.5, 1.4, state.t) : 0.9 + ghostFlash * 0.9);
 
     // The finished piece turns on the banding wheel while it is judged
     if (fired && (state.phase === 'judge' || (state.phase === 'fire' && state.t > FIRE.slide))) {

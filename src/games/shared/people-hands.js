@@ -56,23 +56,23 @@ const BI = Object.fromEntries(HAND_BONES.map((n, i) => [n, i]));
  * [spread, flexMCP, flexPIP, flexDIP] — the little finger curls most.
  */
 export const DIGITS = {
-  index: { mcp: [-0.0015, -0.0935, 0.0272], len: [0.0338, 0.0207, 0.0172], r: [0.0093, 0.0084, 0.0076], rest: [-0.05, 0.16, 0.2, 0.1] },
-  middle: { mcp: [0.0005, -0.0965, 0.0091], len: [0.0372, 0.0228, 0.0178], r: [0.0096, 0.0087, 0.0078], rest: [-0.005, 0.24, 0.3, 0.14] },
-  ring: { mcp: [-0.001, -0.095, -0.0091], len: [0.0352, 0.0217, 0.0172], r: [0.0091, 0.0083, 0.0075], rest: [0.045, 0.32, 0.38, 0.18] },
-  pinky: { mcp: [-0.0042, -0.0885, -0.0266], len: [0.0272, 0.0162, 0.0152], r: [0.0082, 0.0075, 0.0068], rest: [0.12, 0.4, 0.46, 0.22] }
+  index: { mcp: [-0.0015, -0.0935, 0.0284], len: [0.0325, 0.0198, 0.0168], r: [0.0101, 0.0093, 0.0085], rest: [-0.05, 0.16, 0.2, 0.1] },
+  middle: { mcp: [0.0005, -0.0962, 0.0095], len: [0.0355, 0.0215, 0.0172], r: [0.0104, 0.0096, 0.0087], rest: [-0.005, 0.24, 0.3, 0.14] },
+  ring: { mcp: [-0.001, -0.0948, -0.0094], len: [0.0338, 0.0205, 0.0166], r: [0.0099, 0.0091, 0.0083], rest: [0.045, 0.32, 0.38, 0.18] },
+  pinky: { mcp: [-0.0042, -0.0885, -0.0274], len: [0.0262, 0.0155, 0.0148], r: [0.0089, 0.0082, 0.0075], rest: [0.12, 0.4, 0.46, 0.22] }
 };
 export const FINGER_NAMES = ['index', 'middle', 'ring', 'pinky'];
 
 /** The palm-arch bone's pivot (between the middle and ring metacarpals). */
 export const PALM_PIVOT = [0.0, -0.022, -0.0005];
 /** Palm block (for collisions and the mesh): centre and half sizes [d, y, f]. */
-export const PALM = { c: [0.0005, -0.051, 0.0008], half: [0.0158, 0.05, 0.0355] };
+export const PALM = { c: [0.0005, -0.051, 0.0008], half: [0.0162, 0.05, 0.0372] };
 
 const norm3 = (v) => {
   const l = Math.hypot(v[0], v[1], v[2]) || 1;
   return [v[0] / l, v[1] / l, v[2] / l];
 };
-const TD = norm3([-0.3, -0.84, 0.45]);
+const TD = norm3([-0.36, -0.86, 0.36]);
 const PD = (() => {
   const v = [-0.55, 0, -0.83];
   const k = v[0] * TD[0] + v[1] * TD[1] + v[2] * TD[2];
@@ -85,8 +85,8 @@ const TA = norm3([TD[1] * PD[2] - TD[2] * PD[1], TD[2] * PD[0] - TD[0] * PD[2], 
  * the MCP/IP hinge (positive rotation flexes towards the pad).
  */
 export const THUMB = {
-  cmc: [-0.0085, -0.0255, 0.0205], dir: TD, pad: PD, axis: TA,
-  len: [0.042, 0.031, 0.0262], r: [0.0128, 0.0106, 0.0097]
+  cmc: [-0.0095, -0.029, 0.0215], dir: TD, pad: PD, axis: TA,
+  len: [0.038, 0.029, 0.025], r: [0.0136, 0.0114, 0.0105]
 };
 
 /* ------------------------------------------------------------ configs */
@@ -371,7 +371,7 @@ function segSeg(p1, q1, p2, q2) {
 function solveThumb(spec, shapes, palm, fingers, hs, margin) {
   const T = THUMB;
   const r = T.r.map((x) => x * hs * 0.9 + margin);
-  const target = spec.target;
+  const { target } = spec;
   const pron = spec.pron ?? 0.55;
   const cost = (t) => {
     thumbFK(t, hs, FK2);
@@ -416,7 +416,7 @@ function solveThumb(spec, shapes, palm, fingers, hs, margin) {
         for (const sgn of [1, -1]) {
           const t = best.slice();
           t[i] += sgn * step;
-          if (i === 3 || i === 4) t[i] = THREE.MathUtils.clamp(t[i], -0.25, 1.5);
+          if (i === 3 || i === 4) t[i] = THREE.MathUtils.clamp(t[i], -0.12, 1.5);
           if (i === 1) t[i] = THREE.MathUtils.clamp(t[i], -0.2, 1.6);
           if (i === 0) t[i] = THREE.MathUtils.clamp(t[i], -0.6, 1.0);
           if (i === 2) t[i] = THREE.MathUtils.clamp(t[i], -0.3, 1.4);
@@ -472,14 +472,14 @@ export const GRIPS = {
     fixed: true,
     params: {
       index: DIGITS.index.rest, middle: DIGITS.middle.rest, ring: DIGITS.ring.rest, pinky: DIGITS.pinky.rest,
-      thumb: [0.08, 0.32, 0.25, 0.14, 0.12], palm: 0.05
+      thumb: [-0.04, 0.2, 0.35, 0.18, 0.14], palm: 0.05
     }
   }),
   open: () => ({
     fixed: true,
     params: {
       index: [-0.13, 0.03, 0.04, 0.02], middle: [-0.02, 0.04, 0.05, 0.02], ring: [0.09, 0.05, 0.06, 0.03], pinky: [0.24, 0.06, 0.07, 0.03],
-      thumb: [0.42, 0.12, 0.1, 0.05, 0.02], palm: -0.02
+      thumb: [0.38, 0.08, 0.15, 0.04, 0.02], palm: -0.02
     }
   }),
   /** A clenched fist; the hole sits on the legacy gripL/gripR socket. */
@@ -491,7 +491,7 @@ export const GRIPS = {
       quat: frameYZ(ax, PALM_N),
       shapes: [{ type: 'cyl', r: R, h: 0.06 }],
       fingers: wrapAll([0, 0.9, 1.1, 0.7], 0.12),
-      thumb: { guess: [-0.05, 0.75, 0.75, 0.45, 0.55], target: overIndex(0.55, 0.75) },
+      thumb: { guess: [0.1, 0.4, 0.8, 0.7, 0.5], target: overIndex(0.55, 0.75) },
       palm: 0.16
     };
   },
@@ -504,7 +504,7 @@ export const GRIPS = {
       quat: frameYZ(ax, PALM_N),
       shapes: [{ type: 'cyl', r: R, h: Math.max(0.08, o.length ? o.length / 2 : 0.15) }],
       fingers: wrapAll([0, 0.35, 0.3, 0.15], 0.06),
-      thumb: { guess: [-0.1, 0.8, 0.8, 0.35, 0.35], target: overIndex(0.5, 0.65 + R * 6) },
+      thumb: { guess: [0.1, 0.35, 0.6, 0.45, 0.4], target: overIndex(0.5, 0.65 + R * 6) },
       palm: 0.12
     };
   },
@@ -517,8 +517,8 @@ export const GRIPS = {
     const hw = (o.handle?.[0] || 0.026) / 2;
     const ht = (o.handle?.[1] || 0.022) / 2;
     const br = o.blade || 0.078;
-    const ax = n(0, -Math.sin(0.62), Math.cos(0.62));
-    const zh = new THREE.Vector3(-0.72, 0.0, -0.69);
+    const ax = n(0, -Math.sin(0.66), Math.cos(0.66));
+    const zh = PALM_N;
     return {
       pos: new THREE.Vector3(palmSurface(hs) - ht - 0.003, DIGITS.middle.mcp[1] * hs + hw + 0.006, -0.002),
       quat: frameYZ(ax, zh),
@@ -532,7 +532,7 @@ export const GRIPS = {
         ring: { start: [0.05, 0.5, 0.5, 0.25] },
         pinky: { start: [0.12, 0.5, 0.5, 0.25] }
       },
-      thumb: { guess: [0.05, 0.55, 0.45, 0.2, 0.12], target: [0, 0.052, ht + 0.0035 + 0.0085] },
+      thumb: { guess: [0.0, 0.2, 0.5, 0.1, 0.05], target: [0, 0.052, ht + 0.0035 + 0.0085] },
       palm: 0.1
     };
   },
@@ -560,25 +560,24 @@ export const GRIPS = {
         ring: { start: [0.05, 0.6, 0.8, 0.4] },
         pinky: { start: [0.12, 0.7, 0.9, 0.45] }
       },
-      thumb: { guess: [0.1, 0.55, 0.5, 0.1, 0.05], target: [0, 0.03, ht + 0.0105] },
+      thumb: { guess: [0.0, 0.1, 0.35, 0.1, 0.05], target: [0, 0.03, ht + 0.0105] },
       palm: 0.08
     };
   },
   /** Tripod grip for a pen or brush. Object +Y runs towards the tip. o.diameter (default 9 mm). */
   pinch: (o, hs) => {
     const R = (o.diameter || 0.009) / 2;
-    const ax = n(-0.55, -0.72, -0.42);
     return {
-      pos: new THREE.Vector3(-0.034 * hs, -0.128 * hs, 0.032 * hs),
-      quat: frameYZ(ax, new THREE.Vector3(0.6, 0, -0.8)),
+      pos: new THREE.Vector3(-0.03 * hs, -0.146 * hs, 0.036 * hs),
+      quat: frameYZ(n(-0.42, -0.9, -0.08), PALM_N),
       shapes: [{ type: 'cyl', r: R, h: 0.15 }],
       fingers: {
-        index: { start: [-0.08, 0.45, 0.55, 0.15], rate: [0.6, 1, 0.5] },
-        middle: { start: [0.02, 0.55, 0.85, 0.3], rate: [0.7, 1, 0.5] },
+        index: { start: [-0.06, 0.42, 0.42, 0.18], rate: [0.6, 1, 0.5] },
+        middle: { start: [0.0, 0.6, 0.75, 0.3], rate: [0.7, 1, 0.5] },
         ring: { start: [0.06, 0.95, 1.2, 0.55], fixed: true },
         pinky: { start: [0.14, 1.05, 1.25, 0.6], fixed: true }
       },
-      thumb: { guess: [0.05, 0.6, 0.55, 0.25, 0.2], target: [0.0, 0.004, -0.013] },
+      thumb: { guess: [0.0, 0.35, 0.6, 0.25, 0.2], target: [0.0, 0.002, R + 0.009] },
       palm: 0.1
     };
   },
@@ -603,7 +602,7 @@ export const GRIPS = {
         ring: { start: [0.06, 0.8, 1.1, 0.6] },
         pinky: { start: [0.14, 0.9, 1.2, 0.6] }
       },
-      thumb: { guess: [0.1, 0.55, 0.5, 0.2, 0.15], target: [0, loop + bar + 0.004, -0.002] },
+      thumb: { guess: [0.0, 0.2, 0.4, 0.15, 0.1], target: [0, loop + bar + 0.004, -0.002] },
       palm: 0.08
     };
   },
@@ -628,16 +627,16 @@ export const GRIPS = {
   flat: (o, hs) => {
     const ht = (o.thickness || 0.01) / 2;
     return {
-      pos: new THREE.Vector3(-0.034 * hs, -0.118 * hs, 0.038 * hs),
-      quat: frameYZ(n(-0.95, 0.0, -0.3), n(0.1, -1, 0.15)),
-      shapes: [{ type: 'box', pos: [0, 0, 0.12], half: [0.12, ht, 0.12], round: 0.002 }],
+      pos: new THREE.Vector3(-0.02 * hs - ht, -0.112 * hs, 0.044 * hs),
+      quat: frameYZ(PALM_N, n(0, -0.62, -0.78)),
+      shapes: [{ type: 'box', pos: [0, 0, 0.13], half: [0.12, ht, 0.13], round: 0.002 }],
       fingers: {
-        index: { start: [-0.1, 0.3, 0.1, 0.05], rate: [1, 0.6, 0.4] },
-        middle: { start: [-0.02, 0.3, 0.1, 0.05], rate: [1, 0.6, 0.4] },
-        ring: { start: [0.06, 0.3, 0.12, 0.06], rate: [1, 0.6, 0.4] },
-        pinky: { start: [0.15, 0.32, 0.15, 0.08], rate: [1, 0.6, 0.4] }
+        index: { start: [-0.08, 0.15, 0.06, 0.03], rate: [1, 0.5, 0.3] },
+        middle: { start: [-0.02, 0.15, 0.06, 0.03], rate: [1, 0.5, 0.3] },
+        ring: { start: [0.05, 0.15, 0.08, 0.04], rate: [1, 0.5, 0.3] },
+        pinky: { start: [0.12, 0.18, 0.1, 0.05], rate: [1, 0.5, 0.3] }
       },
-      thumb: { guess: [0.25, 0.4, 0.3, 0.05, 0.05], target: [0, ht + 0.009, 0.012] },
+      thumb: { guess: [0.05, 0.15, 0.4, 0.1, 0.05], target: [0, ht + 0.0095, 0.012] },
       palm: 0.04
     };
   },
@@ -649,18 +648,28 @@ export const GRIPS = {
    */
   palette: (o, hs) => {
     const ht = (o.thickness || 0.009) / 2;
+    const thumb = [0.15, 1.05, 0.5, 0.15, 0.1];
+    const ch = thumbFK(thumb, hs, mkChain());
+    const plane = palmSurface(hs) - ht - 0.002;
+    const a = ch.j[1];
+    const b = ch.j[2];
+    const k = THREE.MathUtils.clamp((plane - a.x) / (b.x - a.x || 1e-6), 0, 1);
+    const hole = a.clone().lerp(b, k);
+    // Paint side faces the palm's way; the board reaches up the forearm (+X)
+    const xA = n(0, 0.72, -0.69);
+    const q = frameYZ(PALM_N, new THREE.Vector3().crossVectors(xA, PALM_N));
     return {
-      pos: new THREE.Vector3(-0.04 * hs, -0.09 * hs, 0.054 * hs),
-      quat: frameYZ(n(-1, 0.05, 0.12), n(0, 0.7, 0.7)),
-      shapes: [{ type: 'box', pos: [0.13, 0, 0.02], half: [0.15, ht, 0.12], round: 0.003, hole: 0.02 }],
+      pos: new THREE.Vector3(plane, hole.y, hole.z),
+      quat: q,
+      shapes: [],
       fingers: {
-        index: { start: [-0.06, 0.5, 0.35, 0.15], rate: [1, 0.8, 0.5] },
-        middle: { start: [0.0, 0.5, 0.35, 0.15], rate: [1, 0.8, 0.5] },
-        ring: { start: [0.06, 0.55, 0.4, 0.2], rate: [1, 0.8, 0.5] },
-        pinky: { start: [0.14, 0.6, 0.45, 0.2], rate: [1, 0.8, 0.5] }
+        index: { start: [-0.05, 0.55, 0.6, 0.3], fixed: true },
+        middle: { start: [0.0, 0.6, 0.65, 0.3], fixed: true },
+        ring: { start: [0.05, 0.65, 0.7, 0.35], fixed: true },
+        pinky: { start: [0.13, 0.7, 0.75, 0.35], fixed: true }
       },
-      thumb: { guess: [0.25, 0.25, 0.2, 0.1, 0.1], target: null },
-      palm: 0.06
+      thumb: { guess: thumb, target: null },
+      palm: 0.08
     };
   },
   /** A small ball (ping-pong toss) in the fingertips. Origin = ball centre. o.diameter (40 mm). */
@@ -676,7 +685,7 @@ export const GRIPS = {
         ring: { start: [0.06, 0.6, 0.6, 0.3], rate: [1, 1, 0.8] },
         pinky: { start: [0.14, 0.75, 0.8, 0.4], rate: [1, 1, 0.8] }
       },
-      thumb: { guess: [0.1, 0.65, 0.6, 0.15, 0.15], target: [0.0, R * 0.4, -R - 0.009] },
+      thumb: { guess: [0.0, 0.35, 0.6, 0.25, 0.2], target: [0.0, R * 0.4, -R - 0.009] },
       palm: 0.1
     };
   },
@@ -748,7 +757,7 @@ export function solveGrip(name, opts = {}, hs = HAND_SCALE_DEFAULT) {
   if (hit) return hit;
   const def = GRIPS[def0](opts, hs);
   let params;
-  if (def.fixed) params = def.params;
+  if (def.fixed) ({ params } = def);
   else {
     const shapes = toHandShapes(def);
     const palm = palmShape(hs);

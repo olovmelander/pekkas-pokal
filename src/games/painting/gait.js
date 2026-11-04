@@ -85,7 +85,7 @@ export class Feet {
   /** Where a foot would stand if the person stood square right now. */
   ideal(f, out) {
     const r = this.person.root;
-    const yaw = this.yaw;
+    const { yaw } = this;
     return out.set(f.side * this.width, 0, 0.01 * this.s).applyAxisAngle(Y, yaw).add(r.position).setY(0);
   }
 
@@ -116,15 +116,15 @@ export class Feet {
   plan(dt) {
     const d = Math.min(Math.max(dt, 1e-4), 0.1);
     const r = this.person.root;
-    const s = this.s;
+    const { s } = this;
     // Smoothed ground velocity: the lead a swinging foot aims ahead by
     _v.subVectors(r.position, this.lastRoot).divideScalar(d).setY(0);
     this.lastRoot.copy(r.position);
     this.vel.lerp(_v, 1 - Math.exp(-d * 10));
     const speed = this.vel.length();
     this.still = speed < 0.05 ? this.still + d : 0;
-    const yaw = this.yaw;
-    const lead = 0.3;
+    const { yaw } = this;
+    const lead = 0.25;
 
     // In the air: chase where the body will be when the foot lands
     let flying = null;
@@ -180,8 +180,7 @@ export class Feet {
     // Standing feet: flat, or rolling onto the toes as the body passes over
     const fwdX = Math.sin(yaw);
     const fwdZ = Math.cos(yaw);
-    let behindMax = 0;
-    const out = this.out;
+    const { out } = this;
     out.swing = 0;
     for (const f of this.feet) {
       // How far ahead of the hips this foot is
@@ -190,7 +189,6 @@ export class Feet {
       if (f.t >= 0) continue;
       const heel = speed > 0.3 ? Math.min(0.42, Math.max(0, (-ahead - 0.14 * s) * 2.2)) : 0;
       f.pitch += (heel - f.pitch) * (1 - Math.exp(-d * (heel > f.pitch ? 12 : 22)));
-      behindMax = Math.max(behindMax, -ahead);
     }
     out.swing = THREE.MathUtils.clamp(out.swing / (0.55 * s), -1, 1);
     out.twist = out.swing;
@@ -217,18 +215,15 @@ export class Feet {
 
   /** Ankle target and sole orientation for a foot, from its contact point. */
   ankleOf(f) {
-    const s = this.s;
+    const { s } = this;
     _e.set(f.pitch, f.yaw, 0, 'YXZ');
     f.quat.setFromEuler(_e);
     if (f.pitch > 0 && f.t < 0) {
       // Rolling onto the toes: the toe pad stays put, the ankle rises round it
-      _q2.setFromEuler(_e.set(0, f.yaw, 0, 'YXZ'));
-      const toe = _v.copy(TOE).multiplyScalar(s).applyQuaternion(_q2).add(f.pos);
-      toe.y = 0;
-      f.ankle.copy(TOE).multiplyScalar(-s).applyQuaternion(f.quat).add(toe);
-      f.ankle.y += ANKLE * s - TOE.y * -s * 0 + 0;
-      // TOE.y is the drop from ankle to sole: keep the sole's toe on the grass
-      f.ankle.y = toe.y + _v2.copy(TOE).multiplyScalar(-s).applyQuaternion(f.quat).y;
+      _q2.setFromAxisAngle(Y, f.yaw);
+      const toe = _v.set(0, (ANKLE + TOE.y) * s, TOE.z * s).applyQuaternion(_q2).add(f.pos);
+      f.ankle.copy(TOE).multiplyScalar(s).applyQuaternion(f.quat);
+      f.ankle.subVectors(toe, f.ankle);
     } else {
       f.ankle.copy(f.pos);
       f.ankle.y = f.pos.y + ANKLE * s;
@@ -239,8 +234,8 @@ export class Feet {
   /** Legs onto the feet. Call after setPose and root.updateMatrixWorld. */
   solve() {
     const p = this.person;
-    const s = this.s;
-    const yaw = this.yaw;
+    const { s } = this;
+    const { yaw } = this;
     for (const f of this.feet) {
       this.ankleOf(f);
       // Knee toward where the foot points, a little out

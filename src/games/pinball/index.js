@@ -356,11 +356,13 @@ export async function createPinball(container, opts = {}) {
    * five and the left orbit starts FINALEN, the wizard mode.
    */
   const MODES = [
-    { id: 'gokart', year: 2012, name: 'GOKART', label: 'Gokart', hint: 'Kör 3 varv — orbit eller ramp', goal: 3, time: 35 },
-    { id: 'femkamp', year: 2013, name: 'FEMKAMP', label: 'Femkamp', hint: 'Träffa 5 olika skott', goal: 5, time: 60 },
-    { id: 'pingis', year: 2019, name: 'PINGIS', label: 'Pingis', hint: '12 bumperträffar', goal: 12, time: 35 },
-    { id: 'skytte', year: 2022, name: 'SKYTTE', label: 'Skytte', hint: 'Fäll P→O→K→A→L i ordning', goal: 5, time: 45 },
-    { id: 'fiske', year: 2024, name: 'FISKE', label: 'Fiske', hint: '3 napp på pokalen i borgen', goal: 3, time: 40 }
+    // `gi`: each gren recolours the whole GI string, so a glance at the
+    // table says which one is running
+    { id: 'gokart', year: 2012, name: 'GOKART', label: 'Gokart', hint: 'Kör 3 varv — orbit eller ramp', goal: 3, time: 35, gi: 0xff8a4a },
+    { id: 'femkamp', year: 2013, name: 'FEMKAMP', label: 'Femkamp', hint: 'Träffa 5 olika skott', goal: 5, time: 60, gi: 0xffd27a },
+    { id: 'pingis', year: 2019, name: 'PINGIS', label: 'Pingis', hint: '12 bumperträffar', goal: 12, time: 35, gi: 0x9fe6ff },
+    { id: 'skytte', year: 2022, name: 'SKYTTE', label: 'Skytte', hint: 'Fäll P→O→K→A→L i ordning', goal: 5, time: 45, gi: 0xff6a86 },
+    { id: 'fiske', year: 2024, name: 'FISKE', label: 'Fiske', hint: '3 napp på pokalen i borgen', goal: 3, time: 40, gi: 0x5eead4 }
   ];
 
   const state = {
@@ -472,6 +474,7 @@ export async function createPinball(container, opts = {}) {
     renderMult();
   }
 
+  const view = { w: 1, h: 1, land: false };
   const clock = (secs) => `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
 
   /** The one thing worth doing next, in words */
@@ -487,6 +490,12 @@ export async function createPinball(container, opts = {}) {
     if (m) {
       // Progress and the clock in the line itself: in portrait this pill is
       // the only place the gren's objective is spelled out
+      if (view.land) {
+        // The mode card beside the table already shows progress and clock
+        if (m.def.id === 'skytte') return `Fäll ${L.targets[Math.min(4, m.progress)].letter} härnäst`;
+        if (m.def.id === 'fiske') return 'Porten är öppen — skjut pokalen i borgen';
+        return m.def.hint;
+      }
       const left = clock(Math.max(0, Math.ceil(m.timeLeft)));
       const head = `${m.def.label} ${m.progress}/${m.def.goal}`;
       if (m.def.id === 'skytte') return `${head} · fäll ${L.targets[Math.min(4, m.progress)].letter} härnäst · ${left}`;
@@ -519,7 +528,6 @@ export async function createPinball(container, opts = {}) {
   }
 
   /* ---- Score pops: the points rise off the thing you hit ---- */
-  const view = { w: 1, h: 1, land: false };
   const popEls = Array.from({ length: 8 }, () => {
     const el = document.createElement('span');
     el.className = 'pbf-pop';
@@ -678,6 +686,7 @@ export async function createPinball(container, opts = {}) {
    */
   const FLASHER_GI = { left: 3, right: 7 };
   function fireFlasher(which = 'both', strength = 1) {
+    if (state.phase === 'play' && strength >= 0.8) sfx.flasher(Math.min(1, strength));
     refs.flashers.forEach((f) => {
       if (which === 'both' || which === f.id) {
         f.t = 0;
@@ -1076,8 +1085,8 @@ export async function createPinball(container, opts = {}) {
     fireFlasher('both', 1);
     buzz([20, 30, 40]);
     dmd.modeStart(next.name, next.year, next.hint, next.time, next.id);
-    lampShow('chase', 0x7c8cf8, 1.8);
-    setGI(0x7c8cf8, 1.2 * LAMP);
+    lampShow('chase', next.gi, 1.8);
+    setGI(next.gi, 1.25 * LAMP);
     renderGrenar();
     updateStatus();
     const spot = {
@@ -1462,6 +1471,14 @@ export async function createPinball(container, opts = {}) {
       }
     }
 
+    // The GI sags as the ball goes, the way a real machine's string dips on
+    // a drain, then comes back for the next ball. (This is also what hands
+    // the lights back after a TILT, which used to leave them red.)
+    setGI(0x5a3040, 0.45 * LAMP);
+    later(() => {
+      if (state.phase === 'between' || state.phase === 'launch') setGI();
+    }, 1500);
+
     // End-of-ball bonus — counted up row by row on the DMD. A tilted ball
     // forfeits it, as on every real machine.
     const pb = state.perBall;
@@ -1787,13 +1804,22 @@ export async function createPinball(container, opts = {}) {
       dmd.warning();
       sfx.warning();
     }
-    const dir = Math.random() < 0.5 ? -1 : 1;
+    // The shove goes the way that helps: the lowest ball (the one in
+    // danger) is pushed back toward the middle, away from its outlane. It
+    // used to be a coin toss, which made the button feel like a lottery.
+    let low = null;
+    state.balls.forEach((b) => {
+      if (b.live && (!low || b.y < low.y)) low = b;
+    });
+    const off = low ? L.centerX - low.x : 0;
+    const dir = Math.abs(off) > 0.4 ? Math.sign(off) : Math.random() < 0.5 ? -1 : 1;
     world.nudgeX = dir * 40 + (Math.random() - 0.5) * 22;
     world.nudgeY = 38;
     state.balls.forEach((b) => {
-      b.vx += dir * 2.8 + (Math.random() - 0.5) * 3;
+      b.vx += dir * 2.8 + (Math.random() - 0.5) * 1.6;
       b.vy += 3;
     });
+    buzz(30);
     later(() => {
       world.nudgeX = 0;
       world.nudgeY = 0;
@@ -1992,8 +2018,9 @@ export async function createPinball(container, opts = {}) {
         }
       });
     } else {
+      const saveLeft = state.ballSaveUntil - performance.now();
       const lit = {
-        save: state.phase === 'play' && performance.now() < state.ballSaveUntil,
+        save: state.phase === 'play' && saveLeft > 0,
         leftOrbit: state.modeStartLit || (state.multiball && !state.jackpotLit),
         leftRamp: !!state.mode || state.multiball,
         castle: state.lockLit || (state.multiball && state.jackpotLit) ||
@@ -2004,6 +2031,8 @@ export async function createPinball(container, opts = {}) {
       INSERT_ORDER.forEach((id) => {
         level[id] = lit[id] ? pulse : null;
       });
+      // The last two seconds of ball save hurry, as on a real machine
+      if (lit.save && saveLeft < 2000) level.save = Math.floor(now / 90) % 2 ? 1 : null;
     }
 
     // Lamp show on top
@@ -2097,7 +2126,7 @@ export async function createPinball(container, opts = {}) {
     // The plastics glow with the GI string under them, and the bulbs show it
     const g0 = giLamps[0];
     refs.plastics.emissive.copy(g0.color);
-    refs.plastics.emissiveIntensity = clamp(0.36 * (g0.intensity / GI_INTENSITY), 0.05, 0.6);
+    refs.plastics.emissiveIntensity = clamp(0.5 * (g0.intensity / GI_INTENSITY), 0.06, 0.8);
     materials.bulb.color.copy(g0.color).multiplyScalar(clamp(0.55 + 0.4 * (g0.intensity / GI_INTENSITY), 0.2, 0.92));
   }
 

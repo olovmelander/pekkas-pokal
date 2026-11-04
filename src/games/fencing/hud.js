@@ -34,6 +34,9 @@ const short = (name) => {
 export const fmt = (n) => Math.round(n).toLocaleString('sv-SE');
 
 const KEY = (k) => `<kbd>${k}</kbd>`;
+/* The blade's angle in each line, as a glyph on the guard buttons */
+const BLADE_ICO = ['M3 13 L21 4', 'M3 9 L21 9', 'M3 5 L21 14'].map((d) => `<svg class="fen-line-ico" viewBox="0 0 24 18" aria-hidden="true">
+  <path d="${d}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="3" cy="${d.split(' ')[1]}" r="2.6" fill="currentColor"/></svg>`);
 
 class Hud {
   constructor(root, el) {
@@ -215,9 +218,9 @@ export function buildHud(root) {
     </div>
 
     <div class="fen-pad fen-pad-l" id="fen-lines">
-      <button class="fen-line" data-line="0" aria-label="Hög linje">HÖG ${KEY('↑')}</button>
-      <button class="fen-line on" data-line="1" aria-label="Mittlinje">MITT</button>
-      <button class="fen-line" data-line="2" aria-label="Låg linje">LÅG ${KEY('↓')}</button>
+      <button class="fen-line" data-line="0" aria-label="Hög linje"><span>HÖG</span>${BLADE_ICO[0]}${KEY('↑')}</button>
+      <button class="fen-line on" data-line="1" aria-label="Mittlinje"><span>MITT</span>${BLADE_ICO[1]}</button>
+      <button class="fen-line" data-line="2" aria-label="Låg linje"><span>LÅG</span>${BLADE_ICO[2]}${KEY('↓')}</button>
     </div>
     <div class="fen-pad fen-pad-r" id="fen-attack">
       <button class="fen-btn fen-feint" id="fen-feint" aria-label="Fint">FINT ${KEY('F')}</button>

@@ -1166,7 +1166,7 @@ class ScoreBox {
     pole.position.y = -1.55;
     pole.castShadow = true;
     g.add(pole);
-    this.light = new THREE.PointLight(0x2bff74, 0, 9, 2);
+    this.light = new THREE.PointLight(0x2bff74, 0, 7.5, 2);
     this.light.position.set(0, -0.2, 0.8);
     g.add(this.light);
     this.on = [0, 0];
@@ -1190,9 +1190,10 @@ class ScoreBox {
     this.tex.needsUpdate = true;
   }
 
-  /** side 0 = you (green), 1 = opponent (red) */
-  flash(side) {
+  /** side 0 = you (green), 1 = opponent (red); `spill` = colour the room too */
+  flash(side, spill = true) {
     this.on[side] = 1;
+    this.spill = spill;
     this.light.color.set(side ? 0xff3b2c : 0x2bff74);
   }
 
@@ -1207,7 +1208,7 @@ class ScoreBox {
       // Lit lamps hum a little, as the real ones do through a camera
       const target = on ? 7 + Math.sin(t * 50) * 0.4 : 0.05;
       m.emissiveIntensity += (target - m.emissiveIntensity) * Math.min(1, dt * (on ? 30 : 8));
-      lightI += on ? 2.8 : 0;
+      lightI += on && this.spill !== false ? 2.1 : 0;
     });
     this.light.intensity += (lightI - this.light.intensity) * Math.min(1, dt * 14);
   }
@@ -1575,6 +1576,19 @@ export function buildSalle({ glow, high, crowdNames = [] }) {
     score,
     trophy,
     trophyPos: new THREE.Vector3(tx, 1.4, tz),
+    /** Pekkas Pokal goes back on its table (after the champion has lifted it). */
+    returnTrophy() {
+      g.add(trophy);
+      trophy.position.set(tx, 0.94, tz);
+      trophy.quaternion.identity();
+      trophy.scale.setScalar(1.15);
+      trophyGlow.visible = true;
+    },
+    /** It leaves the table: the glow over the empty table goes out. */
+    lendTrophy() {
+      trophyGlow.visible = false;
+      return trophy;
+    },
     /** `focus`: where the action is (the blades), for heads to follow. */
     update(t, dt, focus) {
       // Wrapped clocks: the shaft's two noise scrolls (0.012 and 0.02 per
@@ -1591,7 +1605,8 @@ export function buildSalle({ glow, high, crowdNames = [] }) {
         l.intensity = 11 * (f + (i ? Math.sin(t * 13.3) * 0.03 : 0));
       });
       flameMat.size = 0.32 * f;
-      trophy.rotation.y = t * 0.25;
+      // It turns slowly on its table — not in the champion's hand
+      if (trophy.parent === g) trophy.rotation.y = t * 0.25;
     },
     setMoteScale(px) {
       motes.mat.uniforms.uScale.value = px;

@@ -103,7 +103,8 @@ export function foliageMaterial() {
         varying float vRim;
       `)
       .replace('#include <opaque_fragment>', `
-        outgoingLight += diffuseColor.rgb * uSunColor * vRim * 2.2 + uSunColor * vRim * 0.05;
+        // (a fixed sap-green term keeps the glow alive, not brown, on dark needles)
+        outgoingLight += (diffuseColor.rgb * 1.8 + vec3(0.09, 0.11, 0.015)) * uSunColor * vRim;
         #include <opaque_fragment>
       `);
   };
@@ -250,7 +251,7 @@ export function addBirch(G, rand, x, y0, z, h, o = {}) {
     }
   }
   // Crown: hanging clumps around the upper stem, biggest in the middle
-  const leaf = new THREE.Color(o.leaf || 0x6c8a34);
+  const leaf = new THREE.Color(o.leaf || 0x7a9c3e);
   const n = o.clumps || 7;
   const crownC = new THREE.Vector3(...at(0.78));
   const cw = h * (0.17 + rand() * 0.05);
@@ -262,7 +263,7 @@ export function addBirch(G, rand, x, y0, z, h, o = {}) {
     const rr = cw * (0.22 + rand() * 0.14) * (1 - Math.abs(f - 0.7) * 0.6);
     const tint = leaf.clone().offsetHSL((rand() - 0.5) * 0.04, (rand() - 0.5) * 0.1, (rand() - 0.5) * 0.12);
     addClump(G, rand, sx + Math.cos(a) * out, sy - rr * 0.15, sz + Math.sin(a) * out, rr, {
-      tint, haze, centre: crownC, squash: 1.5, droop: 0.5, shade: 0.65, tipK: 0.4
+      tint, haze, centre: crownC, squash: 1.5, droop: 0.5, shade: 0.4, tipK: 0.4, lift: 0.9, detail: o.detail
     });
   }
 }
@@ -279,7 +280,7 @@ export function addClump(G, rand, x, y, z, r, o) {
   const haze = o.haze || 0;
   const squash = o.squash || 1;
   const droop = o.droop || 0;
-  const shadeK = o.shade === undefined ? 0.5 : o.shade;
+  const shadeK = o.shade === undefined ? 0.42 : o.shade;
   // Jitter per unique direction so shared corners stay welded
   const jit = new Map();
   const key = (a, b, c) => `${Math.round(a * 100)},${Math.round(b * 100)},${Math.round(c * 100)}`;
@@ -299,7 +300,7 @@ export function addClump(G, rand, x, y, z, r, o) {
       vs.push([px, py, pz, uy, j]);
     }
     for (const [px, py, pz, uy, j] of vs) {
-      _n.set(px - centre.x, (py - centre.y) * 0.9 + r * 0.3, pz - centre.z);
+      _n.set(px - centre.x, (py - centre.y) * 0.9 + r * (o.lift || 0.4), pz - centre.z);
       const k = (1 - shadeK) + shadeK * (uy * 0.5 + 0.5);
       _c.copy(o.tint).multiplyScalar(k * (0.9 + (j - 0.78) * 0.5)).lerp(HAZE_C, haze);
       G.v(px, py, pz, _n.x, _n.y, _n.z, _c, Math.min(1, Math.max(0, j - 0.85) * 3) * (o.tipK || 1) * (0.4 + 0.6 * Math.max(0, uy + 0.3)));
@@ -446,7 +447,8 @@ export function buildForest(rand, { lite = false } = {}) {
   /* Birches in front of the spruce, in loose groups */
   const birchAt = (bx, bz, haze, sz = 1) => {
     const h = (7 + rand() * 6) * sz;
-    addBirch(edge, rand, bx, -0.3, bz, h, { haze, clumps: lite ? 8 : 13 + Math.floor(rand() * 5) });
+    // 95 m out a 20-face clump reads the same as an 80-face one
+    addBirch(edge, rand, bx, -0.3, bz, h, { haze, clumps: lite ? 8 : 13 + Math.floor(rand() * 5), detail: 0 });
   };
   for (let i = 0; i < (lite ? 12 : 22); i++) {
     const gx = -150 + rand() * 300;
@@ -478,7 +480,7 @@ export function buildForest(rand, { lite = false } = {}) {
       const parts = lite ? 2 : 3 + Math.floor(rand() * 2);
       for (let k = 0; k < parts; k++) {
         addClump(under, rand, ux + (rand() - 0.5) * bw * 1.2, bw * (0.45 + rand() * 0.35), uz + (rand() - 0.5) * bw * 0.6,
-          bw * (0.55 + rand() * 0.3), { tint, haze: 0.08, centre, squash: 0.9, detail: lite ? 0 : 1 });
+          bw * (0.55 + rand() * 0.3), { tint, haze: 0.08, centre, squash: 0.9, detail: 0 });
       }
     }
   }
@@ -502,11 +504,11 @@ export function buildForest(rand, { lite = false } = {}) {
       const zz = 92 + rand() * 14;
       const h = 8 + rand() * 12;
       const tint = SPRUCE.clone().offsetHSL((rand() - 0.5) * 0.04, (rand() - 0.5) * 0.1, (rand() - 0.5) * 0.08);
-      addSpruce(back, rand, x, -1, zz, h, { tiers: lite ? 5 : 7, arms: 6, tint, haze: 0.28, trunk: false });
+      addSpruce(back, rand, x, -1, zz, h, { tiers: lite ? 5 : 8, arms: 6, tint, tipColor: SPRUCE_TIP, tipLight: 0.3, haze: 0.1, trunk: false });
       x += (lite ? 7 : 4.6) * (0.5 + rand());
     }
     [[-26, 52], [-19, 60], [-31, 66], [22, 58], [30, 49], [37, 63], [8, 74]].forEach(([bx, bz]) => {
-      addBirch(back, rand, bx, -0.3, bz, 7 + rand() * 4, { haze: 0.15, clumps: lite ? 8 : 13 });
+      addBirch(back, rand, bx, -0.3, bz, 7 + rand() * 4, { haze: 0.06, clumps: lite ? 8 : 13, detail: lite ? 0 : 1 });
     });
   }
   emit(back, -5);

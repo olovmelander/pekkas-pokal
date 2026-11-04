@@ -3,7 +3,8 @@
  * geometry. Shared by createPerson and the crowd.
  */
 import * as THREE from 'three';
-import { BONE_DEFS, BONE_INDEX, A_POSE, jointTable, HEAD_SCALE } from './people-rig.js';
+import { BONE_DEFS, BONE_INDEX, A_POSE, jointTable, HEAD_SCALE, armChain } from './people-rig.js';
+import { HAND_ALIASES } from './people-hands.js';
 import {
   Builder, REGION, sstep, buildTorso, buildArm, buildLeg, buildHand, buildShoe, buildCollar, buildTorsoExtras
 } from './people-build.js';
@@ -23,7 +24,7 @@ import { buildFactors } from './people-look.js';
 export function buildPersonData(look, detail = 'high', opts = {}) {
   const res = { high: detail !== 'low' };
   const build = buildFactors(look.build);
-  const joints = jointTable(build.w, build.w > 1 ? 1.04 : build.w < 1 ? 0.97 : 1);
+  const joints = jointTable(build.w, build.w > 1 ? 1.04 : build.w < 1 ? 0.97 : 1, build.hand ?? 1.09);
   const crowd = !!opts.crowd;
   const { outfit } = look;
   const white = new THREE.Color(1, 1, 1);
@@ -150,7 +151,7 @@ export function buildPersonData(look, detail = 'high', opts = {}) {
 export function toBindPose(b, joints) {
   const { P } = b;
   const { N } = b;
-  const chain = (S) => ['upperArm', 'forearm', 'forearmTwist', 'hand', 'thumb', 'index', 'indexTip', 'fingers', 'fingersTip'].map((n) => BONE_INDEX[n + S]);
+  const chain = (S) => armChain(S).map((n) => BONE_INDEX[n]);
   const armL = new Set(chain('L'));
   const armR = new Set(chain('R'));
   const rot = (side) => {
@@ -217,6 +218,13 @@ export function makeSkeleton(joints, s) {
   }
   bones.upperArmL.rotation.z = A_POSE;
   bones.upperArmR.rotation.z = -A_POSE;
+  // Legacy finger names (fingers, fingersTip) point at the new bones
+  for (const [old, now] of Object.entries(HAND_ALIASES)) {
+    for (const S of ['L', 'R']) {
+      Object.defineProperty(bones, old + S, { value: bones[now + S], enumerable: false });
+      restPos[old + S] = restPos[now + S];
+    }
+  }
   return { bones, list, restPos };
 }
 

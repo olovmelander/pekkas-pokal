@@ -316,6 +316,15 @@
 
 /* ---- Repris: brevlådeformat och en blinkande etikett --------------------- */
 
+/* Under reprisen är det tv-bild: poäng, tavla och tangenttips viker undan */
+.pg-ui.pg-replaying .pb-top,
+.pg-ui.pg-replaying .pg-bug,
+.pg-ui.pg-replaying .pg-keys,
+.pg-ui.pg-replaying .pg-rally {
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
 .pg-ui .pg-replay {
   position: absolute;
   inset: 0;
@@ -382,9 +391,9 @@
 /* Hallen ska synas bakom korten: den är halva upplevelsen */
 .pg-ui .pb-overlay {
   background:
-    radial-gradient(120% 90% at 50% 40%, rgba(10, 8, 6, 0.35), rgba(6, 5, 4, 0.82)),
-    linear-gradient(180deg, rgba(6, 5, 4, 0.2), rgba(6, 5, 4, 0.55));
-  backdrop-filter: blur(3px);
+    radial-gradient(120% 90% at 50% 40%, rgba(10, 8, 6, 0.22), rgba(6, 5, 4, 0.74)),
+    linear-gradient(180deg, rgba(6, 5, 4, 0.12), rgba(6, 5, 4, 0.5));
+  backdrop-filter: blur(2px);
   padding: 12px;
 }
 
@@ -917,9 +926,11 @@
   left: max(14px, env(safe-area-inset-left));
   bottom: calc(14px + env(safe-area-inset-bottom));
   display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  max-width: min(760px, 62vw);
+  /* A short column in the corner, clear of the centred serve prompt */
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  max-width: min(300px, 30vw);
   font-size: 0.62rem;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -950,6 +961,9 @@
   left: 16px;
   right: 16px;
   bottom: calc(64px + env(safe-area-inset-bottom));
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
   width: fit-content;
   max-width: 460px;
   margin: 0 auto;
@@ -1177,8 +1191,9 @@
 
 @media (max-height: 500px) {
   .pg-ui .pg-ghost {
-    bottom: calc(8% + env(safe-area-inset-bottom));
+    bottom: calc(50px + env(safe-area-inset-bottom)); /* above the serve prompt */
     transform: scale(0.85);
+    transform-origin: 50% 100%;
   }
 }
 

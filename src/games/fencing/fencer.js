@@ -24,6 +24,7 @@
  */
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createPerson, appearanceFor } from '../shared/people.js';
 
 /* ---- Proportions (metres, for a 1.80 m fencer; scaled per person) ------ */
@@ -237,14 +238,34 @@ function buildFoil(mats) {
   const bellGeo = new THREE.SphereGeometry(0.06, 16, 6, 0, Math.PI * 2, 0, Math.PI / 2.6);
   bellGeo.rotateZ(-Math.PI / 2);
   bellGeo.translate(0.03, 0, 0);
-  const bell = new THREE.Mesh(bellGeo, mats.steel);
-  bell.castShadow = true;
-  g.add(bell);
-  const gripGeo = new THREE.CylinderGeometry(0.012, 0.015, 0.12, 6);
+  // The French grip: a slightly curved, tapering handle with the thumb
+  // pad inside the bell, and the pommel at the end that rests against the
+  // wrist (the pommel is steel: merged into the bell's mesh)
+  const gripGeo = new THREE.CylinderGeometry(0.011, 0.015, 0.12, 6, 3);
   gripGeo.rotateZ(Math.PI / 2);
   gripGeo.translate(-0.025, 0, 0);
-  const grip = new THREE.Mesh(gripGeo, mats.grip);
+  const gp = gripGeo.attributes.position;
+  for (let i = 0; i < gp.count; i++) {
+    const x = gp.getX(i) + 0.025;
+    gp.setY(i, gp.getY(i) - 0.5 * x * x); // the curve, towards the palm
+  }
+  gripGeo.computeVertexNormals();
+  const pad = new THREE.CylinderGeometry(0.04, 0.04, 0.008, 14);
+  pad.rotateZ(Math.PI / 2);
+  pad.translate(0.012, 0, 0);
+  const grip = new THREE.Mesh(mergeGeometries([gripGeo, pad]), mats.grip);
+  gripGeo.dispose();
+  pad.dispose();
   g.add(grip);
+  const pommelGeo = new THREE.SphereGeometry(0.016, 10, 6);
+  pommelGeo.scale(1.25, 1, 1);
+  pommelGeo.translate(-0.092, -0.0042, 0);
+  const bellAll = mergeGeometries([bellGeo.toNonIndexed(), pommelGeo.toNonIndexed()]);
+  bellGeo.dispose();
+  pommelGeo.dispose();
+  const bell = new THREE.Mesh(bellAll, mats.steel);
+  bell.castShadow = true;
+  g.add(bell);
   // The blade is rebuilt in place whenever its curvature changes
   const segs = 12;
   const bladeGeo = new THREE.CylinderGeometry(0.0032, 0.0062, BLADE, 4, segs, false);
@@ -269,6 +290,7 @@ const _v3 = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _q2 = new THREE.Quaternion();
+const _q3 = new THREE.Quaternion();
 const _m = new THREE.Matrix4();
 const _m2 = new THREE.Matrix4();
 const _s = new THREE.Vector3();
@@ -348,7 +370,7 @@ export class Fencer {
     // gauntlet cuff over the sleeve
     // (long enough up the back of the hand to cover the skin fist inside)
     const gloveGeo = new THREE.SphereGeometry(1, 14, 10);
-    gloveGeo.scale(0.053, 0.074, 0.057).translate(0, 0.016, -0.004);
+    gloveGeo.scale(0.06, 0.08, 0.064).translate(0, 0.014, -0.004);
     this.glove = new THREE.Mesh(gloveGeo, this.mats.pad);
     this.glove.castShadow = true;
     const cuffGeo = new THREE.CylinderGeometry(0.056, 0.047, 0.1, 12, 1, true);
@@ -610,9 +632,11 @@ export class Fencer {
     const dir = ldir(lerp(lerp(-0.22, -0.08, down), -0.25, up), lerp(lerp(-0.72, -0.98, down), 1, up), lerp(lerp(0.62, 0.22, down), 0.12, up), this.V());
     const pole = local(lerp(-0.7, -1.2, up), lerp(0.9, 1.7, up), lerp(-0.6, -0.1, up), this.V());
     this._weapon(grip, dir, pole);
-    const rw = local(0.24, 0.84, 0.03, this.V());
-    const rPole = local(0.6, 1.1, -0.7, this.V());
-    const fing = ldir(0.04, -1, 0.06, this.V());
+    // The rear hand carries the mask by the side — or lifts the cup high
+    const cup = this.trophy ? up : 0;
+    const rw = local(lerp(0.24, 0.3, cup), lerp(0.84, 2.0, cup), lerp(0.03, 0.14, cup), this.V());
+    const rPole = local(lerp(0.6, 0.9, cup), lerp(1.1, 1.5, cup), lerp(-0.7, -0.25, cup), this.V());
+    const fing = ldir(0.04, lerp(-1, 1, cup), lerp(0.06, 0.12, cup), this.V());
     const palm = ldir(-1, 0, 0.1, this.V());
     // ldir already mirrors x; hand on the person's own left/right is handled in _rearHand
     this._rearHandW(rw, rPole, fing, palm);
@@ -724,6 +748,18 @@ export class Fencer {
     const pw = head.localToWorld(_v.copy(this.headC));
     head.getWorldQuaternion(_q);
     let pos = pw;
+    if (this.trophy) {
+      // Put down on the piste beside him, grille up, while he lifts the cup
+      person.root.getWorldQuaternion(_q2);
+      const out = this.rear === 'L' ? 1 : -1;
+      pos = _v3.set(out * 0.32 * s, 0.13 * s, 0.22 * s).applyQuaternion(_q2).add(person.root.getWorldPosition(_v2));
+      pos.y = this.group.position.y + 0.13 * s;
+      _q.copy(_q2).multiply(_q3.setFromAxisAngle(_v2.set(1, 0, 0), -Math.PI / 2));
+      this.mask.position.copy(this.group.worldToLocal(pos));
+      this.mask.quaternion.copy(_q);
+      this.mask.scale.setScalar(s);
+      return;
+    }
     if (k < 1) {
       // Carried: hanging upright from the rear fist by the strap, grille
       // facing the way the fencer faces — upright whatever the wrist does,
@@ -746,6 +782,22 @@ export class Fencer {
     this.mask.position.copy(this.group.worldToLocal(pos));
     this.mask.quaternion.copy(_q);
     this.mask.scale.setScalar(s);
+  }
+
+  /**
+   * The champion lifts the cup in the rear hand (held by its stem, raised
+   * high); the mask is put down on the piste beside him meanwhile.
+   */
+  holdTrophy(obj) {
+    this.trophy = obj;
+    this.person.attach(obj, `grip${this.rear}`, { position: [0, 0.12 * this.s, 0.01 * this.s], rotation: [Math.PI, 0, 0], scale: 0.82 * this.s });
+  }
+
+  /** Lets go of the cup (the caller puts it back where it belongs). */
+  dropTrophy() {
+    const o = this.trophy;
+    this.trophy = null;
+    return o;
   }
 
   /** A held expression that relaxes back to the base one. */
@@ -925,6 +977,34 @@ const ACTIONS = {
     return 24;
   },
 
+  /**
+   * The end of a bout, as the rules want it: mask off, a salute to the
+   * opponent, and only then the joy or the disappointment.
+   */
+  win(a, out, ctx) {
+    a.guardPose(out, ctx);
+    const big = a.act === 'champion' ? 1 : 0.7;
+    // The champion's moment comes after the bout's salute: no second one
+    const t = a.act === 'champion' ? 9 : a.t;
+    if (t < 1.55) return a.boutSalute(out, t);
+    const r = smooth(clamp((t - 1.55) * 2, 0, 1));
+    out[P.relax] = r;
+    out[P.mask] = 0;
+    out[P.cheer] = big * r;
+    out[P.bob] = Math.abs(Math.sin(a.t * 6.5)) * (a.act === 'champion' ? 0.05 : 0.012) * a.f.s * r;
+    return 9;
+  },
+
+  lose(a, out, ctx) {
+    a.guardPose(out, ctx);
+    if (a.t < 1.55) return a.boutSalute(out, a.t);
+    const r = smooth(clamp((a.t - 1.55) * 1.5, 0, 1));
+    out[P.relax] = r;
+    out[P.mask] = 0;
+    out[P.cheer] = -r;
+    return 7;
+  },
+
   salute(a, out, ctx, k) {
     // The salute as it is done on a real piste: standing tall on the
     // en-garde line, heels together, mask in the rear hand. The bell comes
@@ -956,26 +1036,6 @@ const ACTIONS = {
     a.guardPose(out, ctx);
     out[P.relax] = 1;
     out[P.mask] = 0;
-    return 7;
-  },
-
-  win(a, out, ctx, k) {
-    a.guardPose(out, ctx);
-    const big = a.act === 'champion' ? 1 : 0.7;
-    const r = smooth(clamp(k * 2, 0, 1));
-    out[P.relax] = r;
-    out[P.mask] = 0;
-    out[P.cheer] = big * r;
-    out[P.bob] = Math.abs(Math.sin(a.t * 6.5)) * (a.act === 'champion' ? 0.05 : 0.012) * a.f.s * r;
-    return 9;
-  },
-
-  lose(a, out, ctx, k) {
-    a.guardPose(out, ctx);
-    const r = smooth(clamp(k * 1.5, 0, 1));
-    out[P.relax] = r;
-    out[P.mask] = 0;
-    out[P.cheer] = -r;
     return 7;
   },
 
@@ -1083,6 +1143,34 @@ export class Animator {
     out[P.cheer] = 0;
     out[P.mask] = 1;
     out[P.bob] = 0;
+  }
+
+  /**
+   * After the last touch: straighten up, the mask comes off (the rear hand
+   * lifts it from the face), then the blade comes up to the chin and
+   * sweeps down towards the opponent. `t` in seconds.
+   */
+  boutSalute(out, t) {
+    const { s } = this.f;
+    const stand = smooth(clamp(t / 0.4, 0, 1));
+    out[P.py] = lerp(out[P.py], 0.9 * s, stand);
+    out[P.lean] = lerp(out[P.lean], -0.02, stand);
+    out[P.ffx] = lerp(out[P.ffx], out[P.bfx] + 0.13 * s, stand);
+    out[P.px] = lerp(out[P.px], out[P.bfx] + 0.07 * s, stand);
+    out[P.mask] = t < 0.1 ? 1 : 0;
+    // Blade down by the side while the mask comes off, then the salute
+    const rest = stand * (1 - smooth(clamp((t - 0.62) / 0.16, 0, 1)));
+    out[P.hx] += (0.16 * s - out[P.hx]) * rest;
+    out[P.hy] += (-0.42 * s - out[P.hy]) * rest;
+    out[P.fa] += (-1.0 - out[P.fa]) * rest;
+    const up = smooth(clamp((t - 0.62) / 0.22, 0, 1)) * (1 - smooth(clamp((t - 1.02) / 0.16, 0, 1)));
+    const down = smooth(clamp((t - 1.02) / 0.16, 0, 1));
+    out[P.hx] += (0.14 * s - out[P.hx]) * up + (0.44 * s - out[P.hx]) * down;
+    out[P.hy] += (0.0 - out[P.hy]) * up + (-0.26 * s - out[P.hy]) * down;
+    out[P.fa] += (Math.PI / 2 - out[P.fa]) * up + (-0.62 - out[P.fa]) * down;
+    out[P.nod] += 0.08 * up - 0.05 * down;
+    out[P.back] = 0;
+    return 12;
   }
 
   /** The lunge (player) and the attack (AI) share one shape. */

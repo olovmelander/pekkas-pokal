@@ -234,7 +234,7 @@ function leanIn(t, out) {
 /** Upper-body layers in blend order: [weight name, pose function]. */
 const LAYERS = [
   ['crossed', POSES.armsCrossed], ['hips', POSES.handsOnHips], ['point', POSES.point], ['clap', POSES.clap],
-  ['cheer', POSES.cheer], ['armUp', armUp], ['thumb', thumbsUp], ['shrug', shrug], ['lean', leanIn]
+  ['cheer', POSES.cheer], ['armUp', armUp], ['thumb', thumbsUp], ['shrug', shrug], ['lean', leanIn], ['explain', POSES.explain]
 ];
 const THUMB_UP = new THREE.Quaternion().setFromEuler(new THREE.Euler(-1.45, 0.1, 0.2));
 const IDENTITY = new THREE.Quaternion();
@@ -250,8 +250,12 @@ const IDENTITY = new THREE.Quaternion();
  * @param {THREE.Vector3} [o.kilnSpot]   where he tends the kiln (beside its door)
  * @param {THREE.Object3D} [o.kilnHinge] the door's hinge group, which the game swings
  * @param {THREE.Vector3} [o.kilnHandle] the door handle, in the hinge's space
+ * @param {THREE.Vector3} [o.kilnBack]   where he steps back to, clear of the door and the piece's flight
+ * @param {THREE.Vector3} [o.greet]      where he welcomes you on the start screen (by the wheel)
  */
-export function createKeramiker({ home, judge, wheel, banding, bandingRadius, kilnDoor, kilnSpot = null, kilnHinge = null, kilnHandle = null }) {
+export function createKeramiker({
+  home, judge, wheel, banding, bandingRadius, kilnDoor, kilnSpot = null, kilnHinge = null, kilnHandle = null, kilnBack = null, greet = null
+}) {
   const person = createPerson(LOOK);
   smearApron(person);
   const { root, bones, sockets } = person;
@@ -260,8 +264,8 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
   root.add(blob.mesh);
   const beret = buildBeret(s);
   person.attach(beret, 'headTop', { position: [-0.006 * s, -0.028 * s, -0.004 * s], rotation: [-0.16, 0, -0.3] });
-  root.position.copy(home);
-  root.rotation.y = Math.atan2(wheel.x - home.x, wheel.z - home.z);
+  root.position.copy(greet || home);
+  root.rotation.y = greet ? 0 : Math.atan2(wheel.x - home.x, wheel.z - home.z);
 
   /* Pose buffers and layer weights, reused every frame */
   const base = emptyPose();
@@ -281,6 +285,7 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
     phase: 0, // walk cycle
     rim: 0, // IK weights: hand on the banding wheel, fist on the chin, hand on the kiln door
     door: 0,
+    backing: false,
     chin: 0,
     expr: '',
     talking: -1,
@@ -361,6 +366,14 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
     express('warm', { smile: 0.45 });
     if (ctx.phase !== 'over') {
       st.overT = -1;
+      // Now and then he tells you about tonight's work, hands talking
+      const cyc = t % 10;
+      if (cyc > 6.5) {
+        goalW.explain = window01(cyc, 6.5, 10, 0.5);
+        goalW.hips = 1 - goalW.explain;
+        plan.talk = cyc > 6.9 && cyc < 9.3;
+        express('tell', { smile: 0.55 });
+      }
       return;
     }
     // The evening is over: applause, then hands on hips, proud
@@ -382,6 +395,8 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
     goalW.hips = swap ? 1 : 0;
     express('watch', { focus: 0.35 });
     const c = st.cue;
+    // Coming over from the start screen: the "this one" waits till he is at his place
+    if (c && c.kind === 'intro' && root.position.distanceTo(goal) > 0.3) c.t0 = t;
     const age = c ? t - c.t0 : 99;
     if (c && c.kind === 'intro' && age < 2.1) {
       // "This one": points at the lump and says what he wants
@@ -480,7 +495,16 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
     tmp.subVectors(goal, root.position).setY(0);
     const dist = tmp.length();
     let walkGoal = 0;
-    if (dist > 0.03) {
+    const backErr = dist > 0.03 ? wrapAngle(Math.atan2(-tmp.x, -tmp.z) - root.rotation.y) : 0;
+    if (dist > 0.03 && st.backing && Math.abs(backErr) < 0.9) {
+      // A short step BACK (out of the way of the kiln door and the hot
+      // piece): no turning round, still facing what he faces, legs in reverse
+      root.rotation.y += backErr * k(4);
+      const step = Math.min(dist, Math.min(0.85, 0.35 + dist * 1.4) * dt);
+      root.position.addScaledVector(tmp.normalize(), step);
+      st.phase -= (step / (WALK_STRIDE * s)) * Math.PI * 2;
+      walkGoal = 0.8;
+    } else if (dist > 0.03) {
       const err = wrapAngle(Math.atan2(tmp.x, tmp.z) - root.rotation.y);
       root.rotation.y += err * k(7);
       const speed = Math.abs(err) > 1.1 ? 0 : Math.min(1.15, 0.3 + dist * 1.6) * (1 - Math.abs(err) / 1.6);
@@ -611,7 +635,15 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
     plan.door = 0;
 
     const atJudge = phase === 'judge' || (phase === 'fire' && ctx.opened);
-    goal.copy(atJudge ? judge : phase === 'fire' && kilnSpot ? kilnSpot : home);
+    // The door swings open and the hot piece comes out past his spot: he
+    // steps back first, then goes round to the banding wheel
+    st.backing = phase === 'fire' && !!kilnBack && !!ctx.doorOpening && root.position.distanceTo(kilnBack) > 0.05 &&
+      (!ctx.opened || st.backing);
+    if (st.backing) goal.copy(kilnBack);
+    else if (atJudge) goal.copy(judge);
+    else if (phase === 'fire' && kilnSpot) goal.copy(kilnSpot);
+    else if (phase === 'idle' && greet) goal.copy(greet);
+    else goal.copy(home);
     if (phase === 'idle' || phase === 'over') planWaiting(t, ctx);
     else if (phase === 'intro' || phase === 'throw') planThrow(dt, t, ctx);
     else if (!atJudge) planKiln(ctx);

@@ -41,6 +41,7 @@ export function buildHud(root, { ludvig }) {
       <div class="sk-edge left" id="sk-edge-l"></div>
       <div class="sk-edge right" id="sk-edge-r"></div>
       <div class="sk-cross" id="sk-cross"><i></i></div>
+      <div class="sk-finger" id="sk-finger"></div>
       <div class="fg-zone sk-callout" id="sk-callout"></div>
       <div class="fg-phase" id="sk-phase"></div>
       <div class="sk-hint" id="sk-hint"></div>
@@ -62,10 +63,10 @@ export function buildHud(root, { ludvig }) {
         <p class="pb-help-sub">Pekkas Lerduvor</p>
         <ul class="pb-help-list">
           <li><i style="--c:#f2c14e"></i><b>PULL!</b> Tryck PULL, mellanslag — eller sätt bara fingret på skärmen. Duvan släpps efter en slumpad fördröjning på upp till ett par sekunder, precis som i olympisk skeet. Var redo.</li>
-          <li><i style="--c:#7fd8e8"></i><b>Svinga igenom</b> Håll fingret nere och följ duvan. Släpp när kornet ligger på — hagelsvärmen går dit du pekar. På dator: sikta med musen, klicka för skott.</li>
+          <li><i style="--c:#7fd8e8"></i><b>Svinga igenom</b> Håll fingret nere och följ duvan — på telefonen sitter siktet en bit ovanför fingret, så att du ser duvan. Släpp när siktet ligger på. På dator: sikta med musen, klicka för skott.</li>
           <li><i style="--c:#5eead4"></i><b>Håll svingen</b> Haglen tar en tiondels sekund ut till duvan, och under tiden flyger den vidare. Stannar du svingen när du skjuter hamnar svärmen bakom. Följer du med i duvans fart tar svingen med sig svärmen.</li>
           <li><i style="--c:#ff7a6b"></i><b>Bom?</b> Efter en bom visar banan var svärmen gick och var duvan var — BAKOM, FÖRE, ÖVER eller UNDER, och hur mycket.</li>
-          <li><i style="--c:#d9a05b"></i><b>Serierna</b> Rakt från graven, sen korsare från sidorna, sen finalen med dubbléer. Två patroner per singel, en per duva i dubbléerna.</li>
+          <li><i style="--c:#d9a05b"></i><b>Serierna</b> Rakt från graven, sen korsare från sidorna och inkommare från tornet, sen finalen med dubbléer. Två patroner per singel, en per duva i dubbléerna.</li>
           <li><i style="--c:#ffd166"></i><b>GULDDUVAN</b> Den 25:e. Liten, snabb, guld — 500 poäng, en enda patron.</li>
         </ul>
         <p class="pb-help-tip">Poäng: kross 100 + 25 per streak · dubblé-par +200 · felfri serie +500 · guldduvan 500. Medaljer: brons 1 800, silver 2 800, guld när du slår Ludvigs ${fmt(ludvig)}.</p>
@@ -86,7 +87,7 @@ export function buildHud(root, { ludvig }) {
     score: q('#sk-score'), ghost: q('#sk-ghost'), ghostFill: q('#sk-ghost-fill'),
     ghostMark: q('#sk-ghost-mark'), ghostText: q('#sk-ghost-text'),
     streak: q('#sk-streak'), serie: q('#sk-serie'),
-    card: q('#sk-card'), shells: q('#sk-shells'), cross: q('#sk-cross'),
+    card: q('#sk-card'), shells: q('#sk-shells'), cross: q('#sk-cross'), finger: q('#sk-finger'),
     lead: q('#sk-lead'), leadLine: q('#sk-lead-line'), leadRing: q('#sk-lead-ring'),
     leadDots: q('#sk-lead-dots'), leadClay: q('#sk-lead-clay'), leadLabel: q('#sk-lead-label'),
     edgeL: q('#sk-edge-l'), edgeR: q('#sk-edge-r'),
@@ -131,7 +132,7 @@ export function startPanelHtml({ best, ludvig, medals, touch }) {
     <p>Tre serier, 24 duvor — och till sist guldduvan. En hel runda om 25, med Ludvigs guldrunda som spöke att slå.</p>
     <ul class="fg-steps">
       <li><i style="--c:#f2c14e"></i><b>Pull!</b> ${touch ? 'Tryck PULL eller sätt fingret på skärmen' : 'Klicka, tryck PULL eller mellanslag'} — duvan kommer efter en slumpad paus.</li>
-      <li><i style="--c:#7fd8e8"></i><b>Sving</b> ${touch ? 'Håll fingret nere och följ duvan' : 'Följ duvan med musen'} — svärmen går dit kornet pekar.</li>
+      <li><i style="--c:#7fd8e8"></i><b>Sving</b> ${touch ? 'Håll fingret nere och följ duvan med siktet ovanför fingret' : 'Följ duvan med musen'} — svärmen går dit siktet pekar.</li>
       <li><i style="--c:#5eead4"></i><b>${touch ? 'Släpp = skott' : 'Klick = skott'}</b> Håll svingen igång när du skjuter — duvan hinner flytta sig medan haglen flyger.</li>
     </ul>
     <div class="sk-goals">${chips}</div>
@@ -160,7 +161,7 @@ export function endPanelHtml(r) {
   // Two halves: stacked on a phone, side by side on a short landscape screen
   return `
     <div class="sk-end-a">
-      <div class="sk-kicker">Rundan är slut · ${r.hits}/25 duvor</div>
+      <div class="sk-kicker">Rundan är slut · ${r.hits}/25 duvor${r.smoke ? ` · ${r.smoke} ${r.smoke === 1 ? 'rökboll' : 'rökbollar'}` : ''}</div>
       <div class="sk-medal tier-${r.tier}"><span>${tierName}</span></div>
       <div class="sk-stars">${stars}</div>
       <h2>${r.title}</h2>

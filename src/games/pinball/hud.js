@@ -51,7 +51,7 @@ export function buildHud(root, { touch }) {
         <dl class="pbf-keys">
           <div><dt>← →</dt><dd>Flippers (även Shift, A/D)</dd></div>
           <div><dt>Mellanslag</dt><dd>Håll &amp; släpp avfyraren</dd></div>
-          <div><dt>N</dt><dd>Nudga — men inte för ofta</dd></div>
+          <div><dt>N</dt><dd>Nudga bollen mot mitten — inte för ofta</dd></div>
           <div><dt>?</dt><dd>Strategikort</dd></div>
         </dl>
       </section>
@@ -92,10 +92,11 @@ export function buildHud(root, { touch }) {
             <li><i style="--c:#8b93ad"></i><b>Borgen</b> Tre smällar på porten fäller vindbryggan. Bumprarna laddar låset — lås två bollar i borgen för MULTIBALL med jackpot på pokalen.</li>
             <li><i style="--c:#6f9b5a"></i><b>Trollen</b> Vaktar borgen under grenar och multiball. Slå ner dem — 3 000 styck.</li>
             <li><i style="--c:#3ddc7b"></i><b>Ny boll &amp; kickback</b> Lampan vid avloppet lyser de första sekunderna: dräneras bollen då serveras den om, en gång per boll. Vänster utbana har kickback — tänds om via båda inbanorna.</li>
+            <li><i style="--c:#ffb347"></i><b>Lamporna över flipprarna</b> Översta raden är grenarna — fast sken när en är klar, blink när den pågår. Under den: bonus ×, som tänds via båda inbanorna.</li>
             <li><i style="--c:#ffd166"></i><b>Finalen</b> Klara alla fem grenar → 60 sekunder multiball där allt räknas ×5.</li>
           </ul>
           <p class="pbf-help-tip">Skill shot: släpp avfyraren i det turkosa fältet — och skjut vänster orbit inom tre sekunder för SUPER (15 000).</p>
-          <div class="pbf-help-keys">Flippers: skärmhalvorna, ←/→ eller Shift · Avfyrare: håll &amp; släpp / mellanslag · Nudge: N · Fyra nudgar för snabbt ger TILT · Esc stänger kortet</div>
+          <div class="pbf-help-keys">Flippers: skärmhalvorna, ←/→ eller Shift · Avfyrare: håll &amp; släpp / mellanslag · Nudge: N (knuffar den lägsta bollen mot mitten) · Fyra nudgar för snabbt ger TILT · Esc stänger kortet</div>
           <button class="pbf-btn" id="pbf-help-close">Tillbaka till spelet</button>
         </div>
       </div>
@@ -164,7 +165,11 @@ export function startSheet({ touch, board }) {
   return `
     <h2 class="pbf-port-only">Pekkas Pokal <span>Flipper</span></h2>
     <h2 class="pbf-land-only">Lägg i en krona</h2>
-    <p>Fäll P-O-K-A-L, storma borgen och klara grenarna. Tre bollar — gör dem långa.</p>
+    <ol class="pbf-steps">
+      <li><b>1</b><span>${touch ? 'Håll fingret och släpp' : 'Håll och släpp mellanslag'} — skjut ut bollen</span></li>
+      <li><b>2</b><span>Fäll P-O-K-A-L, starta en gren i vänster orbit</span></li>
+      <li><b>3</b><span>Bumprarna tänder låset — två bollar i borgen ger multiball</span></li>
+    </ol>
     <button class="pbf-btn" data-act="start">Starta spelet</button>
     <p class="pbf-sheet-hint">${how}</p>
     <p class="pbf-sheet-hint pbf-rotate-hint">Tips: vänd telefonen till stående — då blir bordet större.</p>
