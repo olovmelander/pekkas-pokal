@@ -305,7 +305,7 @@ export async function createPainting(container) {
   // Handle out toward the right hand and the viewer, bristles on the canvas
   const brushDir = new THREE.Vector3(0.42, -0.5, 0.76).normalize();
   brush.group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), brushDir);
-  const brushState = { on: 0, x: 0.5, y: 0.5, tx: 0.5, ty: 0.5, sound: 0 };
+  const brushState = { on: 0, vis: 0, x: 0.5, y: 0.5, tx: 0.5, ty: 0.5, sound: 0 };
 
   // The id-map lives offscreen: tapping the canvas reads pixels from it
   // rather than doing point-in-polygon against curved paths.
@@ -1559,7 +1559,7 @@ export async function createPainting(container) {
       const k = 1 - Math.exp(-dt * 26);
       b.x += (b.tx - b.x) * k;
       b.y += (b.ty - b.y) * k;
-      b.vis = (b.vis || 0) + ((b.on ? 1 : 0) - (b.vis || 0)) * (1 - Math.exp(-dt * (b.on ? 30 : 9)));
+      b.vis += ((b.on ? 1 : 0) - b.vis) * (1 - Math.exp(-dt * (b.on ? 30 : 9)));
       brush.group.visible = b.vis > 0.02;
       if (brush.group.visible) {
         brushPos.set((b.x - 0.5) * CANVAS_W, CANVAS_C.y + (0.5 - b.y) * CANVAS_H, 0.066);

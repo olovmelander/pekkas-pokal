@@ -506,17 +506,37 @@ nästa omålade yta strandar en enda begravd yta hela rundan.
 
 Duken renderas i två lager. Basen — väven, den lagda färgen, penseldragen,
 teckningen — är för dyr att rita om sextio gånger i sekunden och ändras
-bara när en yta målas, så den byggs om vid behov och den pulsande
-markeringen komponeras ovanpå per bildruta.
+bara när en yta målas, så den byggs om vid behov. Den pulsande markeringen
+och dess glödande kontur räknas fram i shadern ur id-kartan, så ingen
+textur laddas upp på nytt per bildruta.
 
 **Trädgården.** Himlen är en gradient på insidan av en kupol, inte en
 `scene.background`: en enda färg överallt är precis vad en utomhushimmel
 aldrig är. Granskogen ligger i tre led, vart och ett blekare och blåare än
 det förra — avstånd säljs med färg, inte med mer geometri. Skogen, häcken
 och vimplarna ritas som `InstancedMesh` med färg per instans; det är
-ritanropen, inte trianglarna, som en telefon-GPU tar slut på, och
-omskrivningen tog dem från 425 till 222 på dator och från 117 till 37 på
-mobil.
+ritanropen, inte trianglarna, som en telefon-GPU tar slut på. Med statiska
+grupper sammanslagna och publiken instansierad ligger trädgården nu på
+ungefär 67 ritanrop på dator (77 under domen), från 208.
+
+**Uppgraderingen.** Spelet fyller nu hela skärmen: på datorn hänger förlagan
+till vänster om staffliet och paletten står till höger, på telefonen är
+paletten ett ark längst ner. Färgen läggs med riktiga penseldrag vars
+riktning räknas ut ur ytans form – Munchs himmel får långa vågiga drag, Van
+Goghs virvlar spiraler – och duken har en höjdkarta som den låga solen faller
+snett över, så impasto, blank olja och linneväv genom tunn färg syns i
+ljuset. Paletten är ett trästycke med fem pigmentklickar där varje droppe
+flyger ner i blandningen och rörs in i spiraler, och mätaren säger varmare
+eller kallare och vad som är fel: för ljus, för grå, fel kulör. Står man
+still pekar paletten ut nästa droppe, beräknad som den kortaste vägen till en
+träff man faktiskt kan nå genom att bara lägga till färg. Pricka färgen
+flera ytor i rad för svit-multiplikator, och vid domen går Mikael Hägglund
+fram till staffliet medan din tolkning hängs bredvid originalet, betyget
+räknas upp och upp till tre stjärnor delas ut. Ditt bästa per verk och dina
+målningar sparas i ett galleri på enheten. Trädgården lever: granar och
+björkkronor vajar, vimplarna fladdrar, svalor flyger över häcken och en björk
+utanför bild kastar rörliga ljusfläckar på gräsmattan. Tonmappningen är
+Neutral i stället för ACES, så duken visar den färg man faktiskt blandat.
 
 **Kontroller i flipperspelet**
 
