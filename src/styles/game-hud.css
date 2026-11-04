@@ -1418,3 +1418,32 @@
   background: #ffe9b0;
   box-shadow: 0 0 8px rgba(255, 233, 176, 0.9);
 }
+
+/* ---- Grafikvaktens notis (src/games/shared/gfx.js) ---- */
+
+.gfx-notice {
+  position: absolute;
+  left: 50%;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  z-index: 60;
+  max-width: min(92%, 34rem);
+  transform: translate(-50%, 8px);
+  padding: 0.55rem 1rem;
+  border-radius: 14px;
+  font-family: var(--ff-sans);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  text-align: center;
+  color: #f4efe6;
+  background: rgba(14, 12, 9, 0.86);
+  border: 1px solid rgba(233, 191, 92, 0.35);
+  backdrop-filter: blur(8px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s, transform 0.3s;
+}
+
+.gfx-notice.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}

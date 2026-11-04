@@ -35,6 +35,7 @@ import { Trail, Swoosh, Rings, Sparks, Confetti, spinColor, spinCss } from './fx
 import { buildCrowd } from './crowd.js';
 import { Scoreboard } from './scoreboard.js';
 import { createPost } from './post.js';
+import { guardRenderer, RenderWatchdog, gfxNotice } from '../shared/gfx.js';
 import { buildHud, MEDAL_NAMES } from './hud.js';
 
 /** Fill the whole stage on desktop; the camera reframes per aspect. */
@@ -230,6 +231,8 @@ export async function createPingis(container) {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   canvasHost.appendChild(renderer.domElement);
+  // Riktiga grafikkretsar är strängare än testmiljöns (se shared/gfx.js)
+  const gfx = guardRenderer(renderer, container);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x120f0a);
@@ -418,7 +421,28 @@ export async function createPingis(container) {
   trophyShaft.visible = false;
   scene.add(trophyShaft);
 
-  const post = createPost(renderer, scene, camera, { samples: low ? 0 : 4, bloomRes: low ? 0.35 : 0.5 });
+  const post = createPost(renderer, scene, camera, { samples: low ? 0 : 4, bloomRes: low ? 0.35 : 0.5, profile: gfx });
+  let usePost = !gfx.safe;
+  // Svart bild på någon krets: rita förbi efterbehandlingen, sedan utan skuggor
+  const watchdog = new RenderWatchdog(
+    renderer,
+    [
+      () => {
+        usePost = false;
+      },
+      () => {
+        renderer.shadowMap.enabled = false;
+        scene.traverse((o) => {
+          if (o.material) [].concat(o.material).forEach((m) => (m.needsUpdate = true));
+        });
+      }
+    ],
+    { onStep: () => gfxNotice(container, 'Grafiken förenklades för att fungera på den här enheten.') }
+  );
+  const drawFrame = () => {
+    if (usePost) post.render();
+    else renderer.render(scene, camera);
+  };
 
   /* ---- State ----------------------------------------------------------- */
 
@@ -2109,7 +2133,8 @@ export async function createPingis(container) {
 
     updateCamera(v, t, dt);
     hall.updateReflections(camera.position);
-    post.render();
+    drawFrame();
+    watchdog.afterFrame();
   }
 
   showMenu();
@@ -2189,7 +2214,7 @@ export async function createPingis(container) {
     info() {
       renderer.info.autoReset = false;
       renderer.info.reset();
-      post.render();
+      drawFrame();
       const r = { drawCalls: renderer.info.render.calls, triangles: renderer.info.render.triangles, pixelRatio, tier };
       renderer.info.autoReset = true;
       return r;
@@ -2213,6 +2238,8 @@ export async function createPingis(container) {
     timers.length = 0;
     hud.dispose();
     delete window.__ppPingis;
+    gfx.dispose();
+    watchdog.dispose();
 
     disposeTree(scene);
     glow.dispose();

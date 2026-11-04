@@ -114,6 +114,8 @@
     chartBuilders: {},
     map: null,
     mapTiles: null,
+    mapProvider: 0,
+    mapTileTimer: null,
     mapMarkers: [],
     tourTimer: null,
     tickerTimer: null,
@@ -1218,10 +1220,27 @@
      Map
      ====================================================================== */
 
-  const TILE_URLS = {
-    dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    light: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
-  };
+  /**
+   * Kartplattor. CARTO:s rasterkartor (dark_all/light_all) kräver numera en
+   * API-nyckel och gav en tom karta, så sidan använder OpenStreetMaps egna
+   * nyckelfria plattor och tonar dem med CSS efter temat (components.css).
+   * Svarar inte första servern faller kartan över till nästa, och svarar
+   * ingen visas ett meddelande i stället för en tom ruta.
+   */
+  const TILE_PROVIDERS = [
+    { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', options: { maxZoom: 19 } },
+    {
+      url: 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
+      options: { subdomains: 'abc', maxZoom: 19 },
+      credit: ' · plattor <a href="https://www.openstreetmap.fr/">OSM France</a>'
+    }
+  ];
+  const OSM_ATTRIBUTION =
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+  // Så länge ingen platta kommit fram: så många fel, eller så lång tystnad
+  // efter första försöket, innan nästa server prövas.
+  const TILE_MAX_ERRORS = 4;
+  const TILE_SILENCE_MS = 10000;
 
   function initMap() {
     if (typeof L === 'undefined' || App.map) return;
@@ -1232,6 +1251,9 @@
       center: [61.8, 17.4],
       zoom: 5,
       scrollWheelZoom: false,
+      // På telefon ska ett finger scrolla sidan, inte fastna i kartan —
+      // två fingrar nyper och flyttar den
+      dragging: !L.Browser.mobile,
       zoomControl: true
     });
 
@@ -1294,15 +1316,50 @@
     $('#map-tour-btn').addEventListener('click', toggleMapTour);
   }
 
-  function updateMapTiles() {
+  /**
+   * Lägger kartans plattlager. Temat byter bara CSS-tonen, så ett lager som
+   * redan ligger behålls; det byts bara när en server inte svarar.
+   */
+  function updateMapTiles(providerIndex) {
     if (!App.map) return;
+    const index = providerIndex == null ? App.mapProvider || 0 : providerIndex;
+    if (App.mapTiles && index === App.mapProvider) return;
     if (App.mapTiles) App.map.removeLayer(App.mapTiles);
-    App.mapTiles = L.tileLayer(TILE_URLS[currentTheme()], {
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      subdomains: 'abcd',
-      maxZoom: 19
-    }).addTo(App.map);
+    clearTimeout(App.mapTileTimer);
+    App.mapTiles = null;
+
+    const mapEl = $('#map');
+    const provider = TILE_PROVIDERS[index];
+    if (!provider) {
+      mapEl.classList.add('map-failed');
+      return;
+    }
+    App.mapProvider = index;
+
+    let loaded = 0;
+    let failed = 0;
+    const layer = L.tileLayer(provider.url, {
+      ...provider.options,
+      attribution: OSM_ATTRIBUTION + (provider.credit || '')
+    });
+    const tryNext = () => {
+      if (App.mapTiles === layer && loaded === 0) updateMapTiles(index + 1);
+    };
+    // Tystnadsklockan startar först när en platta faktiskt begärts — en
+    // dold karta (annan vy öppen) begär inga och ska inte räknas som fel.
+    layer.once('tileloadstart', () => {
+      App.mapTileTimer = setTimeout(tryNext, TILE_SILENCE_MS);
+    });
+    layer.on('tileload', () => {
+      loaded++;
+      clearTimeout(App.mapTileTimer);
+      mapEl.classList.remove('map-failed');
+    });
+    layer.on('tileerror', () => {
+      failed++;
+      if (loaded === 0 && failed >= TILE_MAX_ERRORS) tryNext();
+    });
+    App.mapTiles = layer.addTo(App.map);
   }
 
   function toggleMapTour() {
@@ -2342,6 +2399,10 @@
     stage.hidden = false;
     loading.hidden = false;
     document.body.classList.add('game-open');
+    // Spelscenen har ett eget laddkort; webbplatsens laddskärm får inte
+    // ligga kvar och tona ovanpå spelet (t.ex. när sidan laddas om inne i
+    // ett spel och spelet startar medan sidan fortfarande bygger vyerna).
+    $('#loading-screen').classList.add('hidden');
     if (!App.lastFocusBeforeGame) App.lastFocusBeforeGame = document.activeElement;
     $('#game-close').focus({ preventScroll: true });
     if (App.trophy) App.trophy.pause();

@@ -11,6 +11,7 @@
 
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { postTarget, addSanitize } from '../shared/gfx.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
@@ -27,7 +28,7 @@ const FinishShader = {
     uFlash: { value: 0 },
     uFringe: { value: 0 },
     uTime: { value: 0 },
-    uGrain: { value: 0.025 }
+    uGrain: { value: 0.012 }
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -64,21 +65,25 @@ const FinishShader = {
       float v = smoothstep(0.95, 0.15, length(dv) * (1.0 + uVignette));
       col *= mix(1.0, v, 0.85);
       col += uFlash * vec3(1.0, 0.96, 0.88);
-      float n = fract(sin(dot(vUv * 913.7 + uTime, vec2(12.9898, 78.233))) * 43758.5453);
+      // Stillastående dither (interleaved gradient noise) i stället för ett
+      // animerat sin-hash: fract(sin(stort tal)) räknas grovt på många
+      // grafikkretsar och blev blockigt brus som flimrade varje bildruta.
+      float n = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
       col += (n - 0.5) * uGrain;
       gl_FragColor = vec4(col, 1.0);
     }`
 };
 
-export function createPost(renderer, scene, camera, { samples = 0, bloomRes = 0.5 } = {}) {
-  const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+export function createPost(renderer, scene, camera, { samples = 0, bloomRes = 0.5, profile } = {}) {
   // Our own target so the scene pass keeps MSAA — the composer's default
   // target has none, which is how a post-processed game loses its
-  // antialiasing without anyone noticing.
-  const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples });
+  // antialiasing without anyone noticing. postTarget() picks a format and
+  // sample count the GPU can actually render to.
+  const rt = postTarget(profile, { samples });
   const composer = new EffectComposer(renderer, rt);
   composer.setPixelRatio(renderer.getPixelRatio());
   composer.addPass(new RenderPass(scene, camera));
+  addSanitize(composer);
   const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.34, 0.55, 0.86);
   composer.addPass(bloom);
   composer.addPass(new OutputPass());

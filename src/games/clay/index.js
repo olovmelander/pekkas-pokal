@@ -31,6 +31,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { guardRenderer, postTarget, addSanitize, RenderWatchdog, gfxNotice } from '../shared/gfx.js';
 import { Sfx } from './audio.js';
 import { N, H, R_MIN, R_MAX, ClayBody, ringMaps, clayMaterial, glazeMaterial } from './clay.js';
 import { mulberry, buildStudio, buildWheel, buildHand, buildSponge, buildEnvScene, disposeScene } from './studio.js';
@@ -228,6 +229,8 @@ export async function createClay(container) {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   canvasHost.appendChild(renderer.domElement);
+  // Riktiga grafikkretsar är strängare än testmiljöns (se shared/gfx.js)
+  const gfx = guardRenderer(renderer, container);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x160e09);
@@ -366,15 +369,38 @@ export async function createClay(container) {
 
   /* ---- Post: bloom for the window, bulbs and kiln; haze while firing ---- */
 
-  const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: lowTier ? 0 : 4 });
-  const composer = new EffectComposer(renderer, rt);
+  const composer = new EffectComposer(renderer, postTarget(gfx, { samples: lowTier ? 0 : 4 }));
   composer.addPass(new RenderPass(scene, camera));
+  addSanitize(composer);
   const haze = new ShaderPass(HeatHazeShader);
   haze.enabled = false;
   composer.addPass(haze);
   const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.3, 0.55, 0.88);
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
+  // ?gfx=safe, eller vakten nedan: rita direkt utan efterbehandling
+  let usePost = !gfx.safe;
+
+  // Ateljén är aldrig mörk på riktigt — solen står i fönstret och lampan
+  // lyser. Blir bilden ändå (nästan) svart på en krets trappas grafiken ner:
+  // först förbi efterbehandlingen, sedan bort med skuggorna (strålen genom
+  // fönstret är en skugga i väggen; går skuggkartan fel hamnar allt i mörker).
+  const watchdog = new RenderWatchdog(
+    renderer,
+    [
+      () => {
+        usePost = false;
+      },
+      () => {
+        renderer.shadowMap.enabled = false;
+        scene.traverse((o) => {
+          if (o.material) [].concat(o.material).forEach((m) => (m.needsUpdate = true));
+        });
+      }
+    ],
+    // Ateljén är ljus till största delen; under en fjärdedel upplyst = fel
+    { minLitFraction: 0.25, darkThreshold: 24, onStep: () => gfxNotice(container, 'Grafiken förenklades för att fungera på den här enheten.') }
+  );
 
   /* ---- State ----------------------------------------------------------- */
 
@@ -1520,7 +1546,9 @@ export async function createClay(container) {
     }
 
     updateCamera(t, dt);
-    composer.render();
+    if (usePost) composer.render();
+    else renderer.render(scene, camera);
+    watchdog.afterFrame();
   }
 
   const onVisibility = () => {
@@ -1632,6 +1660,8 @@ export async function createClay(container) {
     clearTimeout(state.lastToast);
     state.timers.forEach(clearTimeout);
     delete window.__ppLera;
+    gfx.dispose();
+    watchdog.dispose();
 
     guide.dispose();
     fx.dispose();
@@ -1644,8 +1674,7 @@ export async function createClay(container) {
     maps.albedo.dispose();
     envRT.dispose();
     composer.passes.forEach((pass) => pass.dispose?.());
-    composer.dispose();
-    rt.dispose();
+    composer.dispose(); // frigör även renderingsmålen
     renderer.dispose();
     renderer.forceContextLoss?.();
     if (sfx.ctx) sfx.ctx.close();
