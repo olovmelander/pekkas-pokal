@@ -44,6 +44,7 @@ import { guardRenderer, postTarget, addSanitize, RenderWatchdog, gfxNotice, prec
 import { Sfx } from './audio.js';
 import { HAZE, SUN_DIR, LIGHT_DIR, SUN_COLOR, buildSky, bakeEnvironment, buildHaze, buildHills, buildShafts } from './sky.js';
 import { buildGang } from './gang.js';
+import { createPerson, POSES, SKIN_TONES } from '../shared/people.js';
 import { mulberry, glowTexture, starTexture, buildRange, buildClay } from './range.js';
 import { buildShotgun } from './gun.js';
 import { buildGrass } from './grass.js';
@@ -272,6 +273,39 @@ export async function createShooting(container) {
   const gun = buildShotgun({ envMap, glow, star });
   gun.group.scale.setScalar(0.55);
   camera.add(gun.group);
+
+  /* The shooter's own arms: a people-system person in gloves and an olive
+     shooting jacket, living in the gun's frame. The gun is a camera-space
+     miniature (its units are ~1.5× real), so the person is drawn 2.6
+     "units" tall to match it; the chest sits below the bottom of the frame
+     and the head and neck are folded away, so only the sleeves and the
+     gloved hands ever show — gripping the forend and the pistol grip with
+     the shared power grip, solved with IK every frame. */
+  const shooter = createPerson({
+    name: 'Skytten', height: 2.6, build: 'average', skin: SKIN_TONES.light,
+    hair: { style: 'buzz' },
+    outfit: { top: 'jacket', topColor: 0x46533a, bottom: 'trousers', bottomColor: 0x3b3a34 },
+    gloves: { side: 'both', color: 0x7a4e2e, cuff: false }
+  });
+  shooter.root.rotation.y = Math.PI; // face down the barrels (−z)
+  shooter.root.position.set(-0.1, -2.5, 0.14);
+  shooter.mesh.castShadow = false;
+  shooter.mesh.receiveShadow = false;
+  gun.group.add(shooter.root);
+  const shooterPose = POSES.stand(0);
+  const poleL = new THREE.Vector3();
+  const poleR = new THREE.Vector3();
+  function poseShooter(dt, t) {
+    gun.group.updateMatrixWorld(true);
+    shooter.setPose(shooterPose, 1);
+    // Fold the head away: it would rise into the bottom of the frame
+    shooter.bones.neck.scale.setScalar(0.001);
+    gun.group.localToWorld(poleL.set(-0.75, -0.9, -0.15));
+    gun.group.localToWorld(poleR.set(0.8, -0.35, 0.3));
+    shooter.holdWith('R', gun.pistolGrip, { at: [0, 0, 0], grip: 'power', diameter: 0.075, pole: poleR });
+    shooter.holdWith('L', gun.forendGrip, { at: [0, 0, 0], grip: 'power', diameter: 0.105, pole: poleL });
+    shooter.update(dt, t);
+  }
   let flashK = 0;
 
   // The gang on the fika chairs (and Henrik with the score sheet)
@@ -1625,7 +1659,7 @@ export async function createShooting(container) {
     }
   }
 
-  function updateGun(realDt) {
+  function updateGun(realDt, t) {
     recoil = Math.max(0, recoil - realDt * 5.5);
     gun.flashMat.opacity = Math.max(0, gun.flashMat.opacity - realDt * 16);
     gun.starMat.opacity = Math.max(0, gun.starMat.opacity - realDt * 22);
@@ -1649,6 +1683,7 @@ export async function createShooting(container) {
     gun.group.lookAt(gunTarget);
     gun.group.rotateY(Math.PI); // barrels run along -z; lookAt aims +z
     gun.group.rotateX(-recoil * 0.16); // muzzle flips up
+    if (gun.group.visible) poseShooter(realDt, t);
   }
 
   function updateHud(realDt) {
@@ -1796,7 +1831,7 @@ export async function createShooting(container) {
     shot.update(dt, SHOT_SPEED);
     ambient.uniforms.uScale.value = pointScale();
 
-    updateGun(realDt);
+    updateGun(realDt, t);
     updateGlint(t, dt);
     updateGang(realDt, t);
     updateHud(realDt);
@@ -2005,6 +2040,8 @@ export async function createShooting(container) {
     watchdog.dispose();
     // People first: their materials are shared and reference-counted
     gang.dispose();
+    shooter.dispose();
+    gun.group.remove(shooter.root);
 
     const textures = new Set([glow, star, ...gun.textures]);
     if (envMap) textures.add(envMap);

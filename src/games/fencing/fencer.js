@@ -285,98 +285,6 @@ function buildFoil(mats) {
   return { group: g, blade, rest, button };
 }
 
-/* ---- The glove -------------------------------------------------------- */
-
-const GLOVE_BONES = [
-  'hand', 'thumb', 'thumbMid', 'thumbTip', 'index', 'indexMid', 'indexTip', 'middle', 'middleMid', 'middleTip',
-  'palm', 'ring', 'ringMid', 'ringTip', 'pinky', 'pinkyMid', 'pinkyTip', 'fingers', 'fingersTip'
-];
-
-/**
- * The fencing glove on the weapon hand: the person's own hand, copied out
- * of their skinned mesh (every triangle weighted to the hand and finger
- * bones), puffed out a few millimetres along its normals and skinned to
- * the same skeleton. It follows every finger of the grip exactly — one
- * draw call, and it fits whoever wears it.
- */
-function buildGlove(person, S, mat) {
-  const { mesh } = person;
-  const skel = mesh.skeleton;
-  const g = mesh.geometry;
-  const pos = g.attributes.position;
-  const nor = g.attributes.normal;
-  const si = g.attributes.skinIndex;
-  const sw = g.attributes.skinWeight;
-  if (!pos || !nor || !si || !sw || !skel) return null;
-  const set = new Set();
-  GLOVE_BONES.forEach((n) => {
-    const b = person.bones[n + S];
-    const i = b ? skel.bones.indexOf(b) : -1;
-    if (i >= 0) set.add(i);
-  });
-  if (!set.size) return null;
-  const handW = new Float32Array(pos.count);
-  for (let v = 0; v < pos.count; v++) {
-    let w = 0;
-    for (let k = 0; k < 4; k++) if (set.has(si.getComponent(v, k))) w += sw.getComponent(v, k);
-    handW[v] = w;
-  }
-  const idx = g.index ? g.index.array : null;
-  const triCount = (idx ? idx.length : pos.count) / 3;
-  const remap = new Int32Array(pos.count).fill(-1);
-  const keep = [];
-  const order = [];
-  for (let t = 0; t < triCount; t++) {
-    const a = idx ? idx[t * 3] : t * 3;
-    const b = idx ? idx[t * 3 + 1] : t * 3 + 1;
-    const c = idx ? idx[t * 3 + 2] : t * 3 + 2;
-    if (Math.min(handW[a], handW[b], handW[c]) < 0.5) continue;
-    for (const v of [a, b, c]) {
-      if (remap[v] < 0) {
-        remap[v] = keep.length;
-        keep.push(v);
-      }
-      order.push(remap[v]);
-    }
-  }
-  if (!order.length) return null;
-  const n = keep.length;
-  const P = new Float32Array(n * 3);
-  const N = new Float32Array(n * 3);
-  const SI = new si.array.constructor(n * 4);
-  const SW = new Float32Array(n * 4);
-  const puff = 0.0032 * person.scale;
-  keep.forEach((v, i) => {
-    const nx = nor.getX(v);
-    const ny = nor.getY(v);
-    const nz = nor.getZ(v);
-    P[i * 3] = pos.getX(v) + nx * puff;
-    P[i * 3 + 1] = pos.getY(v) + ny * puff;
-    P[i * 3 + 2] = pos.getZ(v) + nz * puff;
-    N[i * 3] = nx;
-    N[i * 3 + 1] = ny;
-    N[i * 3 + 2] = nz;
-    for (let k = 0; k < 4; k++) {
-      SI[i * 4 + k] = si.getComponent(v, k);
-      SW[i * 4 + k] = sw.getComponent(v, k);
-    }
-  });
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(P, 3));
-  geo.setAttribute('normal', new THREE.BufferAttribute(N, 3));
-  geo.setAttribute('skinIndex', new THREE.BufferAttribute(SI, 4));
-  geo.setAttribute('skinWeight', new THREE.BufferAttribute(SW, 4));
-  geo.setIndex(order);
-  const glove = new THREE.SkinnedMesh(geo, mat);
-  glove.name = 'fencing-glove';
-  glove.castShadow = true;
-  glove.receiveShadow = true;
-  glove.frustumCulled = false;
-  mesh.add(glove);
-  glove.bind(skel, mesh.bindMatrix);
-  return glove;
-}
-
 /* ---- The fencer ------------------------------------------------------- */
 
 const _v = new THREE.Vector3();
@@ -449,8 +357,6 @@ export class Fencer {
       pad: new THREE.MeshStandardMaterial({ color: 0xf1efe8, roughness: 0.7 }),
       steel: new THREE.MeshStandardMaterial({ color: 0xdfe4ec, roughness: 0.3, metalness: 0.95 }),
       grip: new THREE.MeshStandardMaterial({ color: 0x2a2422, roughness: 0.7 }),
-      // Soft white leather with a little sheen
-      glove: new THREE.MeshStandardMaterial({ color: 0xf3f1ea, roughness: 0.62 }),
       // The point's button: a warm pin of light that bloom can catch
       button: new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 1.4, 1.0) })
     };
@@ -463,12 +369,6 @@ export class Fencer {
     this.blade = foil.blade;
     this.bladeRest = foil.rest;
     this.button = foil.button;
-    // The fencing glove's long gauntlet cuff over the sleeve (the glove
-    // itself is skinned to each person's hand in setPerson)
-    this.glove = null;
-    const cuffGeo = new THREE.CylinderGeometry(0.056, 0.047, 0.1, 12, 1, true);
-    this.cuff = new THREE.Mesh(cuffGeo, this.mats.pad);
-    this.cuff.castShadow = true;
     // Foil space → fist space: +x along the blade, +y the way it bows
     this.foilQ = frameQuat(new THREE.Vector3(1, 0, 0), BLADE_L, new THREE.Vector3(0, 1, 0), BOW_L, new THREE.Quaternion());
     this.foilHolder = new THREE.Group();
@@ -489,21 +389,19 @@ export class Fencer {
     this.sock = sock;
     // The new person first, then the old one goes: the shared materials and
     // their shader programs stay alive, so nothing recompiles mid-game
+    // Faces, hair and glasses are the person's own (appearanceFor); the kit
+    // is the salle's: whites, lamé, socks in their colour, and the white
+    // glove with its gauntlet cuff on the weapon hand only
     const p = createPerson(appearanceFor(name, {
-      outfit: { top: 'fencing', bottom: 'knickers', accent: sock, shoes: 'sneakers', shoeColor: 0xe9e7e2 }
+      outfit: { top: 'fencing', bottom: 'knickers', accent: sock, shoes: 'sneakers', shoeColor: 0xe9e7e2 },
+      gloves: { side: this.hand, color: 0xf1efe8, cuff: true }
     }));
-    if (this.glove) {
-      this.glove.geometry.dispose();
-      this.glove.removeFromParent();
-      this.glove = null;
-    }
     if (this.person) this.person.dispose();
     this.person = p;
     this.s = p.scale;
     this.group.add(p.root);
+    this.rearGrip = '';
     this._grip();
-    this.glove = buildGlove(p, this.hand, this.mats.glove);
-    p.attach(this.cuff, `forearm${this.hand}`, { position: [0, -0.215 * p.scale, 0.004 * p.scale], scale: p.scale });
     const { lame } = p.materials;
     if (lame) {
       // Lamé is woven metal: duller than a mirror, so the sun leaves a sheen
@@ -873,11 +771,28 @@ export class Fencer {
     this.group.updateMatrixWorld(true);
   }
 
+  /**
+   * The rear hand's fingers: closed on the mask's padded top while it is
+   * carried or going on, a loose fist round the cup's stem, and handed
+   * back to the pose (the relaxed carriage) once the mask is on.
+   */
+  _rearFingers(carrying) {
+    const p = this.person;
+    if (typeof p.setGrip !== 'function') return;
+    const want = this.trophy ? 'cup' : carrying ? 'mask' : 'pose';
+    if (want === this.rearGrip) return;
+    this.rearGrip = want;
+    if (want === 'mask') p.setGrip(this.rear, 'power', { diameter: 0.03, blend: 0.18 });
+    else if (want === 'cup') p.setGrip(this.rear, 'fist', { diameter: 0.04, blend: 0.2 });
+    else p.setGrip(this.rear, null, { blend: 0.25 });
+  }
+
   _placeMask() {
     const { person } = this;
     const { s } = this;
     const m = clamp(this.pose[P.mask], 0, 1);
     const k = smooth(clamp((m - 0.22) / 0.4, 0, 1));
+    this._rearFingers(k < 0.999);
     const { head } = person.bones;
     head.updateWorldMatrix(true, false);
     // Worn: centred on the head
@@ -978,12 +893,8 @@ export class Fencer {
   }
 
   dispose() {
-    if (this.glove) {
-      this.glove.geometry.dispose();
-      this.glove.removeFromParent();
-    }
     this.person.dispose();
-    for (const o of [this.mask, this.foil, this.cuff]) {
+    for (const o of [this.mask, this.foil]) {
       o.traverse((c) => {
         if (c.geometry) c.geometry.dispose();
       });

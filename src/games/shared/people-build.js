@@ -322,7 +322,7 @@ export function ringsFromBands(samples, bands, { lipW = 0.006, simple = false } 
   const sg = asc ? 1 : -1;
   const eps = 0.0008;
   const rings = [];
-  const mk = (band, t, off, lip = 0) => ({ t, region: band.region, mat: band.mat, off, tint: band.tint, lip });
+  const mk = (band, t, off, lip = 0) => ({ t, region: band.region, mat: band.mat, off, tint: band.tint, lip, band });
   const bounds = bands.slice(0, -1).map((bd) => bd.to);
   const nearBound = (s) => bounds.some((t) => Math.abs(s - t) < Math.max(lipW * 1.4, 0.004));
   bands.forEach((band, bi) => {
@@ -1470,7 +1470,7 @@ export function buildTorsoExtras(b, ctx, sweepFn) {
       }
     }
   }
-  if (top.tucked && bot.belt && high) {
+  if (top.tucked && bot.belt && high && !top.apron) {
     surfaceBlob(b, ctx, { y: bot.waist - 0.015, th: 0, r: [0.017, 0.013, 0.0035], n: [4, 4], lift: 0.0035, region: REGION.FIXED, tint: [0.5, 0.38, 0.16], mat: MAT.GLOSS, weight: tw, cols: 8, rows: 4 });
   }
   if (top.apron) {

@@ -117,10 +117,10 @@ const PADDLE_IN_HAND = new THREE.Quaternion().setFromRotationMatrix(
 const PADDLE_IN_HAND_POS = new THREE.Vector3(-0.0015, 0.004, 0);
 const BLADE_Y = 0.112; // blade centre above the grip (hall.js buildPaddle)
 const BLADE_R = 0.098;
-/* The shared hold('racket') grip is still being tuned tonight (it closed
-   two fingers along the backhand); until it lands, the bat sits in our own
-   shakehand frame above, with the pose's grip/point fingers. */
+/* The shared hold('racket') grip (people.js); the frame above and the
+   pose's grip/point fingers are the fallback without it */
 const USE_SHARED_GRIP = true;
+const WRAP_PAIRS = [['middleR', 'ringR'], ['middleMidR', 'ringMidR'], ['middleTipR', 'ringTipR']];
 
 /* The open, flat palm the rules ask for: palm (hand −X) up, the fingers
    forward and a little in, the thumb out to the side */
@@ -171,6 +171,7 @@ export class Foe {
         handle: [0.034, 0.0245], blade: BLADE_R, blend: 0,
         offset: { position: [0, 0.05 + BLADE_R * 0.92 - BLADE_Y, 0.0035] }
       });
+      this.wrapMiddle = !!(p.bones.middleR && p.bones.ringR);
       const anchor = p.sockets.holdR;
       this.paddleInHand = anchor.quaternion.clone().multiply(paddle.quaternion);
       this.bladeInHand = paddle.position.clone().applyQuaternion(anchor.quaternion).add(anchor.position);
@@ -349,6 +350,12 @@ export class Foe {
       this.reactPose(reacting, env, r.t, pose);
     }
     p.setPose(pose, jump ? 1 : 1 - Math.exp(-dt * 18));
+    if (this.wrapMiddle) {
+      // Only the index belongs on the backhand rubber: the shared racket
+      // grip leaves the middle finger lying there too (reported), so it
+      // takes the ring finger's wrap round the handle
+      for (const [m, r] of WRAP_PAIRS) bones[m].quaternion.copy(bones[r].quaternion);
+    }
 
     /* Feet: planted, and they step when the body has moved off them (the
        walk-on's feet are the walk cycle's own) */

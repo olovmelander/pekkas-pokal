@@ -63,6 +63,11 @@ const ACT = {
   cheer: { grip: [-0.26, 1.58, 0.2], pitch: 80, yaw: 18, lean: -0.1, twist: -0.05, hint: [-0.35, -0.9, -0.2], pole: [-0.9, -0.3, 0.1], left: 'fist', w: 10, z: 0.6 }
 };
 const LEFT_MODES = ['fore', 'butt', 'crank', 'fist', 'cap'];
+/** Along the rod from the reel seat (rod-local z) — see buildRod: the grip
+ *  centre sits on the reel foot, the fore cork above it, the butt cork below. */
+const GRIP_Z = 0.065;
+const FORE_Y = 0.25 - GRIP_Z;
+const BUTT_Y = -0.15 - GRIP_Z;
 /** Where a gull might be wheeling — somewhere to look while he waits. */
 const SKY_POINT = new THREE.Vector3(30, 16, -60);
 
@@ -79,16 +84,48 @@ export function createAngler(boat) {
   root.rotation.y = Math.PI / 2;
   boat.add(root);
 
+  /*
+   * The rod in his right fist, through the shared grip API. The holder is
+   * the grip's frame — origin in the middle of the fist, +Y up the rod to
+   * the tip, +Z the way the palm faces — and the palm faces the reel: the
+   * fist sits on top of the reel seat with the reel's stem between the
+   * middle and ring fingers, the way a spinning rod is held. The left hand
+   * cranks (a right-handed angler's spinning reel has its handle on the
+   * left), or takes the fore grip, or the butt for a cast.
+   */
   const rod = buildRod();
-  person.attach(rod.mesh, 'gripR');
-  const sockR = person.sockets.gripR;
+  const holder = new THREE.Group();
+  holder.name = 'fiske-rod-grip';
+  rod.mesh.rotation.x = -Math.PI / 2; // rod +Z (tip) → holder +Y, rod −Y (reel) → holder +Z
+  rod.mesh.position.y = -GRIP_Z;      // the reel seat's middle is the grip centre
+  holder.add(rod.mesh);
+  person.hold(holder, 'R', 'power', { diameter: 0.034, blend: 0 });
+  const anchorR = person.sockets.holdR;
   const sockL = person.sockets.gripL;
+  // The crank knob as a frame of its own (it spins freely on its axle, so
+  // the hand on it does not spin with the arm): +Y out along the axle,
+  // +Z toward the rod tip — the hand comes to it from behind
+  const knob = new THREE.Object3D();
+  knob.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(
+    new THREE.Vector3(0, -1, 0), new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 1)
+  ));
+  rod.mesh.add(knob);
+  let leftGrip = null;
+  /** Shape the left hand for what it holds (only when that changes). */
+  function shapeLeft(mode) {
+    const want = mode === 'crank' ? 'knob' : mode === 'fist' ? 'fist' : mode === 'cap' ? 'relaxed' : 'rod';
+    if (want === leftGrip) return;
+    leftGrip = want;
+    if (want === 'knob') person.setGrip('L', 'power', { diameter: 0.018, blend: 0.15 });
+    else if (want === 'rod') person.setGrip('L', 'power', { diameter: 0.034, blend: 0.18 });
+    else person.setGrip('L', want, { blend: 0.2 });
+  }
+  shapeLeft('fore');
 
   /* Springs for every channel, starting at rest */
   const sp = {};
   const start = ACT.rest;
   ['gx', 'gy', 'gz'].forEach((k, i) => { sp[k] = new Spring(start.grip[i]); });
-  ['hx', 'hy', 'hz'].forEach((k, i) => { sp[k] = new Spring(start.hint[i]); });
   ['px', 'py', 'pz'].forEach((k, i) => { sp[k] = new Spring(start.pole[i]); });
   sp.pitch = new Spring(start.pitch * DEG);
   sp.yaw = new Spring(start.yaw * DEG);
@@ -101,20 +138,21 @@ export function createAngler(boat) {
   const base = POSES.sitRod(0);
   const v = new THREE.Vector3();
   const D = new THREE.Vector3();
-  const Yh = new THREE.Vector3();
+  const P = new THREE.Vector3();
   const X = new THREE.Vector3();
-  const up = new THREE.Vector3();
   const grip = new THREE.Vector3();
   const wrist = new THREE.Vector3();
   const pole = new THREE.Vector3();
   const tgtL = new THREE.Vector3();
   const zL = new THREE.Vector3();
   const yL = new THREE.Vector3();
-  const rx = new THREE.Vector3();
-  const ry = new THREE.Vector3();
   const qR = new THREE.Quaternion();
   const qL = new THREE.Quaternion();
+  const qM = new THREE.Quaternion();
   const qTmp = new THREE.Quaternion();
+  const qRoll = new THREE.Quaternion();
+  const qObj = new THREE.Quaternion();
+  const Yaxis = new THREE.Vector3(0, 1, 0);
   const m4 = new THREE.Matrix4();
   const lookV = new THREE.Vector3();
 
@@ -128,6 +166,27 @@ export function createAngler(boat) {
     X.crossVectors(yv, zv).normalize();
     m4.makeBasis(X, yv, zv);
     return out.setFromRotationMatrix(m4);
+  }
+  /**
+   * The hand frame that puts a grip's object frame at (point, quat): the
+   * same sum the people API's holdWith does, kept here so several targets
+   * can be blended before one IK solve.
+   */
+  function handFor(anchor, point, quat, outP, outQ) {
+    outQ.copy(quat).multiply(qTmp.copy(anchor.quaternion).invert());
+    outP.copy(anchor.position).applyQuaternion(outQ);
+    outP.subVectors(point, outP);
+  }
+  /** Blend accumulator for the left hand. */
+  const acc = { w: 0 };
+  const hP = new THREE.Vector3();
+  const hQ = new THREE.Quaternion();
+  function addLeft(w, p, q) {
+    if (w <= 1e-3) return;
+    acc.w += w;
+    tgtL.addScaledVector(p, w);
+    if (acc.w === w) qL.copy(q);
+    else qL.slerp(q, w / acc.w);
   }
 
   /* Idle life while he waits: a jig, a few turns of the crank, a glance */
@@ -223,9 +282,6 @@ export function createAngler(boat) {
     sp.gx.step(action.grip[0], dt, w, z);
     sp.gy.step(action.grip[1], dt, w, z);
     sp.gz.step(action.grip[2], dt, w, z);
-    sp.hx.step(action.hint[0], dt, w * 0.8, 1);
-    sp.hy.step(action.hint[1], dt, w * 0.8, 1);
-    sp.hz.step(action.hint[2], dt, w * 0.8, 1);
     sp.px.step(action.pole[0], dt, w * 0.8, 1);
     sp.py.step(action.pole[1], dt, w * 0.8, 1);
     sp.pz.step(action.pole[2], dt, w * 0.8, 1);
@@ -255,79 +311,101 @@ export function createAngler(boat) {
     person.setPose(base);
     root.updateWorldMatrix(true, false);
 
-    /* Right arm: put the fist where the rod wants it */
+    /* Right arm: put the rod's grip where the action wants it. D runs up
+       the rod; the palm faces P, straight down to the reel — the reel
+       hangs under the rod in every pose, cocked back over his shoulder too */
     const cp = Math.cos(pitch);
-    dirW(-Math.sin(yaw) * cp, Math.sin(pitch), Math.cos(yaw) * cp, D);
+    const spp = Math.sin(pitch);
+    const sy = Math.sin(yaw);
+    const cy = Math.cos(yaw);
+    dirW(-sy * cp, spp, cy * cp, D);
+    dirW(-sy * spp, -cp, cy * spp, P);
+    X.crossVectors(D, P).normalize();
+    m4.makeBasis(X, D, P);
+    qM.setFromRotationMatrix(m4);
     grip.set(sp.gx.x * K, sp.gy.x * K, sp.gz.x * K);
     root.localToWorld(grip);
-    dirW(sp.hx.x, sp.hy.x, sp.hz.x, Yh);
-    basisQ(D, Yh, qR);
-    wrist.copy(sockR.position).applyQuaternion(qR);
-    wrist.subVectors(grip, wrist);
+    handFor(anchorR, grip, qM, wrist, qR);
     person.bones.upperArmR.getWorldPosition(pole);
     pole.add(dirW(sp.px.x, sp.py.x, sp.pz.x, v).multiplyScalar(s));
     person.ikArm('R', wrist, pole, qR);
 
-    /* The rod as it now sits: reel down, crank on his left */
-    sockR.getWorldPosition(grip);
-    up.set(0, 1, 0).addScaledVector(D, -D.y);
-    if (up.lengthSq() < 1e-4) dirW(0, 0, -1, up);
-    up.normalize();
-    rx.crossVectors(up, D).normalize();
+    /* The rod as it now sits, and the crank knob on it */
+    rod.bend.value.set(0, bend);
+    rod.tip.position.set(0, bend, rod.length);
+    rod.crank.rotation.x = -crankAngle;
+    knob.position.set(rod.knobLocal.x, rod.knobLocal.y + Math.sin(crankAngle) * rod.crankR, rod.knobLocal.z + Math.cos(crankAngle) * rod.crankR);
+    holder.updateWorldMatrix(true, true);
+    holder.getWorldQuaternion(qM);
 
-    /* Left hand: blend of fore grip, butt, crank knob and a fist in the air */
+    /* Left hand: a blend of the fore grip, the butt, the crank knob, a fist
+       in the air and a touch to the cap. On the rod it closes round it with
+       the grip API's own hand frame, so no finger floats off the cork. */
     const wf = sp.fore.x;
     const wb = sp.butt.x;
     const wc = sp.crank.x;
     const wfi = sp.fist.x;
     const wcap = sp.cap.x;
-    const wsum = Math.max(1e-3, wf + wb + wc + wfi + wcap);
+    let lead = 'fore';
+    let best = wf;
+    [['butt', wb], ['crank', wc], ['fist', wfi], ['cap', wcap]].forEach(([m, w]) => {
+      if (w > best) {
+        best = w;
+        lead = m;
+      }
+    });
+    shapeLeft(lead);
+    const anchorL = person.sockets.holdL || sockL;
+    acc.w = 0;
     tgtL.set(0, 0, 0);
-    zL.set(0, 0, 0);
-    yL.set(0, 0, 0);
     if (wf > 1e-3) {
-      tgtL.addScaledVector(v.copy(grip).addScaledVector(D, 0.2), wf);
-      zL.addScaledVector(D, wf);
-      yL.addScaledVector(dirW(0.6, 0.5, -0.62, v), wf);
+      // Under the fore grip, palm up, carrying the rod
+      holder.localToWorld(v.set(0, FORE_Y, 0));
+      qObj.copy(qM).multiply(qRoll.setFromAxisAngle(Yaxis, Math.PI * 0.85));
+      handFor(anchorL, v, qObj, hP, hQ);
+      addLeft(wf, hP, hQ);
     }
     if (wb > 1e-3) {
-      tgtL.addScaledVector(v.copy(grip).addScaledVector(D, -0.19), wb);
-      zL.addScaledVector(D, wb);
-      yL.addScaledVector(dirW(0.55, -0.35, -0.75, v), wb);
+      // Round the butt cork for the cast and the heave
+      holder.localToWorld(v.set(0, BUTT_Y, 0));
+      qObj.copy(qM).multiply(qRoll.setFromAxisAngle(Yaxis, 0.35));
+      handFor(anchorL, v, qObj, hP, hQ);
+      addLeft(wb, hP, hQ);
     }
     if (wc > 1e-3) {
-      // The knob, turning about the reel's side axle
-      const kx = rod.knobLocal.x;
-      const ky = rod.knobLocal.y + Math.sin(crankAngle) * rod.crankR;
-      const kz = rod.knobLocal.z + Math.cos(crankAngle) * rod.crankR;
-      v.copy(grip).addScaledVector(rx, kx + 0.02).addScaledVector(up, ky).addScaledVector(D, kz);
-      tgtL.addScaledVector(v, wc);
-      zL.addScaledVector(rx, wc);
-      yL.addScaledVector(dirW(0.45, -0.3, -0.85, v), wc);
+      // On the knob, which turns about the reel's side axle
+      knob.getWorldPosition(v);
+      knob.getWorldQuaternion(qObj);
+      handFor(anchorL, v, qObj, hP, hQ);
+      addLeft(wc, hP, hQ);
     }
     if (wfi > 1e-3) {
       v.set(0.26 * K, 1.52 * K, 0.36 * K);
       root.localToWorld(v);
-      tgtL.addScaledVector(v, wfi);
-      zL.addScaledVector(dirW(-1, 0, 0.25, v), wfi);
-      yL.addScaledVector(dirW(0.15, -1, -0.1, v), wfi);
+      dirW(-1, 0, 0.25, zL);
+      dirW(0.15, -1, -0.1, yL);
+      basisQ(zL.normalize(), yL, hQ);
+      hP.copy(sockL.position).applyQuaternion(hQ);
+      hP.subVectors(v, hP);
+      addLeft(wfi, hP, hQ);
     }
     if (wcap > 1e-3) {
       // Fingers to the cap's brim, palm down
       person.bones.head.getWorldPosition(v);
       v.addScaledVector(dirW(0.02, 0.1, 0.16, lookV), s);
-      tgtL.addScaledVector(v, wcap);
-      zL.addScaledVector(dirW(-1, 0.1, 0.2, lookV), wcap);
-      yL.addScaledVector(dirW(0.35, -0.75, -0.3, lookV), wcap);
+      dirW(-1, 0.1, 0.2, zL);
+      dirW(0.35, -0.75, -0.3, yL);
+      basisQ(zL.normalize(), yL, hQ);
+      hP.copy(sockL.position).applyQuaternion(hQ);
+      hP.subVectors(v, hP);
+      addLeft(wcap, hP, hQ);
     }
-    tgtL.multiplyScalar(1 / wsum);
-    zL.normalize();
-    basisQ(zL, yL, qL);
-    wrist.copy(sockL.position).applyQuaternion(qL);
-    wrist.subVectors(tgtL, wrist);
-    person.bones.upperArmL.getWorldPosition(pole);
-    pole.add(dirW(0.5 + wfi * 0.4 + wcap * 0.5, -0.6 + wfi * 0.4 + wcap * 0.1, -0.9 + wfi * 0.9 + wcap * 0.6, v).multiplyScalar(s));
-    person.ikArm('L', wrist, pole, qL);
+    if (acc.w > 1e-3) {
+      tgtL.multiplyScalar(1 / acc.w);
+      person.bones.upperArmL.getWorldPosition(pole);
+      pole.add(dirW(0.5 + wfi * 0.4 + wcap * 0.5, -0.6 + wfi * 0.4 + wcap * 0.1, -0.9 + wfi * 0.9 + wcap * 0.6, v).multiplyScalar(s));
+      person.ikArm('L', tgtL, pole, qL);
+    }
 
     /* Face and gaze */
     if (look) person.lookAt(lookV.copy(look), 0.9);
@@ -335,14 +413,6 @@ export function createAngler(boat) {
     person.setExpression(expr, react.left > 0 ? react.amount : 1);
     person.update(dt, t);
 
-    /* Roll the rod about its own axis so the reel always hangs under it,
-       bend it, and turn the crank */
-    sockR.getWorldQuaternion(qTmp).invert();
-    ry.set(0, -1, 0).addScaledVector(D, D.y).applyQuaternion(qTmp);
-    rod.mesh.rotation.z = Math.atan2(ry.x, -ry.y);
-    rod.bend.value.set(0, bend);
-    rod.tip.position.set(0, bend, rod.length);
-    rod.crank.rotation.x = -crankAngle;
   }
 
   return {

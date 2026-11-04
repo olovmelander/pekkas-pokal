@@ -993,6 +993,7 @@ class Referee {
     this.target = emptyPose();
     this.seq = REF_SEQ.idle.slice();
     this.kind = 'idle';
+    this.hands = { L: '', R: '' };
     this.side = 0;
     this.t = 0;
     this.talkT = 0;
@@ -1093,6 +1094,34 @@ class Referee {
     return p;
   }
 
+  /**
+   * Hand shapes for the signals: flat open hands for »En garde«, »Allez«
+   * and »Halte«, the index pointing at the scorer for the touch, and the
+   * pose's own relaxed hands at rest.
+   */
+  shapeHands() {
+    const p = this.person;
+    if (typeof p.setGrip !== 'function') return;
+    const k = this.kind;
+    const S = this.side < 0 ? 'R' : 'L';
+    const want = { L: null, R: null };
+    if (k === 'engarde' || k === 'ready' || k === 'allez') {
+      want.L = 'open';
+      want.R = 'open';
+    } else if (k === 'halt') want.R = 'open';
+    else if (k === 'parry') {
+      want.L = 'open';
+      want.R = 'open';
+    } else if (k === 'attack') want[S] = 'open';
+    else if (k === 'point' && this.side) want[S] = 'point';
+    ['L', 'R'].forEach((side) => {
+      const g = want[side] || '';
+      if (g === this.hands[side]) return;
+      this.hands[side] = g;
+      p.setGrip(side, g || null, { blend: g ? 0.12 : 0.3 });
+    });
+  }
+
   update(dt, focus) {
     this.t += dt;
     // Walk the signal sequence: »Halte!« → analysis → »Touché!«
@@ -1106,6 +1135,7 @@ class Referee {
       this.talkT -= dt;
       if (this.talkT <= 0) this.person.talk(0);
     }
+    this.shapeHands();
     // Ease our own copy of the pose (setPose(…, 1) each frame keeps the
     // look-at layered cleanly on top); signals are snappy, rest is slow
     const rate = this.kind === 'idle' ? 6 : this.kind === 'allez' || this.kind === 'halt' ? 22 : 14;
