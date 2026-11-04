@@ -285,7 +285,7 @@ export function createAngler(boat) {
       yL.addScaledVector(dirW(0.45, -0.3, -0.85, v), wc);
     }
     if (wfi > 1e-3) {
-      v.set(0.3 * K, 1.62 * K, 0.16 * K);
+      v.set(0.26 * K, 1.52 * K, 0.36 * K);
       root.localToWorld(v);
       tgtL.addScaledVector(v, wfi);
       zL.addScaledVector(dirW(-1, 0, 0.25, v), wfi);

@@ -319,8 +319,9 @@ export function buildBoat() {
   }
   staves.computeVertexNormals();
   const staveCol = [C(0x8f5d32), C(0x7f5129), C(0x9a6638)];
-  // Non-indexed, the cylinder runs two triangles per stave per row: colour by stave
-  bb.add(staves, (p, n, i) => staveCol[(Math.floor(i / 6) % 18) % 3]);
+  // Non-indexed, the cylinder runs stave by stave, two triangles per row
+  // (two rows): twelve vertices per stave
+  bb.add(staves, (p, n, i) => staveCol[Math.floor(i / 12) % 3]);
   const inside = new THREE.CylinderGeometry(BARREL.r - 0.02, BARREL.r * 0.9 - 0.02, BARREL.h, 18, 1, true);
   inside.scale(-1, 1, 1); // mirrored: the faces now look inward…
   inside.computeVertexNormals(); // …and so do the normals
