@@ -23,11 +23,24 @@ varying vec2 vUv;
 varying vec3 vColor;
 varying float vLife;
 void main() {
+  vUv = vec2(0.0);
+  vColor = vec3(0.0);
+  vLife = 0.0;
+  // A dead spark (zero width, zero velocity) would normalize a zero vector
+  // below — NaN positions that some GPUs rasterise as garbage. Park it
+  // outside the clip volume instead.
+  if (aLife.x <= 0.0 || aLife.y <= 0.0) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    return;
+  }
   vec3 vh = (viewMatrix * vec4(aPos, 1.0)).xyz;
   vec3 vt = (viewMatrix * vec4(aPos - aVel * 0.035, 1.0)).xyz;
   vec3 dir = vt - vh;
   float w = aLife.y;
-  if (length(dir.xy) < w) dir = vec3(normalize(dir.xy + vec2(1e-4, 0.0)) * w, dir.z);
+  if (length(dir.xy) < w) {
+    vec2 d2 = dot(dir.xy, dir.xy) > 1e-12 ? normalize(dir.xy) : vec2(1.0, 0.0);
+    dir = vec3(d2 * w, dir.z);
+  }
   vec3 side = normalize(cross(dir, vec3(0.0, 0.0, 1.0)));
   vec3 p = mix(vh, vh + dir, position.x + 0.5) + side * position.y * w;
   vUv = vec2(position.x + 0.5, position.y * 2.0);
@@ -154,8 +167,10 @@ export class Sparks {
       this.pos[j] += this.vel[j] * dt;
       this.pos[j + 1] += this.vel[j + 1] * dt;
       this.pos[j + 2] += this.vel[j + 2] * dt;
-      if (this.pos[j + 1] < 0.02) {
-        this.pos[j + 1] = 0.02;
+      // Bounce on the piste (3.5 cm up) or the parquet beside it
+      const floor = Math.abs(this.pos[j + 2]) < 0.9 && Math.abs(this.pos[j]) < 7 ? 0.04 : 0.006;
+      if (this.pos[j + 1] < floor) {
+        this.pos[j + 1] = floor;
         this.vel[j + 1] *= -0.35;
       }
     }
@@ -431,8 +446,10 @@ export class Confetti {
       this.p[j] += (this.v[j] + Math.sin(this.t * 3 + i) * 0.3) * dt;
       this.p[j + 1] += this.v[j + 1] * dt;
       this.p[j + 2] += (this.v[j + 2] + Math.cos(this.t * 2.6 + i) * 0.3) * dt;
-      if (this.p[j + 1] < 0.01) {
-        this.p[j + 1] = 0.01;
+      // Settle on the piste or the parquet — clear of either surface
+      const floor = Math.abs(this.p[j + 2]) < 0.9 && Math.abs(this.p[j]) < 7 ? 0.045 : 0.012;
+      if (this.p[j + 1] < floor) {
+        this.p[j + 1] = floor;
         this.v[j + 1] = 0;
       }
       const spin = this.v[j + 1] === 0 ? 0 : dt * 5;

@@ -18,15 +18,24 @@
  *
  * Module map: artworks.js holds the motifs and the colour science,
  * canvasart.js turns colours into brushwork, palette.js is the palette in
- * your hand, garden.js the world, hud.js the markup, audio.js the sound.
- * This file is the evening itself: the camera, the flow and the scoring.
+ * your hand, garden.js the world, cast.js the people in it (Hägglund and
+ * the rest of the field, from the shared character system), hud.js the
+ * markup, audio.js the sound. This file is the evening itself: the camera,
+ * the flow and the scoring.
+ *
+ * Real graphics cards are stricter than the software renderer the game is
+ * tested on (see ../shared/gfx.js): the renderer is guarded, shaders are
+ * compiled asynchronously before the first frame, and a watchdog steps the
+ * garden down if the picture ever comes out black.
  */
 
 import * as THREE from 'three';
 import { Sfx } from './audio.js';
 import {
-  mulberry, buildGarden, animateGarden, buildSky, buildEasel, buildBrush, buildPainter, buildJudge
+  mulberry, buildGarden, animateGarden, buildSky, buildEasel, buildBrush, simplifyGarden
 } from './garden.js';
+import { buildCast } from './cast.js';
+import { guardRenderer, RenderWatchdog, gfxNotice, precompile } from '../shared/gfx.js';
 import {
   ARTWORKS, mixPigments, colourDistance, hexToRgb, rgbToCss, paintIdMap,
   mixAdvice, accuracy, MATCH_DE, MAX_DROPS, PIGMENT_WORD
@@ -162,14 +171,18 @@ export async function createPainting(container) {
   const rand = mulberry((Date.now() ^ 0x2021) & 0x7fffffff);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, lowTier ? 1.75 : 2));
+  // Real GPUs are stricter than the test renderer (see shared/gfx.js):
+  // shader errors and a lost context get an on-screen notice, ?gfx=safe
+  // drops the shadows, the reflections and the people's heavy materials
+  const gfx = guardRenderer(renderer, container);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, gfx.safe ? 1.5 : lowTier ? 1.75 : 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   // Neutral, not ACES: this is a game about getting a colour exactly right,
   // and ACES shifts hue and saturation on the way to the screen. Khronos'
   // neutral curve keeps the canvas reading as the colour you mixed.
   renderer.toneMapping = THREE.NeutralToneMapping;
   renderer.toneMappingExposure = 1.02;
-  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.enabled = !gfx.safe;
   // r187: PCF with a hardware-compared Vogel disk; radius sets the softness
   renderer.shadowMap.type = THREE.PCFShadowMap;
   canvasHost.appendChild(renderer.domElement);
@@ -179,7 +192,11 @@ export async function createPainting(container) {
   // the far spruces fade into a band that does not exist in the sky behind.
   scene.fog = new THREE.Fog(0xc9d9dd, 30, 78);
 
-  const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 140);
+  // Nothing ever comes nearer the lens than a metre, so the near plane sits
+  // at half a metre: five times the depth precision of 0.1, which is what
+  // keeps the canvas, its stretcher and the house's windows from flickering
+  // through each other on a GPU with a 16-bit depth buffer.
+  const camera = new THREE.PerspectiveCamera(40, 1, 0.5, 140);
 
   scene.add(buildSky());
 
@@ -220,7 +237,9 @@ export async function createPainting(container) {
    * prefiltered once. Fresh oil picks up the sky; bare linen does not.
    */
   let envRT = null;
-  {
+  // PMREM renders in half floats; a GPU that cannot render to them would
+  // hand back garbage for a reflection, so it is skipped there (and in safe mode)
+  if (gfx.floatRT && !gfx.safe) {
     const envScene = new THREE.Scene();
     const sky = buildSky();
     envScene.add(sky);
@@ -274,7 +293,10 @@ export async function createPainting(container) {
   const selUniforms = { uPulse: { value: 0 } };
   const artMat = new THREE.MeshStandardMaterial({
     map: artTex, bumpMap: surfTex, bumpScale: 1.6, roughnessMap: surfTex,
-    roughness: 1, metalness: 0, envMapIntensity: 0.55
+    roughness: 1, metalness: 0, envMapIntensity: 0.55,
+    // The canvas lies on the face of its stretcher: pulled toward the eye in
+    // depth-buffer units, so the two can never fight whatever the precision
+    polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4
   });
   artMat.onBeforeCompile = (shader) => {
     shader.uniforms.uSelMap = { value: selTex };
@@ -291,7 +313,15 @@ export async function createPainting(container) {
         diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 1.0, 0.84, 0.48 ), pmSel.r * ( 0.12 + 0.14 * uPulse ) );
         diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 1.0, 0.97, 0.9 ), pmSel.g * 0.16 );`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-        totalEmissiveRadiance += vec3( 1.0, 0.68, 0.22 ) * pmEdge * ( 0.5 + 0.5 * uPulse );`);
+        totalEmissiveRadiance += vec3( 1.0, 0.68, 0.22 ) * pmEdge * ( 0.5 + 0.5 * uPulse );`)
+      // Specular antialiasing: once the canvas is smaller on screen than its
+      // texture (the wide and verdict shots, small phones) the impasto's
+      // ridges are sub-pixel, and glossy paint would sparkle as the camera
+      // drifts. Let the gloss spread as the texture minifies.
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+        vec2 pmTx = vMapUv * vec2( ${ART_W}.0, ${ART_H}.0 );
+        float pmMin = max( length( dFdx( pmTx ) ), length( dFdy( pmTx ) ) );
+        roughnessFactor = mix( roughnessFactor, max( roughnessFactor, 0.6 ), clamp( pmMin - 1.0, 0.0, 1.0 ) );`);
   };
   artMat.customProgramCacheKey = () => 'pm-art';
 
@@ -314,53 +344,41 @@ export async function createPainting(container) {
   idCv.height = ART_H;
   const idCtx = idCv.getContext('2d', { willReadFrequently: true });
 
-  /* ---- The rest of the field ------------------------------------------ */
+  /* ---- The people ------------------------------------------------------ */
+
+  // Mikael Hägglund waits by the trestle; beside your easel, level with the
+  // canvas, is where he stands to judge it — never in front of it
+  const JUDGE_HOME = { x: 1.75, z: -3.4, ry: -0.9 };
+  const JUDGE_SPOT = { x: 1.22, z: -0.5 };
+  const cast = buildCast({
+    lowTier, safe: gfx.safe, reduced, home: JUDGE_HOME, spot: JUDGE_SPOT, canvasC: CANVAS_C, seed: 2021
+  });
+  scene.add(cast.group);
 
   /*
-   * The rest of the field, staged so they actually land inside the frame.
-   * Depth is what buys you width: at z −5 the frame is nine metres across.
+   * A sunny garden is never dark. If the picture comes out (nearly) black on
+   * some GPU, step down: first the shadows (the dappled light under the
+   * birch is a shadow, and a broken shadow map can put everything in
+   * shade), then the garden's own shaders and the reflections.
    */
-  const FIELD = [
-    { name: 'Per Olsson', shirt: 0x6b4a2e, beret: true, x: -3.4, z: -4.6, ry: 0.42, side: -1 },
-    { name: 'Viktor Jones', shirt: 0x2f5f96, x: 3.3, z: -4.8, ry: -0.38, side: 1 },
-    // Depth alone does not separate two figures: a painter at x −3 and z −4.6
-    // and one at x −4.9 and z −7.4 land on the SAME screen column and read as
-    // one pile. The far pair is pulled back toward the centre instead.
-    { name: 'Per Vikman', shirt: 0xa8202c, x: -3.0, z: -7.4, ry: 0.58, side: -1, hair: 0x4a3520 },
-    { name: 'Henrik Lundqvist', shirt: 0x3f7a46, x: 3.1, z: -7.8, ry: -0.52, side: 1, hair: 0x2a1c10 }
-  ];
-  const painters = FIELD.map((p) => {
-    const fig = buildPainter(p.shirt, { beret: p.beret, hair: p.hair });
-    // Their canvases face away from us, so the painter stands BEYOND the
-    // easel looking back toward the camera — in front of it, everyone is
-    // painting the back of their own canvas. The lateral offset is what
-    // keeps them from being four heads floating over four boards.
-    const fx = Math.sin(p.ry);
-    const fz = Math.cos(p.ry);
-    fig.group.position.set(
-      p.x - fx * 0.72 + fz * p.side * 0.44,
-      0,
-      p.z - fz * 0.72 - fx * p.side * 0.44
-    );
-    fig.group.rotation.y = p.ry - p.side * 0.5;
-    scene.add(fig.group);
-    const theirEasel = buildEasel(null, 0.78, 0.6);
-    theirEasel.position.set(p.x, 0, p.z);
-    theirEasel.rotation.y = p.ry + Math.PI;
-    theirEasel.scale.setScalar(0.88);
-    scene.add(theirEasel);
-    return { ...p, fig, phase: rand() * 6 };
-  });
-
-  /* Mikael Hägglund, strolling between the easels until he is needed */
-  const judge = buildJudge();
-  const JUDGE_HOME = { x: 1.75, z: -3.4, ry: -0.9 };
-  // Beside the easel, level with the canvas, so he never stands in front of it
-  const JUDGE_SPOT = { x: 1.22, z: -0.5 };
-  judge.group.position.set(JUDGE_HOME.x, 0, JUDGE_HOME.z);
-  judge.group.rotation.y = JUDGE_HOME.ry;
-  scene.add(judge.group);
-  const judgeState = { mode: 'home', t: 0, fromX: JUDGE_HOME.x, fromZ: JUDGE_HOME.z, toX: JUDGE_HOME.x, toZ: JUDGE_HOME.z, ry: JUDGE_HOME.ry, mood: 0 };
+  const watchdog = new RenderWatchdog(
+    renderer,
+    [
+      () => {
+        renderer.shadowMap.enabled = false;
+        sun.castShadow = false;
+        scene.traverse((o) => {
+          if (o.material) [].concat(o.material).forEach((m) => (m.needsUpdate = true));
+        });
+      },
+      () => {
+        simplifyGarden(garden);
+        scene.environment = null;
+        artMat.needsUpdate = true;
+      }
+    ],
+    { minLitFraction: 0.3, darkThreshold: 24, onStep: () => gfxNotice(container, 'Grafiken förenklades för att fungera på den här enheten.') }
+  );
 
   /* ---- Palette ---------------------------------------------------------- */
 
@@ -465,6 +483,7 @@ export async function createPainting(container) {
   }
 
   const rig = { name: 'wide', t: 1, dur: 1, from: null };
+  let peekShot = null;
   const cur = { pos: new THREE.Vector3(), tgt: new THREE.Vector3(), fov: 40, ox: 0, oy: 0 };
 
   function setShot(name, dur = 1.4) {
@@ -503,6 +522,12 @@ export async function createPainting(container) {
     camera.lookAt(cur.tgt);
     camera.fov = cur.fov;
     camera.setViewOffset(view.w, view.h, cur.ox, cur.oy, view.w, view.h);
+    if (peekShot) {
+      camera.position.copy(peekShot.pos);
+      camera.lookAt(peekShot.tgt);
+      camera.fov = peekShot.fov;
+      camera.setViewOffset(view.w, view.h, 0, 0, view.w, view.h);
+    }
   }
 
   function resize() {
@@ -929,6 +954,8 @@ export async function createPainting(container) {
   function setPhase(p) {
     state.phase = p;
     hudHost.dataset.phase = p;
+    // Between evenings Hägglund wanders over to see what the others are doing
+    cast.judge.stroll = p === 'idle' || p === 'over';
   }
 
   function drawSlip() {
@@ -948,7 +975,7 @@ export async function createPainting(container) {
       : 'Första gången du drar den här lappen';
     hud.showCard('slip');
     setShot('easel', 2.1);
-    judgeGoHome();
+    cast.judge.goHome();
     later(() => {
       // state.hold lets a test (or a slow reader) keep the slip up
       if (state.phase === 'draw' && !state.hold) beginPaint();
@@ -1028,19 +1055,14 @@ export async function createPainting(container) {
 
     // Hägglund walks over while the camera turns to watch him
     setShot('judge', 1.7);
-    judgeWalk(JUDGE_SPOT.x, JUDGE_SPOT.z, 'inspect');
-    judgeState.mood = grade >= 7.5 ? 1 : grade < 4.5 ? -1 : 0;
+    cast.judge.inspect(grade);
     later(() => showReveal(result), reduced ? 400 : 2000);
   }
 
   function showReveal(r) {
     setPhase('reveal');
     // If he is still on his way over, the verdict waits until he arrives
-    if (judgeState.mode === 'walk') judgeState.then = 'verdict';
-    else {
-      judgeState.mode = 'verdict';
-      judgeState.t = 0;
-    }
+    cast.judge.verdict();
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const pw = Math.round(clamp(view.lay.wide ? (view.lay.card - 70) / 2 : (view.w - 60) / 2, 120, 280) * dpr);
     const ph = tall(pw);
@@ -1097,7 +1119,11 @@ export async function createPainting(container) {
             hud.rvPb.hidden = false;
             hud.rvPb.textContent = r.first ? 'Första gången!' : 'Personbästa!';
           }
-          if (r.grade >= 7.5) sfx.applause(r.grade >= 9);
+          if (r.grade >= 7.5) {
+            sfx.applause(r.grade >= 9);
+            // The rest of the field turns round: brushes up, the back row applauds
+            cast.hail(r.grade >= 9);
+          }
           if (r.grade >= 9) confetti(36);
         }, reduced ? 0 : 200 + r.stars * 260);
       }
@@ -1149,7 +1175,7 @@ export async function createPainting(container) {
     state.returnCard = 'final';
     hud.showCard('final');
     setShot('wide', 2.2);
-    judgeGoHome();
+    cast.judge.goHome();
     sfx.fanfare();
     if (avg >= 8 || isHigh) confetti(60);
   }
@@ -1261,83 +1287,6 @@ export async function createPainting(container) {
       hud.pops.appendChild(el);
       later(() => el.remove(), 4400);
     }
-  }
-
-  /* ---- The judge -------------------------------------------------------- */
-
-  function judgeWalk(x, z, then) {
-    const p = judge.group.position;
-    judgeState.mode = 'walk';
-    judgeState.t = 0;
-    judgeState.fromX = p.x;
-    judgeState.fromZ = p.z;
-    judgeState.toX = x;
-    judgeState.toZ = z;
-    judgeState.then = then;
-  }
-
-  function judgeGoHome() {
-    const p = judge.group.position;
-    if (Math.hypot(p.x - JUDGE_HOME.x, p.z - JUDGE_HOME.z) > 0.05) judgeWalk(JUDGE_HOME.x, JUDGE_HOME.z, 'home');
-  }
-
-  const turnTo = (cur0, target, k) => {
-    let d = target - cur0;
-    while (d > Math.PI) d -= Math.PI * 2;
-    while (d < -Math.PI) d += Math.PI * 2;
-    return cur0 + d * k;
-  };
-
-  function animateJudge(dt, t) {
-    const js = judgeState;
-    const g = judge.group;
-    const { head, armR } = judge.refs;
-    js.t += dt;
-    let face = js.ry;
-    head.rotation.set(0, 0, 0);
-    armR.rotation.set(0, 0, 0);
-    g.position.y = 0;
-    if (js.mode === 'walk') {
-      const dist = Math.hypot(js.toX - js.fromX, js.toZ - js.fromZ);
-      const dur = Math.max(0.6, dist / 1.6);
-      const k = Math.min(1, js.t / dur);
-      const e = easeInOut(k);
-      g.position.x = js.fromX + (js.toX - js.fromX) * e;
-      g.position.z = js.fromZ + (js.toZ - js.fromZ) * e;
-      g.position.y = Math.abs(Math.sin(js.t * 9)) * 0.025 * Math.sin(k * Math.PI);
-      face = Math.atan2(js.toX - js.fromX, js.toZ - js.fromZ);
-      if (k >= 1) {
-        js.mode = js.then;
-        js.t = 0;
-      }
-    } else if (js.mode === 'inspect') {
-      // Looking at the canvas, head on one side, pen to the chin
-      face = Math.atan2(CANVAS_C.x - g.position.x, CANVAS_C.z - g.position.z);
-      head.rotation.z = Math.sin(t * 0.8) * 0.12 + 0.1;
-      head.rotation.x = 0.12;
-      armR.rotation.x = -1.9;
-      armR.rotation.z = 0.35;
-    } else if (js.mode === 'verdict') {
-      // Turns to deliver it: nods if he liked it, shakes his head if not
-      face = Math.atan2(camera.position.x - g.position.x, camera.position.z - g.position.z) * 0.7
-        + Math.atan2(CANVAS_C.x - g.position.x, CANVAS_C.z - g.position.z) * 0.3;
-      const k = Math.min(1, js.t / 2.4);
-      const fade = Math.sin(k * Math.PI);
-      if (js.mood > 0) {
-        head.rotation.x = Math.sin(js.t * 7) * 0.16 * fade;
-        armR.rotation.x = -0.9 * fade;
-      } else if (js.mood < 0) {
-        head.rotation.y = Math.sin(js.t * 8) * 0.32 * fade;
-      } else {
-        head.rotation.z = 0.18 * fade;
-        armR.rotation.x = -0.5 * fade;
-      }
-    } else {
-      face = JUDGE_HOME.ry;
-      head.rotation.y = reduced ? 0 : Math.sin(t * 0.35) * 0.5;
-    }
-    js.ry = turnTo(js.ry, face, 1 - Math.exp(-dt * 6));
-    g.rotation.y = js.ry;
   }
 
   /* ---- Input ------------------------------------------------------------ */
@@ -1584,14 +1533,7 @@ export async function createPainting(container) {
 
     // The garden keeps working whatever the player is doing
     animateGarden(garden, t, reduced);
-    painters.forEach((p, i) => {
-      const swing = Math.sin(t * (1.1 + i * 0.18) + p.phase);
-      p.fig.refs.armR.rotation.x = 0.62 + swing * 0.34;
-      p.fig.refs.armR.rotation.z = -0.16 + Math.cos(t * 0.8 + p.phase) * 0.12;
-      p.fig.refs.head.rotation.y = Math.sin(t * 0.5 + p.phase) * 0.22;
-      p.fig.group.position.y = Math.abs(Math.sin(t * 0.9 + p.phase)) * 0.006;
-    });
-    animateJudge(dt, t);
+    cast.update(dt, t, camera);
     // The hat hops when a slip comes out of it
     hatHop = Math.max(0, hatHop - dt * 1.6);
     const { hat } = garden.refs;
@@ -1600,7 +1542,26 @@ export async function createPainting(container) {
 
     updateCamera(dt, t);
     renderer.render(scene, camera);
+    watchdog.afterFrame();
   }
+
+  /*
+   * Compile every shader before the first frame, asynchronously where the
+   * driver can (Windows/D3D11 compiles the people's physical materials
+   * slowly; one blocking burst can trip the GPU watchdog and leave a black
+   * canvas). The loading card stays up meanwhile. The crowd's reaction
+   * poses and the brush are hidden until needed, so they are shown for it.
+   */
+  updateCamera(0, 0);
+  const hidden = [...cast.hidden(), brush.group];
+  hidden.forEach((o) => {
+    o.visible = true;
+  });
+  await precompile(renderer, scene, camera);
+  hidden.forEach((o) => {
+    o.visible = false;
+  });
+  timer.reset();
   raf = requestAnimationFrame(tick);
 
   const onVisibility = () => {
@@ -1616,6 +1577,13 @@ export async function createPainting(container) {
     camera,
     /** True once the camera has arrived at its current shot. */
     settled: () => rig.t >= 1,
+    /** Debug camera: look from `pos` at `tgt` (arrays), or null to hand back. */
+    peek(pos, tgt, fov = 30) {
+      peekShot = pos ? { pos: new THREE.Vector3(...pos), tgt: new THREE.Vector3(...tgt), fov } : null;
+    },
+    cast,
+    judge: () => ({ mode: cast.judge.mode, then: cast.judge.then, pos: cast.judge.person.root.position.toArray() }),
+    gfx: () => ({ safe: gfx.safe, level: watchdog.level, lastMean: watchdog.lastMean, shadows: renderer.shadowMap.enabled }),
     rig: () => ({ name: rig.name, t: rig.t, dur: rig.dur }),
     drops: () => drops,
     startGame,
@@ -1710,7 +1678,9 @@ export async function createPainting(container) {
         drawCalls: renderer.info.render.calls,
         triangles: renderer.info.render.triangles,
         textures: renderer.info.memory.textures,
-        geometries: renderer.info.memory.geometries
+        geometries: renderer.info.memory.geometries,
+        programs: renderer.info.programs ? renderer.info.programs.length : 0,
+        people: cast.stats()
       };
     }
   };
@@ -1730,6 +1700,11 @@ export async function createPainting(container) {
     clearTimeout(state.lastToast);
     clearTimeout(deltaTimer);
     delete window.__ppMaleri;
+    watchdog.dispose();
+    gfx.dispose();
+    // People first: their materials are shared and refcounted, and their
+    // props are positioned in the cast group, not parented to the scene's bones
+    cast.dispose();
 
     const textures = new Set([artTex, surfTex, selTex]);
     scene.traverse((o) => {

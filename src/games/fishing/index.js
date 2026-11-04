@@ -24,14 +24,17 @@
  */
 
 import * as THREE from 'three';
+import { guardRenderer, RenderWatchdog, gfxNotice, precompile } from '../shared/gfx.js';
 import { Sfx } from './audio.js';
 import { SPECIES, JUNK, fishAssets, Shoal, spawnJunk, disposeAssets, speciesSvg } from './species.js';
 import {
   BOTTOM, causticTexture, noiseTexture, particleAtlas, buildSky, buildShore, buildWater, buildVolume,
-  makeEnvironment, buildBoat, buildBasin, buildKelp, buildSeabed, buildShafts, buildLilies,
+  makeEnvironment, buildBasin, buildKelp, buildSeabed, buildShafts, buildLilies,
   buildLure, buildLine, waveHeight, WATER_FOG
 } from './world.js';
-import { Pool, CELL, buildSnow, buildRipples, pointScale } from './fx.js';
+import { buildBoat, BARREL, WATERLINE } from './boat.js';
+import { createAngler } from './angler.js';
+import { Pool, CELL, buildSnow, buildRipples, pointScale, pointCap } from './fx.js';
 import { buildHud, replay, renderBook } from './hud.js';
 import { loadProgress, saveProgress, logCatch, weighFish, fmtKg, pickMission, MISSION_BONUS } from './progress.js';
 
@@ -47,7 +50,23 @@ const CASTS_PER_GAME = 3;
  * cut. A tap skips the wait.
  */
 const BETWEEN_HOLD = 2.3; // round card on screen, seconds
-const CAST_OUT = 0.62;    // lure arcing from the rod tip back to the water
+const WIND_UP = 0.55;     // the last part of it: he reaches back for the throw
+const CAST_OUT = 0.68;    // lure arcing from the rod tip back to the water
+
+/**
+ * The eka lies off to the left of where the lure goes in (x = 0), so the
+ * throw carries the lure from behind his shoulder out over the bow — and
+ * the line never runs down through the hull.
+ */
+const BOAT_X = -4.6;
+
+/**
+ * The game's own clock wraps once an hour. Every time uniform (waves, swim,
+ * caustics, snow) is fed from it, so none of them ever grows to the size
+ * where float precision on a GPU turns smooth motion into steps — which
+ * performance.now() alone would, on a tab left open for days.
+ */
+const CLOCK_WRAP = 3600;
 
 /**
  * The water by depth, as three gradients: the colour looking level (also
@@ -118,10 +137,11 @@ function framing(aspect) {
     dist: lerp(11.5, 13.8, w),
     follow: lerp(0.62, 0.28, w),
     look: lerp(0.88, 0.4, w),
-    // Start/end screens: on a wide screen the panel sits left and the boat
-    // right; in portrait the panel docks low and the boat and sun sit above
-    idleCam: wide ? [-6.6, 3.4, 14.8] : [-3.2, 3.4, 13.5],
-    idleLook: wide ? [-3.8, 2.3, 0] : [0.4, -3.4, 0]
+    // Start/end screens, relative to the boat: on a wide screen the panel
+    // sits left and the boat right; in portrait the panel docks low and the
+    // boat and sun sit above
+    idleCam: wide ? [-7.0, 3.4, 14.8] : [-3.6, 3.4, 13.5],
+    idleLook: wide ? [-4.2, 2.3, 0] : [0, -3.4, 0]
   };
 }
 
@@ -149,21 +169,31 @@ export async function createFishing(container) {
   /* ---- Renderer: ACES filmic tone mapping does the heavy lifting on the
      look. No post-processing — a phone keeps its frame rate instead. ---- */
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-  const maxRatio = Math.min(window.devicePixelRatio || 1, LITE ? 1.75 : 2);
-  let ratio = maxRatio;
-  renderer.setPixelRatio(ratio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.12;
   canvasHost.appendChild(renderer.domElement);
+  // Real GPUs are stricter than the test machine's (see shared/gfx.js):
+  // shader errors and a lost context get a notice, ?gfx=safe drops the
+  // heavy water effects from the start
+  const gfx = guardRenderer(renderer, container);
+  const maxRatio = Math.min(window.devicePixelRatio || 1, LITE || gfx.safe ? 1.5 : 2);
+  let ratio = maxRatio;
+  renderer.setPixelRatio(ratio);
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(0x1f8f96, 0.02);
   scene.background = new THREE.Color(0x1f8f96);
-  const envRT = makeEnvironment(renderer);
-  scene.environment = envRT.texture;
+  // The pre-filtered environment is rendered into half-float targets; a GPU
+  // that cannot render to those would hand back black. Without it the
+  // hemisphere light carries the fish a little harder instead.
+  const envRT = gfx.floatRT ? makeEnvironment(renderer) : null;
+  scene.environment = envRT ? envRT.texture : null;
+  const envBoost = envRT ? 0 : 0.35;
 
-  const camera = new THREE.PerspectiveCamera(56, 1, 0.1, 900);
+  // Near plane at 0.4 m: nothing ever comes closer than ~6 m, and every
+  // step out buys depth precision (some GPUs only give 16 bits)
+  const camera = new THREE.PerspectiveCamera(56, 1, 0.4, 900);
   camera.position.set(-3.2, 3.0, 13.5);
 
   const hemi = new THREE.HemisphereLight(0xfff0d2, 0x0a2434, 1.15);
@@ -176,6 +206,11 @@ export async function createFishing(container) {
   const caustics = causticTexture();
   const noise = noiseTexture();
   const atlas = particleAtlas();
+  // Both are sampled at grazing angles across a lake that reaches the
+  // horizon: anisotropic filtering keeps the far ripples from shimmering
+  const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  caustics.anisotropy = aniso;
+  noise.anisotropy = aniso;
   const timeU = { value: 0 };
 
   const sky = buildSky(noise);
@@ -190,9 +225,10 @@ export async function createFishing(container) {
   scene.add(lilies);
 
   const boat = buildBoat();
-  boat.position.set(0.4, -0.08, 0);
+  boat.position.set(BOAT_X, -WATERLINE, 0);
   scene.add(boat);
-  scene.add(boat.userData.foam);
+  scene.add(boat.userData.foam, boat.userData.bobber);
+  const angler = createAngler(boat);
 
   const basin = buildBasin();
   scene.add(basin);
@@ -210,11 +246,12 @@ export async function createFishing(container) {
 
   /* ---- Particles ---- */
   const scaleU = { value: 600 };
-  const glow = new Pool(LITE ? 170 : 260, atlas, THREE.AdditiveBlending, scaleU);
-  const bubbles = new Pool(LITE ? 110 : 170, atlas, THREE.AdditiveBlending, scaleU);
-  const spray = new Pool(LITE ? 150 : 220, atlas, THREE.NormalBlending, scaleU);
-  const snow = buildSnow(atlas, scaleU, LITE ? 280 : 520);
-  const ripples = buildRipples();
+  const capU = { value: pointCap(renderer, ratio) };
+  const glow = new Pool(LITE ? 170 : 260, atlas, THREE.AdditiveBlending, scaleU, capU);
+  const bubbles = new Pool(LITE ? 110 : 170, atlas, THREE.AdditiveBlending, scaleU, capU);
+  const spray = new Pool(LITE ? 150 : 220, atlas, THREE.NormalBlending, scaleU, capU);
+  const snow = buildSnow(atlas, scaleU, capU, LITE ? 280 : 520);
+  const ripples = buildRipples(timeU);
   scene.add(glow.points, bubbles.points, spray.points, snow.points, ripples.mesh);
 
   /* ---- Shoal ---------------------------------------------------------- */

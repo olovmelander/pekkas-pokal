@@ -23,6 +23,11 @@
  * camera punches in on the point of contact, the lamé flashes, the box
  * blooms and the crowd reacts. The deciding touch of each bout is
  * replayed in slow motion from recorded poses.
+ *
+ * People: the fencers, the referee and the spectators are the shared
+ * people.js characters, so Mikael, Rickard and Per Vikman look the same
+ * here as in every other year's game. Masks come off between bouts —
+ * you see who you are up against — and go on after the salute.
  */
 
 import * as THREE from 'three';
@@ -30,8 +35,9 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { guardRenderer, postTarget, addSanitize, RenderWatchdog, gfxNotice, precompile } from '../shared/gfx.js';
 import { Sfx } from './audio.js';
-import { Fencer, Animator, P, POSE_LEN, LINE_Y } from './fencer.js';
+import { Fencer, Animator, P, POSE_LEN } from './fencer.js';
 import { mulberry, glowTexture, buildSalle, buildEnvScene } from './salle.js';
 import { Sparks, Trail, Flashes, Confetti, starTexture, ringTexture } from './fx.js';
 import {
@@ -46,7 +52,9 @@ const KEY_FENCER = 'pp-fakt-fencer';
 const KEY_MEDALS = 'pp-fakt-medals';
 const KEY_TUTOR = 'pp-fakt-tutorial';
 const TOUCHES = 5;
-const HOME = 1.3; // each fencer's en garde position from the centre line
+const HOME = 1.22; // each fencer's en garde position from the centre line
+const PISTE_TOP = 0.035; // the fencers stand on the metal piste
+const MY_SOCK = 0xd9a531;
 const LINE_NAME = ['HÖG', 'MITT', 'LÅG'];
 const STRIKES = new Set(['lunge', 'attack', 'feint']);
 

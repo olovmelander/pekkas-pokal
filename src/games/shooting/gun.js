@@ -222,11 +222,18 @@ export function buildShotgun({ envMap, glow, star }) {
   starSprite.position.set(0, 0.02, -1.42);
   starSprite.scale.setScalar(0.9);
   g.add(starSprite);
-  // The flash lights the barrels, the hand-side of the stock and the grass
-  // underfoot for two frames. Distance-limited so it never reaches the field.
-  const light = new THREE.PointLight(0xffb866, 0, 9, 2);
-  light.position.set(0, 0.05, -1.4);
-  g.add(light);
+  // The flash lights the gun itself for two frames: a warm emissive pulse
+  // on its own materials (setFlash). A real point light would do the same
+  // but add a light to every shader in the scene for the whole game — and
+  // toggling it with the gun's visibility would recompile them all.
+  const glowMats = [blued, silver, walnut];
+  glowMats.forEach((m) => m.emissive.set(0xffa955));
+  function setFlash(k) {
+    glowMats.forEach((m) => {
+      m.emissiveIntensity = k * (m === walnut ? 0.5 : 0.9);
+    });
+  }
+  setFlash(0);
 
-  return { group: g, flashMat, starMat, starSprite, flash, light, muzzle, textures };
+  return { group: g, flashMat, starMat, starSprite, flash, setFlash, muzzle, textures };
 }

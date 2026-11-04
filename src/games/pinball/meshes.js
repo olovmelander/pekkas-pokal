@@ -201,8 +201,35 @@ function radialTexture(THREE, inner, stops) {
 
 /* -------------------------------------------------------------- materials */
 
+/**
+ * Caps the direct-light highlight on polished metal at just under the bloom
+ * threshold, keeping its hue (the brightest channel is scaled, not each one).
+ *
+ * The key light's glint on a 0.17-rough cylinder — the lockdown bar, the
+ * wireforms — is hundreds of times brighter than white. Tone mapping hides
+ * that, but bloom does not: the bar turned the bottom corner of the screen
+ * into a haze, and a wire only a pixel wide blinks in and out of a
+ * third-resolution bloom as the camera drifts with the ball. Capped, the
+ * streak still reads as polished steel (it still tones to near-white), and
+ * the room's reflection on top of it carries the rest.
+ */
+function tameGlints(material, cap = 0.9) {
+  material.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <lights_fragment_end>',
+      `#include <lights_fragment_end>
+      {
+        float peak = max(max(reflectedLight.directSpecular.r, reflectedLight.directSpecular.g), reflectedLight.directSpecular.b);
+        reflectedLight.directSpecular *= min(1.0, ${cap.toFixed(2)} / max(peak, 1e-4));
+      }`
+    );
+  };
+  material.customProgramCacheKey = () => `pb-glint-${cap}`;
+  return material;
+}
+
 export function createMaterials(THREE, playfieldTexture) {
-  return {
+  const m = {
     // A playfield is ink on wood under a thick pour of clearcoat. The coat is
     // what carries the room's reflection; the print below stays matte, and
     // the wear map keeps the gloss from being a perfect mirror.
@@ -350,6 +377,8 @@ export function createMaterials(THREE, playfieldTexture) {
       polygonOffsetUnits: -1
     })
   };
+  [m.chrome, m.rail, m.armour].forEach((mat) => tameGlints(mat));
+  return m;
 }
 
 /* ----------------------------------------------------------- the machine */

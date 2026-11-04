@@ -578,10 +578,10 @@ function buildJunk(j) {
     const can = new THREE.CylinderGeometry(0.2, 0.2, 0.5, 10);
     can.applyMatrix4(M(0, 0, 0, Math.PI / 2.4));
     parts.push({ geometry: can, color: C(0x8d7b5a) });
-    const label = new THREE.CylinderGeometry(0.205, 0.205, 0.22, 10);
+    const label = new THREE.CylinderGeometry(0.225, 0.225, 0.22, 10); // proud enough for any depth buffer
     label.applyMatrix4(M(0, 0, 0, Math.PI / 2.4));
     parts.push({ geometry: label, color: C(0x9b3a2c) });
-    const lid = new THREE.CylinderGeometry(0.21, 0.21, 0.05, 10);
+    const lid = new THREE.CylinderGeometry(0.225, 0.225, 0.05, 10);
     lid.applyMatrix4(M(0.2, 0.14, 0, Math.PI / 2.4));
     parts.push({ geometry: lid, color: C(0xb0a181) });
   } else {
@@ -616,6 +616,7 @@ export function fishAssets() {
 }
 
 const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
+const TAU = Math.PI * 2;
 
 /**
  * Every swimmer in the lake, one InstancedMesh per species. A fish is a
@@ -675,7 +676,10 @@ export class Shoal {
         } else {
           mesh.setMatrixAt(k, HIDDEN);
         }
-        arr[k * 4] = f.phase;
+        // The stroke only needs the phase modulo 2π — wrapped, it stays a
+        // small number however long the lake has been open (big arguments
+        // to sin() lose precision on many GPUs)
+        arr[k * 4] = f.phase % TAU;
         arr[k * 4 + 1] = f.amp;
         arr[k * 4 + 2] = f.flash;
       }

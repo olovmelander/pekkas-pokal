@@ -14,6 +14,7 @@
  */
 
 import * as THREE from 'three';
+import { WAVE_GLSL } from './world.js';
 
 export const CELL = { DOT: 0, BUBBLE: 1, GLINT: 2, DROP: 3 };
 
@@ -32,10 +33,23 @@ export function pointScale(renderer, camera) {
   return h / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
 }
 
+/**
+ * The largest sprite worth drawing, in drawing-buffer pixels: about 140 CSS
+ * px, and never above what this GPU can rasterise. GPUs clamp gl_PointSize
+ * to ALIASED_POINT_SIZE_RANGE silently and differently (64 on some phones,
+ * 1024 on desktops) — clamping it ourselves keeps every device alike.
+ */
+export function pointCap(renderer, ratio) {
+  const gl = renderer.getContext();
+  const range = gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE);
+  const gpuMax = range && range[1] ? range[1] : 64;
+  return Math.max(8, Math.min(gpuMax, 140 * ratio));
+}
+
 const TMP = new THREE.Color();
 
 export class Pool {
-  constructor(count, atlas, blending, scale) {
+  constructor(count, atlas, blending, scale, cap) {
     this.count = count;
     this.next = 0;
     this.parts = [];
@@ -55,7 +69,7 @@ export class Pool {
     geo.setAttribute('aColor', new THREE.BufferAttribute(this.color, 3).setUsage(THREE.DynamicDrawUsage));
     geo.setAttribute('aCell', new THREE.BufferAttribute(this.cell, 1).setUsage(THREE.DynamicDrawUsage));
     this.material = new THREE.ShaderMaterial({
-      uniforms: { uAtlas: { value: atlas }, uScale: scale },
+      uniforms: { uAtlas: { value: atlas }, uScale: scale, uCap: cap },
       transparent: true,
       depthWrite: false,
       blending,
@@ -64,7 +78,7 @@ export class Pool {
         attribute float aAlpha;
         attribute vec3 aColor;
         attribute float aCell;
-        uniform float uScale;
+        uniform float uScale, uCap;
         varying float vAlpha;
         varying vec3 vColor;
         varying float vCell;
@@ -73,7 +87,7 @@ export class Pool {
           vColor = aColor;
           vCell = aCell;
           vec4 mv = modelViewMatrix * vec4(position, 1.0);
-          gl_PointSize = min(aSize * uScale / max(0.1, -mv.z), 160.0);
+          gl_PointSize = min(aSize * uScale / max(0.1, -mv.z), uCap);
           gl_Position = projectionMatrix * mv;
         }
       `,
@@ -201,7 +215,7 @@ export class Pool {
 
 
 /** Marine snow and plankton, drifting and wrapping on the GPU. */
-export function buildSnow(atlas, scale, count, box = 34) {
+export function buildSnow(atlas, scale, cap, count, box = 34) {
   const pos = new Float32Array(count * 3);
   const rnd = new Float32Array(count);
   for (let i = 0; i < count; i++) {
@@ -216,6 +230,7 @@ export function buildSnow(atlas, scale, count, box = 34) {
   const uniforms = {
     uAtlas: { value: atlas },
     uScale: scale,
+    uCap: cap,
     uCam: { value: new THREE.Vector3() },
     uBox: { value: box },
     uTime: { value: 0 },
@@ -230,7 +245,7 @@ export function buildSnow(atlas, scale, count, box = 34) {
     vertexShader: `
       attribute float aRand;
       uniform vec3 uCam;
-      uniform float uBox, uTime, uScale;
+      uniform float uBox, uTime, uScale, uCap;
       varying float vA;
       void main() {
         vec3 p = position;
@@ -244,7 +259,7 @@ export function buildSnow(atlas, scale, count, box = 34) {
         float edge = 1.0 - smoothstep(0.7, 1.0, max(abs(rel.x), abs(rel.y)));
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
         float s = 0.05 + aRand * aRand * aRand * 0.34;
-        gl_PointSize = min(s * uScale / max(0.2, -mv.z), 48.0);
+        gl_PointSize = min(s * uScale / max(0.2, -mv.z), uCap * 0.3);
         float tw = 0.55 + 0.45 * sin(uTime * (0.8 + aRand * 3.0) + aRand * 50.0);
         // Big near ones are out-of-focus bokeh: dimmer, so they read as depth
         vA = tw * edge * (1.0 - smoothstep(0.6, 1.0, aRand) * 0.55) * smoothstep(0.5, 2.5, -mv.z);
@@ -272,10 +287,13 @@ export function buildSnow(atlas, scale, count, box = 34) {
 
 /**
  * Ripple rings on the surface: where the lure goes in, where the catch
- * comes out, where a missed fish plops back. Instanced, six at a time.
+ * comes out, where a missed fish plops back. Instanced, eight at a time.
+ * Each ring is a small grid that rides the same five waves as the water,
+ * a few cm above it — a flat card would cut into the slope of a wave and
+ * flicker where the two meet.
  */
-export function buildRipples(count = 8) {
-  const geo = new THREE.PlaneGeometry(2, 2);
+export function buildRipples(timeU, count = 8) {
+  const geo = new THREE.PlaneGeometry(2, 2, 10, 10);
   geo.rotateX(-Math.PI / 2);
   const age = new THREE.InstancedBufferAttribute(new Float32Array(count * 2), 2);
   age.setUsage(THREE.DynamicDrawUsage);
@@ -284,14 +302,19 @@ export function buildRipples(count = 8) {
     transparent: true,
     depthWrite: false,
     side: THREE.DoubleSide,
+    uniforms: { uTime: timeU },
     vertexShader: `
       attribute vec2 aRing;
+      uniform float uTime;
       varying vec2 vUv;
       varying vec2 vRing;
+      ${WAVE_GLSL}
       void main() {
         vUv = uv;
         vRing = aRing;
-        gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+        vec4 w = modelMatrix * instanceMatrix * vec4(position, 1.0);
+        w.y = waveH(w.xz, uTime) + 0.06;
+        gl_Position = projectionMatrix * viewMatrix * w;
       }
     `,
     fragmentShader: `
@@ -324,7 +347,7 @@ export function buildRipples(count = 8) {
       const r = rings[next++ % count];
       Object.assign(r, { t: 0, life, x, z, size, str });
     },
-    update(dt, heightAt) {
+    update(dt) {
       rings.forEach((r, i) => {
         if (r.t >= 1) {
           mesh.setMatrixAt(i, zero);
@@ -333,7 +356,7 @@ export function buildRipples(count = 8) {
         }
         r.t = Math.min(1, r.t + dt / r.life);
         const s = r.size * (0.4 + r.t * 0.9);
-        m.makeScale(s, 1, s).setPosition(r.x, heightAt(r.x, r.z) + 0.08, r.z);
+        m.makeScale(s, 1, s).setPosition(r.x, 0, r.z); // height comes from the waves
         mesh.setMatrixAt(i, m);
         age.array[i * 2] = r.t;
         age.array[i * 2 + 1] = r.str;

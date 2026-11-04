@@ -1778,6 +1778,12 @@ export async function createPinball(container, opts = {}) {
     // not tell the wood from anything a quarter of a unit above it.
     camera.near = clamp(dist * 0.35, 0.5, 40);
     camera.far = dist + 200;
+    // The fog that sinks the room goes with the framing too (58–118 at the
+    // usual ~62). As fixed distances, a short window — where the camera has
+    // to stand further back to fit the machine between the HUD bars — put
+    // the whole table past the fog and rendered it black.
+    scene.fog.near = dist * 0.93;
+    scene.fog.far = dist * 1.9;
     const dx = ins.l + RW / 2 - box.cx;
     const dy = ins.t + RH / 2 - box.cy;
     camera.setViewOffset(W, H, -dx, -dy, W, H);

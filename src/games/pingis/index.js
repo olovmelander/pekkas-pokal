@@ -18,8 +18,9 @@
  * — Henrik (brons), Rickard (silver) and Viktor Jones (mästaren) — make
  * the tournament.
  *
- * Module layout: hall.js builds the room and the figures, fx.js the juice
- * (trails, rings, sparks, confetti), crowd.js the people watching,
+ * Module layout: hall.js builds the room, foe.js the opponent (one of the
+ * friends, from the shared people system), fx.js the juice (trails,
+ * rings, sparks, confetti), crowd.js the people watching,
  * scoreboard.js the split-flap board, post.js the bloom and grade, hud.js
  * the DOM. This file owns the rules, the ball, the bot and the flow — and
  * the ball/bot code is the measured one: see the README before touching
@@ -29,13 +30,14 @@
 import * as THREE from 'three';
 import { Sfx } from './audio.js';
 import {
-  mulberry, glowTexture, ballTexture, buildHall, buildPlayer, buildPaddle, buildTrophy, TABLE
+  mulberry, glowTexture, ballTexture, buildHall, buildPaddle, buildTrophy, TABLE
 } from './hall.js';
+import { Foe, BAT_OFFSET } from './foe.js';
 import { Trail, Swoosh, Rings, Sparks, Confetti, spinColor, spinCss } from './fx.js';
 import { buildCrowd } from './crowd.js';
 import { Scoreboard } from './scoreboard.js';
 import { createPost } from './post.js';
-import { guardRenderer, RenderWatchdog, gfxNotice } from '../shared/gfx.js';
+import { guardRenderer, RenderWatchdog, gfxNotice, precompile } from '../shared/gfx.js';
 import { buildHud, MEDAL_NAMES } from './hud.js';
 
 /** Fill the whole stage on desktop; the camera reframes per aspect. */
@@ -49,8 +51,12 @@ const T = TABLE;
 const HITZ = T.length / 2 + 0.11; // the hit plane, just off each end
 const REACH = 0.62; // generous: quality falls off toward the edge, misses are rare
 const GRAV = 9.4;
-const FOE_SCALE = 1.14; // ~1.85 m against the 76 cm table
+const FOE_Z = -HITZ - 0.55; // where the opponent stands, feet
 const PADDLE_Y = T.height + 0.08; // the player's grip height at rest
+/* Layer 1 is seen by the camera but not by the floor's mirror: specks of
+   dust, sparks and confetti are a pixel or two wide, and in a half-size,
+   un-antialiased reflection they only shimmer. */
+const NO_MIRROR = 1;
 
 /*
  * The opponents.
@@ -74,9 +80,6 @@ const OPPONENTS = [
     name: 'Henrik Lundqvist',
     title: 'Bronsracketen',
     podium: 'Brons 2019',
-    shirt: 0x3f7a46,
-    hair: 0x6b4a24,
-    shorts: 0x23283a,
     speed: 1.3,
     place: 0.5,
     pace: 1.1,
@@ -91,9 +94,6 @@ const OPPONENTS = [
     name: 'Rickard Nilsson',
     title: 'Silverloopen',
     podium: 'Silver 2019',
-    shirt: 0x2f5f96,
-    hair: 0x2a1c10,
-    shorts: 0x1b2130,
     speed: 1.8,
     place: 0.7,
     pace: 1.02,
@@ -108,9 +108,6 @@ const OPPONENTS = [
     name: 'Viktor Jones',
     title: 'Mästaren av 2019',
     podium: 'Guld 2019 · mästaren',
-    shirt: 0xa8202c,
-    hair: 0x3d2b18,
-    shorts: 0x2a1418,
     speed: 2.0,
     place: 0.8,
     pace: 1.0,
@@ -238,10 +235,14 @@ export async function createPingis(container) {
   scene.background = new THREE.Color(0x120f0a);
   scene.fog = new THREE.Fog(0x151109, 10, 24);
 
-  const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 40);
+  // Near plane at 10 cm, not 5: nothing ever comes closer to the lens, and
+  // it doubles the depth precision everywhere else — the floor glows and
+  // the signs on their boards sit centimetres apart several metres away.
+  const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 40);
+  camera.layers.enable(NO_MIRROR);
   // The input camera: the play framing without parallax or shake, so the
   // cursor-to-bat mapping never drifts while the view breathes.
-  const aimCam = new THREE.PerspectiveCamera(50, 1, 0.05, 40);
+  const aimCam = new THREE.PerspectiveCamera(50, 1, 0.1, 40);
   const base = { fov: 50, pos: new THREE.Vector3(), look: new THREE.Vector3() };
 
   /* Lights — hierarchy: hemisphere fill, one casting key, lamp accents */
@@ -282,8 +283,24 @@ export async function createPingis(container) {
 
   /* World */
   const glow = glowTexture();
-  const hall = buildHall(glow, { tier, pixelRatio });
+  const hall = buildHall(glow, { tier, pixelRatio, profile: gfx });
   scene.add(hall.group);
+  hall.refs.dust.layers.set(NO_MIRROR);
+  if (hall.refs.reflector) hall.refs.reflector.getReflectionCamera(camera).layers.disable(NO_MIRROR);
+
+  /* Shaders are compiled before anything is drawn, off the main thread
+     where the driver can (see shared/gfx.js) — the cube capture below would
+     otherwise compile the whole hall in one blocking burst. Compiled with a
+     render target bound: every pass here (the composer's scene pass, the
+     mirror, the cube capture) renders into one, and a program compiled
+     against the canvas is a different, tone-mapped variant. */
+  const compileTarget = new THREE.WebGLRenderTarget(1, 1);
+  const compileAll = async (toTarget) => {
+    renderer.setRenderTarget(toTarget ? compileTarget : null);
+    await precompile(renderer, scene, camera);
+    renderer.setRenderTarget(null);
+  };
+  await compileAll(true);
 
   /* The hall reflects itself: one cube capture from over the table, so the
      lacquer, the ball and the cups shine with THIS room, not a studio. */
@@ -305,8 +322,14 @@ export async function createPingis(container) {
   hall.refs.floorMat.envMapIntensity = low ? 0.9 : 0.3;
   hall.refs.tableTopMat.envMapIntensity = 0.7;
 
-  /* Opponent figure across the table */
+  /* The opponent across the table: one of the friends, holding the bat
+     that stays with the game while the people change */
   let foe = null;
+  const foePaddle = buildPaddle();
+  foePaddle.traverse((o) => {
+    if (o.isMesh) o.castShadow = true;
+  });
+  useEnv(foePaddle);
   function disposeTree(root) {
     root.traverse((o) => {
       if (o.geometry) o.geometry.dispose();
@@ -325,18 +348,16 @@ export async function createPingis(container) {
     });
   }
   function spawnFoe(idx) {
-    if (foe) {
-      scene.remove(foe.group);
-      disposeTree(foe.group);
-    }
-    const look = OPPONENTS[idx];
-    foe = buildPlayer(look.shirt, { hair: look.hair, shorts: look.shorts });
-    foe.group.position.set(0, 0, -HITZ - 0.55);
-    foe.group.rotation.y = Math.PI;
-    foe.group.scale.setScalar(FOE_SCALE);
-    useEnv(foe.group);
-    scene.add(foe.group);
+    // The new one first, the old one after: people share their materials,
+    // so the shaders stay compiled across the swap instead of being thrown
+    // away and rebuilt (a hitch on a GPU that compiles slowly)
+    const old = foe;
+    foe = new Foe(OPPONENTS[idx], foePaddle);
+    foe.root.position.set(0, 0, FOE_Z);
+    useEnv(foe.root);
+    scene.add(foe.root);
     foe.idx = idx;
+    if (old) old.dispose();
   }
   spawnFoe(0);
 
@@ -402,8 +423,13 @@ export async function createPingis(container) {
   const sparks = new Sparks(glow);
   const confetti = new Confetti(low ? 200 : 360);
   scene.add(trail.mesh, swooshMe.mesh, swooshFoe.mesh, rings.mesh, sparks.points, confetti.mesh);
+  sparks.points.layers.set(NO_MIRROR);
+  confetti.mesh.layers.set(NO_MIRROR);
 
-  const crowd = buildCrowd(hall.refs.seats);
+  // Phones skip the crowd's shadows: a dozen figures in the shadow pass
+  // buys nothing at that size
+  const crowd = buildCrowd(hall.refs.seats, { castShadow: !low });
+  useEnv(crowd.group);
   scene.add(crowd.group);
   const board = new Scoreboard(hall.refs.scoreboard);
 
@@ -435,6 +461,10 @@ export async function createPingis(container) {
         scene.traverse((o) => {
           if (o.material) [].concat(o.material).forEach((m) => (m.needsUpdate = true));
         });
+      },
+      () => {
+        // Last resort: the floor's mirror (a second render of the room)
+        if (hall.refs.reflector) hall.refs.reflector.visible = false;
       }
     ],
     { onStep: () => gfxNotice(container, 'Grafiken förenklades för att fungera på den här enheten.') }
@@ -1114,6 +1144,8 @@ export async function createPingis(container) {
     if (mine) {
       crowd.react('ooh', 0.8);
       sfx.ooh(0.8);
+    } else if (foe) {
+      foe.cue('smash');
     }
   }
 
@@ -1167,12 +1199,14 @@ export async function createPingis(container) {
     setDrama(0);
     const power = Math.min(1, 0.3 + rally / 14);
     if (mine) {
-      crowd.react('cheer', 0.8 + power);
+      crowd.react('cheer', power);
       sfx.cheer(power);
     } else {
-      crowd.react('groan', 0.9);
+      // A long rally earns him applause too — it is a friendly hall
+      crowd.react(rally >= 8 ? 'applause' : 'groan', power);
       if (rally >= 4) sfx.groan();
     }
+    if (foe) foe.cue(mine ? 'lost' : 'point');
   }
 
   /* Match-point drama: the hall dims around the table, the grade leans
@@ -1201,6 +1235,7 @@ export async function createPingis(container) {
     confetti.stop();
     trophy.visible = false;
     trophyShaft.visible = false;
+    crowd.react('idle');
     setDrama(0);
     hud.setMatchPoint(0);
     hud.setRally(0, '', 0);
@@ -1326,7 +1361,8 @@ export async function createPingis(container) {
         saveBest();
       }
       if (renderOn) {
-        crowd.react('cheer', 1.6);
+        crowd.react('cheer', 1);
+        if (foe) foe.cue('matchLost');
         setTimeoutSafe(() => sfx.medal(level), 650);
       }
       if (state.mode === 'single') {
@@ -1351,6 +1387,7 @@ export async function createPingis(container) {
       });
     } else {
       sfx.applause();
+      if (renderOn && foe) foe.cue('matchWon');
       if (state.mode === 'single') {
         state.phase = 'over';
         hud.result({ won, my, ai: them, opp: o, level: 0, why: `${o.title} tog den här gången.`, stats: state.stats, score: state.score, mode: 'single' });
@@ -1783,9 +1820,10 @@ export async function createPingis(container) {
   // back from the replay buffer.
   const view = {
     t: 0, bx: 0, by: 1, bz: HITZ, bvis: false, st: 0, ss: 0, vz: 0, live: false, smash: false,
-    meX: 0, meVx: 0, meDVX: 0, meDVY: 0, meSwing: 0, meSpin: 0, aiX: 0, foeX: 0, stroke: 0, fh: 1
+    meX: 0, meVx: 0, meDVX: 0, meDVY: 0, meSwing: 0, meSpin: 0, aiX: 0, foeX: 0, foeZ: FOE_Z, stroke: 0, fh: 1,
+    hc: false, cx: 0, cy: 0, cz: 0, toss: -1
   };
-  const foeAnim = { x: 0, fh: 1, stroke: 0 };
+  const foeAnim = { x: 0, z: FOE_Z, fh: 1, stroke: 0, read: -1, swing: 0, hc: false, c: new THREE.Vector3() };
 
   function liveView(dt) {
     const src = dead.on ? dead.pos : b.pos;
@@ -1811,7 +1849,29 @@ export async function createPingis(container) {
     // after contact. Forehand unless it is coming well to his backhand.
     const incoming = b.live && b.vel.z < 0 && ai.reading;
     if (incoming) foeAnim.fh = ai.targetX > 0.35 ? -1 : 1;
-    if (ai.swing > 0) {
+    // Where he will meet it: the bot's own read, repeated for the picture
+    // (predictStrike only reads the ball, so the rules never notice)
+    if (incoming && foeAnim.read !== state.rallyHits) {
+      foeAnim.read = state.rallyHits;
+      const r = predictStrike(-1);
+      foeAnim.c.set(r.x, r.y, r.z);
+      foeAnim.hc = true;
+    }
+    // Contact: the ball is exactly where the bat met it this frame
+    if (ai.swing > foeAnim.swing + 0.5) {
+      foeAnim.c.copy(b.pos);
+      foeAnim.hc = true;
+    }
+    let toss = -1;
+    if (state.phase === 'serve' && !myServe() && !b.live) {
+      // His serve: the ball sits in his palm, goes up, and the bat winds up
+      // under it as it falls to the serve point
+      toss = THREE.MathUtils.clamp(1 - ai.serveTimer / 0.5, 0, 1);
+      foeAnim.fh = 1;
+      foeAnim.stroke = smooth(0.35, 1, toss) * 0.99;
+      foeAnim.c.set(ai.x, T.height + 0.34, -HITZ + 0.05);
+      foeAnim.hc = true;
+    } else if (ai.swing > 0) {
       // After contact: follow-through, 1 → 2 (2 is the ready pose again)
       ai.swing = Math.max(0, ai.swing - dt * 4.5);
       foeAnim.stroke = ai.swing > 0 ? 2 - ai.swing : 0;
@@ -1821,14 +1881,25 @@ export async function createPingis(container) {
     } else {
       foeAnim.stroke = Math.max(0, Math.min(foeAnim.stroke, 0.99) - dt * 3);
     }
+    foeAnim.swing = ai.swing;
+    if (!incoming && ai.swing <= 0 && toss < 0 && foeAnim.stroke <= 0) foeAnim.hc = false;
     view.stroke = foeAnim.stroke;
     view.fh = foeAnim.fh;
+    view.toss = toss;
+    view.hc = foeAnim.hc;
+    view.cx = foeAnim.c.x;
+    view.cy = foeAnim.c.y;
+    view.cz = foeAnim.c.z;
     // Stand so the BAT, not the belly button, is where the bot is: a
     // forehand reaches out to his right (world −x), a backhand is played
-    // in front of the body.
-    const off = (foeAnim.fh > 0 ? 0.3 : -0.1) * FOE_SCALE;
+    // in front of the body. A short ball brings him in to the table end.
+    const off = foeAnim.fh > 0 ? BAT_OFFSET.fh : BAT_OFFSET.bh;
     foeAnim.x += (ai.x + off - foeAnim.x) * Math.min(1, dt * 10);
+    const stepIn = foeAnim.hc && foeAnim.stroke > 0 && foeAnim.stroke < 1.6 && toss < 0
+      ? THREE.MathUtils.clamp(foeAnim.c.z - 0.62, FOE_Z, -1.66) : FOE_Z;
+    foeAnim.z += (stepIn - foeAnim.z) * Math.min(1, dt * 5);
     view.foeX = foeAnim.x;
+    view.foeZ = foeAnim.z;
     return view;
   }
 
@@ -1849,35 +1920,11 @@ export async function createPingis(container) {
     const c = rec[i];
     const k = THREE.MathUtils.clamp((replay.t - a.t) / Math.max(1e-5, c.t - a.t), 0, 1);
     Object.assign(rv, c);
-    ['bx', 'by', 'bz', 'meX', 'meVx', 'aiX', 'foeX', 'stroke', 'meSwing'].forEach((f) => {
+    ['bx', 'by', 'bz', 'meX', 'meVx', 'aiX', 'foeX', 'foeZ', 'stroke', 'meSwing'].forEach((f) => {
       rv[f] = a[f] + (c[f] - a[f]) * k;
     });
     if (Math.abs(c.stroke - a.stroke) > 0.8) rv.stroke = c.stroke;
     return rv;
-  }
-
-  /* Opponent pose keyframes: [shoulder pitch, shoulder roll, elbow, torso
-     yaw] at stroke phase 0 (ready), 0.7 (backswing), 1 (contact), 1.5
-     (follow-through), 2 (ready again). Positive pitch swings the arm
-     forward, positive roll takes it out to his right, positive yaw turns
-     his shoulders to his left. */
-  const FH = [
-    [0.72, -0.42, 0.5, 0], [-0.25, 0.65, 0.4, -0.55], [0.9, 0.35, 0.45, -0.1],
-    [2.05, -0.5, 1.25, 0.5], [0.72, -0.42, 0.5, 0]
-  ];
-  const BH = [
-    [0.72, -0.42, 0.5, 0], [0.75, -1.05, 1.55, 0.4], [1.15, -0.65, 0.65, 0.05],
-    [1.45, -0.05, 0.25, -0.3], [0.72, -0.42, 0.5, 0]
-  ];
-  const KEYS = [0, 0.7, 1, 1.5, 2];
-  const pose4 = [0, 0, 0, 0];
-  function strokePose(stroke, fh) {
-    const tab = fh > 0 ? FH : BH;
-    let i = 0;
-    while (i < 3 && stroke > KEYS[i + 1]) i++;
-    const k = smooth(0, 1, (stroke - KEYS[i]) / (KEYS[i + 1] - KEYS[i]));
-    for (let j = 0; j < 4; j++) pose4[j] = tab[i][j] + (tab[i + 1][j] - tab[i][j]) * k;
-    return pose4;
   }
 
   const camPos = new THREE.Vector3(0, 2.5, 3.85);
@@ -1885,63 +1932,49 @@ export async function createPingis(container) {
   let camFov = 50;
   const tPos = new THREE.Vector3();
   const tLook = new THREE.Vector3();
-  const headW = new THREE.Vector3();
   const bladeA = new THREE.Vector3();
   const bladeB = new THREE.Vector3();
   const ballW = new THREE.Vector3();
 
+  /* The opponent, from the view: where he stands, the stroke, the ball he
+     is watching, and what the moment asks of his face */
+  const foeView = {
+    x: 0, z: FOE_Z, stroke: 0, fh: 1, ball: null, contact: null, mode: 'menu', look: null, focus: 0,
+    toss: -1, tossBall: new THREE.Vector3(), servePoint: new THREE.Vector3()
+  };
+  const contactW = new THREE.Vector3();
+  const lookW = new THREE.Vector3();
   function poseOpponent(v, t, dt) {
     if (!foe) return;
-    const fr = foe.refs;
-    const prevX = foe.group.position.x;
-    const celebrating = state.phase === 'celebrate' || (state.phase === 'over' && state.champion);
-    foe.group.position.x = v.foeX;
-    const moving = Math.abs(v.foeX - prevX);
-    const stride = moving > 0.004 ? 1 : 0;
-
-    // Split-step: a table tennis player is never still, they bounce on
-    // the balls of their feet between shots. That idle is most of what
-    // makes a figure read as alive rather than as a prop.
-    const hop = Math.abs(Math.sin(t * 4.4)) * (0.012 + stride * 0.02);
-    foe.group.position.y = hop;
-    const crouch = 0.1 + hop * 1.6;
-    fr.legL.hip.rotation.x = crouch + Math.sin(t * 4.4) * 0.06 * stride;
-    fr.legR.hip.rotation.x = crouch - Math.sin(t * 4.4) * 0.06 * stride;
-    fr.legL.knee.rotation.x = -0.22 - hop * 2.4;
-    fr.legR.knee.rotation.x = -0.22 - hop * 2.4;
-    // Lean into the direction of travel
-    foe.group.rotation.z = THREE.MathUtils.clamp((v.foeX - prevX) * -1.4, -0.16, 0.16);
-
-    if (celebrating) {
-      // Beaten, he applauds the new champion
-      const clap = Math.sin(t * 12) * 0.18;
-      fr.armR.shoulder.rotation.set(1.25 + clap, 0, -0.55);
-      fr.armL.shoulder.rotation.set(1.25 + clap, 0, 0.55);
-      fr.armR.elbow.rotation.x = 0.7;
-      fr.armL.elbow.rotation.x = 0.7;
-      fr.torso.rotation.y = 0;
-    } else {
-      const p = strokePose(v.stroke, v.fh);
-      fr.armR.shoulder.rotation.x = p[0] + (v.stroke === 0 ? Math.sin(t * 1.7) * 0.07 : 0);
-      fr.armR.shoulder.rotation.z = p[1];
-      fr.armR.elbow.rotation.x = p[2];
-      fr.torso.rotation.y += (p[3] - fr.torso.rotation.y) * Math.min(1, dt * 18);
-      fr.armL.shoulder.rotation.x = 0.5 + Math.sin(t * 1.7 + 1) * 0.06;
-      fr.armL.shoulder.rotation.z = 0.34;
-      fr.armL.elbow.rotation.x = 0.5;
+    const fv = foeView;
+    const ph = state.phase;
+    fv.mode = ph === 'menu' ? 'menu'
+      : ph === 'intro' ? 'intro'
+        : ph === 'celebrate' || (ph === 'over' && state.champion) ? 'clap' : 'play';
+    fv.x = v.foeX;
+    fv.z = v.foeZ;
+    fv.stroke = v.stroke;
+    fv.fh = v.fh;
+    fv.ball = v.bvis ? ballW.set(v.bx, v.by, v.bz) : null;
+    fv.contact = v.hc ? contactW.set(v.cx, v.cy, v.cz) : null;
+    fv.toss = v.toss;
+    if (v.toss >= 0) {
+      fv.servePoint.set(v.cx, v.cy, v.cz);
+      fv.ball = fv.tossBall;
     }
-    // Eyes on the ball: yaw toward it, pitch down to it
-    fr.head.getWorldPosition(headW);
-    const dx = v.bx - headW.x;
-    const dz = v.bz - headW.z;
-    const yaw = Math.atan2(dx, Math.max(0.2, dz)) - fr.torso.rotation.y;
-    fr.head.rotation.y = THREE.MathUtils.clamp(yaw, -0.9, 0.9);
-    const pitch = Math.atan2(v.by - headW.y - 0.12, Math.hypot(dx, dz));
-    fr.head.rotation.x = THREE.MathUtils.clamp(pitch, -0.5, 0.3);
-
+    // Between points he looks at you (the bat); at the card, into the lens
+    fv.look = fv.mode === 'intro' || fv.mode === 'clap' ? lookW.copy(camera.position)
+      : fv.mode === 'menu' ? null : lookW.set(v.meX, PADDLE_Y + 0.25, HITZ);
+    fv.focus = fv.mode === 'play' && v.live ? 0.5 + drama.v * 0.4 : 0;
+    foe.update(dt, t, fv);
+    if (v.toss >= 0) {
+      // The ball is in his hand, not where the rules parked it
+      v.bx = fv.tossBall.x;
+      v.by = fv.tossBall.y;
+      v.bz = fv.tossBall.z;
+    }
     // The swing trail rides the blade
-    fr.paddle.localToWorld(bladeA.set(0, 0.03, 0));
-    fr.paddle.localToWorld(bladeB.set(0, 0.2, 0));
+    foe.bladePoints(bladeA, bladeB);
     swooshFoe.sample(bladeA, bladeB, dt);
   }
 
@@ -1963,7 +1996,7 @@ export async function createPingis(container) {
       // Close on the opponent; on a wide screen he stands right of centre
       // so the card can take the left, on a phone he stands above it
       const wide = camera.aspect > 1.05;
-      const fx = foe ? foe.group.position.x : 0;
+      const fx = foe ? foe.root.position.x : 0;
       tPos.set(fx + (wide ? 0.45 : 0.2), wide ? 1.85 : 1.75, wide ? 1.35 : 1.0);
       tLook.set(fx - (wide ? 0.62 : 0), wide ? 1.48 : 1.22, -2.1);
       fov = wide ? 32 : 48;
@@ -2106,7 +2139,9 @@ export async function createPingis(container) {
     hall.refs.lampMats.forEach((l, i) => {
       l.mat.uniforms.uIntensity.value = l.base * (i < 2 ? 1 + 0.9 * drama.v : 1 - 0.7 * drama.v);
     });
-    hall.refs.dust.material.uniforms.uTime.value = t;
+    // Wrapped: the motes drift on a float clock, and a clock that runs for
+    // hours loses the precision their slow drift needs on mediump GPUs
+    hall.refs.dust.material.uniforms.uTime.value = t % 2048;
     hall.refs.dust.material.uniforms.uIntensity.value = 1 + drama.v * 0.8;
     post.u.uVignette.value = 0.3 + drama.v * 0.6 + (replaying ? 0.25 : 0);
     if (drama.mine) post.u.uTint.value.setRGB(1.1, 1.0, 0.82);
@@ -2114,7 +2149,6 @@ export async function createPingis(container) {
     post.u.uTintAmt.value = drama.v * 0.45;
     post.u.uFlash.value *= Math.exp(-dt * 14);
     post.u.uFringe.value *= Math.exp(-dt * 10);
-    post.u.uTime.value = t % 100;
     post.bloom.strength = 0.34 + excite * 0.12 + (state.phase === 'celebrate' ? 0.15 : 0);
 
     /* The cup rises for the champion */
@@ -2136,6 +2170,12 @@ export async function createPingis(container) {
     drawFrame();
     watchdog.afterFrame();
   }
+
+  // Everything is in the scene now (the cup, the crowd's poses and the
+  // markers included — compile visits hidden objects too): compile it all
+  // for the target the first frame will actually render into
+  await compileAll(usePost);
+  compileTarget.dispose();
 
   showMenu();
   raf = requestAnimationFrame(tick);
@@ -2241,6 +2281,12 @@ export async function createPingis(container) {
     gfx.dispose();
     watchdog.dispose();
 
+    // People first: they hold shared, reference-counted materials that the
+    // generic sweep below must not dispose out from under them
+    if (foe) foe.dispose();
+    foe = null;
+    crowd.dispose();
+    disposeTree(foePaddle);
     disposeTree(scene);
     glow.dispose();
     envRT.dispose();

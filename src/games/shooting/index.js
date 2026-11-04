@@ -21,9 +21,18 @@
  *
  * Hits break the clay into actual 3D shards with hit-stop and a streak
  * multiplier; misses cost nothing but the streak. The gang watches from
- * folding chairs — you see them in the establishing shot the round opens
- * and closes on. Ludvig won this in real life — his ghost score is the
- * target, and beating it is the gold medal.
+ * folding chairs — the real 2022 field, see gang.js — in the establishing
+ * shot the round opens and closes on, and in a reaction shot after every
+ * series. Ludvig won this in real life — his ghost score is the target,
+ * and beating it is the gold medal.
+ *
+ * Real-GPU notes (the game is tested on a forgiving software GPU, played on
+ * Direct3D, Metal and phone drivers): every shader is compiled before the
+ * first frame for the exact path that will draw it, the scene's light count
+ * never changes at runtime (that would recompile everything mid-game), the
+ * sky clears to haze rather than black, and a watchdog steps the graphics
+ * down — post-processing, then shadows, then the custom shaders — if the
+ * picture comes out dark.
  */
 
 import * as THREE from 'three';
@@ -34,6 +43,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { guardRenderer, postTarget, addSanitize, RenderWatchdog, gfxNotice, precompile } from '../shared/gfx.js';
 import { Sfx } from './audio.js';
 import { HAZE, SUN_DIR, LIGHT_DIR, SUN_COLOR, buildSky, bakeEnvironment, buildHaze, buildHills } from './sky.js';
+import { buildGang } from './gang.js';
 import { mulberry, glowTexture, starTexture, buildRange, buildClay } from './range.js';
 import { buildShotgun } from './gun.js';
 import { buildGrass } from './grass.js';
@@ -46,6 +56,7 @@ export const layout = 'full';
 const HIGHSCORE_KEY = 'pp-skytte-highscore';
 const BEST_KEY = 'pp-skytte-best';
 const LUDVIG = 3400; // mästarens ghost score
+const LUDVIG_NAME = 'Ludvig Ulenius';
 
 /** Medal lines. Gold is defined by Ludvig: beat his 2022 round. */
 const MEDALS = [
@@ -147,6 +158,8 @@ export async function createShooting(container) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
   quality.dpr = Math.min(window.devicePixelRatio || 1, quality.dprCap);
   renderer.setPixelRatio(quality.dpr);
+  // Whatever fails to draw, the frame behind it is evening haze, not black
+  renderer.setClearColor(HAZE, 1);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.96;
@@ -154,13 +167,17 @@ export async function createShooting(container) {
   // r187: PCFSoftShadowMap is gone; PCF now does hardware comparison over
   // a 5-tap Vogel disk whose spread is light.shadow.radius (in texels).
   renderer.shadowMap.type = THREE.PCFShadowMap;
-  // Count every pass of a frame (bloom included), not just the last one
+  // Count every pass of a frame (bloom included), not just the last one.
+  // Safe with skinned people: r187 advances info.render.frame (which gates
+  // skeleton updates) in render() itself, not in reset().
   renderer.info.autoReset = false;
   canvasHost.appendChild(renderer.domElement);
   // Riktiga grafikkretsar är strängare än testmiljöns: rätt sorts mål för
   // efterbehandlingen, notis om en shader inte kompilerar, ?gfx=safe
   const gfx = guardRenderer(renderer, container);
-  if (gfx.safe) quality.bloom = false;
+  // Bloom wants a half-float target; on 8 bits the linear HDR image would
+  // band in the dark sky, so without float targets there is no composer.
+  if (gfx.safe || !gfx.floatRT) quality.bloom = false;
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(HAZE, 50, 300);
@@ -168,6 +185,33 @@ export async function createShooting(container) {
   const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 420);
   camera.position.set(0, 1.7, 0);
   scene.add(camera);
+
+  /* ---- Shader compilation ------------------------------------------------ */
+
+  /**
+   * A program depends on WHERE it draws: into the composer's target (linear
+   * light, no tone mapping) or straight to the screen (ACES + sRGB) — two
+   * different programs per material. precompile() alone would warm the
+   * screen variant, and with bloom on every material would then still
+   * compile in one blocking burst on the first frame: exactly what trips
+   * the GPU watchdog on Windows. So each path is compiled for its target.
+   * (compileAsync compiles synchronously up front and only then waits, so
+   * the render target can be restored straight after the call.)
+   */
+  let compileRT = null;
+  let busy = false; // a background compile for a step-down is running
+  let alive = true;
+  async function compileFor(root, toTarget) {
+    if (toTarget) {
+      compileRT = compileRT || new THREE.WebGLRenderTarget(1, 1);
+      renderer.setRenderTarget(compileRT);
+    } else {
+      renderer.setRenderTarget(null);
+    }
+    const job = precompile(renderer, root, camera);
+    renderer.setRenderTarget(null);
+    await job;
+  }
 
   /* Lighting hierarchy: one warm low sun (the only shadow caster), a sky
      hemisphere, and a cool fill from behind the shooter — the scene is
@@ -181,9 +225,13 @@ export async function createShooting(container) {
   // A tight orthographic frustum around the station is what keeps a single
   // map crisp — a wide one would smear every contact shadow away.
   sun.shadow.mapSize.setScalar(lowTier ? 1024 : 2048);
-  Object.assign(sun.shadow.camera, { left: -26, right: 26, top: 26, bottom: -26, near: 1, far: 170 });
-  sun.shadow.bias = -0.0008;
-  sun.shadow.normalBias = 0.03;
+  // Depth range just around what the frustum covers (the light sits 80 m
+  // out): an orthographic map spreads its precision evenly, so a 170 m range
+  // made the bias 13 cm and lifted every contact shadow off the ground. The
+  // light never moves, so there is no shadow swimming to snap away.
+  Object.assign(sun.shadow.camera, { left: -26, right: 26, top: 26, bottom: -26, near: 30, far: 125 });
+  sun.shadow.bias = -0.0005;
+  sun.shadow.normalBias = 0.025;
   sun.shadow.radius = 3;
   scene.add(sun);
   scene.add(sun.target);
@@ -197,8 +245,11 @@ export async function createShooting(container) {
   const star = starTexture();
   const sky = buildSky();
   scene.add(sky.dome);
+  // The env bake draws the sky into a float target — compile that variant
+  // in the background first instead of in one blocking burst inside PMREM
+  await compileFor(sky.dome, true);
   const envRT = bakeEnvironment(renderer, sky);
-  const envMap = envRT.texture;
+  const envMap = envRT ? envRT.texture : null;
   const haze = buildHaze();
   scene.add(haze.group);
   scene.add(buildHills());
@@ -210,6 +261,25 @@ export async function createShooting(container) {
   const gun = buildShotgun({ envMap, glow, star });
   gun.group.scale.setScalar(0.55);
   camera.add(gun.group);
+  let flashK = 0;
+
+  // The gang on the fika chairs (and Henrik with the score sheet)
+  const gang = buildGang({ rand: mulberry(1975) });
+  scene.add(gang.group);
+  const stationEye = new THREE.Vector3(0, 1.6, 0);
+
+  // No bake (no float targets): mirror-metal would render black without
+  // something to reflect, so the gun and the trophy turn satin instead
+  if (!envMap) {
+    scene.traverse((o) => {
+      [].concat(o.material || []).forEach((m) => {
+        if (m.isMeshStandardMaterial && m.metalness > 0.5) {
+          m.metalness = 0.45;
+          m.roughness = Math.max(m.roughness, 0.45);
+        }
+      });
+    });
+  }
 
   /* Clay pool: at most two airborne (the double) */
   const clays = [buildClay(), buildClay()].map((mesh) => {
@@ -231,7 +301,7 @@ export async function createShooting(container) {
   const fogInfo = { color: scene.fog.color, near: scene.fog.near, far: scene.fog.far };
   const soft = new Particles(420, { fog: fogInfo });
   const bright = new Particles(260, { additive: true, fog: fogInfo });
-  scene.add(soft.points, bright.points);
+  scene.add(soft.mesh, bright.mesh);
   const shards = new Shards(44);
   scene.add(shards.mesh);
   const shot = new ShotCloud(72);
@@ -262,21 +332,74 @@ export async function createShooting(container) {
   }
   if (quality.bloom) buildComposer();
 
-  // Blir bilden svart på någon krets trappas grafiken ner i stället för att
-  // spelet blir ospelbart: först bort med efterbehandlingen, sedan skuggorna.
-  const watchdog = new RenderWatchdog(
-    renderer,
-    [
-      () => disposeComposer(),
-      () => {
-        renderer.shadowMap.enabled = false;
-        scene.traverse((o) => {
-          if (o.material) [].concat(o.material).forEach((m) => (m.needsUpdate = true));
-        });
-      }
-    ],
-    { onStep: () => gfxNotice(container, 'Grafiken förenklades för att fungera på den här enheten.') }
-  );
+  /**
+   * Step-downs compile what they will need in the background first and
+   * switch only when it is ready, so dropping bloom or shadows never stalls
+   * the game for a blocking compile. Never re-enabled once dropped.
+   */
+  async function dropComposer() {
+    if (!composer || busy) return;
+    busy = true;
+    await compileFor(scene, false);
+    busy = false;
+    if (alive) disposeComposer();
+  }
+
+  async function dropShadows() {
+    if (!renderer.shadowMap.enabled || busy) return;
+    busy = true;
+    // Shadow-less variants, compiled while the shadowed ones keep drawing
+    renderer.shadowMap.enabled = false;
+    const job = compileFor(scene, !!composer);
+    renderer.shadowMap.enabled = true;
+    await job;
+    busy = false;
+    if (!alive) return;
+    renderer.shadowMap.enabled = false;
+    scene.traverse((o) => {
+      [].concat(o.material || []).forEach((m) => {
+        m.needsUpdate = true;
+      });
+    });
+  }
+
+  /** Last resort: the plainest sky and no custom-shader layers or reflections. */
+  function plainShaders() {
+    sky.dome.material = sky.plain;
+    haze.group.visible = false;
+    ambient.points.visible = false;
+    scene.traverse((o) => {
+      [].concat(o.material || []).forEach((m) => {
+        if (m.envMap) {
+          m.envMap = null;
+          m.metalness = Math.min(m.metalness, 0.45);
+          m.needsUpdate = true;
+        }
+      });
+    });
+  }
+
+  // Blir bilden svart eller mörk på någon krets trappas grafiken ner i
+  // stället för att spelet blir ospelbart: först efterbehandlingen, sedan
+  // skuggorna, sist de egna shaderna. The scene is a bright evening, so the
+  // bar is higher than "black": under a third of the sampled pixels above a
+  // dim grey means something in the chain broke (normal frames sit at 70 %+).
+  let lastCheck = null;
+  class Watchdog extends RenderWatchdog {
+    afterFrame() {
+      if (!busy) super.afterFrame(); // re-check only once a step has landed
+    }
+
+    judge(stats) {
+      lastCheck = stats;
+      super.judge(stats);
+    }
+  }
+  const watchdog = new Watchdog(renderer, [dropComposer, dropShadows, plainShaders], {
+    darkThreshold: 40,
+    minLitFraction: 0.3,
+    onStep: () => gfxNotice(container, 'Grafiken förenklades för att fungera på den här enheten.')
+  });
 
   /* ---- State ----------------------------------------------------------- */
 
@@ -314,6 +437,9 @@ export async function createShooting(container) {
   let camBlend = 0; // 0 = establishing shot, 1 = at the gun
   let camTarget = 0;
   let camSpeed = 0.6;
+  // The reaction shot after a series: 0 = at the gun, 1 = on the gang
+  const reaction = { k: 0, target: 0 };
+  let raise = 0; // how far the gun is up (0 lowered/hidden … 1 shouldered)
   let countUp = null;
   const pending = []; // shots in flight: { t, records, shotDir, gold }
   const timers = new Set();
@@ -323,7 +449,8 @@ export async function createShooting(container) {
   const lead = { t: 0, center: new THREE.Vector3(), clay: new THREE.Vector3(), dots: [], radius: 0 };
   const follow = { yaw: 0, pitch: 0 };
   const flare = { t: 0, pos: new THREE.Vector3() };
-  const perf = { ema: 16, slowFor: 0 };
+  const perf = { ema: 16, slowFor: 0, age: 0 };
+  const clock = { shader: 0, game: 0 }; // shader time, kept small (see wrap)
 
   const tmpV = new THREE.Vector3();
   const tmpV2 = new THREE.Vector3();
@@ -680,9 +807,7 @@ export async function createShooting(container) {
     if (clay.gold) {
       flashScreen('gold');
       callout('GULDDUVAN!', 'gold');
-      range.crowd.forEach((p) => {
-        p.userData.cheer = 3;
-      });
+      gang.react('gold', 4);
       later(() => sfx.cheer(1.4), 250);
     }
 
@@ -690,9 +815,7 @@ export async function createShooting(container) {
       later(() => {
         callout(`${state.streak} I RAD!`, 'streak');
         sfx.milestone(state.streak);
-        range.crowd.forEach((p) => {
-          p.userData.cheer = 2;
-        });
+        gang.react('clap', 2.4);
         flashScreen('streak');
       }, 260);
     }
@@ -791,10 +914,8 @@ export async function createShooting(container) {
       renderScore();
       checkLudvig();
       sfx.cheer(1);
-      range.crowd.forEach((p) => {
-        p.userData.cheer = 2.5;
-      });
     }
+    reactToSeries(hits, row.length);
     hud.serieCard.innerHTML = `
       <small>Serie ${state.serieNo} klar</small>
       <b>${hits} <span>av ${row.length}</span></b>
@@ -802,6 +923,25 @@ export async function createShooting(container) {
       ${clean ? '<em>Felfri serie +500</em>' : `<em class="dim">${hits >= 6 ? 'Fint skjutet' : 'Nästa serie, ny chans'}</em>`}`;
     retrigger(hud.serieCard, 'show');
     later(() => hud.serieCard.classList.remove('show'), 2400);
+  }
+
+  /**
+   * The reaction shot: between series the camera turns round to the gang,
+   * who answer the series — a cheer for a clean one, applause for a good
+   * one, Ludvig's folded arms for a poor one. Skipped with reduced motion.
+   */
+  function reactToSeries(hits, of) {
+    if (hits === of) gang.react('cheer', 2.8, { [LUDVIG_NAME]: 'clap' });
+    else if (hits >= of - 2) gang.react('clap', 2.6);
+    else if (hits >= of / 2) gang.react('clap', 2.2, { [LUDVIG_NAME]: 'idle', 'Henrik Lundqvist': 'idle' });
+    else gang.react('idle', 2.6, { [LUDVIG_NAME]: 'crossed' });
+    if (reduceMotion) return;
+    later(() => {
+      reaction.target = 1;
+    }, 250);
+    later(() => {
+      reaction.target = 0;
+    }, 2350);
   }
 
   function resolveThrow() {
@@ -818,13 +958,15 @@ export async function createShooting(container) {
       state.phase = 'between';
       renderPull();
       endSeries();
+      // A little longer than the reaction shot (0.25 s in, 2.1 s out)
+      const gap = reduceMotion ? 2700 : 3300;
       if (state.serieNo >= 3) {
-        later(startGold, 2700);
+        later(startGold, gap);
       } else {
         later(() => {
           state.serieNo++;
           startSerie();
-        }, 2700);
+        }, gap);
       }
       return;
     }
@@ -863,7 +1005,7 @@ export async function createShooting(container) {
     gun.flashMat.opacity = 1;
     gun.starMat.opacity = 1;
     gun.starMat.rotation = rand() * Math.PI;
-    gun.light.intensity = 26;
+    flashK = 1;
     if (navigator.vibrate) navigator.vibrate(18);
 
     const origin = camera.getWorldPosition(new THREE.Vector3());
@@ -1163,9 +1305,11 @@ export async function createShooting(container) {
     later(() => {
       camTarget = 0;
       camSpeed = 0.45;
-      range.crowd.forEach((p) => {
-        p.userData.cheer = tier >= 2 || beat ? 6 : tier === 1 ? 3 : 0;
-      });
+      // Beat him and Ludvig applauds the new champion while the rest go
+      // wild; fall short and he leans back with his arms folded
+      if (beat) gang.react('cheer', 7, { [LUDVIG_NAME]: 'clap' });
+      else if (tier >= 1) gang.react(tier >= 2 ? 'cheer' : 'clap', 5, { [LUDVIG_NAME]: 'crossed' });
+      else gang.react('idle', 6, { [LUDVIG_NAME]: 'crossed', 'Henrik Lundqvist': 'clap' });
       if (tier >= 1) later(() => sfx.cheer(tier >= 3 ? 1.6 : 1), 600);
     }, 1300);
     later(() => {
@@ -1213,6 +1357,9 @@ export async function createShooting(container) {
 
   const vista = { pos: new THREE.Vector3(), q: new THREE.Quaternion(), fov: 50, ox: 0, oy: 0 };
   const fp = { pos: new THREE.Vector3(), q: new THREE.Quaternion(), fov: 50 };
+  const reactPose = { pos: new THREE.Vector3(), q: new THREE.Quaternion(), fov: 40 };
+  const GANG_CENTRE = new THREE.Vector3(0.5, 0.98, 2.8);
+  const REACT_DIR = new THREE.Vector3(0.24, 0.2, -1).normalize();
   const lookM = new THREE.Matrix4();
   const lookAt = new THREE.Vector3();
   const euler = new THREE.Euler(0, 0, 0, 'YXZ');
@@ -1244,6 +1391,12 @@ export async function createShooting(container) {
       vista.ox = Math.min(view.w * 0.16, 240);
       vista.oy = 0;
     }
+    const tn = window.__ppSkytte && window.__ppSkytte.tune;
+    if (tn) {
+      vista.pos.set(...tn.pos);
+      lookAt.set(...tn.look);
+      vista.fov = tn.fov;
+    }
     lookM.lookAt(vista.pos, lookAt, THREE.Object3D.DEFAULT_UP);
     vista.q.setFromRotationMatrix(lookM);
   }
@@ -1264,6 +1417,22 @@ export async function createShooting(container) {
     fp.fov = fpFov();
   }
 
+  /**
+   * The reaction shot: from out on the field, looking back over the
+   * station at the gang, far enough that the whole row fits the frame's
+   * width on any aspect (a phone in portrait stands further back).
+   */
+  function reactionPose(t) {
+    const portrait = view.aspect < 0.9;
+    reactPose.fov = portrait ? 52 : 38;
+    const halfH = Math.tan(THREE.MathUtils.degToRad(reactPose.fov / 2)) * view.aspect;
+    const dist = THREE.MathUtils.clamp(2.9 / halfH, 3.8, 9.5);
+    reactPose.pos.copy(GANG_CENTRE).addScaledVector(REACT_DIR, dist);
+    reactPose.pos.x += Math.sin(t * 0.3) * 0.06;
+    lookM.lookAt(reactPose.pos, GANG_CENTRE, THREE.Object3D.DEFAULT_UP);
+    reactPose.q.setFromRotationMatrix(lookM);
+  }
+
   function applyCamera(t, dt) {
     vistaPose(t);
     fpPose(t, dt);
@@ -1271,16 +1440,39 @@ export async function createShooting(container) {
       const step = dt * camSpeed;
       camBlend = camTarget > camBlend ? Math.min(camTarget, camBlend + step) : Math.max(camTarget, camBlend - step);
     }
+    if (reaction.k !== reaction.target) {
+      const step = dt * 1.6;
+      reaction.k = reaction.target > reaction.k ? Math.min(1, reaction.k + step) : Math.max(0, reaction.k - step);
+    }
     const e = ease(camBlend);
     camera.position.lerpVectors(vista.pos, fp.pos, e);
     // Arc over the gang's heads on the way in and out
     camera.position.y += Math.sin(Math.PI * e) * 1.3;
     camera.quaternion.slerpQuaternions(vista.q, fp.q, e);
+    let fov = vista.fov + (fp.fov - vista.fov) * e;
+    const r = ease(reaction.k);
+    if (r > 0) {
+      reactionPose(t);
+      camera.position.lerp(reactPose.pos, r);
+      // A little lift mid-turn, so the swing reads as a move, not a spin
+      camera.position.y += Math.sin(Math.PI * r) * 0.5;
+      camera.quaternion.slerp(reactPose.q, r);
+      fov += (reactPose.fov - fov) * r;
+    }
+    // The gun comes up as the camera settles at the shoulder and goes down
+    // for the reaction shot
+    raise = smooth(0.55, 1, camBlend) * (1 - smooth(0, 0.45, reaction.k));
+    // Near plane: close enough for the gun only while it is up; otherwise
+    // pushed out, which buys the depth buffer precision for the far field
+    const near = raise > 0.01 ? 0.1 : 0.3;
+    if (camera.near !== near) {
+      camera.near = near;
+      applied.fov = -1;
+    }
     if (shakeP > 0.001 && !reduceMotion) {
       camera.position.x += (rand() - 0.5) * shakeP * 0.03;
       camera.position.y += (rand() - 0.5) * shakeP * 0.03;
     }
-    const fov = vista.fov + (fp.fov - vista.fov) * e;
     const ox = Math.round(vista.ox * (1 - e) * 4) / 4;
     const oy = Math.round(vista.oy * (1 - e) * 4) / 4;
     if (fov !== applied.fov || ox !== applied.ox || oy !== applied.oy || view.w !== applied.w || view.h !== applied.h) {
@@ -1358,11 +1550,11 @@ export async function createShooting(container) {
     recoil = Math.max(0, recoil - realDt * 5.5);
     gun.flashMat.opacity = Math.max(0, gun.flashMat.opacity - realDt * 16);
     gun.starMat.opacity = Math.max(0, gun.starMat.opacity - realDt * 22);
-    gun.light.intensity = Math.max(0, gun.light.intensity - realDt * 260);
+    flashK = Math.max(0, flashK - realDt * 10);
+    gun.setFlash(flashK);
     gun.starSprite.scale.setScalar(0.7 + (1 - gun.starMat.opacity) * 0.6);
     // Placement tracks the frame so the gun sits in the same corner on any aspect
     const tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
-    const raise = smooth(0.55, 1, camBlend);
     gun.group.visible = raise > 0.01;
     const portrait = view.aspect < 1;
     gunBase.set(0.66 * tanV * view.aspect * (portrait ? 0.62 : 0.6), -0.66 * tanV * (portrait ? 0.86 : 0.98), -0.66);
@@ -1380,10 +1572,11 @@ export async function createShooting(container) {
   function updateHud(realDt) {
     const live = camBlend > 0.97 && state.phase !== 'intro' && state.phase !== 'over';
     hud.hud.classList.toggle('live', live);
-    canvasHost.classList.toggle('aiming', live && !touch);
+    hud.hud.classList.toggle('reaction', reaction.k > 0.05);
+    canvasHost.classList.toggle('aiming', live && !touch && reaction.k < 0.05);
     hud.cross.style.left = `${(aim.x * 0.5 + 0.5) * 100}%`;
     hud.cross.style.top = `${(-aim.y * 0.5 + 0.5) * 100}%`;
-    hud.cross.classList.toggle('show', live && (state.phase === 'flight' || state.phase === 'delay' || !touch));
+    hud.cross.classList.toggle('show', live && reaction.k < 0.05 && (state.phase === 'flight' || state.phase === 'delay' || !touch));
     hud.cross.classList.toggle('hold', tracking);
     // Arrows at the frame edge for a clay that's coming but not yet in view
     let left = null;
@@ -1411,16 +1604,20 @@ export async function createShooting(container) {
     }
   }
 
-  function updateCrowd(dt, t) {
-    range.crowd.forEach((p) => {
-      const u = p.userData;
-      if (u.cheer > 0) u.cheer -= dt;
-      const up = u.cheer > 0;
-      const geo = up ? u.poses.up : u.poses.down;
-      if (u.arms.geometry !== geo) u.arms.geometry = geo;
-      p.position.y = up ? Math.abs(Math.sin(t * 9 + u.phase)) * 0.12 : 0;
-      p.rotation.z = Math.sin(t * 1.2 + u.phase) * (up ? 0.06 : 0.02);
-    });
+  /**
+   * The gang is behind the camera for the whole round, so at the gun they
+   * are hidden outright — no skinning, no shadow-map draws — and only
+   * animate while a shot can see them.
+   */
+  function updateGang(dt, t) {
+    const seen = camBlend < 0.999 || reaction.k > 0.001;
+    gang.group.visible = seen;
+    if (!seen) return;
+    // On the camera's flights and in the reaction shot they watch the
+    // shooter's station; in the vista they get on with their fika
+    const watching = (camBlend > 0.02 && camBlend < 0.999) || reaction.k > 0.001;
+    gang.lookAt(watching ? stationEye : null);
+    gang.update(dt, t);
   }
 
   function updateGlint(t, dt) {
@@ -1442,16 +1639,23 @@ export async function createShooting(container) {
     }
   }
 
-  /** Adaptive resolution: if frames run long for a while, shed bloom, then pixels. */
+  /**
+   * Adaptive resolution: if frames run long for a while, shed bloom, then
+   * pixels — one way only, never back up, so it cannot oscillate. The first
+   * seconds (shadow maps and passes compiling) and step-downs in flight
+   * don't count.
+   */
   function adapt(realDt) {
-    if (!adaptive) return;
+    if (!adaptive || busy) return;
+    perf.age += realDt;
+    if (perf.age < 4) return;
     perf.ema += (realDt * 1000 - perf.ema) * 0.05;
     if (perf.ema > 30) perf.slowFor += realDt;
     else perf.slowFor = Math.max(0, perf.slowFor - realDt);
     if (perf.slowFor < 2.5) return;
     perf.slowFor = 0;
     if (composer) {
-      disposeComposer();
+      dropComposer();
     } else if (quality.dpr > 1) {
       quality.dpr = Math.max(1, quality.dpr - 0.25);
       resize();
@@ -1482,26 +1686,28 @@ export async function createShooting(container) {
     applyCamera(t, realDt);
     shakeP = Math.max(0, shakeP - realDt * 3.5);
 
-    grass.uniforms.uTime.value += dt;
-    sky.uniforms.uTime.value = t;
-    haze.uniforms.uTime.value = t;
-    range.flagUniforms.uTime.value += dt;
-    ambient.uniforms.uTime.value += dt;
-    range.swallows.update(dt, ambient.uniforms.uTime.value);
+    // Shader clocks wrap hourly: a float time in the hundreds of thousands
+    // (a tab left open for days) turns sin() and noise into blocky steps on
+    // GPUs with less precision. One small jump an hour is the price.
+    clock.shader = (clock.shader + realDt) % 3600;
+    clock.game = (clock.game + dt) % 3600;
+    grass.uniforms.uTime.value = clock.game;
+    sky.uniforms.uTime.value = clock.shader;
+    haze.uniforms.uTime.value = clock.shader;
+    range.flagUniforms.uTime.value = clock.game;
+    ambient.uniforms.uTime.value = clock.game;
+    range.swallows.update(dt, clock.game);
     sky.dome.position.copy(camera.position);
 
     shards.update(dt);
     soft.update(dt, WIND);
     bright.update(dt, WIND);
     shot.update(dt, SHOT_SPEED);
-    const ps = pointScale();
-    soft.material.uniforms.uScale.value = ps;
-    bright.material.uniforms.uScale.value = ps;
-    ambient.uniforms.uScale.value = ps;
+    ambient.uniforms.uScale.value = pointScale();
 
     updateGun(realDt);
     updateGlint(t, dt);
-    updateCrowd(realDt, t);
+    updateGang(realDt, t);
     updateHud(realDt);
     if (rand() < realDt * 0.15) sfx.bird();
 
@@ -1513,9 +1719,10 @@ export async function createShooting(container) {
   }
 
   // Kompilera alla shaders innan första bilden, utan att låsa GPU:n —
-  // annars kompileras himlen, ängen och geväret i ett block vid första
-  // render-anropet, vilket kan återställa grafiken på Windows (Direct3D).
-  await precompile(renderer, scene, camera);
+  // annars kompileras himlen, ängen, folket och geväret i ett block vid
+  // första render-anropet, vilket kan återställa grafiken på Windows
+  // (Direct3D). Compiled for the path that will draw them (see compileFor).
+  await compileFor(scene, !!composer);
   last = performance.now();
   raf = requestAnimationFrame(tick);
 
@@ -1646,13 +1853,31 @@ export async function createShooting(container) {
       gameOver();
     },
     clays,
+    /** Show the between-series reaction shot for a given result (hits of 8); `hold` keeps it up. */
+    reactionShot(hits = 8, hold = false) {
+      reactToSeries(hits, 8);
+      if (hold) {
+        reaction.target = 1;
+        reaction.k = 1;
+        timers.forEach((id) => clearTimeout(id));
+        timers.clear();
+      }
+    },
+    /* TEMP vista tuning */
+    tune: null,
+    gang,
     info() {
       return {
         drawCalls: renderer.info.render.calls,
         triangles: renderer.info.render.triangles,
         bloom: !!composer,
+        shadows: renderer.shadowMap.enabled,
         dpr: quality.dpr,
         camBlend,
+        reaction: reaction.k,
+        gangVisible: gang.group.visible,
+        watchdog: { level: watchdog.level, last: lastCheck },
+        programs: renderer.info.programs ? renderer.info.programs.length : 0,
         phase: state.phase
       };
     }
@@ -1679,19 +1904,19 @@ export async function createShooting(container) {
     hud.helpClose.removeEventListener('click', onHelpClose);
     hud.mute.removeEventListener('click', onMute);
     delete window.__ppSkytte;
+    alive = false;
     gfx.dispose();
     watchdog.dispose();
+    // People first: their materials are shared and reference-counted
+    gang.dispose();
 
-    const textures = new Set([glow, star, envMap, ...gun.textures]);
+    const textures = new Set([glow, star, ...gun.textures]);
+    if (envMap) textures.add(envMap);
     const geometries = new Set();
     const materials = new Set();
     scene.traverse((o) => {
       if (o.geometry) geometries.add(o.geometry);
       if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => materials.add(m));
-    });
-    range.crowd.forEach((p) => {
-      geometries.add(p.userData.poses.up);
-      geometries.add(p.userData.poses.down);
     });
     materials.forEach((m) => {
       Object.values(m).forEach((v) => {
@@ -1701,7 +1926,10 @@ export async function createShooting(container) {
     });
     geometries.forEach((g) => g.dispose());
     textures.forEach((tx) => tx.dispose());
-    envRT.dispose();
+    if (envRT) envRT.dispose();
+    if (compileRT) compileRT.dispose();
+    sky.plain.dispose();
+    sky.material.dispose();
     disposeComposer();
     renderer.dispose();
     renderer.forceContextLoss?.();

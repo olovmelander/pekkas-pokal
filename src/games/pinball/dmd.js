@@ -146,6 +146,11 @@ void main() {
   dotMask = mix(dotMask, 0.42, clamp((w - 0.3) * 2.5, 0.0, 1.0));
   vec3 col = (dim + hot * gain * v) * dotMask + hot * soft * haze;
   gl_FragColor = vec4(col, 1.0);
+  // No-ops inside the composer (OutputPass grades the whole frame), but they
+  // keep the display amber rather than raw linear red when the frame is
+  // drawn straight to the screen (?gfx=safe, or after the watchdog steps in)
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
 }`;
 
 export class Dmd {

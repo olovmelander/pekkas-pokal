@@ -482,7 +482,9 @@ function dustPoints(lamps, count, pixelRatio) {
         float tw = 0.55 + 0.45 * sin(uTime * (1.2 + aSeed.y * 2.0) + aSeed.x * 30.0);
         vA = inside * tw * smoothstep(0.0, 0.12, h) * (1.0 - smoothstep(0.85, 1.0, h));
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
-        gl_PointSize = (2.0 + aSeed.w * 3.0) * uPR * (2.2 / -mv.z);
+        // Clamped both ways: a mote that drifts up to the lens must not
+        // become a screen-sized blob (or a negative size behind it)
+        gl_PointSize = min((2.0 + aSeed.w * 3.0) * uPR * (2.2 / max(0.3, -mv.z)), 16.0 * uPR);
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: /* glsl */ `
@@ -541,19 +543,33 @@ const FloorReflectShader = {
     varying vec2 vPlank;
     varying vec3 vWorld;
     void main() {
-      vec2 uv = vUv.xy / vUv.w;
+      vec2 uv = vUv.xy / max(vUv.w, 1e-4);
       vec3 plank = texture2D(tPlanks, vPlank).rgb;
       float lum = dot(plank, vec3(0.3, 0.5, 0.2));
-      // A touch of blur along the boards: lacquer on wood, not glass
-      vec2 o = vec2(0.0025, 0.006);
-      vec3 c = texture2D(tDiffuse, uv).rgb * 0.36;
-      c += texture2D(tDiffuse, uv + vec2(o.x, 0.0)).rgb * 0.16;
-      c += texture2D(tDiffuse, uv - vec2(o.x, 0.0)).rgb * 0.16;
-      c += texture2D(tDiffuse, uv + vec2(0.0, o.y)).rgb * 0.16;
-      c += texture2D(tDiffuse, uv - vec2(0.0, o.y)).rgb * 0.16;
+      // Blurred, and mostly along the view: lacquer on wood smears a
+      // light into a streak, it is not glass. The blur is also what keeps
+      // the half-resolution, un-antialiased mirror image from crawling
+      // when the camera drifts — a single bright texel never decides a
+      // pixel on its own.
+      vec2 o = vec2(0.003, 0.0045);
+      vec3 c = texture2D(tDiffuse, uv).rgb * 0.2;
+      c += texture2D(tDiffuse, uv + vec2(o.x, 0.0)).rgb * 0.12;
+      c += texture2D(tDiffuse, uv - vec2(o.x, 0.0)).rgb * 0.12;
+      c += texture2D(tDiffuse, uv + vec2(0.0, o.y)).rgb * 0.14;
+      c += texture2D(tDiffuse, uv - vec2(0.0, o.y)).rgb * 0.14;
+      c += texture2D(tDiffuse, uv + vec2(0.0, o.y * 2.4)).rgb * 0.1;
+      c += texture2D(tDiffuse, uv - vec2(0.0, o.y * 2.4)).rgb * 0.1;
+      c += texture2D(tDiffuse, uv + vec2(0.0, o.y * 4.2)).rgb * 0.04;
+      c += texture2D(tDiffuse, uv - vec2(0.0, o.y * 4.2)).rgb * 0.04;
+      // Roll off the highlights: a mirrored bulb glows on the boards, it
+      // does not feed the bloom a flickering firefly
+      float peak = max(max(c.r, c.g), max(c.b, 1e-4));
+      c *= min(1.0, 1.1 / peak);
       vec3 v = normalize(cameraPosition - vWorld);
       float fres = 0.3 + 0.7 * pow(1.0 - clamp(v.y, 0.0, 1.0), 2.5);
       gl_FragColor = vec4(c * color * uStrength * fres * (0.45 + lum * 1.4), 1.0);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
     }`
 };
 
@@ -633,7 +649,7 @@ export const HALL = { W: 9, D: 14, H: 4.2, STAGE_Z: -4.8, STAGE_H: 0.5 };
  * Builds the room. Returns the scene group, the bits index.js animates
  * (lamps, net, scoreboard, reflections) and the seat list for the crowd.
  */
-export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
+export function buildHall(glow, { tier = 'high', pixelRatio = 1, profile = null } = {}) {
   const group = new THREE.Group();
   const statics = new THREE.Group(); // merged at the end
   group.add(statics);
@@ -657,7 +673,10 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
   group.add(floor);
   refs.floorMat = floorMat;
 
-  if (tier === 'high') {
+  // The mirror renders the room again into a half-float target: only where
+  // the GPU can render to one (EXT_color_buffer_float) and not in ?gfx=safe
+  const mirror = tier === 'high' && (!profile || (profile.floatRT && !profile.safe));
+  if (mirror) {
     const reflector = new Reflector(new THREE.PlaneGeometry(HALL_W, HALL_D), {
       textureWidth: 512,
       textureHeight: 512,
@@ -686,7 +705,7 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
      floor where each pendant's mirror image would be — the reflection a
      glance actually registers — moved with the camera every frame. */
   const fakes = [];
-  if (tier !== 'high') {
+  if (!mirror) {
     const streakMat = new THREE.MeshBasicMaterial({
       map: glow, color: 0xffd9a0, transparent: true, opacity: 0.32,
       depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
@@ -746,7 +765,8 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
 
   /* Windows on the side walls: blue dusk outside */
   const dusk = duskTexture();
-  const paneMat = new THREE.MeshBasicMaterial({ map: dusk });
+  // A centimetre in front of its frame: depth-offset so it wins on every GPU
+  const paneMat = new THREE.MeshBasicMaterial({ map: dusk, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   const frameMat = lambert(0xe8e2d4);
   const radMat = lambert(0xd8d2c4);
   const addWindow = (side, z) => {
@@ -830,7 +850,8 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
     if (pool) {
       const pm = new THREE.MeshBasicMaterial({
         map: glow, color: 0xffdf9e, transparent: true, opacity: 0.05,
-        depthWrite: false, blending: THREE.AdditiveBlending
+        depthWrite: false, blending: THREE.AdditiveBlending,
+        polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4
       });
       const p = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 2.6), pm);
       p.rotation.x = -Math.PI / 2;
@@ -905,29 +926,32 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
     table.add(apron);
   });
 
-  /* Net: posts, a tape with the event's name, and a real mesh in canvas */
-  const [netCv, nctx] = canvas(512, 64);
-  nctx.fillStyle = 'rgba(20,26,36,0.55)';
-  nctx.fillRect(0, 0, 512, 64);
-  nctx.strokeStyle = 'rgba(225,232,245,0.5)';
-  nctx.lineWidth = 1.5;
-  for (let x = 0; x <= 512; x += 10) {
-    nctx.beginPath(); nctx.moveTo(x, 0); nctx.lineTo(x, 64); nctx.stroke();
+  /* Net: posts, a tape with the event's name, and a real mesh in canvas.
+     Painted at twice the size it is ever seen, with soft lines, so the
+     mipmaps always have something to average: a mesh drawn one texel wide
+     at screen size crawls and moirés whenever the camera drifts. */
+  const [netCv, nctx] = canvas(1024, 128);
+  nctx.fillStyle = 'rgba(20,26,36,0.5)';
+  nctx.fillRect(0, 0, 1024, 128);
+  nctx.strokeStyle = 'rgba(225,232,245,0.42)';
+  nctx.lineWidth = 3;
+  for (let x = 0; x <= 1024; x += 20) {
+    nctx.beginPath(); nctx.moveTo(x, 0); nctx.lineTo(x, 128); nctx.stroke();
   }
-  for (let y = 0; y <= 64; y += 10) {
-    nctx.beginPath(); nctx.moveTo(0, y); nctx.lineTo(512, y); nctx.stroke();
+  for (let y = 0; y <= 128; y += 20) {
+    nctx.beginPath(); nctx.moveTo(0, y); nctx.lineTo(1024, y); nctx.stroke();
   }
   nctx.fillStyle = '#f3f6fb';
-  nctx.fillRect(0, 0, 512, 11);
+  nctx.fillRect(0, 0, 1024, 22);
   nctx.fillStyle = '#1d4f86';
-  nctx.font = '700 9px Inter, sans-serif';
+  nctx.font = '700 18px Inter, sans-serif';
   nctx.textAlign = 'center';
   nctx.textBaseline = 'middle';
-  nctx.letterSpacing = '3px';
-  nctx.fillText('PEKKAS POKAL · 2019', 256, 6);
+  nctx.letterSpacing = '6px';
+  nctx.fillText('PEKKAS POKAL · 2019', 512, 12);
   const netTex = new THREE.CanvasTexture(netCv);
   netTex.colorSpace = THREE.SRGBColorSpace;
-  netTex.anisotropy = 4;
+  netTex.anisotropy = 8;
   const net = new THREE.Mesh(
     new THREE.PlaneGeometry(T.width + 0.3, T.netH, 24, 1),
     new THREE.MeshBasicMaterial({ map: netTex, transparent: true, side: THREE.DoubleSide })
@@ -1069,7 +1093,9 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
   {
     const sign = new THREE.Mesh(
       new THREE.PlaneGeometry(2.2, 0.69),
-      new THREE.MeshBasicMaterial({ map: olympiaSignTexture(), color: 0xdddddd })
+      new THREE.MeshBasicMaterial({
+        map: olympiaSignTexture(), color: 0xdddddd, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
+      })
     );
     sign.position.set(0, 2.42, BACK + 0.2);
     sign.userData.keep = true;
@@ -1108,7 +1134,10 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
   /* Scoreboard on the back wall — scoreboard.js paints the flaps */
   {
     add(new THREE.Mesh(new THREE.BoxGeometry(1.16, 0.64, 0.08), lambert(0x15120e)), -1.97, 2.42, BACK + 0.2);
-    const board = new THREE.Mesh(new THREE.PlaneGeometry(1.08, 0.54), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    // A centimetre proud of its box, so depth-offset (see the table top)
+    const board = new THREE.Mesh(new THREE.PlaneGeometry(1.08, 0.54), new THREE.MeshBasicMaterial({
+      color: 0xffffff, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
+    }));
     board.position.set(-1.97, 2.42, BACK + 0.25);
     group.add(board);
     refs.scoreboard = board;
@@ -1121,7 +1150,7 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
     const cloth = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.72, 0.55), standard(0xefe9dc, 0.9));
     cloth.position.y = 0.36;
     g.add(cloth);
-    const runner = new THREE.Mesh(new THREE.BoxGeometry(1.12, 0.2, 0.56), standard(0xa8202c, 0.8));
+    const runner = new THREE.Mesh(new THREE.BoxGeometry(1.14, 0.2, 0.59), standard(0xa8202c, 0.8));
     runner.position.y = 0.6;
     g.add(runner);
     [[-0.32, 0x9c6a3a, 0.7], [0.32, 0xb8bcc4, 0.82], [0, 0xf2c14e, 1.05]].forEach(([x, col, s]) => {
@@ -1254,12 +1283,13 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
      the room */
   {
     const cz = STAGE_Z - 0.03;
-    add(new THREE.Mesh(new THREE.CircleGeometry(0.24, 24), lambert(0xf0ece0)), 3.82, 2.55, cz);
+    const decal = { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 };
+    add(new THREE.Mesh(new THREE.CircleGeometry(0.24, 24), lambert(0xf0ece0, decal)), 3.82, 2.55, cz);
     add(new THREE.Mesh(new THREE.TorusGeometry(0.25, 0.025, 6, 20), lambert(0x2a1f14)), 3.82, 2.55, cz);
     [[0.16, -0.5], [0.1, 1.9]].forEach(([len, ang]) => {
       const geo = new THREE.BoxGeometry(0.012, len, 0.01);
       geo.translate(0, len / 2, 0);
-      const hand = add(new THREE.Mesh(geo, lambert(0x22262e)), 3.82, 2.55, cz + 0.01);
+      const hand = add(new THREE.Mesh(geo, lambert(0x22262e, { polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 })), 3.82, 2.55, cz + 0.01);
       hand.rotation.z = ang;
     });
   }
@@ -1286,24 +1316,25 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1 } = {}) {
     statics.add(g);
   };
   // Only as far forward as the wide lens sees them well: a spectator right
-  // beside the camera is a blurred giant at the edge of the frame.
+  // beside the camera is a blurred giant at the edge of the frame. A seat
+  // is the centre of the seat's top (crowd.js puts each figure on it).
   for (let i = 0; i < 4; i++) {
     const z = -2.25 + i * 0.62;
     chair(-3.55, z, Math.PI / 2 - 0.2);
-    if (i !== 2) refs.seats.push({ x: -3.55, y: 0.45, z, ry: Math.PI / 2 - 0.2, pose: 'chair' });
+    if (i !== 2) refs.seats.push({ x: -3.55, y: 0.45, z, ry: Math.PI / 2 - 0.2, pose: 'sit' });
   }
   for (let i = 0; i < 4; i++) {
     const z = -2.5 + i * 0.62;
     chair(3.55, z, -Math.PI / 2 + 0.2);
-    if (i !== 1) refs.seats.push({ x: 3.55, y: 0.45, z, ry: -Math.PI / 2 + 0.2, pose: 'chair' });
+    if (i !== 1) refs.seats.push({ x: 3.55, y: 0.45, z, ry: -Math.PI / 2 + 0.2, pose: 'sit' });
   }
-  // Along the front lip of the stage, legs dangling, facing the table.
-  // Staggered a little in depth: a row of identical heads at one z reads
-  // as a fence, not as people.
+  // On the front lip of the stage, legs dangling over the edge, facing the
+  // table. Staggered a little in depth: a row of identical heads at one z
+  // reads as a fence, not as people.
   for (let i = 0; i < 9; i++) {
     if (i === 4) continue; // a gap behind the opponent's head
     const x = -2.72 + i * 0.68 + (rand() - 0.5) * 0.1;
-    refs.seats.push({ x, y: STAGE_H, z: STAGE_Z - 0.26 - rand() * 0.06, ry: (rand() - 0.5) * 0.3, pose: 'ledge' });
+    refs.seats.push({ x, y: STAGE_H, z: STAGE_Z - 0.13 - rand() * 0.05, ry: (rand() - 0.5) * 0.3, pose: 'sit' });
   }
   // A standing row at the back of the stage
   [-2.2, -1.5, -0.6, 0.55, 1.35, 1.95].forEach((x) => {
@@ -1345,217 +1376,6 @@ export function buildTrophy(color = 0xf2c14e, scale = 1, envMap = null) {
   g.scale.setScalar(scale);
   g.userData.metal = metal;
   return g;
-}
-
-/* --------------------------------------------------------------- figures */
-
-/**
- * A Pekkas player.
- *
- * Articulated rather than boxed: head with a face, neck, torso, shorts,
- * two-segment arms with elbows, two-segment legs with knees, socks and
- * shoes — modelled in capsules, so the silhouette reads as a person and not
- * as a stack of crates. Every joint index.js animates is its own group with
- * the pivot at the joint, so a shoulder rotation swings the whole arm and
- * the paddle with it — the only way a swing reads as a swing rather than a
- * mesh sliding sideways.
- *
- * Group origin sits at the feet, facing −z — the way a hanging arm swings
- * under a positive pitch, so a raised arm reaches in front of the face.
- * (The first build put the face on +z: turned to the table, that meant
- * reaching for the ball with the back of his head to it.)
- */
-export function buildPlayer(shirt, opts = {}) {
-  const skin = opts.skin ?? 0xd9a678;
-  const hairColor = opts.hair ?? 0x3d2b18;
-  const shortsColor = opts.shorts ?? 0x23283a;
-  const g = new THREE.Group();
-  const refs = {};
-
-  const shirtMat = standard(shirt, 0.78);
-  const skinMat = standard(skin, 0.58);
-  const shortsMat = standard(shortsColor, 0.82);
-  const shoeMat = standard(0x1b1e26, 0.5);
-  const whiteMat = standard(0xf2efe6, 0.7);
-  const hairMat = standard(hairColor, 0.85);
-  const darkMat = standard(0x16181d, 0.4);
-  const shadow = (m) => {
-    m.castShadow = true;
-    return m;
-  };
-  const capsule = (r, len, mat, y) => {
-    const m = shadow(new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 4, 10), mat));
-    m.position.y = y;
-    return m;
-  };
-
-  /* ---- Legs. Hip groups so index.js can bend the knees in the stance. */
-  const makeLeg = (side) => {
-    const hip = new THREE.Group();
-    hip.position.set(side * 0.11, 0.86, 0);
-    hip.add(capsule(0.07, 0.3, skinMat, -0.22));
-    const leg = shadow(new THREE.Mesh(new THREE.CylinderGeometry(0.088, 0.082, 0.22, 12), shortsMat));
-    leg.position.y = -0.08;
-    hip.add(leg);
-    const knee = new THREE.Group();
-    knee.position.y = -0.42;
-    hip.add(knee);
-    knee.add(capsule(0.056, 0.3, skinMat, -0.19));
-    const sock = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.056, 0.11, 10), whiteMat);
-    sock.position.y = -0.34;
-    knee.add(sock);
-    const shoe = shadow(new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.14, 3, 8), shoeMat));
-    shoe.rotation.x = Math.PI / 2;
-    shoe.scale.set(1.15, 1, 0.8);
-    shoe.position.set(0, -0.43, -0.045);
-    knee.add(shoe);
-    const sole = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.02, 0.25), whiteMat);
-    sole.position.set(0, -0.47, -0.045);
-    knee.add(sole);
-    g.add(hip);
-    return { hip, knee };
-  };
-  refs.legL = makeLeg(-1);
-  refs.legR = makeLeg(1);
-
-  /* ---- Torso: a tapered club shirt over shorts */
-  const torso = new THREE.Group();
-  torso.position.y = 0.86;
-  g.add(torso);
-  refs.torso = torso;
-
-  const pelvis = shadow(new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 0.08, 4, 12), shortsMat));
-  pelvis.rotation.z = Math.PI / 2;
-  pelvis.scale.set(1, 1, 0.72);
-  pelvis.position.y = -0.02;
-  torso.add(pelvis);
-  const chest = shadow(new THREE.Mesh(new THREE.CapsuleGeometry(0.16, 0.2, 6, 14), shirtMat));
-  chest.scale.set(1.18, 1, 0.68);
-  chest.position.y = 0.22;
-  torso.add(chest);
-  // Collar and a club stripe across the chest
-  const collar = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.016, 6, 14), whiteMat);
-  collar.rotation.x = Math.PI / 2;
-  collar.position.y = 0.43;
-  torso.add(collar);
-  const stripe = new THREE.Mesh(new THREE.CylinderGeometry(0.168, 0.168, 0.045, 18, 1, true), whiteMat);
-  stripe.scale.set(1.18, 1, 0.69);
-  stripe.position.y = 0.2;
-  torso.add(stripe);
-
-  /* ---- Head with a face. Its own group so it can track the ball. */
-  const headG = new THREE.Group();
-  headG.position.y = 0.53;
-  torso.add(headG);
-  refs.head = headG;
-
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.048, 0.058, 0.1, 10), skinMat);
-  neck.position.y = -0.03;
-  headG.add(neck);
-  const skull = shadow(new THREE.Mesh(new THREE.SphereGeometry(0.112, 20, 14), skinMat));
-  skull.scale.set(0.92, 1.1, 1);
-  skull.position.y = 0.12;
-  headG.add(skull);
-  const jaw = new THREE.Mesh(new THREE.SphereGeometry(0.085, 14, 8), skinMat);
-  jaw.scale.set(1, 0.8, 1);
-  jaw.position.set(0, 0.06, -0.02);
-  headG.add(jaw);
-  // Hair hugs the skull — a cap any bigger reads as a helmet — tilted so
-  // the forehead shows and the back of the head is covered
-  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.116, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.62), hairMat);
-  hair.scale.set(0.94, 1.1, 1.02);
-  hair.position.set(0, 0.128, 0.006);
-  hair.rotation.x = 0.38;
-  headG.add(hair);
-  [-1, 1].forEach((sx) => {
-    const ear = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 6), skinMat);
-    ear.scale.set(0.5, 1, 0.8);
-    ear.position.set(sx * 0.103, 0.115, 0.005);
-    headG.add(ear);
-    const eyeW = new THREE.Mesh(new THREE.SphereGeometry(0.017, 8, 6), whiteMat);
-    eyeW.scale.z = 0.5;
-    eyeW.position.set(sx * 0.038, 0.135, -0.097);
-    headG.add(eyeW);
-    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.009, 6, 4), darkMat);
-    pupil.position.set(sx * 0.038, 0.135, -0.105);
-    headG.add(pupil);
-    const brow = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.011, 0.016), hairMat);
-    brow.position.set(sx * 0.039, 0.165, -0.1);
-    brow.rotation.z = sx * -0.12;
-    headG.add(brow);
-  });
-  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.045, 6), skinMat);
-  nose.rotation.x = -Math.PI / 2 - 0.5;
-  nose.position.set(0, 0.105, -0.112);
-  headG.add(nose);
-  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.008, 0.01), darkMat);
-  mouth.position.set(0, 0.058, -0.098);
-  headG.add(mouth);
-  // Headband in the club colour — the detail that says "athlete"
-  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.108, 0.108, 0.03, 20, 1, true), shirtMat);
-  band.scale.set(0.94, 1, 1.03);
-  band.position.y = 0.19;
-  headG.add(band);
-
-  /* ---- Arms. Shoulder → elbow → hand, each its own pivot. */
-  const makeArm = (side) => {
-    const shoulder = new THREE.Group();
-    shoulder.position.set(side * 0.22, 0.36, 0);
-    torso.add(shoulder);
-    // A T-shirt sleeve: a short tube down the upper arm, not a ball on the shoulder
-    const sleeve = shadow(new THREE.Mesh(new THREE.CapsuleGeometry(0.06, 0.07, 4, 10), shirtMat));
-    sleeve.position.y = -0.055;
-    shoulder.add(sleeve);
-    shoulder.add(capsule(0.044, 0.18, skinMat, -0.13));
-    const elbow = new THREE.Group();
-    elbow.position.y = -0.26;
-    shoulder.add(elbow);
-    elbow.add(capsule(0.039, 0.18, skinMat, -0.125));
-    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), skinMat);
-    hand.scale.set(0.9, 1.15, 0.75);
-    hand.position.y = -0.28;
-    elbow.add(hand);
-    return { shoulder, elbow };
-  };
-  refs.armL = makeArm(-1);
-  refs.armR = makeArm(1);
-
-  // The paddle lives in the right hand, gripped at the handle
-  const paddle = buildPaddle();
-  // Seated IN the hand, and — the part that matters — held the way a bat is
-  // held: head UP, face toward the table. A flat blade cannot do both at
-  // once by accident; if the head points forward the face is edge-on. So
-  // the paddle cancels the pitch the shoulder and elbow have accumulated
-  // (0.72 + 0.5), which lands it upright in the figure's own frame with the
-  // rubber looking straight across the net. The swing then carries it.
-  paddle.position.set(0, -0.3, 0.02);
-  paddle.rotation.set(-1.22, 0, 0);
-  refs.armR.elbow.add(paddle);
-  refs.paddle = paddle;
-
-  // Resting pose: knees soft, arms forward in a ready stance.
-  //
-  // Positive pitch swings a hanging arm toward the figure's own −z, which
-  // is the side it faces. Negative put both arms behind its back, where the
-  // bat was invisible from across the table.
-  refs.legL.hip.rotation.x = 0.1;
-  refs.legR.hip.rotation.x = 0.1;
-  refs.legL.knee.rotation.x = -0.22;
-  refs.legR.knee.rotation.x = -0.22;
-  refs.armL.shoulder.rotation.x = 0.5;
-  refs.armL.shoulder.rotation.z = 0.34;
-  refs.armL.elbow.rotation.x = 0.5;
-  refs.armR.shoulder.rotation.x = 0.72;
-  refs.armR.shoulder.rotation.z = -0.42;
-  refs.armR.elbow.rotation.x = 0.5;
-
-  // Bake each joint's own pieces together: 44 meshes become ~25 draws
-  [refs.legL, refs.legR, refs.armL, refs.armR].forEach((limb) => {
-    Object.values(limb).forEach((j) => mergeStatic(j, true));
-  });
-  mergeStatic(torso, true);
-  mergeStatic(headG, true);
-  return { group: g, refs };
 }
 
 /**
