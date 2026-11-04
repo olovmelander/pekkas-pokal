@@ -26,7 +26,7 @@
   inset: 0;
   pointer-events: none;
   font-family: var(--font-body);
-  color: #eef1ff;
+  color: #f4efe6;
 }
 
 .pb-ui button {
@@ -61,7 +61,7 @@
   font-size: 0.6rem;
   font-weight: 700;
   letter-spacing: 0.14em;
-  color: rgba(190, 199, 233, 0.65);
+  color: rgba(214, 204, 186, 0.65);
 }
 
 .pb-meta {
@@ -138,8 +138,8 @@
   transform: translate(-50%, -6px);
   padding: 0.5rem 1.1rem;
   border-radius: var(--r-pill);
-  background: rgba(10, 14, 28, 0.78);
-  border: 1px solid rgba(242, 193, 78, 0.34);
+  background: rgba(14, 12, 9, 0.78);
+  border: 1px solid rgba(233, 191, 92, 0.34);
   backdrop-filter: blur(8px);
   font-size: 0.82rem;
   font-weight: 700;
@@ -172,8 +172,10 @@
   align-items: center;
   justify-content: center;
   padding: var(--sp-5);
-  background: rgba(5, 7, 15, 0.82);
-  backdrop-filter: blur(10px);
+  background:
+    radial-gradient(70% 55% at 50% 40%, rgba(233, 191, 92, 0.08), transparent 70%),
+    rgba(8, 7, 6, 0.8);
+  backdrop-filter: blur(10px) saturate(120%);
   opacity: 0;
   visibility: hidden;
   transition: opacity var(--t-med), visibility var(--t-med);
@@ -187,24 +189,30 @@
 .pb-panel {
   max-width: 380px;
   text-align: center;
-  color: #eef1ff;
+  color: #f4efe6;
 }
 
+/* Spelens rubriker i samma förgyllda serif som webbplatsen */
 .pb-panel h2 {
-  font-family: var(--font-display);
-  font-size: clamp(1.5rem, 6vw, 2rem);
-  font-weight: 700;
-  background: linear-gradient(120deg, #f2c14e, #fff0c8 55%, #d99a2b);
+  font-family: var(--ff-serif);
+  font-size: clamp(1.8rem, 7vw, 2.6rem);
+  font-weight: 400;
+  font-style: italic;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  font-variation-settings: 'opsz' 144;
+  background: var(--metal-gold);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
+  padding-bottom: 0.06em;
 }
 
 .pb-panel p {
   margin-top: var(--sp-3);
   font-size: var(--text-sm);
   line-height: 1.6;
-  color: #a7aecb;
+  color: #b6ae9f;
 }
 
 .pb-scoreline {
@@ -213,10 +221,12 @@
 
 .pb-scoreline span {
   display: block;
-  font-family: var(--font-display);
-  font-size: 2.4rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
+  font-family: var(--ff-serif);
+  font-size: 2.8rem;
+  font-weight: 400;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-variation-settings: 'opsz' 144;
   color: #fff;
 }
 
@@ -226,7 +236,7 @@
   font-size: 0.72rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(190, 199, 233, 0.6);
+  color: rgba(214, 204, 186, 0.6);
 }
 
 .pb-btn {
@@ -235,16 +245,19 @@
   border-radius: var(--r-pill);
   font-size: 0.95rem;
   font-weight: 700;
-  color: #241a05;
-  background: linear-gradient(140deg, #f2c14e, #d99a2b);
+  letter-spacing: 0.01em;
+  color: #1d1404;
+  background: var(--metal-gold);
+  background-size: 140% 140%;
   border: none;
-  box-shadow: 0 8px 26px rgba(242, 193, 78, 0.36);
-  transition: transform var(--t-fast) var(--ease-out), box-shadow var(--t-fast);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset, 0 -1px 0 rgba(0, 0, 0, 0.18) inset, 0 10px 28px -8px rgba(233, 191, 92, 0.6);
+  transition: transform var(--t-fast) var(--ease-out), box-shadow var(--t-fast), background-position var(--t-slow) var(--ease-out);
 }
 
 .pb-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 12px 32px rgba(242, 193, 78, 0.46);
+  background-position: 100% 100%;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset, 0 -1px 0 rgba(0, 0, 0, 0.18) inset, 0 14px 34px -8px rgba(233, 191, 92, 0.7);
 }
 
 .pb-btn:active {
