@@ -31,7 +31,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { guardRenderer, postTarget, addSanitize, RenderWatchdog, gfxNotice } from '../shared/gfx.js';
+import { guardRenderer, postTarget, addSanitize, RenderWatchdog, gfxNotice, precompile } from '../shared/gfx.js';
 import { Sfx } from './audio.js';
 import { N, H, R_MIN, R_MAX, ClayBody, ringMaps, clayMaterial, glazeMaterial } from './clay.js';
 import { mulberry, buildStudio, buildWheel, buildHand, buildSponge, buildEnvScene, disposeScene } from './studio.js';
@@ -1583,9 +1583,10 @@ export async function createClay(container) {
       o.visible = true;
     }
   });
-  // Synchronous on purpose: compileAsync warns wherever the parallel-compile
-  // extension is missing, and the loading screen is up anyway
-  renderer.compile(scene, camera);
+  // Asynkront: ett synkront block av tunga material (glasyrerna, leran)
+  // kunde få Direct3D-kompilatorn på Windows att trigga GPU-vakthunden och
+  // lämna en svart duk. Laddkortet ligger kvar medan det kompilerar.
+  await precompile(renderer, scene, camera);
   hidden.forEach((o) => {
     o.visible = false;
   });

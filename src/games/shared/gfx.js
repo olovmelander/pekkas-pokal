@@ -246,6 +246,44 @@ export class RenderWatchdog {
   }
 }
 
+/* ------------------------------------------------------------- kompilering */
+
+/**
+ * Kompilera scenens shaders innan första bilden — utan att låsa GPU:n.
+ *
+ * På Windows översätter Chrome och Edge WebGL till Direct3D 11, vars
+ * shaderkompilator är långsam för tunga material. Kompileras allt i ett
+ * enda block (renderer.compile, eller tyst vid första render-anropet) kan
+ * GPU-processens vakthund slå till och återställa grafiken — kvar blir en
+ * svart duk. compileAsync lämnar arbetet åt drivrutinens bakgrundstrådar
+ * (KHR_parallel_shader_compile) och väntar utan att blockera; spelets
+ * laddkort ligger kvar så länge. Taket gör att ett laddkort aldrig fastnar.
+ *
+ * Dolda objekt kompileras inte av three — gör dem synliga runt anropet om
+ * de ska med (t.ex. glasyrmallar som visas senare).
+ */
+export async function precompile(renderer, scene, camera, { timeout = 20000 } = {}) {
+  // Utan parallell kompilering finns inget att vinna på att vänta asynkront
+  // (och three varnar om tillägget saknas) — kompilera då direkt.
+  if (!renderer.compileAsync || !renderer.extensions.has('KHR_parallel_shader_compile')) {
+    renderer.compile(scene, camera);
+    return;
+  }
+  let timer = 0;
+  try {
+    await Promise.race([
+      renderer.compileAsync(scene, camera),
+      new Promise((resolve) => {
+        timer = setTimeout(resolve, timeout);
+      })
+    ]);
+  } catch (e) {
+    /* då kompileras det vid första bilden i stället */
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /* ------------------------------------------------------------- shaderfel */
 
 /**
