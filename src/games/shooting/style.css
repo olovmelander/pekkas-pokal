@@ -736,16 +736,33 @@
 
 /* End screen */
 .sk-ui .sk-panel.end {
+  padding-bottom: 0;
   text-align: center;
+}
+
+.sk-ui .sk-panel.end h2 {
+  font-size: clamp(1.5rem, 4vw, 1.9rem);
+}
+
+/* The end sheet can run long: keep "Ny runda" pinned in reach */
+.sk-ui .sk-panel.end .pb-btn {
+  position: sticky;
+  bottom: 0;
+  margin: 10px 0 0;
+  box-shadow: 0 -10px 24px rgba(14, 10, 8, 0.9), 0 8px 26px rgba(242, 193, 78, 0.36);
+}
+
+.sk-ui .sk-panel.end .sk-end-b {
+  padding-bottom: 18px;
 }
 
 .sk-ui .sk-medal {
   position: relative;
   display: grid;
   place-items: center;
-  width: 92px;
-  height: 92px;
-  margin: 30px auto 6px;
+  width: 84px;
+  height: 84px;
+  margin: 26px auto 6px;
   border-radius: 50%;
   background: radial-gradient(circle at 34% 28%, #6a6f78, #3a3e46 60%, #22252c);
   box-shadow: inset 0 -6px 12px rgba(0, 0, 0, 0.35), inset 0 3px 6px rgba(255, 255, 255, 0.25), 0 10px 30px rgba(0, 0, 0, 0.45);
@@ -980,15 +997,6 @@
 
   .sk-ui .sk-panel.end {
     max-height: calc(100% - 64px);
-    padding-bottom: 0;
-  }
-
-  /* The end sheet is long on a phone: keep "Ny runda" pinned in reach */
-  .sk-ui .sk-panel.end .pb-btn {
-    position: sticky;
-    bottom: 0;
-    margin: 10px 0 0;
-    box-shadow: 0 -10px 24px rgba(14, 10, 8, 0.9), 0 8px 26px rgba(242, 193, 78, 0.36);
   }
 
   .sk-ui .sk-panel.end .sk-end-b {

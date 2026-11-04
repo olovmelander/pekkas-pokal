@@ -1062,7 +1062,9 @@ export async function createShooting(container) {
     if (e.key === ' ' || e.key === 'Enter') {
       e.preventDefault();
       if (hud.overlay.classList.contains('show') && (state.phase === 'intro' || state.phase === 'over')) {
-        if (!countUp || countUp.done) startGame();
+        // First press during the count-up just lands the total; the next one restarts
+        if (countUp && !countUp.done) countUp.t = countUp.dur;
+        else startGame();
       } else if (state.phase === 'armed') {
         callPull();
       }

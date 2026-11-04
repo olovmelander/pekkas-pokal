@@ -319,7 +319,7 @@ Grafiken vilar på tre saker som all utomhusrendering handlar om:
   kraftigt viktad inåt, för gräs ser tätt ut på håll men glest rakt
   ovanifrån, och närmast skjutplatsen är det nertrampat.
 - **Luftperspektiv.** Avstånd säljs med blekare och blåare färg, inte med
-  fler detaljer: dimman är samma dova blågrå ton som himlens horisontband
+  fler detaljer: dimman är samma dova varmgrå ton som himlens horisontband
   tonar in i, och den bortre granridån är förtintad mot den ovanpå det.
 - **Skuggor.** En skuggkastande sol med tajt ortografisk frustum runt
   stationen. Kontaktskuggor under graven, stenarna och gänget är det som
@@ -328,6 +328,21 @@ Grafiken vilar på tre saker som all utomhusrendering handlar om:
 Ljudet syntetiseras: skottets knall med ekot som rullar tillbaka från
 skogsbrynet, brytvapnets klick-klack vid omladdning, kastarens svisch,
 duvans spröda kross — och fågelsång med vindbädd däremellan.
+
+**Uppgraderingen.** Rundan börjar och slutar nu i ett vidvinkelpanorama
+bakom gänget på fikastolarna — med Pekkas Pokal på fikabordet, ladugården,
+flaggan och den låga augustisolen i samma bild — innan kameran flyger in
+till axeln. Himlen är egenbyggd: guldband mot solen, lila-grått från den,
+moln med guldkant, dimslöjor över skogskanten och svalor och myggdans som
+lyser i motljuset. Haglen har fått flygtid och tar svingen med sig, så den
+som stannar bössan skjuter bakom — och efter varje bom visar banan var
+svärmen gick: BAKOM, FÖRE, ÖVER eller UNDER, i meter. En kross ger hit-stop,
+en orange dammsky och riktiga skärvor som studsar i gräset, och guldduvan
+skjuts i slow motion. Ludvigs 3 400 följer med som spökstapel under poängen,
+och slutkortet räknar upp poängen, fyller i hela 25-kortet och delar ut
+brons (1 800), silver (2 800) eller guld — guld betyder att du slog Ludvig.
+Korsarna startar precis utanför bildkanten och deras fart följer bildens
+bredd, så en stående telefon ser samma passage som en datorskärm.
 
 **Pekkas Pingis (2019)**
 
@@ -649,7 +664,7 @@ stänger dem.
 | `src/games/fishing/` | Fiskespelet: `species` (procedurella fiskar), `world` (sjö, vattenshader, båt), `fx` (stänk, bubblor, glimtar), `hud` (paneler, fångstdagbok), `progress` (uppdrag och rekord), `audio` (syntetiskt ljud), `index` (spelloop) |
 | `src/games/clay/` | Drejspelet: `studio` (ateljé, matcaps, drejskiva), `audio` (syntetiskt ljud), `index` (lerfysik + spelloop) |
 | `src/games/fencing/` | Fäktspelet: `salle` (fäktsal, ljusvolymer, publik), `fencer` (IK-riggade fäktare), `fx` (gnistor, klingspår, konfetti), `hud` (paneler, slutspelsträd), `audio` (syntetiskt ljud), `index` (duell-AI + spelloop) |
-| `src/games/shooting/` | Skyttespelet: `range` (fält, gevär, lerduvor), `grass` (instansierad äng med vind), `audio` (syntetiskt ljud), `index` (banor + spelloop) |
+| `src/games/shooting/` | Skyttespelet: `range` (fält, lerduvor, gänget), `sky` (himmelsshader och moln), `gun` (bockbössan i PBR), `grass` (instansierad äng med vind), `fx` (skärvor, damm, haglsvärm), `hud` (25-kortet, spökstapeln, slutkortet), `audio` (syntetiskt ljud), `index` (banor + spelloop) |
 | `src/games/pingis/` | Pingisspelet: `hall` (bygdegård, bord, figurer), `audio` (syntetiskt ljud), `index` (fysik, AI och spelloop) |
 | `src/games/painting/` | Målerispelet: `artworks` (motiven + färgblandning i RYB och Lab), `garden` (trädgården, staffli, målare), `audio` (syntetiskt ljud), `index` (spelloop och dom) |
 | `public/` | Statiska filer: `event.json`, `manifest.json`, ikoner, `brand/` (älgen), `og-image.png`, `games/` (affischbilder), `photos/` |
