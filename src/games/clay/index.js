@@ -198,6 +198,7 @@ export async function createClay(container) {
 
   const hudHost = document.createElement('div');
   hudHost.className = 'pb-ui lr-ui';
+  hudHost.dataset.phase = 'idle'; // before the first frame, so CSS starts in the right state
   container.appendChild(hudHost);
   const hud = buildHud(hudHost);
 
@@ -233,6 +234,10 @@ export async function createClay(container) {
 
   const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 80);
   camera.position.set(0, 2.6, 8);
+  // Stage shape, kept by resize(); the camera frames everything from it
+  const view = { aspect: 1, portrait: false, tan: Math.tan(THREE.MathUtils.degToRad(19)) };
+  // Free screen region (fractions: x0, x1, y0 from the top, y1) beside the summary card
+  const summaryFree = new THREE.Vector4(0, 0.6, 0, 1);
 
   /* ---- World ------------------------------------------------------------ */
 
@@ -553,6 +558,16 @@ export async function createClay(container) {
       <div class="pb-scoreline"><span>${fmt(state.score)}</span><small>poäng · rekord ${fmt(high)}</small></div>
       <button class="pb-btn" data-act="start">Dreja igen</button>`;
     hud.overlay.classList.add('summary', 'show');
+    // Frame the window display in whatever part of the screen the card leaves
+    const host = canvasHost.getBoundingClientRect();
+    const card = hud.panel.getBoundingClientRect();
+    if (view.portrait) {
+      const y1 = Math.max(0.15, (card.top - host.top) / host.height);
+      summaryFree.set(0, 1, 0, y1);
+    } else {
+      const x1 = Math.max(0.3, (card.left - host.left - 12) / host.width);
+      summaryFree.set(0, x1, 0, 1);
+    }
   }
 
   /* ---- Phases ----------------------------------------------------------- */
@@ -892,7 +907,6 @@ export async function createClay(container) {
 
   /* ---- Camera framing per aspect ---------------------------------------- */
 
-  const view = { aspect: 1, portrait: false, tan: Math.tan(THREE.MathUtils.degToRad(19)) };
   const camGoal = new THREE.Vector3();
   const lookGoal = new THREE.Vector3();
   const lookAt = new THREE.Vector3(0, 1.6, 0);
@@ -957,9 +971,13 @@ export async function createClay(container) {
       frame(REVEAL_LOOK, DIR_REVEAL, P ? 0.75 : 1.3, 0.7, P ? 0.9 : 0.75,
         ph === 'judge' ? (P ? [0, 0.42] : [0.3, 0]) : [0, P ? 0.1 : 0]);
     } else if (ph === 'over') {
-      // The sill sits in the half of the screen the summary card leaves free
-      if (P) frame(SHOW_LOOK, DIR_SHOW, 1.45, 0.75, 0.95, [0, 0.45]);
-      else frame(SHOW_LOOK, DIR_SHOW, 2.6, 0.95, 1, [-0.44, 0]);
+      // The sill (half-width ~1.3 with its pieces, plus margin) fills the free region
+      const f = summaryFree;
+      const halfX = f.y - f.x;
+      const halfY = f.w - f.z;
+      const cx = f.x + f.y - 1;
+      const cy = 1 - (f.z + f.w);
+      frame(SHOW_LOOK, DIR_SHOW, 1.5 / Math.max(0.3, halfX), 0.42 / Math.max(0.15, halfY), 0.92, [cx, cy]);
     }
     const k = 1 - Math.exp(-dt * (ph === 'fire' ? 2.4 : 2.0));
     camera.position.lerp(camGoal, k);

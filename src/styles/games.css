@@ -295,6 +295,11 @@ body.game-open {
   min-width: 0;
 }
 
+.game-instance {
+  position: absolute;
+  inset: 0;
+}
+
 .game-close {
   position: absolute;
   top: max(12px, env(safe-area-inset-top));

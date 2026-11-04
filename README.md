@@ -203,25 +203,29 @@ drejar den — och keramikern dömer, precis som i verkligheten.
    keramikerns kommentar, och ställs på bänken.
 
 Tre alster per kväll: **Skålen** (honungsglasyr), **Vasen** (koboltglasyr)
-och **Amforan** (seladonglasyr). Poängen räknas på likhet i kvadrat plus
-tidsbonus, och rekordet sparas per enhet.
+och **Amforan** (seladonglasyr). Varje alster ger en till tre stjärnor
+(60/78/90 % likhet), och sex stjärnor på en kväll låser upp ett fjärde:
+**Pokalen** i guldlyster. Poängen räknas på likhet i kvadrat plus
+tidsbonus, och rekordet och personbästa per form sparas per enhet.
 
 **Teknik.** Leran är ett radiellt höjdfält lindat till ett lathe-nät som
-uppdateras på plats — drejränder och en svag spiral av fingermärken läggs
-på medan skivan snurrar. Skuggningen är en genererad **matcap**, samma
-trick som skulpteringsprogram använder för sin lerförhandsvisning: hela
-ljussättningen bakas in i en enda liten textur som slås upp per normal,
-så våta highlights kostar ingenting. Eftersom en matcap ignorerar
-scenens ljus kan krukan aldrig ta emot en riktig skugga — därför ligger
-en målad kontaktskugga under den, vilket är det som hindrar den från att
-sväva. Ateljén — kakelgolv, bågfönstret med Barcelona-silhuetten,
-hyllorna med brända krukor (slumpade lathe-profiler med glasyren bakad i
-vertexfärger, en draw call per hylla), verktygshyllan, hinken, lersäckarna
-och lerstänket på golvet — är helt procedurell, med samma ljushierarki som
-fäktsalen: kvällssolen genom fönstret är dominant och enda skuggkastare,
-en kall ovanifrånfill och en frontfill lyfter resten. Ljudet syntetiseras:
-drejskivans brum och lerans våta klafs är kontinuerliga WebAudio-lager
-som styrs av hur hårt händerna arbetar.
+uppdateras på plats — ihåligt, med rundad läpp, innervägg och botten.
+Ateljén ritas med fysikaliskt ljus: bakväggen är en riktig skuggkastare med
+ett välvt hål, så kvällssolen kommer in *bara* genom fönstret — strålen
+sveper över den våta leran från vänster och lägger en båge av ljus på
+golvet. Leran är ett fysikaliskt material med drejränder i en genererad
+normalkarta, och varje band har egen fukt: fingrarna lämnar skarpa, blöta
+ränder, svampen smälter bort dem och torkande lera tappar glansen. Ett
+färgat band mellan din vägg och målets visar live var leran ska tryckas in
+(varmt) eller dras ut (kallt), en hand syns där du arbetar — och rycker du
+för hårt slår leran. Trycker du KLAR skärs alstret loss och flyger in i
+ugnen, dörren slår igen och kontrollern klättrar till 1 240 °C med glöd,
+gnistor och värmedaller; ut kommer alstret glödande, svalnar till blank
+glasyr medan det plingar och hamnar till sist i fönstret mot Barcelonas
+skyline. Alla shaders kompileras bakom laddskärmen så inget hackar mitt i
+ett drag. Ljudet syntetiseras: drejskivans brum och lerans våta klafs är
+kontinuerliga WebAudio-lager som styrs av hur hårt händerna arbetar, och
+ugnen, trådsnittet och glasyrens pling har egna ljud.
 
 **Pekkas Fäktning (2023)**
 
@@ -682,7 +686,7 @@ stänger dem.
 | `src/styles/` | `main` (tokens/teman), `layout`, `components`, `animations`, `games` (arkaden och spelscenen), `game-hud` (spelens delade HUD), `responsive` |
 | `src/games/pinball/` | Flipperspelet: `physics` (2D-kollision), `table` (layout + banans grafik), `meshes` (3D), `room` (arkadhallen), `dmd` (punktmatrisen), `fx` (gnistor, bollspår), `audio` (syntetiskt ljud), `hud` (paneler), `scores` (topplistan), `index` (spelloop) |
 | `src/games/fishing/` | Fiskespelet: `species` (procedurella fiskar), `world` (sjö, vattenshader, båt), `fx` (stänk, bubblor, glimtar), `hud` (paneler, fångstdagbok), `progress` (uppdrag och rekord), `audio` (syntetiskt ljud), `index` (spelloop) |
-| `src/games/clay/` | Drejspelet: `studio` (ateljé, matcaps, drejskiva), `audio` (syntetiskt ljud), `index` (lerfysik + spelloop) |
+| `src/games/clay/` | Drejspelet: `studio` (ateljé, ugn, drejskiva), `clay` (krukans nät och material), `guide` (målets guider i 3D), `fx` (stänk, glöd, värmedaller), `hud` (paneler, dom, kvällens utställning), `audio` (syntetiskt ljud), `index` (lerfysik + spelloop) |
 | `src/games/fencing/` | Fäktspelet: `salle` (fäktsal, ljusvolymer, publik), `fencer` (IK-riggade fäktare), `fx` (gnistor, klingspår, konfetti), `hud` (paneler, slutspelsträd), `audio` (syntetiskt ljud), `index` (duell-AI + spelloop) |
 | `src/games/shooting/` | Skyttespelet: `range` (fält, lerduvor, gänget), `sky` (himmelsshader och moln), `gun` (bockbössan i PBR), `grass` (instansierad äng med vind), `fx` (skärvor, damm, haglsvärm), `hud` (25-kortet, spökstapeln, slutkortet), `audio` (syntetiskt ljud), `index` (banor + spelloop) |
 | `src/games/pingis/` | Pingisspelet: `hall` (bygdegård, bord, figurer), `audio` (syntetiskt ljud), `index` (fysik, AI och spelloop) |

@@ -2355,13 +2355,20 @@
       if (token !== App.gameToken) return;
       stage.dataset.layout = mod.layout === 'full' ? 'full' : 'portrait';
       const create = mod.default || mod.createPinball;
-      const instance = await create($('#game-mount'), {
+      // Varje öppning får en egen behållare: stängs scenen medan create()
+      // fortfarande bygger, skriver det sena spelet i en lösryckt nod i
+      // stället för i nästa spels scen.
+      const host = document.createElement('div');
+      host.className = 'game-instance';
+      $('#game-mount').appendChild(host);
+      const instance = await create(host, {
         participants: App.data.participants
           .filter((p) => App.stats.per[p.id].starts > 0)
           .map((p) => p.name)
       });
       if (token !== App.gameToken) {
         instance.destroy();
+        host.remove();
         return;
       }
       App.game = instance;
