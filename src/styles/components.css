@@ -313,7 +313,7 @@
   font-style: italic;
   line-height: 0.95;
   letter-spacing: -0.035em;
-  font-variation-settings: 'opsz' 144, 'SOFT' 100, 'WONK' 1;
+  font-variation-settings: 'opsz' 144;
   padding-bottom: 0.08em;
 }
 
@@ -2173,7 +2173,7 @@
   font-weight: 400;
   font-style: italic;
   letter-spacing: -0.02em;
-  font-variation-settings: 'opsz' 144, 'SOFT' 100;
+  font-variation-settings: 'opsz' 144;
   color: #1f1a12;
 }
 

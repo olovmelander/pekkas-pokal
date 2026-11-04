@@ -167,7 +167,7 @@ function plateTexture(lines, { width = 1024, height = 256, title = false } = {})
   if (title) {
     ctx.font = `600 ${Math.round(height * 0.34)}px Fraunces, Georgia, serif`;
     ctx.fillText(lines[0], width / 2, height * 0.44);
-    ctx.font = `500 ${Math.round(height * 0.13)}px "JetBrains Mono", monospace`;
+    ctx.font = `400 ${Math.round(height * 0.13)}px "JetBrains Mono", monospace`;
     ctx.fillText(lines[1] || '', width / 2, height * 0.76);
   } else {
     const rows = Math.ceil(lines.length / 2);
@@ -176,7 +176,7 @@ function plateTexture(lines, { width = 1024, height = 256, title = false } = {})
       const col = Math.floor(i / rows);
       const row = i % rows;
       const y = height * ((row + 0.5) / rows) * 0.8 + height * 0.1;
-      ctx.font = `600 ${Math.round(height * 0.15)}px "JetBrains Mono", monospace`;
+      ctx.font = `400 ${Math.round(height * 0.15)}px "JetBrains Mono", monospace`;
       ctx.textAlign = 'left';
       ctx.fillText(line.year, col * colW + 48, y);
       ctx.font = `500 ${Math.round(height * 0.17)}px Fraunces, Georgia, serif`;
@@ -312,6 +312,14 @@ export async function mountTrophy(canvas, opts = {}) {
   const trim = new THREE.Mesh(track(new RoundedBoxGeometry(2.24, 0.04, 2.24, 2, 0.015)), gold);
   trim.position.y = 1.22;
   trophy.add(trim);
+
+  // Plåtarna ritas med sidans typsnitt — vänta in dem, men aldrig länge
+  if (document.fonts && document.fonts.load) {
+    await Promise.race([
+      Promise.all([document.fonts.load('500 40px Fraunces'), document.fonts.load('400 20px "JetBrains Mono"')]),
+      new Promise((r) => setTimeout(r, 1500))
+    ]).catch(() => {});
+  }
 
   // Vinnarplåtar: fyra sidor, upp till fyra namn var (två kolumner × två rader)
   const sorted = winners.slice().sort((a, b) => a.year - b.year);

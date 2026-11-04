@@ -161,7 +161,7 @@
   font-size: var(--text-2xl);
   font-weight: 400;
   letter-spacing: -0.025em;
-  font-variation-settings: 'opsz' 144, 'SOFT' 50;
+  font-variation-settings: 'opsz' 144;
 }
 
 .view-head h1 em {

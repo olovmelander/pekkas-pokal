@@ -216,7 +216,7 @@ h4 {
   line-height: 1.08;
   margin: 0;
   letter-spacing: -0.015em;
-  font-variation-settings: 'opsz' 72, 'SOFT' 30;
+  font-variation-settings: 'opsz' 72;
   text-wrap: balance;
 }
 
