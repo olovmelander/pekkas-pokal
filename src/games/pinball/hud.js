@@ -87,8 +87,8 @@ export function buildHud(root, { touch }) {
           <p class="pbf-help-sub">Pekkas Pokal Flipper</p>
           <ul class="pbf-help-list">
             <li><i style="--c:#f2c14e"></i><b>Ramper</b> Kungsvägen (vänster mynning) och Vallgraven (hårt skott i höger orbit) — kedjar kombos och räknas som varv.</li>
-            <li><i style="--c:#7c8cf8"></i><b>Vänster orbit</b> Snurran ger poäng per varv. Lyser pilen: skjut hit, så väntar bollen i borgen medan du väljer gren med flipprarna.</li>
-            <li><i style="--c:#f26d8d"></i><b>P-O-K-A-L</b> Fäll alla fem målen så tänds grenstart i vänster orbit.</li>
+            <li><i style="--c:#7c8cf8"></i><b>Vänster orbit</b> Snurran ger poäng per varv. Skjut den inom tre sekunder efter avfyrningen för SUPER skill shot.</li>
+            <li><i style="--c:#f26d8d"></i><b>P-O-K-A-L</b> Fäll alla fem målen så tänds grenstart: porten öppnas, och när bollen når pokalen (eller vänster orbit) väntar den i borgen medan du väljer gren med flipprarna.</li>
             <li><i style="--c:#8b93ad"></i><b>Borgen</b> Tre smällar spräcker porten och fäller vindbryggan. Skjut pokalen medan den ligger nere: BORGEN STORMAD (10 000 och mer för varje gång). Två stormningar tänder EXTRA BOLL på Kungsvägen.</li>
             <li><i style="--c:#7c8cf8"></i><b>Multiball</b> Bumprarna laddar låset — lås två bollar i borgen. Varje jackpot är värd 10 000 mer än den förra, två jackpottar tänder SUPER JACKPOT (100 000), och den första tänder ADD-A-BALL på Vallgraven.</li>
             <li><i style="--c:#6f9b5a"></i><b>Trollen</b> Vaktar borgen under grenar och multiball. Slå ner dem — 3 000 styck.</li>

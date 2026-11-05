@@ -565,7 +565,9 @@ export async function createPinball(container, opts = {}) {
       return `${head} · ${m.def.hint.toLowerCase()} · ${left}`;
     }
     if (state.modeStartLit) {
-      return MODES.every((x) => state.modeDone.has(x.id)) ? 'Finalen tänd — skjut vänster orbit' : 'Gren tänd — skjut vänster orbit';
+      return MODES.every((x) => state.modeDone.has(x.id))
+        ? 'Finalen tänd — skjut in i borgen eller vänster orbit'
+        : 'Gren tänd — skjut in i borgen (eller vänster orbit)';
     }
     if (state.lockLit) return 'Låset är tänt — skjut in bollen i borgen';
     if (state.gate.bashed && gateIsOpen()) return 'Porten är nere — skjut pokalen i borgen och storma den!';
@@ -1067,10 +1069,10 @@ export async function createPinball(container, opts = {}) {
         if (!state.mode) {
           state.modeStartLit = true;
           const allDone = MODES.every((m) => state.modeDone.has(m.id));
-          say(allDone ? ['FINALEN TÄND', 'VÄNSTER ORBIT'] : ['P-O-K-A-L!', 'GREN TÄND · V. ORBIT'],
+          say(allDone ? ['FINALEN TÄND', 'SKJUT IN I BORGEN'] : ['P-O-K-A-L!', 'GREN TÄND · BORGEN'],
             { prio: 2, flash: true, border: true, dur: 2.2 });
           later(() => {
-            if (state.modeStartLit) coach('orbit', 'Skjut vänster orbit — starta grenen!', ORBIT_L[0], ORBIT_L[1] - 0.8);
+            if (state.modeStartLit) coach('orbit', 'Porten öppnas — skjut in i borgen och välj gren!', GATE_X, GATE_Y - 0.6);
           }, 900);
         } else {
           say(['P-O-K-A-L!', `POÄNG ×${state.mult}`], { prio: 2, flash: true, dur: 2 });
@@ -1147,6 +1149,16 @@ export async function createPinball(container, opts = {}) {
         fx.spark(jx, 2, -jy, 0xffd27a, 14, 9, 6);
         comboShot();
         modeEvent('jackpot');
+        return;
+      }
+
+      // A lit gren start: the castle takes the ball in for mission select.
+      // (The left orbit starts one too, but from the flippers it is the
+      // hardest shot on the table; the castle is makeable from both.)
+      if (state.modeStartLit && !state.multiball && b) {
+        state.modeStartLit = false;
+        award(2500, jx, jy);
+        beginSelect(b);
         return;
       }
 
@@ -1402,7 +1414,7 @@ export async function createPinball(container, opts = {}) {
       MODES.indexOf(m.def));
     if (MODES.every((x) => state.modeDone.has(x.id)) && !state.multiball) {
       state.modeStartLit = true;
-      later(() => coach('finalen', 'Finalen tänd — skjut vänster orbit!', ORBIT_L[0], ORBIT_L[1] - 0.8), 3200);
+      later(() => coach('finalen', 'Finalen tänd — skjut in i borgen!', GATE_X, GATE_Y - 0.6), 3200);
     }
   }
 
@@ -1625,6 +1637,8 @@ export async function createPinball(container, opts = {}) {
   function gateIsOpen() {
     return (
       !!state.held ||
+      // A lit gren start opens the castle: the ball goes in to pick one
+      (state.modeStartLit && !state.mode && !state.multiball) ||
       state.lockLit ||
       (state.multiball && state.jackpotLit) ||
       (state.mode && (state.mode.wizard || state.mode.def.id === 'fiske')) ||
@@ -2377,7 +2391,7 @@ export async function createPinball(container, opts = {}) {
         save: state.phase === 'play' && saveLeft > 0,
         leftOrbit: state.modeStartLit || relight || want('leftOrbit'),
         leftRamp: relight || want('leftRamp') || state.castle.ebLit || (state.mode && state.mode.wizard),
-        castle: state.lockLit || (state.multiball && state.jackpotLit) || mid === 'fiske' || storm ||
+        castle: state.lockLit || (state.multiball && state.jackpotLit) || mid === 'fiske' || storm || state.modeStartLit ||
           (fem && !fem.has('jackpot')) || (state.mode && state.mode.wizard),
         rightRamp: relight || want('rightRamp') || (state.addBallLit && state.multiball) ||
           (state.mode && state.mode.wizard),
@@ -2618,7 +2632,7 @@ export async function createPinball(container, opts = {}) {
       else status = state.superLit ? 'TÄND SUPER' : 'TÄND JACKPOT';
     } else if (state.lockLit) [status, hot] = ['LÅS → BORGEN', true];
     else if (state.gate.bashed && gateIsOpen()) [status, hot] = ['STORMA BORGEN!', true];
-    else if (state.modeStartLit) [status, hot] = ['GREN → V.ORBIT', true];
+    else if (state.modeStartLit) [status, hot] = ['GREN → BORGEN', true];
     else if (state.castle.ebLit) [status, hot] = ['EB → K.VÄGEN', true];
     else if (state.gate.hits > 0) status = `PORTEN ${state.gate.hits}/3`;
     else if (state.extraBalls > 0) status = 'EXTRA BOLL';

@@ -2262,8 +2262,9 @@ export function buildTable(THREE, mergeGeometries, materials) {
 
     const SPOTS = [
       { id: 'save', x: L.centerX, y: 4.5, a: 0, color: 0x3ddc7b, disc: true },
-      { id: 'leftOrbit', x: -8.95, y: 15.4, a: 0, color: 0x7c8cf8 },
-      { id: 'leftRamp', x: -6.75, y: 14.4, a: 0.18, color: 0xf2c14e },
+      // Just below the orbit switch and in front of the ramp's mouth
+      { id: 'leftOrbit', x: -8.95, y: 18.6, a: 0, color: 0x7c8cf8 },
+      { id: 'leftRamp', x: -6.2, y: 15.2, a: 0.18, color: 0xf2c14e },
       { id: 'castle', x: L.centerX, y: 19.4, a: 0, color: 0x7c8cf8 },
       { id: 'rightRamp', x: 5.5, y: 15.0, a: -0.18, color: 0xf2c14e },
       { id: 'trolls', x: L.centerX, y: 22.6, a: 0, color: 0x6f9b5a }
