@@ -1258,6 +1258,7 @@ export async function createPingis(container) {
   /* ---- Flow ------------------------------------------------------------- */
 
   let camMode = 'menu';
+  let lightMix = 0; // 0 play lighting … 1 the intro portrait
   let camCut = false;
   let celebT = 0;
   let singleIdx = 0;
@@ -2237,6 +2238,12 @@ export async function createPingis(container) {
     /* Match-point drama */
     drama.v += (drama.target - drama.v) * Math.min(1, dt * 2.5);
     hemi.intensity = HEMI * (1 - 0.5 * drama.v);
+    // The intro card is a portrait: the fill drops away and the rim comes
+    // up, so the face is modelled by the key instead of lit flat
+    const portrait = camMode === 'intro' ? 1 : 0;
+    lightMix += (portrait - lightMix) * Math.min(1, dt * 3);
+    faceFill.intensity = 0.34 * (1 - 0.7 * lightMix);
+    rim.intensity = 16 * (1 + 0.6 * lightMix);
     key.intensity = 1.55 * (1 + 0.28 * drama.v);
     pendants[2].intensity = 5 * (1 - 0.55 * drama.v);
     hall.refs.lampMats.forEach((l, i) => {

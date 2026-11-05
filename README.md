@@ -271,6 +271,22 @@ den våta leran klampas så att bloom inte fladdrar, och en vakt sänker
 upplösningen om datorn inte hinner med.
 
 
+**Nattens uppgradering.** Lerskulptur fick en grundlig genomgång. Knapparna
+Glätta och Klar gick tidigare inte att trycka på, så på mobilen gick det varken
+att glätta eller bränna; det är rättat. Handen på leran är helt ny: fingrar med
+leder som kupar sig mot leran, en tumme, handled, en underarm som smalnar av
+mot handleden och en uppkavlad linneärm. Den trycker på utsidan, och när man
+drar ut väggen inifrån sträcker sig armen in över krukans närmaste kant, som
+när man sitter vid drejskivan. Leran ger efter under fingrarna med en liten
+vulst, blir blankare där handen nyss gått, och slicker stänker av skivan.
+
+Keramikern lägger armarna i kors på riktigt, visar tummen upp och pekar med de
+nya händerna, plockar fram en buxbomsskrapa ur förklädesfickan medan han väntar
+och stänger själv ugnsluckan. I mobilens stående läge syns hela hans huvud när
+domen läses upp. Glasyrerna har fått egna ytor – järnprickig honung, flammig
+kobolt, krackelerad seladon och glasyr som runnit i droppar mot foten – och
+ateljén har fått torkande krukor, glasyrhinkar och ett olivträd.
+
 **Pekkas Fäktning (2023)**
 
 Stockholm, en fäktsal i skymning. Turneringen går mot den riktiga
@@ -701,6 +717,23 @@ kompileras i förväg och en vakt förenklar trädgården om bilden någonsin bl
 svart. Skogen sluter sig nu runt hela trädgården.
 
 
+**Nattens uppgradering.** Pekkas Måleri fick riktiga saker i händerna: målarna
+håller penseln i ett pennfattningsgrepp och paletten med tummen genom hålet,
+och Mikael Hägglund håller anteckningsboken i ena handen och pennan i den
+andra. Målarna drar penseldragen från axeln, blandar på paletten och tar ibland
+några steg bakåt för att se på duken. Fötterna står kvar där de sätts i gräset,
+och deltagarnas dukar fylls i medan de målar – Olovs Skriet syns från
+trädgården.
+
+Runt trädgården står nu en riktig skogskant med granar i olika höjd, björkar
+framför och sly och mjölkört vid foten, och bakom den en disigare rad och en ås
+vid horisonten. Gräsmattan har klippta stråk, torrare och frodigare fläckar och
+mörkare gräs under häcken och träden, och häcken har fått lövruggar och mörkare
+undersida. Huset fick sadeltak med vita vindskivor, bordet en rutig duk och det
+står en öl vid ditt staffli. Den som spelar för första gången får palettens
+tips nästan direkt, och betyget landar som en stämpel när Hägglund har sagt
+sitt.
+
 **Kontroller i flipperspelet**
 
 | | Mobil | Dator |
@@ -900,7 +933,7 @@ stänger dem.
 | `src/games/fencing/` | Fäktspelet: `salle` (fäktsal, ljusvolymer, publik), `fencer` (fäktarna, domaren och masken på personsystemet), `fx` (gnistor, klingspår, konfetti), `hud` (paneler, slutspelsträd), `audio` (syntetiskt ljud), `index` (duell-AI + spelloop) |
 | `src/games/shooting/` | Skyttespelet: `range` (fält, lerduvor), `forest` (skogsbrynet), `gang` (2022 års gäng på fikastolarna), `sky` (himmelsshader och moln), `gun` (bockbössan i PBR), `grass` (instansierad äng med vind), `fx` (skärvor, damm, haglsvärm), `hud` (25-kortet, spökstapeln, slutkortet), `audio` (syntetiskt ljud), `index` (banor + spelloop) |
 | `src/games/pingis/` | Pingisspelet: `hall` (bygdegård, bord), `foe` (motståndaren och racketen), `crowd` (publiken på personsystemet), `scoreboard` (fällbara siffror), `fx` (bollspår, ringar, gnistor), `post` (bloom, gradering, spegelgolv), `hud` (paneler, scoutingkort), `audio` (syntetiskt ljud), `index` (fysik, AI och spelloop) |
-| `src/games/painting/` | Målerispelet: `artworks` (motiven + färgblandning i RYB och Lab), `canvasart` (penseldrag och dukens höjdkarta), `palette` (paletten i 3D), `garden` (trädgården, stafflier), `cast` (Hägglund och 2021 års målare), `gait` (fötter som står kvar), `hud` (paneler, dom, galleri), `audio` (syntetiskt ljud), `index` (spelloop och dom) |
+| `src/games/painting/` | Målerispelet: `artworks` (motiven + färgblandning i RYB och Lab), `canvasart` (penseldrag och dukens höjdkarta), `palette` (paletten i 3D), `garden` (trädgården, stafflier), `forest` (skogskanten), `cast` (Hägglund och 2021 års målare), `gait` (fötter som står kvar), `hud` (paneler, dom, galleri), `audio` (syntetiskt ljud), `index` (spelloop och dom) |
 | `public/` | Statiska filer: `event.json`, `manifest.json`, ikoner, `brand/` (älgen), `og-image.png`, `games/` (affischbilder), `photos/` |
 
 Data hämtas från `competition-data.csv` vid sidladdning. Om filen inte går att

@@ -1439,34 +1439,22 @@ export async function createClay(container) {
     const fit = o.fit || 1;
     const s = (0.86 + 0.14 * hand.userData.k) * fit;
     hand.scale.set(side * s, s, s);
-    if (o.inside) o.reach = reachOf(side, s);
     potter.pose(o);
-  }
-
-  /**
-   * Inside the pot the elbow is up over the NEAR rim (the potter sits in
-   * front of the wheel and reaches in toward the far wall); in the hand
-   * group's own (mirrored, scaled) space.
-   */
-  const reachV = new THREE.Vector3();
-  function reachOf(side, s) {
-    const rim = r[N - 1];
-    // high enough that the forearm clears the rim on its way down into the pot
-    return reachV.set(
-      (side * 0.22 - hand.position.x) / (side * s),
-      (H + 0.6 - hand.position.y) / s,
-      (rim + 0.22 - hand.position.z) / s
-    );
   }
 
   /*
    * Where the hand touches, round the pot. Outside it sits a little toward
-   * the viewer (OUT_YAW), so you see the back of the hand pressing the wall;
-   * inside, on the far wall (IN_YAW), seen through the mouth, its arm
-   * crossing the rim.
+   * the viewer (OUT_YAW), so you see the back of the hand pressing the wall.
+   * Inside it works the NEAR wall (IN_YAW), as a potter sitting at the wheel
+   * does: fingers down inside, palm to the clay, the wrist just over the
+   * near rim and the forearm coming up from the foreground. The hand itself
+   * is behind the near wall from the camera — as it would be — so it never
+   * needs to reach deeper than IN_DIP below the rim; the contact ring and
+   * the bulge show where the fingers work.
    */
   const OUT_YAW = 1.0;
-  const IN_YAW = -0.55;
+  const IN_YAW = 1.05;
+  const IN_DIP = 0.2;
   function contactAt(out, side, rad, y, yaw) {
     return out.set(side * rad * Math.cos(yaw), y, rad * Math.sin(yaw));
   }
@@ -1505,9 +1493,12 @@ export async function createClay(container) {
       if (pull) {
         // Pulling out works from INSIDE the pot: fingers down the inner
         // wall, pads pressing outward, the forearm over the rim
-        contactAt(handPos, b.side, Math.max(0.05, innerR(b.j) - 0.012), b.y, IN_YAW).x += shake;
-        const fit = Math.max(0.6, Math.min(1, innerR(b.j) / 0.5));
-        placeHand(handPos, b.side, { inside: true, slope: insideSlope(b.j, ws.slope), curv: -ws.curv, press, t, yaw: IN_YAW, fit }, dt);
+        const yc = Math.max(b.y, H - IN_DIP);
+        const jc = Math.round((yc / H) * (N - 1));
+        const wc = wallShape(jc);
+        contactAt(handPos, b.side, Math.max(0.05, innerR(jc) - 0.012), yc, IN_YAW).x += shake;
+        const fit = Math.max(0.6, Math.min(1, innerR(jc) / 0.5));
+        placeHand(handPos, b.side, { inside: true, slope: insideSlope(jc, wc.slope), curv: -wc.curv, press, t, yaw: IN_YAW, fit }, dt);
       } else {
         // Pushing in: palm and finger pads on the outer wall
         contactAt(handPos, b.side, shownR(b.j) + 0.01, b.y, OUT_YAW).x += shake;
@@ -1549,14 +1540,16 @@ export async function createClay(container) {
       const pull = guide.worst.sign < 0;
       const ws = wallShape(j);
       const y = (j / (N - 1)) * H;
-      if (pull) contactAt(handPos, 1, Math.max(0.05, innerR(j) - 0.03 + reach * 0.018), y, IN_YAW);
+      const yc = pull ? Math.max(y, H - IN_DIP) : y;
+      const jc = Math.round((yc / H) * (N - 1));
+      if (pull) contactAt(handPos, 1, Math.max(0.05, innerR(jc) - 0.03 + reach * 0.018), yc, IN_YAW);
       else contactAt(handPos, 1, r[j] + 0.01 + (1 - reach) * 0.35, y, OUT_YAW);
       hand.position.copy(handPos);
-      const s = pull ? 1 : 0.6 + 0.4 * reach;
+      const s = pull ? Math.max(0.6, Math.min(1, innerR(jc) / 0.5)) : 0.6 + 0.4 * reach;
       hand.scale.set(s, s, s);
       potter.pose({
-        inside: pull, slope: pull ? insideSlope(j, ws.slope) : ws.slope, curv: pull ? -ws.curv : ws.curv, press: reach * 0.6, t,
-        yaw: pull ? IN_YAW : OUT_YAW, reach: pull ? reachOf(1, s) : null, low: smooth(0.95, 0.2, y)
+        inside: pull, slope: pull ? insideSlope(jc, wallShape(jc).slope) : ws.slope, curv: pull ? -ws.curv : ws.curv, press: reach * 0.6, t,
+        yaw: pull ? IN_YAW : OUT_YAW, low: smooth(0.95, 0.2, y)
       });
       hand.visible = pull || reach > 0.05;
     } else if (!b) {

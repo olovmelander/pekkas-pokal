@@ -23,12 +23,12 @@
  *    the outer wall, palm to the clay, fingers up along the wall's slope,
  *    gently curled so the pads press the wall; the thumb sits toward the
  *    viewer and the forearm comes in from the lower right, toward the camera
- *  - INSIDE (pulling out): the same hand turned over, fingers down the far
- *    inner wall with the pads pressing it outward; the forearm rises across
- *    the pot to the elbow just over the NEAR rim, and the upper arm comes
- *    from the viewer, down in the foreground at a steep angle — as a potter
- *    sitting at the wheel reaches in. Its far end melts away (vertex alpha),
- *    so it never lies over the guide as a solid tube
+ *  - INSIDE (pulling out): the same hand turned over, fingers down inside
+ *    the NEAR wall with the pads pressing it outward, the wrist just over
+ *    the rim and the forearm coming up from the foreground at a steep angle
+ *    — as a potter sitting at the wheel reaches in. The sleeve melts away
+ *    beyond the elbow (vertex alpha), so it never sits over the guide as a
+ *    solid tube
  *
  * Bind pose ("hand frame"): the wrist on the origin, fingers along +Y, the
  * palm facing −X, the thumb side toward +Z, the forearm hanging along −Y.
@@ -482,8 +482,7 @@ export function buildPotterHand() {
     thinOf: () => 0.1
   });
   // Skin the forearm: the hand at the wrist crease, the forearm bone the
-  // rest of the way (pose() stretches that bone along its axis when the
-  // reach asks for a longer arm)
+  // rest of the way (pose() may stretch that bone along its own axis)
   const { sw, si } = B;
   const startArm = B.count - 14 * (6 * 2 + 1);
   for (let v = startArm; v < B.count; v++) {
@@ -539,7 +538,11 @@ export function buildPotterHand() {
   const dir = new THREE.Vector3();
   const up = new THREE.Vector3();
   const upOut = new THREE.Vector3(0.5, -0.5, 0.7);
-  const upIn = new THREE.Vector3(0.48, -0.8, 0.5);
+  const upIn = new THREE.Vector3(0.3, -0.6, 0.74);
+  // forearm directions (group space): outside in from the lower right;
+  // inside from the wrist over the near rim, down into the foreground
+  const DIR_OUT = new THREE.Vector3(0.56, -0.48, 0.68).normalize();
+  const DIR_IN = new THREE.Vector3(0.16, -0.5, 0.85).normalize();
   // the middle finger's middle pad, in its middle phalanx's frame: the contact point
   const md = DIGITS[1];
   const PAD = new THREE.Vector3(-md.r * HS * 0.86, md.len[1] * HS * 0.5, 0);
@@ -554,7 +557,6 @@ export function buildPotterHand() {
    * o.grip    0..1 extra curl (holding the sponge)
    * o.low     0..1 near the foot (outside): the hand turns to lie along the wall
    * o.yaw     the contact point's azimuth round the pot (+ toward the viewer)
-   * o.reach   inside only: where the elbow goes (up over the near rim), in this group's space
    * o.t       clock, for a living micro-motion
    */
   function pose(o) {
@@ -614,19 +616,12 @@ export function buildPotterHand() {
     tmp.copy(PAD).applyMatrix4(mc);
     handBone.position.copy(tmp).negate();
     // Forearm and upper arm, out of the frame toward the viewer. Outside:
-    // in from the lower right. Inside: the forearm rises from the wrist to
-    // o.reach (the elbow, up over the NEAR rim, in this group's space) —
-    // stretching as far as that is — and the upper arm comes down from it
-    // toward the viewer.
+    // in from the lower right. Inside: from the wrist (just over the near
+    // rim) down into the foreground, the sleeve melting away beyond the elbow.
     qInv.copy(qa).invert();
-    let len = FOREARM * HS;
-    if (o.inside && o.reach) {
-      dir.subVectors(o.reach, handBone.position);
-      len = Math.max(len * 0.8, dir.length());
-      dir.normalize();
-    } else {
-      dir.set(0.56, -0.48, 0.68).normalize();
-    }
+    const len = FOREARM * HS;
+    if (o.inside) dir.copy(DIR_IN);
+    else dir.copy(DIR_OUT);
     dir.applyQuaternion(qInv);
     const arm = bones[iArm];
     arm.quaternion.setFromUnitVectors(down, dir);
