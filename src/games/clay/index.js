@@ -1443,10 +1443,19 @@ export async function createClay(container) {
     potter.pose(o);
   }
 
-  /** Inside the pot the elbow goes over its mouth, a little toward the viewer (in the hand group's space). */
+  /**
+   * Inside the pot the elbow rests just over the NEAR rim (the potter sits
+   * in front of the wheel and reaches in toward the far wall); in the hand
+   * group's own (mirrored, scaled) space.
+   */
   const reachV = new THREE.Vector3();
   function reachOf(side, s) {
-    return reachV.set((0 - hand.position.x) / (side * s), (H + 0.4 - hand.position.y) / s, (0.2 - hand.position.z) / s);
+    const rim = r[N - 1];
+    return reachV.set(
+      (side * 0.16 - hand.position.x) / (side * s),
+      (H + 0.24 - hand.position.y) / s,
+      (rim + 0.04 - hand.position.z) / s
+    );
   }
 
   /*

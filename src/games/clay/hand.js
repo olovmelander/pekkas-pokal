@@ -23,10 +23,12 @@
  *    the outer wall, palm to the clay, fingers up along the wall's slope,
  *    gently curled so the pads press the wall; the thumb sits toward the
  *    viewer and the forearm comes in from the lower right, toward the camera
- *  - INSIDE (pulling out): the same hand turned over, fingers down inside
- *    the pot with the pads pressing the inner wall outward, the forearm
- *    rising over the rim toward the camera (stretched as far as the rim
- *    asks — it is mostly hidden by the clay anyway)
+ *  - INSIDE (pulling out): the same hand turned over, fingers down the far
+ *    inner wall with the pads pressing it outward; the forearm rises across
+ *    the pot to the elbow just over the NEAR rim, and the upper arm comes
+ *    from the viewer, down in the foreground at a steep angle — as a potter
+ *    sitting at the wheel reaches in. Its far end melts away (vertex alpha),
+ *    so it never lies over the guide as a solid tube
  *
  * Bind pose ("hand frame"): the wrist on the origin, fingers along +Y, the
  * palm facing −X, the thumb side toward +Z, the forearm hanging along −Y.
@@ -69,7 +71,7 @@ class Builder {
     this.col = [];
     this.si = [];
     this.sw = [];
-    this.skin = []; // aSkin: x = wet, y = thin
+    this.skin = []; // aSkin: x = wet, y = thin, z = fade (1 solid … 0 gone)
     this.idx = [];
   }
 
@@ -77,12 +79,12 @@ class Builder {
     return this.pos.length / 3;
   }
 
-  vert(p, c, bones, weights, wet = 0, thin = 0) {
+  vert(p, c, bones, weights, wet = 0, thin = 0, fade = 1) {
     this.pos.push(p.x, p.y, p.z);
     this.col.push(c.r, c.g, c.b);
     this.si.push(bones[0] || 0, bones[1] || 0, 0, 0);
     this.sw.push(weights[0] ?? 1, weights[1] || 0, 0, 0);
-    this.skin.push(wet, thin);
+    this.skin.push(wet, thin, fade);
   }
 
   geometry() {
@@ -91,7 +93,7 @@ class Builder {
     g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
     g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(this.si, 4));
     g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(this.sw, 4));
-    g.setAttribute('aSkin', new THREE.Float32BufferAttribute(this.skin, 2));
+    g.setAttribute('aSkin', new THREE.Float32BufferAttribute(this.skin, 3));
     // every piece below is wound inward-facing as written; turn them all out
     const idx = this.idx.slice();
     for (let i = 0; i < idx.length; i += 3) {
@@ -112,7 +114,7 @@ class Builder {
  * capped with a rounded tip. Each ring is skinned to the segment's bone,
  * blending into the next one across the joint.
  */
-function tube(B, joints, segBones, prof, { back, ringN = 12, perSeg = 6, capEnd = false, capStart = false, color, wetOf, thinOf }) {
+function tube(B, joints, segBones, prof, { back, ringN = 12, perSeg = 6, capEnd = false, capStart = false, color, wetOf, thinOf, fadeOf }) {
   const segLen = [];
   let total = 0;
   for (let k = 0; k < joints.length - 1; k++) {
@@ -161,7 +163,7 @@ function tube(B, joints, segBones, prof, { back, ringN = 12, perSeg = 6, capEnd 
       const x = ca * rx * (ca < 0 ? flat : 1);
       p.copy(center).addScaledVector(u, x).addScaledVector(w, sa * rz);
       const palmSide = Math.max(0, -ca);
-      B.vert(p, color(s, palmSide, ca, sa), bones, wts, wetOf ? wetOf(s, palmSide) : 0, thinOf ? thinOf(s) : 0);
+      B.vert(p, color(s, palmSide, ca, sa), bones, wts, wetOf ? wetOf(s, palmSide) : 0, thinOf ? thinOf(s) : 0, fadeOf ? fadeOf(s) : 1);
     }
     return start;
   };
@@ -208,7 +210,7 @@ function tube(B, joints, segBones, prof, { back, ringN = 12, perSeg = 6, capEnd 
   // close the very ends with a fan to their centre
   const fan = (ring, center, rev) => {
     const ci = B.count;
-    B.vert(center, color(rev ? 0 : 1, 0, 1, 0), [segBones[rev ? 0 : segBones.length - 1]], [1], 0, 0);
+    B.vert(center, color(rev ? 0 : 1, 0, 1, 0), [segBones[rev ? 0 : segBones.length - 1]], [1], 0, 0, fadeOf ? fadeOf(rev ? 0 : 1) : 1);
     for (let j = 0; j < ringN; j++) {
       const j1 = (j + 1) % ringN;
       if (rev) B.idx.push(ci, ring + j, ring + j1);
@@ -283,22 +285,32 @@ function ring(B, center, axis, R, r, bone, color, squash = 1) {
   }
 }
 
-/** The skin material: physical, sheened, and taught the aSkin attribute. */
-function skinMaterial() {
+/**
+ * The skin material: physical, sheened, and taught the aSkin attribute.
+ * `fade` (0..1) lets the sleeve's far end melt away (vertex alpha × fade):
+ * reaching into the pot, the arm comes from the viewer and must never sit
+ * over the guide as a solid tube.
+ */
+function skinMaterial(fade) {
   const mat = new THREE.MeshPhysicalMaterial({
     vertexColors: true,
     roughness: 0.56,
     metalness: 0,
     sheen: 0.35,
     sheenRoughness: 0.5,
-    sheenColor: new THREE.Color(0.75, 0.33, 0.24)
+    sheenColor: new THREE.Color(0.75, 0.33, 0.24),
+    // drawn in the transparent pass anyway (after the guide); alpha only ever
+    // drops on the sleeve's far end
+    transparent: true
   });
   mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uFade = fade;
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec2 aSkin;\nvarying vec2 vSkin;')
+      .replace('#include <common>', '#include <common>\nattribute vec3 aSkin;\nvarying vec3 vSkin;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSkin = aSkin;');
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec2 vSkin;')
+      .replace('#include <common>', '#include <common>\nvarying vec3 vSkin;\nuniform float uFade;')
+      .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.a *= mix( 1.0, clamp( vSkin.z, 0.0, 1.0 ), uFade );')
       // wet slip: a glossier film
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor *= mix( 1.0, 0.42, clamp( vSkin.x, 0.0, 1.0 ) );')
       // thin parts glow a little warm (fake subsurface), never above a soft cap
@@ -307,7 +319,7 @@ function skinMaterial() {
         '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * vec3( 0.16, 0.05, 0.025 ) * clamp( vSkin.y, 0.0, 1.0 ) * ( 1.0 - 0.8 * clamp( vSkin.x, 0.0, 1.0 ) );'
       );
   };
-  mat.customProgramCacheKey = () => 'lr-potter-skin-1';
+  mat.customProgramCacheKey = () => 'lr-potter-skin-2';
   return mat;
 }
 
@@ -500,11 +512,13 @@ export function buildPotterHand() {
     perSeg: 3,
     capEnd: true,
     color: (s, palmSide, ca, sa) => LINEN.clone().lerp(LINEN_SHADE, 0.3 + 0.3 * Math.sin(sa * 3 + s * 9)),
-    thinOf: () => 0
+    thinOf: () => 0,
+    fadeOf: (s) => 1 - smooth(0.1, 0.42, s)
   });
 
   const geo = B.geometry();
-  const mesh = new THREE.SkinnedMesh(geo, skinMaterial());
+  const fadeU = { value: 0 };
+  const mesh = new THREE.SkinnedMesh(geo, skinMaterial(fadeU));
   mesh.add(handBone);
   group.add(mesh);
   group.updateMatrixWorld(true);
@@ -532,7 +546,7 @@ export function buildPotterHand() {
   const dir = new THREE.Vector3();
   const up = new THREE.Vector3();
   const upOut = new THREE.Vector3(0.5, -0.5, 0.7);
-  const upIn = new THREE.Vector3(0.72, 0.5, 0.48);
+  const upIn = new THREE.Vector3(0.2, -0.5, 1);
   const qb = new THREE.Quaternion();
   // the middle finger's middle pad, in its middle phalanx's frame: the contact point
   const md = DIGITS[1];
@@ -629,6 +643,7 @@ export function buildPotterHand() {
     // group space → the arm bone's own: (hand · arm)⁻¹ = arm⁻¹ · hand⁻¹
     up.copy(o.inside ? upIn : upOut).normalize().applyQuaternion(qb.copy(arm.quaternion).invert().multiply(qInv));
     upper.quaternion.setFromUnitVectors(down, up);
+    fadeU.value = o.inside ? 1 : 0;
   }
 
   pose({});
