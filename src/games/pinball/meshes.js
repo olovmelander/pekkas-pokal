@@ -1250,6 +1250,143 @@ function plasticRampParts(THREE, curve, t1, row) {
 /* ------------------------------------------------------------------ castle */
 
 /**
+ * The castle door, painted in four states side by side: whole, cracked,
+ * splintered with the courtyard's light showing through, and smashed (the
+ * fallen bridge). The game picks a frame by offsetting the map. Seeded, so
+ * the cracks land in the same place every game.
+ */
+function gateDoorTexture(THREE) {
+  const FW = 256;
+  const FH = 192;
+  const cv = document.createElement('canvas');
+  cv.width = FW * 4;
+  cv.height = FH;
+  const g = cv.getContext('2d');
+  let seed = 7;
+  const rnd = () => {
+    seed = (seed * 16807) % 2147483647;
+    return (seed - 1) / 2147483646;
+  };
+  const crack = (x0, y0, len, ang, w) => {
+    let x = x0;
+    let y = y0;
+    g.lineWidth = w;
+    g.beginPath();
+    g.moveTo(x, y);
+    for (let i = 0; i < 6; i++) {
+      ang += (rnd() - 0.5) * 0.9;
+      x += Math.cos(ang) * (len / 6);
+      y += Math.sin(ang) * (len / 6);
+      g.lineTo(x, y);
+    }
+    g.stroke();
+  };
+  for (let f = 0; f < 4; f++) {
+    const ox = f * FW;
+    g.save();
+    g.beginPath();
+    g.rect(ox, 0, FW, FH);
+    g.clip();
+    // Vertical oak boards, each its own shade, with dark seams
+    const boards = 7;
+    for (let i = 0; i < boards; i++) {
+      const x = ox + (i * FW) / boards;
+      const l = 30 + ((i * 37) % 11);
+      g.fillStyle = `hsl(28, 48%, ${l}%)`;
+      g.fillRect(x, 0, FW / boards, FH);
+      g.strokeStyle = 'rgba(40,22,8,0.35)';
+      g.lineWidth = 1;
+      for (let k = 0; k < 5; k++) {
+        const gx = x + 4 + k * 6 + (k % 2) * 2;
+        g.beginPath();
+        g.moveTo(gx, 0);
+        g.bezierCurveTo(gx + 3, FH * 0.3, gx - 3, FH * 0.7, gx + 1, FH);
+        g.stroke();
+      }
+      g.fillStyle = 'rgba(15,8,2,0.85)';
+      g.fillRect(x, 0, 2, FH);
+    }
+    // The courtyard's glow through the splits (frames 2 and 3)
+    if (f >= 2) {
+      g.fillStyle = 'rgba(255,190,90,0.95)';
+      g.beginPath();
+      g.ellipse(ox + FW * 0.52, FH * 0.5, f === 3 ? 46 : 18, f === 3 ? 30 : 12, 0.3, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = 'rgba(255,240,200,0.9)';
+      g.beginPath();
+      g.ellipse(ox + FW * 0.52, FH * 0.5, f === 3 ? 22 : 7, f === 3 ? 13 : 5, 0.3, 0, Math.PI * 2);
+      g.fill();
+    }
+    // Iron straps with rivets; bent and torn as the door gives way
+    [0.22, 0.78].forEach((v, bi) => {
+      const y = FH * v;
+      const bend = f >= 2 && bi === 0 ? 9 : f >= 1 && bi === 1 ? 4 : 0;
+      g.fillStyle = '#2b2e36';
+      g.beginPath();
+      g.moveTo(ox, y - 9);
+      g.quadraticCurveTo(ox + FW / 2, y - 9 + bend, ox + FW, y - 9);
+      g.lineTo(ox + FW, y + 9);
+      g.quadraticCurveTo(ox + FW / 2, y + 9 + bend, ox, y + 9);
+      g.fill();
+      g.fillStyle = '#8d93a3';
+      for (let k = 0; k < 9; k++) {
+        if (f === 3 && k % 3 === 1) continue;
+        g.beginPath();
+        g.arc(ox + 14 + k * ((FW - 28) / 8), y + bend * Math.sin((k / 8) * Math.PI), 2.6, 0, Math.PI * 2);
+        g.fill();
+      }
+    });
+    // The crest: a gold shield with a trophy, scuffed as it takes hits
+    const cx = ox + FW / 2;
+    const cy = FH * 0.5;
+    g.fillStyle = f >= 2 ? '#a07f2a' : '#d4a73a';
+    g.beginPath();
+    g.moveTo(cx - 22, cy - 26);
+    g.lineTo(cx + 22, cy - 26);
+    g.lineTo(cx + 22, cy + 4);
+    g.quadraticCurveTo(cx + 20, cy + 22, cx, cy + 30);
+    g.quadraticCurveTo(cx - 20, cy + 22, cx - 22, cy + 4);
+    g.closePath();
+    g.fill();
+    g.fillStyle = '#5a1e2a';
+    g.fillRect(cx - 9, cy - 16, 18, 12);
+    g.fillRect(cx - 3, cy - 4, 6, 10);
+    g.fillRect(cx - 9, cy + 6, 18, 5);
+    // Cracks: more, longer and wider with every frame
+    g.strokeStyle = 'rgba(12,6,2,0.92)';
+    g.lineCap = 'round';
+    seed = 7;
+    const n = [0, 5, 11, 18][f];
+    for (let i = 0; i < n; i++) {
+      const sx = ox + FW * (0.25 + rnd() * 0.5);
+      const sy = FH * (0.25 + rnd() * 0.5);
+      crack(sx, sy, 40 + rnd() * 50 * (1 + f * 0.4), rnd() * Math.PI * 2, 1.5 + f * 0.9);
+    }
+    // Splinters: pale torn wood along the worst splits
+    if (f >= 2) {
+      g.strokeStyle = 'rgba(232,196,140,0.85)';
+      for (let i = 0; i < f * 6; i++) {
+        const sx = ox + FW * (0.3 + rnd() * 0.44);
+        const sy = FH * (0.3 + rnd() * 0.4);
+        crack(sx, sy, 10 + rnd() * 16, rnd() * Math.PI * 2, 1.2);
+      }
+    }
+    // Soot and wear toward the edges
+    const vg = g.createRadialGradient(cx, cy, FH * 0.3, cx, cy, FW * 0.7);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, `rgba(0,0,0,${0.35 + f * 0.08})`);
+    g.fillStyle = vg;
+    g.fillRect(ox, 0, FW, FH);
+    g.restore();
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  tex.repeat.set(0.25, 1);
+  return tex;
+}
+
+/**
  * The castle: two round towers with golden cone roofs, a crenellated gate
  * house, a drawbridge that lowers when the gate opens, and pennant flags.
  */
@@ -1371,21 +1508,30 @@ function buildCastle(THREE, materials) {
   g.add(portcullis);
   refs.portcullis = portcullis;
 
-  // Drawbridge: hinged plank in front of the gate
+  // The gate door, which is also the drawbridge: it stands in the opening
+  // while the gate is shut, cracks a little more with every hit (four
+  // frames of one painted atlas, so damage costs no extra draw calls), and
+  // falls forward onto the forecourt as a bridge when the gate gives way.
+  // Hinged at its foot, just in front of the gate collider, so the ball
+  // meets the planks where the physics stops it.
   const bridge = new THREE.Group();
-  const plank = new THREE.Mesh(new THREE.BoxGeometry(gateW + 0.3, 0.12, 1.9), materials.wood);
-  plank.position.z = -0.95;
-  bridge.add(plank);
-  [0.32, -0.32].forEach((off) => {
-    const strap = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.14, 1.9), materials.rail);
-    strap.position.set(off * gateW, 0.02, -0.95);
-    bridge.add(strap);
+  const doorTex = gateDoorTexture(THREE);
+  const doorMat = new THREE.MeshStandardMaterial({
+    map: doorTex,
+    roughness: 0.78,
+    metalness: 0.05,
+    envMapIntensity: 0.25
   });
-  bridge.position.set(gateCx, 0.1, -(gay - 0.35));
-  bridge.rotation.x = -Math.PI / 2 + 0.12; // raised (closed)
+  const DOOR_H = 1.86;
+  const plank = new THREE.Mesh(new THREE.BoxGeometry(gateW + 0.1, DOOR_H, 0.14), doorMat);
+  plank.position.y = DOOR_H / 2;
+  bridge.add(plank);
+  bridge.position.set(gateCx, 0.1, -(gay - 0.22));
+  bridge.rotation.x = 0; // standing (closed)
   bridge.userData.keep = true;
   g.add(bridge);
   refs.bridge = bridge;
+  refs.door = { mat: doorMat, tex: doorTex, frame: 0 };
 
   // Courtyard glow
   const lamp = new THREE.PointLight(0xf2c14e, 9.6, 14, 2); // 0.6 in LAMP units
@@ -1499,9 +1645,10 @@ const PL = { x0: -10.2, x1: 7.0, y0: 7.6, y1: 16.2 };
 
 /** The plastic pieces, in playfield coordinates */
 function plasticOutlines() {
+  // Follows L.leftSlingPts (raised clear of the flipper's swing)
   const sling = [
-    [-5.0, 12.5], [-5.55, 11.9], [-5.32, 9.3], [-4.86, 8.66], [-3.55, 8.4],
-    [-3.16, 8.78], [-3.42, 9.36], [-4.58, 12.32]
+    [-5.05, 13.1], [-5.6, 12.5], [-5.55, 10.05], [-5.1, 9.4], [-3.95, 9.05],
+    [-3.6, 9.45], [-3.85, 10.0], [-4.63, 12.92]
   ];
   // A heater shield over the top of each lane guide, where the orbit
   // returns drop onto the inlane
@@ -1758,7 +1905,7 @@ function buildPlastics(THREE, materials, mergeGeometries, extra = []) {
   });
 
   // GI bulbs tucked under the sling plastics, two a side
-  const bulbs = [[-5.08, 10.1], [-4.25, 8.78]];
+  const bulbs = [[-5.2, 10.75], [-4.55, 9.45]];
   bulbs.concat(bulbs.map(([x, y]) => [mirrorX(x), y])).forEach(([x, y]) => {
     const socket = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.2, 8), materials.rubber);
     socket.position.set(x, 0.1, -y);
@@ -1839,6 +1986,15 @@ const LAMP_DEFS = [
     id: `bx${n}`, x: L.centerX + (i - 2) * 0.84, y: 9.38, r: 0.27, color: 0xffb347, label: `${n}×`
   })),
   { id: 'kickback', x: -8.05, y: 11.75, r: 0.3, color: 0xf2c14e, label: 'K' },
+  // Rules lamps: super jackpot under the castle arrow, add-a-ball by the
+  // right ramp, the extra-ball lamp on the Kungsvägen (left ramp) approach
+  { id: 'super', x: L.centerX, y: 18.2, r: 0.3, color: 0xffd166, label: 'S' },
+  { id: 'addBall', x: 5.45, y: 16.55, r: 0.3, color: 0x5eead4, label: '+1' },
+  { id: 'eb', x: -6.95, y: 16.35, r: 0.32, color: 0xff7a59, label: 'EB' },
+  // Gate damage: three lamps on the forecourt, one per hit
+  ...[0, 1, 2].map((i) => ({
+    id: `gate${i}`, x: L.centerX - 0.9 + i * 0.9, y: 26.0, r: 0.24, color: 0xff9a3c, label: ''
+  })),
   { id: 'inL', x: -6.15, y: 11.55, r: 0.26, color: 0x5eead4, label: '' },
   { id: 'inR', x: mirrorX(-6.15), y: 11.55, r: 0.26, color: 0x5eead4, label: '' }
 ];

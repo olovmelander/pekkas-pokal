@@ -238,11 +238,15 @@ L.rightRail = L.leftRail.map(([x, y]) => [mirrorX(x), y]);
  * Slingshot triangles: T top, BO bottom-outer, BI bottom-inner.
  * T→BI is the kicker face; the other two edges are plain walls.
  */
-L.leftSlingPts = { T: [-4.95, 11.7], BO: [-4.72, 9.45], BI: [-3.75, 9.0] };
+// The lower inner corner sits over the first third of the flipper, as on a
+// real machine, and clear of the raised bat. It used to hang over the
+// flipper's middle, so every shot off the inner half clipped the sling's
+// underside and was kicked up-left into the P target, whatever the timing.
+L.leftSlingPts = { T: [-5.0, 12.3], BO: [-4.95, 10.15], BI: [-4.2, 9.65] };
 L.rightSlingPts = {
-  T: [mirrorX(-4.95), 11.7],
-  BO: [mirrorX(-4.72), 9.45],
-  BI: [mirrorX(-3.75), 9.0]
+  T: [mirrorX(-5.0), 12.3],
+  BO: [mirrorX(-4.95), 10.15],
+  BI: [mirrorX(-4.2), 9.65]
 };
 // Kept as simple 2-point faces for the mesh flash lookup
 L.leftSling = [L.leftSlingPts.T, L.leftSlingPts.BI];
@@ -342,12 +346,18 @@ export function buildColliders(world, hooks = {}) {
   world.add(chain(L.rightReturnGate, downOnly));
 
   // Slingshots: kicker face plus two plain edges
+  // The kicker fires when the ball compresses the rubber hard enough to
+  // close the leaf switch (kickMin), throwing it at a near-constant speed
+  // with a few degrees of scatter (physics.js, active kickers).
   const slingOpts = (side) => ({
     radius: 0.28,
-    restitution: 0.62,
-    kick: 15,
+    restitution: 0.55,
+    kick: 17,
     kickMin: 2.5,
-    onHit: (v, ball) => hooks.onSling && hooks.onSling(side, v, ball)
+    active: true,
+    jitter: 0.07,
+    cooldown: 0.09,
+    onHit: (v, ball, fired) => hooks.onSling && hooks.onSling(side, v, ball, fired)
   });
   [['left', L.leftSlingPts], ['right', L.rightSlingPts]].forEach(([side, P]) => {
     world.add(segment(P.T[0], P.T[1], P.BI[0], P.BI[1], slingOpts(side)));
@@ -359,10 +369,13 @@ export function buildColliders(world, hooks = {}) {
   // throws the ball hard enough to ricochet around the nest
   L.bumpers.forEach((b, i) => {
     const c = circle(b.x, b.y, L.bumperR, {
-      restitution: 0.6,
-      kick: 22,
+      restitution: 0.5,
+      kick: 23,
+      active: true,
+      jitter: 0.14,
+      cooldown: 0.07,
       id: `bumper${i}`,
-      onHit: (v, ball) => hooks.onBumper && hooks.onBumper(i, v, ball)
+      onHit: (v, ball, fired) => hooks.onBumper && hooks.onBumper(i, v, ball, fired)
     });
     world.add(c);
     refs.bumpers.push(c);
