@@ -1,0 +1,47 @@
+@import '../shared/arcade.css';
+
+.triathlon-game .tri-dashboard {
+  position: absolute; left: 20px; right: 20px; top: 108px;
+  max-width: 390px; pointer-events: none;
+  padding: 13px 16px; border: 1px solid #e5e2cd26; border-radius: 15px;
+  background: linear-gradient(135deg, #0b252de8, #102c32a8); backdrop-filter: blur(14px);
+  box-shadow: 0 10px 32px #04151b24; color: #f3f1e3;
+}
+.triathlon-game .tri-stages { display: flex; gap: 8px; font-size: 10px; letter-spacing: .14em; font-weight: 800; }
+.triathlon-game .tri-stage { flex: 1; border-top: 2px solid #ffffff22; padding-top: 6px; color: #c6d6ce88; }
+.triathlon-game .tri-stage.active { border-color: #f4cf74; color: #f4cf74; }
+.triathlon-game .tri-stage.done { border-color: #72d3b5; color: #72d3b5; }
+.triathlon-game .tri-progress { height: 3px; background: #ffffff20; margin: 12px 0; border-radius: 8px; overflow: hidden; }
+.triathlon-game .tri-progress i { display: block; height: 100%; width: 0; background: #f4cf74; }
+.triathlon-game .tri-energy-title { display: flex; justify-content: space-between; gap: 10px; font-size: 11px; font-weight: 700; }
+.triathlon-game .tri-energy { height: 8px; overflow: hidden; border-radius: 8px; background: #ffffff18; margin-top: 6px; }
+.triathlon-game .tri-energy i { display: block; height: 100%; background: linear-gradient(90deg, #58beab, #cce5a1); width: 100%; transition: background .2s; }
+.triathlon-game .tri-energy.low i { background: #f39272; }
+.triathlon-game .tri-help { color: #d9e4d9; font-size: 11px; line-height: 1.45; margin: 8px 0 0; }
+.triathlon-game .tri-controls { position: absolute; bottom: max(22px, env(safe-area-inset-bottom)); left: 22px; right: 22px; display: flex; justify-content: space-between; gap: 16px; pointer-events: none; }
+.triathlon-game .tri-direction { display: flex; gap: 12px; }
+.triathlon-game .tri-control { pointer-events: auto; touch-action: none; -webkit-user-select: none; user-select: none; border-radius: 18px; border: 1px solid #dce9e54a; background: #102c38d9; color: #f6f3e6; min-width: 64px; min-height: 62px; box-shadow: 0 4px 20px #07182050, inset 0 1px 0 #ffffff18; font-family: inherit; font-size: 24px; font-weight: 700; }
+.triathlon-game .tri-control:active, .triathlon-game .tri-control.held { background: #e8c66c; color: #17262b; transform: translateY(2px); }
+.triathlon-game .tri-surge { font-size: 13px; letter-spacing: .08em; padding: 10px 22px; }
+.triathlon-game .tri-surge small { display: block; font-size: 9px; font-weight: 500; letter-spacing: .02em; opacity: .7; margin-top: 3px; }
+.triathlon-game .tri-callout { position: absolute; left: 50%; bottom: 110px; transform: translateX(-50%); color: #fff9db; font-weight: 800; font-size: 12px; text-align: center; letter-spacing: .09em; background: #103d37d9; border: 1px solid #9ddeb55c; border-radius: 30px; padding: 9px 18px; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .25s; }
+.triathlon-game .tri-callout.on { opacity: 1; }
+.triathlon-game .tri-splits { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 20px 0; }
+.triathlon-game .tri-splits div { border: 1px solid #ffffff1c; padding: 12px 5px; border-radius: 12px; color: #f6da8d; }
+.triathlon-game .tri-splits small { display: block; color: #bfcac4; font-size: 9px; letter-spacing: .07em; }
+.triathlon-game .tri-splits strong { font-size: 18px; }
+.triathlon-game .arcade-toast { top: 32%; }
+@media (max-width: 600px) {
+  .triathlon-game .tri-dashboard { top: 100px; left: 12px; right: 12px; max-width: 300px; padding: 10px 12px; }
+  .triathlon-game .tri-controls { left: 14px; right: 14px; bottom: max(16px, env(safe-area-inset-bottom)); gap: 8px; }
+  .triathlon-game .tri-control { min-width: 56px; min-height: 60px; }
+  .triathlon-game .tri-direction { gap: 8px; }
+  .triathlon-game .tri-surge { padding: 8px 16px; }
+}
+@media (max-height: 520px) {
+  .triathlon-game .tri-dashboard { top: 82px; left: 14px; max-width: 255px; padding: 8px 12px; }
+  .triathlon-game .tri-help { display: none; }
+  .triathlon-game .tri-controls { bottom: 12px; }
+  .triathlon-game .tri-control { min-height: 48px; min-width: 54px; }
+  .triathlon-game .tri-callout { bottom: 77px; }
+}

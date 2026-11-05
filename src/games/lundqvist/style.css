@@ -1,0 +1,4 @@
+@import '../farm/style.css';
+.country-lundqvist { --country-gold:#b8d5ad; }
+.country-lundqvist .country-controls { background:linear-gradient(160deg,#15332cde,#122623ed); border-color:#b8d5ad44; }
+.country-lundqvist .country-actions .country-action { background:linear-gradient(140deg,#d7e8bd,#8dbca3); }

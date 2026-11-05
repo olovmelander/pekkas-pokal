@@ -121,7 +121,11 @@ Att lägga till ett nytt års spel:
    `year`, `title`, `tagline`, `icon`, `colors` (affischens två toner),
    `cover` (en stillbild i `public/games/`) och sökvägen i `module`.
 
-År utan spel visas automatiskt under "Kommande".
+Alla genomförda tävlingsår 2011–2026 har nu spel; 2020 var inställt. De åtta nya
+årsspelen är Fantasy, Gokart, Femkamp, Parkmästare, Bondespel, Gårdskamp,
+Triathlon och Ambition. [Spelöversikt, research och testinstruktioner](docs/arcade.md)
+beskriver gameplay, källor och vilka regler som är arkadtolkningar. Nya år utan
+spel visas automatiskt under "Kommande".
 
 **Pekkas Fiske (2024)**
 

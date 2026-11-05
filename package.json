@@ -19,7 +19,8 @@
     "test:ui": "vitest --ui",
     "clean": "rm -rf dist",
     "deploy": "npm run build && npm run deploy:gh-pages",
-    "deploy:gh-pages": "gh-pages -d dist"
+    "deploy:gh-pages": "gh-pages -d dist",
+    "test:games": "node scripts/check-arcade.mjs"
   },
   "keywords": [
     "competition",
@@ -41,20 +42,22 @@
   "homepage": "https://your-username.github.io/pekkas-pokal",
   "devDependencies": {
     "@eslint/js": "^9.0.0",
+    "@vitest/ui": "^1.5.0",
     "eslint": "^8.57.0",
     "gh-pages": "^6.1.0",
     "http-server": "^14.1.1",
+    "playwright": "1.65.0",
     "prettier": "^3.2.5",
     "vite": "^5.2.0",
-    "vitest": "^1.5.0",
-    "@vitest/ui": "^1.5.0"
+    "vitest": "^1.5.0"
   },
   "dependencies": {
     "chart.js": "^4.4.0",
-    "papaparse": "^5.4.1"
+    "papaparse": "^5.4.1",
+    "three": "0.187.0"
   },
   "engines": {
-    "node": ">=16.0.0",
+    "node": ">=20.0.0",
     "npm": ">=8.0.0"
   },
   "browserslist": [
