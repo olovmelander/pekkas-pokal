@@ -592,6 +592,21 @@ kameran rör sig, golvspegeln är mjukare och stabilare, och shaders kompileras
 innan första bilden ritas.
 
 
+**Nattens uppgradering.** Pekkas Pingis fick en ordentlig genomgång.
+Motståndarna håller racketen med ett riktigt fattningsgrepp, med pekfingret
+längs bladets baksida, och vid serven ligger bollen stilla i den öppna
+handflatan innan den kastas upp, som reglerna kräver. Henrik, Rickard och
+Viktor har var sitt sätt att fira och ta emot poäng, går in till bordet när
+presentationskortet visas och flyttar vikten och den fria armen i slagen. Din
+egen racket möter nu bollen där den träffas, och gummit lyser upp i skruvens
+färg vid träffen. Hallen är varmare upplyst, publiken lutar sig fram i långa
+bollar, tar sig för huvudet vid förlorade poäng och applåderar artigt efter
+långa dueller. Golvet har fått gymnastiksalens gamla linjer, slitmärken, en
+handduksbox, en bollhink och ett sekretariatsbord med en liten resultattavla.
+Reprisen visas från en ny tv-vinkel, och på mobilen visar ett spökfinger hur
+serven görs de första gångerna. Reglerna och motståndarnas svårighetsgrad är
+oförändrade.
+
 **Pekkas Måleri (2021)**
 
 Trädgården på **Terrassvägen 47** i Örnsköldsvik, lördag 7 augusti 2021 —
