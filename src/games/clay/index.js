@@ -132,6 +132,7 @@ const TITLES = [
 
 /* The piece shrinks into the kiln (clay shrinks when fired — a little less than this) */
 const KILN_SCALE = 0.36;
+const TAU = Math.PI * 2;
 const REVEAL_SCALE = 0.3;
 
 /* The reveal camera's approach to the banding wheel (keramikern stands on its far side) */
@@ -291,7 +292,9 @@ export async function createClay(container) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x160e09);
 
-  const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 80);
+  // Nothing ever comes nearer the camera than a couple of metres: a deeper
+  // near plane buys a phone's depth buffer precision for the kiln's insides
+  const camera = new THREE.PerspectiveCamera(38, 1, 0.25, 80);
   camera.position.set(0, 2.6, 8);
   // Stage shape, kept by resize(); the camera frames everything from it
   const view = { aspect: 1, portrait: false, tan: Math.tan(THREE.MathUtils.degToRad(19)) };
@@ -667,7 +670,7 @@ export async function createClay(container) {
         <li><i style="--c:#f2c14e"></i><b>Glätta</b> Håll GLÄTTA för att jämna ut kurvorna och ränderna.</li>
         <li><i style="--c:#ff9a5c"></i><b>Bränn</b> Tryck KLAR — ugnen, glasyren och keramikerns dom.</li>
       </ul>
-      <button class="pb-btn" data-act="start">Sätt igång drejskivan</button>`;
+      <div class="lr-cta"><button class="pb-btn" data-act="start">Sätt igång drejskivan</button></div>`;
     hud.overlay.classList.remove('summary');
     hud.overlay.classList.add('show');
   }
@@ -690,7 +693,7 @@ export async function createClay(container) {
       <p>${isHigh ? `${title}. ${words}` : words}</p>
       <ul class="lr-summary">${rows}</ul>
       <div class="pb-scoreline"><span>${fmt(state.score)}</span><small>poäng · rekord ${fmt(high)}</small></div>
-      <button class="pb-btn" data-act="start">Dreja igen</button>`;
+      <div class="lr-cta"><button class="pb-btn" data-act="start">Dreja igen</button></div>`;
     hud.overlay.classList.add('summary', 'show');
     // Frame the window display in whatever part of the screen the card leaves
     const host = canvasHost.getBoundingClientRect();
@@ -1171,11 +1174,14 @@ export async function createClay(container) {
     camera.position.lerp(camGoal, k);
     lookAt.lerp(lookGoal, 1 - Math.exp(-dt * 3.2));
     camera.lookAt(lookAt);
-    // A little firing rumble (never with reduced motion)
+    // A little firing rumble (never with reduced motion). Smooth and slow
+    // enough to read as a rumble at 30 fps too — a fast sine sampled by a
+    // phone's frame rate is a random jitter that makes every edge shimmer
     if (!reduceMotion && ph === 'fire' && state.heat > 0.5) {
-      const s = (state.heat - 0.5) * 0.012;
-      camera.position.x += Math.sin(t * 61) * s;
-      camera.position.y += Math.sin(t * 47 + 1) * s;
+      const s = (state.heat - 0.5) * 0.007;
+      const tt = t % 600;
+      camera.position.x += (Math.sin(tt * 13.1) + 0.5 * Math.sin(tt * 21.7 + 2)) * s;
+      camera.position.y += (Math.sin(tt * 11.3 + 1) + 0.5 * Math.sin(tt * 19.1)) * s * 0.7;
     }
     if (!reduceMotion && state.wobble > 0.25 && ph === 'throw') {
       camera.position.x += Math.sin(t * 38) * state.wobble * 0.008;
@@ -1691,7 +1697,10 @@ export async function createClay(container) {
       haze.uniforms.uCenter.value.set(tmpV.x * 0.5 + 0.5, tmpV.y * 0.5 + 0.5);
       haze.uniforms.uRadius.value.set(0.16 / Math.max(0.6, view.aspect), 0.32);
       haze.uniforms.uStrength.value = state.heat;
-      haze.uniforms.uTime.value = t % 600;
+      // The ripple phases are wrapped on the CPU: t·11 is in the thousands
+      // after a few minutes, and a phone's fragment floats cannot hold that
+      // (the shimmer then jumps every frame instead of flowing)
+      haze.uniforms.uPhase.value.set((t * 7) % TAU, (t * 11) % TAU, (t * 5) % TAU);
     }
     bloom.strength = 0.3 + state.heat * 0.4 + flash * 0.12;
   }
@@ -1780,6 +1789,7 @@ export async function createClay(container) {
   let last = performance.now();
   let running = true;
   let timeScale = 1; // tests on software GL fast-forward with this
+  let frozenNow = null; // tests: freeze the clock (frame diffs for flicker)
   renderer.info.autoReset = false; // count the whole composer frame, not its last pass
 
   /*
@@ -1807,11 +1817,13 @@ export async function createClay(container) {
     resize();
   }
 
-  function tick(now) {
+  function tick(nowRaw) {
     raf = requestAnimationFrame(tick);
-    const raw = now - last;
-    const dt = clampDt(raw) * timeScale;
-    last = now;
+    const raw = nowRaw - last;
+    // Test hook (window.__ppLera.freeze): time stands still, frames keep rendering
+    const now = frozenNow ?? nowRaw;
+    const dt = frozenNow === null ? clampDt(raw) * timeScale : 0;
+    last = nowRaw;
     if (!running) return;
     guardFrameTime(raw);
     renderer.info.reset();
@@ -1980,6 +1992,14 @@ export async function createClay(container) {
       return { x: rect.left + (work.x * 0.5 + 0.5) * rect.width, y: rect.top + (-work.y * 0.5 + 0.5) * rect.height };
     },
     computeMatch,
+    /** Stop the clock (true) or let it run again (false); frames keep rendering. */
+    freeze(on = true) {
+      frozenNow = on ? performance.now() : null;
+    },
+    /** Where the camera is and looks now (for debugCam). */
+    cameraPose() {
+      return { pos: camera.position.toArray(), look: lookAt.toArray() };
+    },
     /** Freeze the camera at pos looking at look (arrays); null releases it. */
     debugCam(pos, look) {
       camOverride = pos ? { pos: new THREE.Vector3(...pos), look: new THREE.Vector3(...look) } : null;

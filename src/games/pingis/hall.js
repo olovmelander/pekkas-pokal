@@ -1113,7 +1113,12 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1, profile = null 
   const stageTex = boardTexture(0x4a3622, { boards: 14, seed: 13, groove: 0.45, repeat: [4, 1] });
   const stageFront = lambert(0xffffff, { map: stageTex });
   const stageTop = standard(0x5a4128, 0.6);
-  const stage = add(new THREE.Mesh(new THREE.BoxGeometry(HALL_W, STAGE_H, -STAGE_Z + BACK),
+  // Depth STAGE_Z − BACK (2.2 m). It was written −STAGE_Z + BACK, a NEGATIVE
+  // depth: the box came out mirrored, so the stage front's normal pointed
+  // into the stage — lit from behind by the stage wash, its shadow lookup
+  // pushed into the surface by the normal bias — and that face flickered
+  // under the people sitting on the stage lip as the camera moved.
+  const stage = add(new THREE.Mesh(new THREE.BoxGeometry(HALL_W, STAGE_H, STAGE_Z - BACK),
     [stageFront, stageFront, stageTop, stageFront, stageFront, stageFront]), 0, STAGE_H / 2, (STAGE_Z + BACK) / 2);
   stage.receiveShadow = true;
   stage.userData.keep = true;

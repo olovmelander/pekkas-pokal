@@ -780,6 +780,77 @@
   pointer-events: auto; /* so a long summary can be scrolled on a phone */
 }
 
+/*
+ * Short screens: a panel never grows past the visible screen. It scrolls
+ * under a finger (the UI layer itself lets touches through to the canvas,
+ * so the panel takes them back), and its primary button stays pinned to
+ * the bottom, reachable without scrolling.
+ */
+.lr-ui .lr-panel {
+  max-height: 100%;
+  overflow-y: auto;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.lr-ui .lr-cta {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin-top: 4px;
+  padding-top: 2px;
+  /* the pinned button rests on the panel's own dusk, not on text scrolling under it */
+  background: linear-gradient(0deg, rgba(20, 11, 6, 0.97) 62%, rgba(20, 11, 6, 0));
+}
+
+.lr-ui.lr-wide .lr-cta {
+  background: linear-gradient(0deg, rgba(20, 11, 6, 0.9) 62%, rgba(20, 11, 6, 0));
+}
+
+/* The verdict card likewise: never taller than the screen, scrolls, button pinned */
+.lr-ui .lr-verdict {
+  max-height: calc(100% - 92px - var(--lr-safe-bottom));
+  overflow-y: auto;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.lr-ui.lr-wide .lr-verdict {
+  max-height: calc(100% - 28px);
+}
+
+.lr-ui .lr-verdict .pb-btn {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+}
+
+/* ...and the help card */
+.lr-ui .pb-help {
+  overflow-y: auto;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+}
+
+.lr-ui .pb-help-card {
+  max-height: 100%;
+  overflow-y: auto;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+}
+
+/* its way back to the studio stays pinned to the card's bottom, over a fade of the card */
+.lr-ui .pb-help-card .pb-btn {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  /* a fade of the card above it, and the card's own dark covering the strip below */
+  box-shadow: 0 -16px 18px 4px rgba(28, 15, 9, 0.96), 0 22px 0 8px rgb(25, 13, 8), 0 8px 26px rgba(224, 138, 60, 0.38);
+}
+
 .lr-ui .lr-panel h2 {
   margin-top: 4px;
   font-family: var(--ff-serif, var(--font-display));
@@ -1191,10 +1262,21 @@
     top: 22%;
   }
 
+  /* below the score and never past the bottom edge: pinned between the two
+     (it scrolls, its button pinned, if a very short screen asks for it) */
   .lr-ui.lr-wide .lr-verdict {
-    top: calc(50% + 24px); /* below the score */
+    top: 58px;
+    bottom: 8px;
+    height: fit-content;
+    max-height: calc(100% - 66px);
+    margin: auto 0;
     width: 300px;
     padding: 12px 14px;
+    transform: translateX(-30px);
+  }
+
+  .lr-ui.lr-wide .lr-verdict.show {
+    transform: none;
   }
 
   .lr-ui.lr-wide .lr-verdict h3 {
@@ -1261,5 +1343,16 @@
   .lr-verdict.show .lr-grade b,
   .lr-summary li {
     animation: none;
+  }
+}
+
+/* Phones on their side (≤ 360 px tall): the verdict keeps the total, not the breakdown */
+@media (max-height: 360px) {
+  .lr-ui.lr-wide .lr-lines div:not(.sum) {
+    display: none;
+  }
+
+  .lr-ui.lr-wide .lr-verdict .lr-badge {
+    margin-top: 4px;
   }
 }
