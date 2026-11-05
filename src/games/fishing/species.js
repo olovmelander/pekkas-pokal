@@ -356,18 +356,26 @@ export const SPECIES = [
     speed: 2.6,
     kg: [0.12, 0.55],
     blurb: 'Stimfisken i ytvattnet. Röda fenor, silversida — och alltid i sällskap.',
-    profile: makeProfile([[0, 0.05], [0.18, 0.34], [0.42, 0.4], [0.75, 0.16], [1, 0.05]],
-      { height: 1.35, width: 0.62, nose: 1, tail: -0.72 }),
-    back: 0x4d6f96,
-    belly: 0xeef4fb,
-    fin: 0xd2452f,
-    finD: 0x8a6a5a, // the back fin is greyer; the low fins burn red
-    tail: 'fork',
-    dorsal: { at: -0.02, h: 0.4, w: 0.34 },
+    profile: makeProfile([[0, 0.05], [0.16, 0.32], [0.4, 0.4], [0.7, 0.2], [0.86, 0.1], [0.96, 0.078], [1, 0.084]],
+      { height: 1.35, width: 0.6, nose: 1, tail: -0.72 }),
+    back: 0x3f5f84,
+    flank: 0xc9d6e2,
+    belly: 0xf2f6fb,
+    fin: 0xd2452f,  // roach: red belly fins…
+    finD: 0x9a5848, // …a greyer red on the back fin…
+    finT: 0xb4524a, // …and a red-grey tail
+    fins: {
+      dorsal: [{ from: 0.4, to: 0.56, h: 0.36, shape: 'tri', rays: 7 }],
+      anal: { from: 0.62, to: 0.76, h: 0.22 },
+      pectoral: { at: 0.24, len: 0.26 },
+      pelvic: { at: 0.46, len: 0.22 },
+      tail: 'fork'
+    },
     eye: 0.16,
     iris: 0xd2452f,
     metal: 0.26,
-    rough: 0.32
+    rough: 0.32,
+    irid: true
   },
   {
     id: 'abborre',
@@ -380,16 +388,25 @@ export const SPECIES = [
     speed: 3.0,
     kg: [0.2, 1.3],
     blurb: 'Randig rovfisk med taggig ryggfena. Sjöns mest pålitliga napp.',
-    profile: makeProfile([[0, 0.06], [0.16, 0.36], [0.38, 0.46], [0.72, 0.15], [1, 0.05]],
-      { height: 1.5, width: 0.58, nose: 1, tail: -0.74 }),
-    back: 0x33591f,
+    profile: makeProfile([[0, 0.06], [0.14, 0.34], [0.34, 0.46], [0.64, 0.24], [0.84, 0.11], [0.95, 0.085], [1, 0.092]],
+      { height: 1.5, width: 0.56, nose: 1, tail: -0.74 }),
+    back: 0x2e5220,
+    flank: 0x9aa860,
     belly: 0xf0e6bd,
     mark: bars(C(0x14290c)),
-    fin: 0xe2581a,
-    finD: 0x5a5a3c, // spiny grey-olive dorsal; belly fins and tail orange-red
-    tail: 'fan',
-    dorsal: { at: 0.1, h: 0.46, w: 0.5, spiny: true },
-    dorsal2: { at: -0.28, h: 0.26, w: 0.24 },
+    fin: 0xe2581a,  // perch: orange-red belly fins and tail…
+    finD: 0x5f5f40, // …a grey-olive spiny dorsal with a black spot
+    finT: 0xc4622a,
+    fins: {
+      dorsal: [
+        { from: 0.2, to: 0.46, h: 0.44, shape: 'spiny', rays: 8, spot: true },
+        { from: 0.49, to: 0.68, h: 0.3, shape: 'round', rays: 7 }
+      ],
+      anal: { from: 0.64, to: 0.76, h: 0.24 },
+      pectoral: { at: 0.25, len: 0.24 },
+      pelvic: { at: 0.3, len: 0.24 },
+      tail: 'fan'
+    },
     eye: 0.17,
     iris: 0xe0a020,
     metal: 0.06,
@@ -406,19 +423,26 @@ export const SPECIES = [
     speed: 3.4,
     kg: [0.4, 1.9],
     blurb: 'Silverblank och skygg — simmar djupare än man tror. Röks vid bryggan.',
-    profile: makeProfile([[0, 0.04], [0.2, 0.28], [0.45, 0.32], [0.78, 0.12], [1, 0.04]],
-      { height: 1.25, width: 0.66, nose: 1.05, tail: -0.78 }),
-    back: 0x5d7f96,
+    profile: makeProfile([[0, 0.04], [0.18, 0.27], [0.42, 0.32], [0.72, 0.15], [0.86, 0.085], [0.96, 0.068], [1, 0.074]],
+      { height: 1.25, width: 0.64, nose: 1.05, tail: -0.78 }),
+    back: 0x4f6f88,
+    flank: 0xd4e0ea,
     belly: 0xf6fafd,
-    mark: flank(C(0xc9dced)),
-    fin: 0x9fb6c6,
-    tail: 'fork',
-    dorsal: { at: 0.02, h: 0.32, w: 0.28 },
-    adipose: -0.42,
+    mark: flank(C(0xe4eef6)),
+    fin: 0x9fb2c2,
+    fins: {
+      dorsal: [{ from: 0.36, to: 0.5, h: 0.32, shape: 'tri', rays: 7 }],
+      adipose: 0.8,
+      anal: { from: 0.66, to: 0.78, h: 0.18 },
+      pectoral: { at: 0.24, len: 0.24 },
+      pelvic: { at: 0.5, len: 0.2 },
+      tail: 'forkDeep'
+    },
     eye: 0.15,
     iris: 0xc8d4e0,
     metal: 0.3,
-    rough: 0.3
+    rough: 0.3,
+    irid: true
   },
   {
     id: 'gadda',
@@ -431,14 +455,20 @@ export const SPECIES = [
     speed: 3.9,
     kg: [1.5, 9],
     blurb: 'Står blick stilla i gropen och väntar. Bönfläckar och andnäbb.',
-    profile: makeProfile([[0, 0.05], [0.12, 0.2], [0.3, 0.29], [0.62, 0.26], [0.86, 0.1], [1, 0.05]],
-      { height: 1.1, width: 0.78, nose: 1.35, tail: -0.85 }),
-    back: 0x2c4a22,
-    belly: 0xdfd79a,
-    mark: beans(C(0xbcd07a)),
-    fin: 0x6b7f3c,
-    tail: 'fork',
-    dorsal: { at: -0.52, h: 0.42, w: 0.34 },
+    profile: makeProfile([[0, 0.07], [0.06, 0.11], [0.17, 0.19], [0.3, 0.27], [0.58, 0.26], [0.78, 0.15], [0.9, 0.095], [1, 0.092]],
+      { height: 1.1, width: 0.78, nose: 1.35, tail: -0.85, snoutFlat: 0.42 }),
+    back: 0x2a4620,
+    flank: 0x6f8a3c,
+    belly: 0xe2dca4,
+    mark: beans(C(0xc8d888)),
+    fin: 0xa26e34, // pike: rusty-orange fins, dorsal and anal set far back by the tail
+    fins: {
+      dorsal: [{ from: 0.74, to: 0.88, h: 0.36, shape: 'round', rays: 7, lean: 0.3 }],
+      anal: { from: 0.76, to: 0.89, h: 0.28 },
+      pectoral: { at: 0.3, len: 0.24 },
+      pelvic: { at: 0.56, len: 0.22 },
+      tail: 'fork'
+    },
     snout: true,
     eye: 0.14,
     iris: 0xd8c040,
@@ -456,19 +486,26 @@ export const SPECIES = [
     speed: 4.6,
     kg: [2, 11],
     blurb: 'Insjölaxen i det kalla djupvattnet. Snabbast av dem alla.',
-    profile: makeProfile([[0, 0.05], [0.16, 0.3], [0.4, 0.38], [0.76, 0.13], [1, 0.045]],
-      { height: 1.3, width: 0.68, nose: 1.15, tail: -0.82 }),
-    back: 0x34507c,
+    profile: makeProfile([[0, 0.05], [0.16, 0.3], [0.4, 0.37], [0.72, 0.17], [0.86, 0.09], [0.96, 0.074], [1, 0.08]],
+      { height: 1.3, width: 0.66, nose: 1.15, tail: -0.82 }),
+    back: 0x2e4a74,
+    flank: 0xc8d4e2,
     belly: 0xf4f6f8, // bright silver: a lake salmon fresh from the deep
     mark: specks(C(0x141c2c)),
-    fin: 0x5f6f8c,
-    tail: 'fork',
-    dorsal: { at: 0.0, h: 0.36, w: 0.3 },
-    adipose: -0.44,
+    fin: 0x66778f,
+    fins: {
+      dorsal: [{ from: 0.38, to: 0.52, h: 0.34, shape: 'tri', rays: 7 }],
+      adipose: 0.81,
+      anal: { from: 0.68, to: 0.8, h: 0.2 },
+      pectoral: { at: 0.24, len: 0.26 },
+      pelvic: { at: 0.52, len: 0.2 },
+      tail: 'fork'
+    },
     eye: 0.16,
     iris: 0xb8c0d0,
     metal: 0.32,
-    rough: 0.3
+    rough: 0.3,
+    irid: true
   },
   {
     id: 'pekka',
@@ -482,18 +519,26 @@ export const SPECIES = [
     rare: true,
     kg: [14, 21],
     blurb: 'Guldfärgad, krönt och inte alltid hemma. Ingen har sett henne två gånger samma kväll.',
-    profile: makeProfile([[0, 0.05], [0.12, 0.22], [0.3, 0.31], [0.62, 0.28], [0.86, 0.11], [1, 0.05]],
-      { height: 1.12, width: 0.8, nose: 1.35, tail: -0.85 }),
-    back: 0xd39a1c,
+    profile: makeProfile([[0, 0.07], [0.06, 0.12], [0.17, 0.2], [0.3, 0.29], [0.58, 0.28], [0.78, 0.16], [0.9, 0.1], [1, 0.096]],
+      { height: 1.12, width: 0.8, nose: 1.35, tail: -0.85, snoutFlat: 0.4 }),
+    back: 0xc8901a,
+    flank: 0xf2c454,
     belly: 0xfff0bd,
     mark: beans(C(0xfff6d8)),
     fin: 0xf2c14e,
-    tail: 'fork',
-    dorsal: { at: -0.52, h: 0.44, w: 0.36 },
+    fins: {
+      dorsal: [{ from: 0.74, to: 0.88, h: 0.38, shape: 'round', rays: 7, lean: 0.3 }],
+      anal: { from: 0.76, to: 0.89, h: 0.3 },
+      pectoral: { at: 0.3, len: 0.26 },
+      pelvic: { at: 0.56, len: 0.24 },
+      tail: 'fork'
+    },
     snout: true,
     crown: true,
     eye: 0.15,
-    iris: 0xff6a3d
+    iris: 0xff6a3d,
+    metal: 0.55,
+    rough: 0.32
   }
 ];
 
