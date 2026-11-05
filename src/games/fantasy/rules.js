@@ -68,6 +68,52 @@ export function forecast(player, round, seed) {
   return 2 + expectedGoals * goalValue + expectedAssists * 3 + cleanChance * cleanValue +
     (player.position === 'MV' ? 1 : 0) - concessionPenalty;
 }
+
+/** Public scouting information. No simulated result is consulted here. */
+export function squadForecast(squad, captain, round, seed, triple = false) {
+  return squad.reduce((sum, id) => sum + forecast(playerById(id), round, seed) *
+    (id === captain ? triple ? 3 : 2 : 1), 0);
+}
+
+export function upcomingFixtures(player, round, seed, count = 3) {
+  return Array.from({ length: Math.min(count, ROUNDS - round) }, (_, offset) => ({
+    round: round + offset,
+    difficulty: difficulty(player.club, round + offset, seed),
+    expected: forecast(player, round + offset, seed)
+  }));
+}
+
+/** Rival managers use the same budget, one-transfer rule and visible forecasts as you. */
+export function planRival(rival, round, seed) {
+  const initial = rival.squad.slice();
+  let squad = initial.slice();
+  const horizon = (ids) => ids.reduce((sum, id) => sum + forecast(playerById(id), round, seed) +
+    (round < ROUNDS - 1 ? forecast(playerById(id), round + 1, seed) * 0.35 : 0), 0);
+  let best = horizon(squad);
+  if (round > 0) {
+    initial.forEach((_, slot) => PLAYERS.forEach((player) => {
+      if (!canTransfer(initial, slot, player.id, initial)) return;
+      const next = initial.slice(); next[slot] = player.id;
+      const expected = horizon(next);
+      if (expected > best + 0.15) { best = expected; squad = next; }
+    }));
+  }
+  const captain = squad.reduce((bestId, id) =>
+    forecast(playerById(id), round, seed) > forecast(playerById(bestId), round, seed) ? id : bestId, squad[0]);
+  const now = forecast(playerById(captain), round, seed);
+  const later = Math.max(0, ...Array.from({ length: ROUNDS - round - 1 }, (_, i) =>
+    Math.max(...squad.map((id) => forecast(playerById(id), round + i + 1, seed)))));
+  const triple = !rival.tripleUsed && (now >= later || round === ROUNDS - 1);
+  return { ...rival, squad, captain, triple, tripleUsed: rival.tripleUsed || triple };
+}
+
+export function roundVerdict(actual, expected) {
+  const delta = actual - expected;
+  if (delta >= 12) return { title: 'En omgång att minnas.', detail: 'Ditt lag slog prognosen med råge.', tone: 'gold' };
+  if (delta >= 3) return { title: 'Dina val gav utdelning.', detail: 'Laget överträffade förväntningarna.', tone: 'gold' };
+  if (delta <= -8) return { title: 'Fotboll är oförutsägbart.', detail: 'Ett tufft utfall. Läs nästa spelschema innan du byter.', tone: 'calm' };
+  return { title: 'Stabilt genomfört.', detail: 'Nära prognosen. Nästa beslut kan avgöra ligan.', tone: 'calm' };
+}
 export function pointsFor(position, stats) {
   const goalValue = { MV: 10, BACK: 6, MITT: 5, ANF: 4 }[position];
   const clean = stats.conceded === 0 ? ({ MV: 4, BACK: 4, MITT: 1, ANF: 0 }[position]) : 0;

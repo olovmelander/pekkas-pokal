@@ -337,6 +337,7 @@ body.game-open {
 
 .game-mount {
   position: relative;
+  isolation: isolate;
   flex: 1;
   min-width: 0;
 }

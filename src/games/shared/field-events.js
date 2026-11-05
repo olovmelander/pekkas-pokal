@@ -1,16 +1,16 @@
 import { createArcade } from './arcade.js';
 import { createPerson, appearanceFor, POSES } from './people.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { clamp, precisionScore, jumpScore, hoopCrossing, medalFor, chargePower } from '../pentathlon/rules.js';
+import { clamp, precisionScore, jumpScore, hoopCrossing, medalFor, chargePower, croquetEnd, fieldThrowScore } from '../pentathlon/rules.js';
 
 const EVENTS = {
-  rings: { title: 'Ringkast', verb: 'HÅLL & SLÄPP', rule: 'Sikta med pilarna. Håll för kraft, släpp för att kasta. Den vita markören visar lagom längd. Tre ringar – kom så nära pinnen som möjligt.' },
+  rings: { title: 'Ringkast', verb: 'HÅLL & SLÄPP', rule: 'Sikta med pilarna. Håll för kraft, släpp för att kasta. Den prickade bågen visar kastet och den vita markören på mätaren visar lagom längd. En ring runt pinnen ger 100 poäng. Tre försök.' },
   hurdles: { title: 'Häcklopp', verb: 'HOPPA', rule: 'Du springer automatiskt. Hoppa strax före varje häck med mellanslag eller knappen. Sex rena passager ger full pott.' },
   target: { title: 'Prickkast', verb: 'LÅS SIKTET', rule: 'Siktet rör sig över tavlan. Första trycket låser sidled, andra låser höjd och kastar. Sikta mot mitten. Tre försök.' },
   jump: { title: 'Längdhopp', verb: 'HOPPA', rule: 'Ansatsen går automatiskt. Hoppa precis före den vita plankan. Övertramp ger noll. Tre försök, ditt bästa hopp räknas.' },
   balance: { title: 'Balansgång', verb: 'HÅLL BALANSEN', rule: 'Håll vänster eller höger för att hålla markören i mitten. Vinden skiftar. Klarar du hela stocken utan att falla?' },
   boule: { title: 'Boule', verb: 'HÅLL & SLÄPP', rule: 'Sikta med pilarna och håll för kraft. Släpp för att kasta när kraften ligger nära den vita markören. Kom närmare lillen än silverklotet. Tre lägen.' },
-  croquet: { title: 'Krocket', verb: 'HÅLL & SLÄPP', rule: 'Sikta med pilarna och håll för kraft. Rulla bollen genom den lysande bågen. Tre bågar, högst sex slag. Missar du får du försöka från samma plats.' }
+  croquet: { title: 'Krocket', verb: 'HÅLL & SLÄPP', rule: 'Sikta med pilarna längs den prickade linjen. Håll för kraft och släpp för att rulla genom den lysande bågen. Tre bågar, högst sex slag. Missar du får du försöka från samma plats.' }
 };
 
 export async function createFieldGames(container, config) {
@@ -34,7 +34,14 @@ export async function createFieldGames(container, config) {
   function surfaceTexture(type) {
     const canvas = document.createElement('canvas'); canvas.width = canvas.height = 512;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = type === 'wood' ? '#d5c9b0' : '#dbdfcc'; ctx.fillRect(0, 0, 512, 512);
+    ctx.fillStyle = type === 'wood' ? '#e1d1b7' : '#e4e8d8'; ctx.fillRect(0, 0, 512, 512);
+    if (type === 'grass') {
+      for (let i = 0; i < 36; i++) {
+        const patch = ctx.createRadialGradient(random() * 512, random() * 512, 8, random() * 512, random() * 512, 180);
+        patch.addColorStop(0, i % 2 ? '#81946933' : '#f1e0ad33'); patch.addColorStop(1, '#ffffff00');
+        ctx.fillStyle = patch; ctx.fillRect(0, 0, 512, 512);
+      }
+    }
     for (let i = 0; i < 7500; i++) {
       const x = random() * 512, y = random() * 512, shade = Math.round(140 + random() * 105);
       ctx.strokeStyle = `rgba(${shade},${shade},${Math.max(0, shade - 12)},${type === 'leaves' ? 0.4 : 0.27})`;
@@ -101,21 +108,43 @@ export async function createFieldGames(container, config) {
     ctx.fillText(text, 512, 130, 930);
     const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(width, width / 4), new THREE.MeshStandardMaterial({ map: texture, roughness: 0.9, side: THREE.DoubleSide }));
+    sign.material.userData.fieldTransient = true;
     sign.position.set(x, y, z); parent.add(sign); return sign;
   }
   function tree(x, z, scale = 1) {
     const g = new THREE.Group(); g.position.set(x, 0, z); g.scale.setScalar(scale); world.add(g);
     pole(0.16, 3.5, '#786c4f', 0, 1.75, 0, g);
-    for (let i = 0; i < 4; i++) {
-      const leaf = ball(1.35, ['#637b54', '#779260', '#8c9e6c', '#66895e'][i], Math.sin(i * 2) * 0.8, 3.1 + i * 0.45, Math.cos(i * 2) * 0.5, g);
-      leaf.scale.y = 0.85;
+    for (let i = 0; i < 8; i++) {
+      const angle = i * 2.399, spread = i < 6 ? 1.15 : 0.4;
+      const branch = pole(0.065, 1.8, '#786c4f', Math.sin(angle) * 0.45, 2.7, Math.cos(angle) * 0.45, g);
+      branch.rotation.z = Math.sin(angle) * 0.65; branch.rotation.x = Math.cos(angle) * 0.65;
+      const geometry = new THREE.IcosahedronGeometry(1.2, 2), positions = geometry.attributes.position;
+      for (let v = 0; v < positions.count; v++) {
+        const factor = 0.89 + Math.sin(positions.getX(v) * 7 + positions.getY(v) * 5 + i) * 0.08;
+        positions.setXYZ(v, positions.getX(v) * factor, positions.getY(v) * factor, positions.getZ(v) * factor);
+      }
+      geometry.computeVertexNormals();
+      const leaf = mesh(geometry, ['#637b54', '#779260', '#8c9e6c', '#66895e'][i % 4], Math.sin(angle) * spread, 3.25 + (i > 5 ? 1.1 : Math.sin(i) * 0.3), Math.cos(angle) * spread, g);
+      leaf.scale.set(1, 0.8 + random() * 0.3, 0.85 + random() * 0.25);
     }
   }
-  const lawn = mesh(new THREE.PlaneGeometry(100, 100), '#83976a', 0, -0.025, -4); lawn.rotation.x = -Math.PI / 2; lawn.castShadow = false;
-  box(12, 0.04, 38, config.theme === 'park' ? '#b5ae8a' : '#a5a879', 0, 0, -5);
+  const groundGeometry = new THREE.PlaneGeometry(180, 180, 48, 48);
+  const groundVertices = groundGeometry.attributes.position;
+  for (let v = 0; v < groundVertices.count; v++) {
+    const x = groundVertices.getX(v), z = groundVertices.getY(v);
+    const outside = Math.min(1, Math.max(0, Math.abs(x) - 8) / 14 + Math.max(0, z - 22) / 20);
+    groundVertices.setZ(v, outside * (1.4 + Math.sin(x * 0.12 + z * 0.09) * 1.2));
+  }
+  groundGeometry.computeVertexNormals();
+  const lawn = mesh(groundGeometry, '#83976a', 0, -0.035, -4); lawn.rotation.x = -Math.PI / 2; lawn.castShadow = false;
+  for (const x of [-5.2, 5.2]) box(1.6, 0.035, 34, '#b5ae8a', x, 0, -4);
+  for (let i = 0; i < 14; i++) {
+    const hill = ball(8 + random() * 5, i % 2 ? '#81987c' : '#94a588', -65 + i * 10, 1.6, -55 - (i % 3) * 6);
+    hill.scale.set(1.8, 0.3, 1.3); hill.castShadow = false;
+  }
   for (let i = 0; i < 28; i++) {
     const side = i % 2 ? -1 : 1;
-    tree(side * (10.7 + (i % 4) * 2.4), 17 - Math.floor(i / 2) * 4.1, 0.7 + (i % 3) * 0.2);
+    tree(side * (10 + random() * 5), 15 - Math.floor(i / 2) * 4.1 + random(), 0.75 + random() * 0.35);
   }
   for (const x of [-7.5, 7.5]) {
     for (let z = 12; z >= -24; z -= 4) {
@@ -126,12 +155,16 @@ export async function createFieldGames(container, config) {
       }
     }
   }
-  for (let i = 0; i < 35; i++) {
-    const x = (i % 2 ? -1 : 1) * (7.8 + (i % 4) * 0.5);
-    const z = 12 - i * 1.1;
+  for (let i = 0; i < 100; i++) {
+    const x = (i % 2 ? -1 : 1) * (6.8 + random() * 2.4);
+    const z = 12 - random() * 35;
     pole(0.018, 0.36, '#657b49', x, 0.18, z);
-    const flower = ball(0.09, ['#ead784', '#e7c3bd', '#e9e3c1'][i % 3], x, 0.4, z);
+    const flower = mesh(new THREE.IcosahedronGeometry(0.09, 0), ['#ead784', '#e7c3bd', '#e9e3c1'][i % 3], x, 0.4, z);
     flower.scale.y = 0.4;
+    for (let blade = 0; blade < 3; blade++) {
+      const grass = box(0.024, 0.18 + random() * 0.2, 0.015, blade % 2 ? '#859360' : '#627e50', x + Math.sin(blade * 2) * 0.15, 0.14, z + Math.cos(blade * 2) * 0.12);
+      grass.rotation.z = Math.sin(i + blade) * 0.25;
+    }
   }
   // A restrained skyline identifies the setting without pretending to reproduce the historic venue.
   if (config.theme === 'park') {
@@ -148,6 +181,9 @@ export async function createFieldGames(container, config) {
     }
   } else {
     box(7, 3.2, 5, '#9f5142', -10, 1.6, -25);
+    for (let x = -13.4; x < -6.5; x += 0.25) box(0.045, 3.15, 0.06, '#b46a50', x, 1.6, -22.46);
+    for (const x of [-13.4, -6.6]) box(0.16, 3.35, 0.12, '#f0dfb8', x, 1.65, -22.4);
+    box(0.5, 1.2, 0.55, '#735a4d', -11.2, 5.6, -25.7);
     const roof = mesh(new THREE.ConeGeometry(5.2, 2.6, 4), '#4e5552', -10, 4.35, -25); roof.rotation.y = Math.PI / 4; roof.scale.z = 0.82;
     for (const x of [-12, -8]) {
       box(1.2, 1.3, 0.12, '#f1dfb4', x, 1.8, -22.45);
@@ -157,6 +193,18 @@ export async function createFieldGames(container, config) {
     for (let i = 0; i < 7; i++) {
       const h = mesh(new THREE.CylinderGeometry(0.65, 0.65, 1.2, 16), '#c1a763', 10 + i % 3, 0.65, -20 - Math.floor(i / 3) * 1.2); h.rotation.z = Math.PI / 2;
     }
+  }
+  // Human-scale rest spots frame the competition lawn rather than a featureless lane.
+  for (const side of [-1, 1]) {
+    const x = side * 6.3, z = side < 0 ? 2.5 : -10;
+    for (let i = 0; i < 4; i++) box(0.17, 0.08, 2.3, '#aa8556', x - 0.3 + i * 0.2, 0.58, z);
+    for (const dz of [-0.8, 0.8]) {
+      box(0.7, 0.53, 0.08, '#45554b', x, 0.27, z + dz);
+      box(0.07, 1.05, 0.08, '#45554b', x + side * 0.4, 0.53, z + dz);
+    }
+    for (const y of [0.9, 1.12]) box(0.08, 0.15, 2.3, '#aa8556', x + side * 0.4, y, z);
+    const pot = mesh(new THREE.CylinderGeometry(0.5, 0.37, 0.7, 16), '#ae7456', x, 0.35, z - 1.9);
+    for (let i = 0; i < 8; i++) ball(0.16, i % 2 ? '#d3a7a4' : '#e9dcb1', Math.sin(i * 2.4) * 0.3, 0.75 + (i % 3) * 0.1, Math.cos(i * 2.4) * 0.3, pot);
   }
   // Bunting, brass trophy, picnic table and hand-lettered event sign.
   for (const x of [-7, 7]) pole(0.08, 5, '#d5c39c', x, 2.5, -19);
@@ -201,7 +249,7 @@ export async function createFieldGames(container, config) {
   const rail = document.createElement('div'); rail.className = 'field-progress'; rail.setAttribute('aria-label', 'Grenar'); a.ui.appendChild(rail);
   const stamp = document.createElement('div'); stamp.className = 'field-stamp'; stamp.textContent = `${config.location} · Sommarspelen`; a.ui.appendChild(stamp);
   const controls = document.createElement('div'); controls.className = 'field-console'; controls.hidden = true;
-  controls.innerHTML = '<div class="field-label"></div><div class="field-hint"></div><div class="field-meter"><i></i><b></b></div><div class="field-buttons"><button type="button" class="field-left" aria-label="Sikta eller balansera vänster">◀</button><button type="button" class="field-action">HÅLL & SLÄPP</button><button type="button" class="field-right" aria-label="Sikta eller balansera höger">▶</button></div>';
+  controls.innerHTML = '<div class="field-label"></div><div class="field-hint"></div><div class="field-meter"><i></i><b></b></div><div class="field-buttons"><button type="button" class="field-left" aria-label="Sikta eller balansera vänster">←</button><button type="button" class="field-action">HÅLL & SLÄPP</button><button type="button" class="field-right" aria-label="Sikta eller balansera höger">→</button></div>';
   a.ui.appendChild(controls);
   const el = (s) => controls.querySelector(s);
   const hint = el('.field-hint'), title = el('.field-label'), meter = el('.field-meter'), fill = el('.field-meter i'), marker = el('.field-meter b');
@@ -211,7 +259,8 @@ export async function createFieldGames(container, config) {
   let shot = null, readyAt = 0, target = { x: 0, z: -4 }, runnerZ = 7, jumpAt = -1, jumpData = null;
   let hurdles = [], cleared = 0, balance = 0, balancePoints = 0, falls = 0, stumble = 0;
   let targetAxis = 0, targetX = 0, targetY = 0, croquetHoops = [], hoopIndex = 0, strokes = 0;
-  let projectile, ringTarget, aimMarker, targetBoard, targetReticle, opponentBall, eventSign;
+  let projectile, ringTarget, aimMarker, targetBoard, targetReticle, opponentBall, eventSign, aimDots, croquetClub;
+  const previewPose = new THREE.Object3D();
   let lastWidth = 0, lastHeight = 0;
   const buttons = { left: false, right: false };
   const clamp01 = (v) => clamp(v, 0, 1);
@@ -227,8 +276,9 @@ export async function createFieldGames(container, config) {
   }
   function disposeEvent() {
     eventWorld.traverse((obj) => {
+      if (obj.isInstancedMesh) obj.dispose();
       obj.geometry?.dispose();
-      if (obj.material?.map) { obj.material.map.dispose(); obj.material.dispose(); }
+      if (obj.material?.userData?.fieldTransient) { obj.material.map?.dispose(); obj.material.dispose(); }
     });
     eventWorld.clear(); effectBits.length = 0;
   }
@@ -240,7 +290,7 @@ export async function createFieldGames(container, config) {
     targetAxis = 0; targetX = 0; targetY = 0; strokes = 0; hoopIndex = 0;
     target = { x: 0, z: -4 }; wind = 0.35;
     athlete.root.position.set(0, 0.02, 7); athlete.root.rotation.set(0, Math.PI, 0);
-    projectile = null; ringTarget = null; targetBoard = null; targetReticle = null; opponentBall = null; aimMarker = null;
+    projectile = null; ringTarget = null; targetBoard = null; targetReticle = null; opponentBall = null; aimMarker = null; aimDots = null; croquetClub = null;
     eventSign = label(EVENTS[kind].title, -5.8, 1.5, -13, 2.7, eventWorld);
     pole(0.06, 1.6, '#715c3c', -5.8, 0.8, -13, eventWorld);
     action.textContent = EVENTS[kind].verb;
@@ -249,12 +299,17 @@ export async function createFieldGames(container, config) {
     meter.hidden = ['hurdles', 'target', 'jump'].includes(kind); meter.classList.toggle('balance', kind === 'balance');
     fill.style.left = '0'; fill.style.width = '0%'; marker.style.left = '66.67%';
     if (['rings', 'boule', 'croquet'].includes(kind)) {
-      box(7, 0.03, 22, kind === 'boule' ? '#c1b08c' : '#7b9562', 0, 0.04, -3, eventWorld);
+      box(7, 0.03, 20, kind === 'boule' ? '#c1b08c' : '#7b9562', 0, 0.04, -2, eventWorld);
+      for (const x of [-3.65, 3.65]) box(0.13, kind === 'boule' ? 0.22 : 0.045, 20, kind === 'boule' ? '#a38050' : '#cbd0ab', x, 0.1, -2, eventWorld);
+      for (const z of [-12, 8]) box(7.4, kind === 'boule' ? 0.22 : 0.045, 0.13, kind === 'boule' ? '#a38050' : '#cbd0ab', 0, 0.1, z, eventWorld);
+      const line = mesh(new THREE.TorusGeometry(0.58, 0.025, 6, 40), '#f6e3b1', 0, 0.08, 7, eventWorld); line.rotation.x = Math.PI / 2;
+      aimDots = new THREE.InstancedMesh(new THREE.SphereGeometry(0.045, 6, 4), mat('#fff2bd'), 18); eventWorld.add(aimDots);
       if (kind === 'rings') {
         projectile = mesh(new THREE.TorusGeometry(0.46, 0.07, 10, 32), '#e5b84d', 0, 1.1, 6.3, eventWorld, 0.35);
         projectile.rotation.x = Math.PI / 2;
         ringTarget = new THREE.Group(); eventWorld.add(ringTarget);
         pole(0.075, 1.1, '#e7d19a', 0, 0.55, 0, ringTarget);
+        pole(0.08, 0.18, '#cd7f59', 0, 1.02, 0, ringTarget);
         pole(0.32, 0.1, '#a77745', 0, 0.05, 0, ringTarget);
         const ring = mesh(new THREE.TorusGeometry(0.9, 0.025, 6, 40), '#ead9ab', 0, 0.04, 0, ringTarget); ring.rotation.x = Math.PI / 2;
       } else {
@@ -264,15 +319,18 @@ export async function createFieldGames(container, config) {
           ball(0.13, '#e7cd64', 0, 0.13, 0, ringTarget);
           opponentBall = ball(0.23, '#ced3cd', 0.9, 0.23, -4, eventWorld, 0.8);
         } else {
-          croquetHoops = [{ x: -1.8, z: 2 }, { x: 1.7, z: -3 }, { x: -0.5, z: -8 }].map((h) => {
+          croquetHoops = [{ x: -1.8, z: 2 }, { x: 1.7, z: -3 }, { x: -0.5, z: -8 }].map((h, i) => {
             const g = new THREE.Group(); g.position.set(h.x, 0, h.z); eventWorld.add(g);
             for (const x of [-0.8, 0.8]) pole(0.045, 1.1, '#f0e4c5', x, 0.55, 0, g);
             box(1.65, 0.09, 0.09, '#f0e4c5', 0, 1.1, 0, g);
             const glow = mesh(new THREE.TorusGeometry(1.1, 0.025, 6, 40), '#f8cf72', 0, 0.04, 0, g); glow.rotation.x = Math.PI / 2;
+            label(String(i + 1), 0, 1.6, 0, 0.5, g);
             return { ...h, group: g, glow };
           });
-          box(0.7, 0.25, 0.25, '#80583b', 0.5, 0.2, 7.6, eventWorld);
-          pole(0.035, 1.6, '#bb965f', 0.5, 0.9, 7.6, eventWorld);
+          croquetClub = new THREE.Group(); eventWorld.add(croquetClub);
+          box(0.7, 0.25, 0.25, '#80583b', 0, 0.2, 0, croquetClub);
+          pole(0.035, 1.6, '#bb965f', 0, 0.9, 0, croquetClub);
+          croquetClub.position.set(0.4, 0, 7.55);
         }
       }
       aimMarker = mesh(new THREE.TorusGeometry(0.28, 0.025, 6, 30), '#faf2bd', 0, 0.06, -4, eventWorld); aimMarker.rotation.x = Math.PI / 2;
@@ -284,6 +342,8 @@ export async function createFieldGames(container, config) {
         disc.rotation.x = Math.PI / 2;
       }
       for (const x of [-1, 1]) pole(0.1, 3.1, '#826b46', x, 1.55, -5.15, eventWorld);
+      box(4.6, 4.6, 0.18, '#8b6a49', 0, 2.8, -5.35, eventWorld);
+      for (const x of [-2.15, 2.15]) box(0.11, 4.4, 0.1, '#dbbf85', x, 2.8, -5.22, eventWorld);
       targetReticle = mesh(new THREE.TorusGeometry(0.16, 0.035, 8, 24), '#ffffff', 0, 0, 0.4, targetBoard);
       projectile = ball(0.14, '#dcae56', 0, 1, 7, eventWorld);
     }
@@ -302,11 +362,17 @@ export async function createFieldGames(container, config) {
       } else {
         box(3, 0.04, 0.32, '#f8e7c5', 0, 0.1, -3, eventWorld);
         box(4, 0.03, 10, '#d7bc7f', 0, 0.09, -9, eventWorld);
+        for (const x of [-2.1, 2.1]) box(0.14, 0.16, 10.3, '#a38050', x, 0.12, -9, eventWorld);
+        for (let i = 0; i < 22; i++) box(3.8, 0.012, 0.018, '#bba36e', 0, 0.115, -4.3 - i * 0.42, eventWorld);
         for (let i = 1; i <= 7; i++) { box(0.3, 0.04, 0.04, '#8c784e', 2.1, 0.14, -3 - i, eventWorld); }
       }
     }
     if (kind === 'balance') {
       box(0.72, 0.5, 21, '#a38050', 0, 0.55, -2, eventWorld);
+      for (const z of [8, -12.5]) box(2.4, 0.22, 1.7, '#8b6a49', 0, 0.18, z, eventWorld);
+      for (const x of [-1.7, 1.7]) for (let z = 7; z >= -12; z -= 3) {
+        const reed = pole(0.018, 0.5, '#a5a067', x + Math.sin(z) * 0.2, 0.25, z, eventWorld); reed.rotation.z = Math.sin(z) * 0.2;
+      }
       for (let z = 7; z >= -12; z -= 3) { box(1.3, 0.4, 0.35, '#746a43', 0, 0.2, z, eventWorld); }
       athlete.root.position.y = 0.8;
     }
@@ -352,14 +418,14 @@ export async function createFieldGames(container, config) {
     a.tone(earned >= 70 ? 880 : 440, 0.25, 'sine');
     const last = eventIndex === config.events.length - 1;
     a.showPanel({ eyebrow: `${earned >= 80 ? 'En mästarinsats' : earned >= 50 ? 'Snyggt jobbat' : 'Nästa försök sitter'} · ${earned}/100 poäng`,
-      title: `${EVENTS[kind].title} klar`, body: `${earned} poäng i grenen. Totalt ${total} poäng.${kind === 'balance' ? ` ${falls} fall – balansen blir bättre med små korrigeringar.` : ''}${kind === 'jump' ? ' Ditt bästa av tre hopp räknas.' : ''}`,
+      title: `${EVENTS[kind].title} klar`, body: `<div class="field-result-number">${earned}<small>av 100 poäng</small></div><p>${points.length ? `Försöken: ${points.join(' · ')} poäng. ` : ''}${kind === 'balance' ? `${falls} fall. Små korrigeringar hjälper dig att hålla mitten.` : kind === 'jump' ? 'Ditt bästa av tre hopp räknas. Avståndet mäts från plankan.' : kind === 'croquet' ? `${hoopIndex} av 3 bågar på ${strokes} slag.` : `Totalt ${total} poäng i tävlingen.`}</p>`,
       button: last ? 'VISA RESULTAT' : 'NÄSTA GREN', onStart: () => { if (last) finishCup(); else { eventIndex++; showEvent(); } } });
   }
   function finishCup() {
     const previous = a.loadBest() || 0; a.saveBest(total); state = 'final';
     const medal = medalFor(total, config.events.length);
     a.showPanel({ eyebrow: `${config.location} · ${config.year} · ${total > previous ? 'Nytt personbästa!' : 'Ditt resultat'}`, title: `${medal} i ${config.location}`,
-      body: `${total} av ${config.events.length * 100} poäng. ${config.events.map((e, i) => `${EVENTS[e].title}: ${results[i]}`).join(' · ')}. Guld kräver 80 poäng per gren i snitt.`,
+      body: `<div class="field-result-number">${total}<small>av ${config.events.length * 100} poäng</small></div><div class="field-scorecard">${config.events.map((e, i) => `<span>${EVENTS[e].title}</span><b>${results[i]}<small>/100</small></b>`).join('')}</div><p>Guld: 80 poäng i snitt · Silver: 55 · Brons: 30.</p>`,
       button: 'SPELA IGEN', onStart: () => { eventIndex = 0; total = 0; results = []; showEvent(); } });
   }
   function startAction() {
@@ -383,9 +449,10 @@ export async function createFieldGames(container, config) {
     if (state !== 'play' || a.paused) return;
     const power = chargePower(charge);
     const start = kind === 'croquet' ? projectile.position.clone() : new THREE.Vector3(0, kind === 'rings' ? 1.2 : 0.9, 7);
-    const distance = kind === 'croquet' ? 2 + power * 7 : 3 + power * 12;
-    const end = new THREE.Vector3(kind === 'croquet' ? start.x + aim : aim + wind, kind === 'rings' ? 0.15 : 0.24, start.z - distance);
-    const p = precisionScore(Math.hypot(end.x - target.x, end.z - target.z), kind === 'boule' ? 2.5 : 3);
+    const destination = kind === 'croquet' ? croquetEnd(start, aim, power) : { x: aim + wind, z: start.z - (3 + power * 12) };
+    const end = new THREE.Vector3(destination.x, kind === 'rings' ? 0.15 : 0.24, destination.z);
+    const distance = Math.hypot(end.x - target.x, end.z - target.z);
+    const p = fieldThrowScore(kind, distance);
     shot = { t: 0, duration: kind === 'croquet' ? 1.7 : 1.2, from: start, to: end, score: p };
     a.tone(240, 0.12, 'triangle');
     if (kind === 'croquet') { strokes++; shot.pass = hoopCrossing(start, end, target); updateHUD(); }
@@ -395,9 +462,9 @@ export async function createFieldGames(container, config) {
     if (jumpData.foul) a.toast('Övertramp! Nästa försök.');
     else a.tone(440, 0.12, 'triangle');
   }
-  function completeAttempt(score) {
+  function completeAttempt(score, message = '') {
     points.push(score); attempt++; updateHUD();
-    a.toast(score >= 85 ? `Mitt i prick! +${score}` : `+${score} poäng`);
+    a.toast(message || (score >= 85 ? `Mitt i prick! +${score}` : `+${score} poäng`));
     if (score >= 70) { confetti(target); a.tone(780, 0.16, 'sine'); } else a.tone(300, 0.12, 'triangle');
     if (attempt >= 3) { finishEvent(kind === 'jump' ? Math.max(...points) : points.reduce((sum, n) => sum + n, 0) / 3); return; }
     readyAt = time + 1.1; target = { x: attempt % 2 ? -1.8 : 1.6, z: -4 - attempt * 0.4 };
@@ -405,7 +472,7 @@ export async function createFieldGames(container, config) {
     if (projectile) projectile.position.set(0, kind === 'rings' ? 1.2 : 0.24, 7);
     updateTargets(); hint.textContent = instruction();
   }
-  function cancelInput() { holding = false; buttons.left = buttons.right = false; action.classList.remove('held'); }
+  function cancelInput() { if (holding) charge = 0; holding = false; buttons.left = buttons.right = false; action.classList.remove('held'); }
   const keyDown = (e) => {
     if (e.code === 'Space' && state === 'play') {
       e.preventDefault();
@@ -442,10 +509,11 @@ export async function createFieldGames(container, config) {
       camera.updateProjectionMatrix();
     }
     const racing = kind === 'hurdles' || kind === 'jump' || kind === 'balance';
-    const follow = state === 'play' && racing ? Math.min(0, athlete.root.position.z) : 0;
+    const follow = state === 'play' && racing ? Math.min(0, athlete.root.position.z) : state === 'play' && kind === 'croquet' ? ((shot ? shot.from.z : projectile.position.z) + target.z) / 2 - 0.4 : 0;
     if (state === 'play') {
-      cameraGoal.set(portrait ? 2.8 : 6, portrait ? 19 : 14, (portrait ? 23 : 19) + follow);
-      lookGoal.set(h < 500 && !portrait ? 2.5 : 0, 0.7, follow - 1);
+      const targeting = kind === 'target';
+      cameraGoal.set(portrait ? (targeting ? 1.1 : 1.4) : 6.5, targeting ? 7.4 : racing ? 9.5 : 10.5, (targeting ? 13.5 : racing ? 15 : 17.5) + follow);
+      lookGoal.set(h < 500 && !portrait ? 2.2 : 0, targeting ? 2.1 : 0.7, follow + (targeting ? -3.5 : racing ? -1 : 0.4));
     } else {
       cameraGoal.set(portrait ? 4 : 10, portrait ? 24 : 19, portrait ? 28 : 24);
       lookGoal.set(0, 0, -4);
@@ -474,20 +542,35 @@ export async function createFieldGames(container, config) {
     aim = clamp(aim + direction * dt * 3.5, -4.4, 4.4);
     if (!meter.classList.contains('balance')) { fill.style.width = `${chargePower(charge) * 100}%`; }
     if (['rings', 'boule', 'croquet'].includes(kind)) {
+      if (kind === 'croquet') {
+        const from = shot ? shot.from : projectile.position;
+        athlete.root.position.set(from.x + 0.6, 0.05, from.z + 0.8);
+        croquetClub.position.set(from.x + 0.2, 0, from.z + 0.5);
+        croquetClub.rotation.x = shot ? Math.sin(Math.min(1, shot.t / 0.35) * Math.PI) * -0.4 : holding ? -0.18 : 0;
+      }
       if (aimMarker) {
-        const startZ = kind === 'croquet' ? projectile.position.z : 7;
-        aimMarker.position.x = kind === 'croquet' ? projectile.position.x + aim : aim + wind;
-        aimMarker.position.z = target.z;
+        const start = kind === 'croquet' ? projectile.position : { x: 0, z: 7 };
+        const idealPower = kind === 'croquet' ? clamp01((Math.hypot(target.x - start.x, target.z - start.z) + 0.7 - 2) / 7) : clamp01((start.z - target.z - 3) / 12);
+        const previewPower = holding ? chargePower(charge) : idealPower;
+        const end = kind === 'croquet' ? croquetEnd(start, aim, previewPower) : { x: aim + wind, z: start.z - (3 + previewPower * 12) };
+        aimMarker.position.set(end.x, 0.075, end.z);
         aimMarker.visible = !shot;
-        marker.style.left = `${clamp01((startZ - target.z - (kind === 'croquet' ? 2 : 3)) / (kind === 'croquet' ? 7 : 12)) * 100}%`;
+        marker.style.left = `${idealPower * 100}%`;
+        aimDots.visible = !shot && time >= readyAt;
+        for (let i = 0; i < 18; i++) {
+          const k = (i + 1) / 19;
+          previewPose.position.set(start.x + (end.x - start.x) * k, kind === 'croquet' ? 0.1 : (kind === 'rings' ? 1.2 : 0.9) * (1 - k) + 0.2 * k + Math.sin(k * Math.PI) * 3.3, start.z + (end.z - start.z) * k);
+          previewPose.updateMatrix(); aimDots.setMatrixAt(i, previewPose.matrix);
+        }
+        aimDots.instanceMatrix.needsUpdate = true;
       }
       if (!shot && time >= readyAt) {
-        hint.textContent = kind === 'croquet' ? `Båge ${hoopIndex + 1}/3 · ${6 - strokes} slag kvar · sikta med ← →` : `Sikta ← → · ${kind === 'rings' ? `vind ${wind > 0 ? '→' : '←'}` : 'närmast lillen vinner'} · håll & släpp`;
+        hint.textContent = holding ? `${Math.round(chargePower(charge) * 100)} % kraft · släpp vid den vita markören` : kind === 'croquet' ? `Båge ${hoopIndex + 1}/3 · ${6 - strokes} slag kvar · följ den prickade linjen` : `Sikta ← → · ${kind === 'rings' ? `vind ${wind > 0 ? '→' : '←'}` : 'närmast lillen ger bonus'} · håll & släpp`;
       }
     }
     if (kind === 'target' && !shot) {
-      if (!targetAxis) targetX = Math.sin(time * 2.1) * 2.2;
-      targetY = Math.sin(time * 2.6 + 0.8) * 1.8;
+      if (!targetAxis) targetX = Math.sin(time * (1.65 + attempt * 0.2)) * 2.2;
+      targetY = Math.sin(time * (2.1 + attempt * 0.2) + 0.8) * 1.8;
       targetReticle.position.set(targetX, targetY, 0.42);
     }
     if (shot) {
@@ -505,7 +588,10 @@ export async function createFieldGames(container, config) {
           } else { projectile.position.copy(result.from); a.toast('Utanför bågen – justera siktet.'); }
           if (hoopIndex >= 3 || strokes >= 6) finishEvent(hoopIndex * 30 + (hoopIndex === 3 ? (6 - strokes) * 10 / 3 : 0));
           else { aim = 0; charge = 0; readyAt = time + 0.65; updateTargets(); updateHUD(); }
-        } else completeAttempt(result.score);
+        } else {
+          const distance = Math.hypot(result.to.x - target.x, result.to.z - target.z);
+          completeAttempt(result.score, kind === 'boule' ? `${distance.toFixed(2)} m till lillen · ${distance < 0.92 ? 'närmast!' : 'silverklotet är närmare'} · ${result.score} p` : kind === 'rings' && distance <= 0.45 ? 'Runt pinnen! 100 poäng' : '');
+        }
       }
     }
     if (kind === 'hurdles') {
@@ -518,7 +604,7 @@ export async function createFieldGames(container, config) {
         if (height > 0.65) { cleared++; a.tone(600 + cleared * 50, 0.08, 'sine'); a.toast(`Rent! ${cleared}/6`); } else { h.group.rotation.x = -1.15; stumble = 0.7; a.tone(130, 0.15, 'triangle'); a.toast('Riven häck – hoppa lite tidigare.'); }
       }
       const next = hurdles.find((h) => !h.passed);
-      hint.textContent = next ? `${runnerZ - next.z < 2 ? 'HOPPA NU!' : 'Nästa häck'} · ${Math.max(0, runnerZ - next.z).toFixed(1)} m · ${cleared}/6 rena` : 'Sista metrarna – mot mål!';
+      hint.textContent = next ? `${runnerZ - next.z < 1.65 ? 'HOPPA NU!' : 'Nästa häck'} · ${Math.max(0, runnerZ - next.z).toFixed(1)} m · ${cleared}/6 rena` : 'Sista metrarna – mot mål!';
       athlete.setPose(POSES.brisk(t * 11));
       if (runnerZ <= -18) finishEvent(cleared / 6 * 100);
     } else if (kind === 'jump') {
@@ -530,12 +616,12 @@ export async function createFieldGames(container, config) {
       }
       if (jumpAt >= 0) {
         const phase = clamp01((time - jumpAt) / 1.4);
-        athlete.root.position.set(0, Math.sin(phase * Math.PI) * (jumpData.foul ? 0.4 : 2.1), runnerZ - phase * jumpData.distance);
+        athlete.root.position.set(0, Math.sin(phase * Math.PI) * (jumpData.foul ? 0.4 : 2.1), runnerZ - phase * jumpData.travel);
         athlete.setPose(POSES.ready(t));
-        if (phase >= 1) { const score = jumpData.points; a.toast(jumpData.foul ? 'Övertramp' : `${jumpData.distance.toFixed(2)} meter!`); completeAttempt(score); }
+        if (phase >= 1) { const score = jumpData.points; completeAttempt(score, jumpData.foul ? 'Övertramp – nästa chans väntar' : `${jumpData.distance.toFixed(2)} meter · ${score} poäng`); }
       } else athlete.root.position.set(0, 0.05, runnerZ);
     } else if (kind === 'balance') {
-      const gust = Math.sin(time * 1.7) * 0.34 + Math.sin(time * 0.6 + 1) * 0.22;
+      const gust = (Math.sin(time * 1.7) * 0.34 + Math.sin(time * 0.6 + 1) * 0.22) * Math.min(1, 0.45 + time / 10);
       balance += (gust + balance * 0.4 + direction * 1.25) * dt;
       if (Math.abs(balance) > 1) { falls++; balance = Math.sign(balance) * 0.45; stumble = 0.8; a.toast('Oj! Upp på stocken igen.'); a.tone(170, 0.1, 'triangle'); }
       stumble = Math.max(0, stumble - dt);

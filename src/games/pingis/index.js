@@ -39,6 +39,7 @@ import { Scoreboard } from './scoreboard.js';
 import { createPost } from './post.js';
 import { guardRenderer, RenderWatchdog, gfxNotice, precompile } from '../shared/gfx.js';
 import { buildHud, MEDAL_NAMES } from './hud.js';
+import { movementKey, sampleFlick } from './input.js';
 
 /** Fill the whole stage on desktop; the camera reframes per aspect. */
 export const layout = 'full';
@@ -206,6 +207,7 @@ export async function createPingis(container) {
 
   const canvasHost = document.createElement('div');
   canvasHost.className = 'pb-canvas';
+  canvasHost.tabIndex = -1;
   container.appendChild(canvasHost);
 
   const hudHost = document.createElement('div');
@@ -939,7 +941,7 @@ export async function createPingis(container) {
     }
     me.swing = 1;
     me.swingSpin = spin;
-    onPlayerShot(spin, side, power, smash);
+    onPlayerShot(spin, side, power, smash, Math.abs(dx) / REACH);
     return true;
   }
 
@@ -1154,13 +1156,14 @@ export async function createPingis(container) {
     }
   }
 
-  function onPlayerShot(spin, side, power, smash) {
+  function onPlayerShot(spin, side, power, smash, contact) {
     if (!renderOn) return;
     // Say what you just played: the spin, in its colour, by the bat
     const word = smash ? 'SMASH' : spin > 0.25 ? 'TOPSPIN' : spin < -0.25 ? 'BACKSPIN' : 'PLATT';
     const arrow = side > 0.22 ? ' →' : side < -0.22 ? ' ←' : '';
     const strength = Math.abs(spin) > 0.7 ? '+' : '';
-    popScore(`${word}${strength}${arrow}`, tmpV.set(me.x, PADDLE_Y + 0.25, HITZ), 'pg-spinpop', spinCss(spin, side));
+    popScore(`${contact < 0.25 && !smash ? 'REN TRÄFF · ' : ''}${word}${strength}${arrow}`, tmpV.set(me.x, PADDLE_Y + 0.25, HITZ), 'pg-spinpop', spinCss(spin, side));
+    if (contact < 0.25) rings.spawn(tmpV, tmpC.set(0xffe7b0), 0.24, 0.22, flatQ.copy(camera.quaternion));
     if (power > 0.82 && !smash) {
       sfx.swish(0.18);
       fovPunch = Math.max(fovPunch, 1.6); // a drive you can feel in the lens
@@ -1559,6 +1562,7 @@ export async function createPingis(container) {
   /* ---- Input ------------------------------------------------------------ */
 
   let dragging = false;
+  let activePointer = null;
   let helpOpen = false;
   let lastPX = 0;
   let lastPY = 0;
@@ -1588,7 +1592,7 @@ export async function createPingis(container) {
 
   function onPointerDown(e) {
     sfx.resume();
-    if (blocked(e)) return;
+    if (blocked(e) || e.isPrimary === false || activePointer !== null || (e.pointerType === 'mouse' && e.button !== 0)) return;
     if (state.phase === 'replay') {
       endReplay();
       return;
@@ -1598,6 +1602,9 @@ export async function createPingis(container) {
       return;
     }
     dragging = true;
+    activePointer = e.pointerId;
+    canvasHost.setPointerCapture?.(e.pointerId);
+    me.dragVX = me.dragVY = 0;
     hud.ghost(false);
     lastPX = e.clientX;
     lastPY = e.clientY;
@@ -1606,9 +1613,10 @@ export async function createPingis(container) {
   }
 
   function onPointerMove(e) {
+    if (helpOpen || (activePointer !== null && activePointer !== e.pointerId)) return;
     const mouse = e.pointerType === 'mouse';
     if (mouse) {
-      if (!container.contains(e.target) || blocked(e)) return;
+      if (!dragging && (!container.contains(e.target) || blocked(e))) { lastPT = 0; return; }
       mouseT = performance.now();
     } else if (!dragging) {
       return;
@@ -1616,34 +1624,71 @@ export async function createPingis(container) {
     // The event's own timestamp, not the handler's clock: on a busy phone
     // handlers run late and bunched, which would read a flick as a crawl
     const now = e.timeStamp || performance.now();
-    const dt = Math.max(8, now - lastPT) / 1000;
     // Flick velocity in "screen heights per second", smoothed
     const rect = canvasHost.getBoundingClientRect();
-    const vx = (e.clientX - lastPX) / rect.width / dt;
-    const vy = (e.clientY - lastPY) / rect.height / dt;
-    me.dragVX = me.dragVX * 0.6 + vx * 0.4;
-    me.dragVY = me.dragVY * 0.6 + vy * 0.4;
+    const velocity = sampleFlick({ x: lastPX, y: lastPY, time: lastPT }, { x: e.clientX, y: e.clientY, time: now }, rect.width, rect.height);
+    me.dragVX = velocity.fresh ? 0 : me.dragVX * 0.6 + velocity.x * 0.4;
+    me.dragVY = velocity.fresh ? 0 : me.dragVY * 0.6 + velocity.y * 0.4;
     lastPX = e.clientX;
     lastPY = e.clientY;
     lastPT = now;
     me.aimX = aimFrom(e);
   }
 
-  function onPointerUp() {
-    if (dragging && state.phase === 'serve' && myServe()) {
+  function onPointerUp(e) {
+    if (activePointer === null || e.pointerId !== activePointer) return;
+    const serve = dragging && !helpOpen && state.phase === 'serve' && myServe();
+    dragging = false;
+    activePointer = null;
+    if (serve) {
       // Two serves of its own, and a finger no longer needs the ghost
       if (++ghostServes >= 2) ghostSeen = true;
       playerServe();
     }
-    dragging = false;
+  }
+
+  function cancelGesture(e) {
+    if (e && (activePointer === null || e.pointerId !== activePointer)) return;
+    const id = activePointer;
+    activePointer = null; dragging = false; lastPT = 0;
+    me.dragVX = me.dragVY = 0;
+    if (id !== null && canvasHost.hasPointerCapture?.(id)) canvasHost.releasePointerCapture(id);
+  }
+
+  function clearInput() {
+    cancelGesture();
+    Object.keys(keys).forEach(key => { keys[key] = false; });
+    mouseT = -Infinity;
+    me.vx = 0;
+  }
+
+  function onBlur() {
+    clearInput();
+    if (['intro', 'serve', 'rally', 'point', 'replay'].includes(state.phase)) setHelp(true);
   }
 
   function onKeyDown(e) {
-    if (e.key === 'ArrowLeft' || e.key === 'a') keys.left = true;
-    else if (e.key === 'ArrowRight' || e.key === 'd') keys.right = true;
-    else if (e.key === 'ArrowUp' || e.key === 'w') keys.up = true;
-    else if (e.key === 'ArrowDown' || e.key === 's') keys.down = true;
-    else if (e.key === ' ') {
+    if (e.key === '?' || e.code === 'KeyP' || (e.key === 'Escape' && helpOpen)) {
+      e.preventDefault(); e.stopPropagation();
+      if (!e.repeat) setHelp(e.key === 'Escape' ? false : !helpOpen);
+      return;
+    }
+    if (helpOpen) {
+      if (e.key === 'Tab') { e.preventDefault(); hud.el.help.querySelector('button').focus(); }
+      return;
+    }
+    const movement = movementKey(e);
+    if (movement) {
+      e.preventDefault();
+      cancelGesture();
+      mouseT = -Infinity;
+      keys[movement] = true;
+      return;
+    }
+    if (e.repeat) return;
+    // Focused menu buttons retain native keyboard activation (including opponent selection).
+    if ((e.key === ' ' || e.key === 'Enter') && e.target.closest?.('button')) return;
+    if (e.key === ' ') {
       e.preventDefault();
       sfx.resume();
       if (helpOpen) return;
@@ -1662,27 +1707,27 @@ export async function createPingis(container) {
       } else if (state.phase === 'over') {
         again();
       }
-    } else if (e.key === '?' || (e.key === 'Escape' && helpOpen)) {
-      // Escape closes the help card here; the site closes the game on it
-      // otherwise, so a consumed Escape must not reach the site's handler
-      if (e.key === 'Escape') e.stopPropagation();
-      setHelp(!helpOpen);
     } else if (e.key === 'Escape' && state.phase === 'replay') {
+      e.preventDefault();
       e.stopPropagation();
       endReplay();
     }
   }
 
   function onKeyUp(e) {
-    if (e.key === 'ArrowLeft' || e.key === 'a') keys.left = false;
-    else if (e.key === 'ArrowRight' || e.key === 'd') keys.right = false;
-    else if (e.key === 'ArrowUp' || e.key === 'w') keys.up = false;
-    else if (e.key === 'ArrowDown' || e.key === 's') keys.down = false;
+    const movement = movementKey(e);
+    if (movement) keys[movement] = false;
   }
 
   function setHelp(open) {
+    clearInput();
     helpOpen = open;
     hud.el.help.hidden = !open;
+    if (open) hud.setStroke(0);
+    hudHost.querySelector('#pg-info').setAttribute('aria-expanded', String(open));
+    if (open) sfx.ctx?.suspend();
+    else sfx.resume();
+    if (!document.hidden && document.hasFocus()) (open ? hud.el.help.querySelector('button') : canvasHost).focus({ preventScroll: true });
   }
 
   function onClick(e) {
@@ -1697,6 +1742,7 @@ export async function createPingis(container) {
       else if (act === 'again') again();
       else if (act === 'menu') showMenu();
       else if (act === 'help-close') setHelp(false);
+      canvasHost.focus({ preventScroll: true });
       return;
     }
     if (e.target === hud.el.help) setHelp(false); // tap beside the card closes it
@@ -1711,6 +1757,9 @@ export async function createPingis(container) {
   canvasHost.addEventListener('pointerdown', onPointerDown);
   window.addEventListener('pointermove', onPointerMove);
   window.addEventListener('pointerup', onPointerUp);
+  window.addEventListener('pointercancel', cancelGesture);
+  canvasHost.addEventListener('lostpointercapture', cancelGesture);
+  window.addEventListener('blur', onBlur);
   window.addEventListener('keydown', onKeyDown, true); // capture: ahead of the site's Escape
   window.addEventListener('keyup', onKeyUp);
 
@@ -1718,6 +1767,7 @@ export async function createPingis(container) {
 
   let viewW = 1;
   let viewH = 1;
+  let resizePicture = null;
   function resize() {
     const rect = canvasHost.getBoundingClientRect();
     viewW = Math.max(1, Math.floor(rect.width));
@@ -1738,6 +1788,7 @@ export async function createPingis(container) {
         Math.round(viewW * pixelRatio * 0.5), Math.round(viewH * pixelRatio * 0.5));
     }
     hall.refs.dust.material.uniforms.uPR.value = pixelRatio * (viewH / 900 + 0.4);
+    resizePicture?.();
   }
   const ro = new ResizeObserver(resize);
   ro.observe(canvasHost);
@@ -1827,6 +1878,10 @@ export async function createPingis(container) {
     const rawDt = clampDt(now - last);
     last = now;
     if (!running || frozen) return;
+    if (helpOpen) {
+      if (renderOn) drawFrame();
+      return;
+    }
     frameT += rawDt;
 
     // Hit-stop freezes the rules for a beat, never the picture
@@ -2117,7 +2172,7 @@ export async function createPingis(container) {
     camLook.lerp(tLook, k);
     camFov += (fov - camFov) * k;
     camera.position.copy(camPos);
-    if (shakeT > 0) {
+    if (shakeT > 0 && dt > 0) {
       shakeT -= dt;
       if (!reduceMotion) {
         camera.position.x += (vrand() - 0.5) * 0.03;
@@ -2133,6 +2188,7 @@ export async function createPingis(container) {
   function renderFrame(dt, t) {
     const replaying = state.phase === 'replay';
     const v = replaying ? replayView() : liveView(dt);
+    hud.setStroke(!helpOpen && (state.phase === 'serve' || state.phase === 'rally') ? -me.dragVY * 0.3 : 0);
     if (!replaying) record(v);
 
     /* The dead ball carries on bouncing for the picture */
@@ -2285,16 +2341,23 @@ export async function createPingis(container) {
   // markers included — compile visits hidden objects too): compile it all
   // for the target the first frame will actually render into
   await precompile(renderer, scene, camera, { target: usePost ? post.composer.renderTarget1 : null });
+  resizePicture = () => {
+    camCut = true;
+    updateCamera(state.phase === 'replay' ? replayView() : liveView(0), frameT, 0);
+    hall.updateReflections(camera.position);
+    if (renderOn) drawFrame();
+  };
 
   showMenu();
   raf = requestAnimationFrame(tick);
 
   const onVisibility = () => {
+    if (document.hidden) onBlur();
     running = !document.hidden;
     last = performance.now();
     if (sfx.ctx) {
       if (document.hidden) sfx.ctx.suspend();
-      else sfx.ctx.resume();
+      else if (!helpOpen) sfx.ctx.resume();
     }
   };
   document.addEventListener('visibilitychange', onVisibility);
@@ -2381,6 +2444,9 @@ export async function createPingis(container) {
     canvasHost.removeEventListener('pointerdown', onPointerDown);
     window.removeEventListener('pointermove', onPointerMove);
     window.removeEventListener('pointerup', onPointerUp);
+    window.removeEventListener('pointercancel', cancelGesture);
+    canvasHost.removeEventListener('lostpointercapture', cancelGesture);
+    window.removeEventListener('blur', onBlur);
     window.removeEventListener('keydown', onKeyDown, true);
     window.removeEventListener('keyup', onKeyUp);
     realTimers.forEach((id) => clearTimeout(id));

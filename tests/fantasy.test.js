@@ -1,10 +1,37 @@
 import { describe, it, expect } from 'vitest';
 import {
   BUDGET, PLAYERS, DEFAULT_SQUAD, validSquad, squadCost, canTransfer,
-  pointsFor, scoreSquad, difficulty, performance, RIVALS, rankStandings, undoTransfer
+  pointsFor, scoreSquad, difficulty, performance, RIVALS, rankStandings, undoTransfer,
+  squadForecast, upcomingFixtures, planRival, forecast, playerById, roundVerdict
 } from '../src/games/fantasy/rules.js';
 
 describe('Fantasy squad and season rules', () => {
+  it('makes captain upside and upcoming fixture forecasts internally consistent', () => {
+    const normal = squadForecast(DEFAULT_SQUAD, 'brook', 0, 123);
+    const triple = squadForecast(DEFAULT_SQUAD, 'brook', 0, 123, true);
+    expect(triple - normal).toBeCloseTo(forecast(playerById('brook'), 0, 123));
+    expect(upcomingFixtures(playerById('brook'), 3, 123).map((f) => f.round)).toEqual([3, 4]);
+    expect(upcomingFixtures(playerById('brook'), 4, 123)[0].expected).toBe(forecast(playerById('brook'), 4, 123));
+    expect(roundVerdict(60, 40).tone).toBe('gold');
+    expect(roundVerdict(20, 40).title).toBe('Fotboll är oförutsägbart.');
+  });
+  it('lets rival managers plan fairly with one legal transfer and one season chip', () => {
+    for (const source of RIVALS) {
+      let rival = { ...source, squad: source.squad.slice(), tripleUsed: false };
+      let chips = 0;
+      for (let round = 0; round < 5; round++) {
+        const next = planRival(rival, round, 4);
+        expect(validSquad(next.squad)).toBe(true);
+        expect(next.squad.filter((id, i) => id !== rival.squad[i]).length).toBeLessThanOrEqual(round === 0 ? 0 : 1);
+        expect(next.squad).toContain(next.captain);
+        // Identical public fixtures produce identical decisions despite different match-result seeds.
+        expect(planRival(rival, round, 7)).toEqual(next);
+        chips += Number(next.triple);
+        rival = next;
+      }
+      expect(chips).toBe(1);
+    }
+  });
   it('starts with a valid affordable five-player formation', () => {
     expect(validSquad(DEFAULT_SQUAD)).toBe(true);
     expect(squadCost(DEFAULT_SQUAD)).toBeLessThanOrEqual(BUDGET);

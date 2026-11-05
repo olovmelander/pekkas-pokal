@@ -21,7 +21,9 @@ Alla grenar ger högst 1 000 poäng, sammanlagt 5 000. Turneringen har instrukti
 
 ## Uttryck och teknik
 
-En rödmålad lada, björkar/tallar, halmbalar, mjölkkannor, vagnshjul och glödlampor bildar gården i varmt kvällsljus. Grenarna har egna synliga redskap: luftgevär och ringtavla, barkförsedda vedträn, gummistövel, U-formad metallhästsko och pinne, planka/spikar/hammare. Personerna återanvänder sajtens gemensamma figurmodell. Statisk geometri slås ihop per material för mobilprestanda; inga externa bild- eller ljudfiler behövs.
+En rödmålad lada, björkar/tallar, halmbalar, mjölkkannor, vagnshjul och glödlampor bildar gården i varmt kvällsljus. Grenarna har egna synliga redskap: luftgevär och ringtavla, barkförsedda vedträn, gummistövel, U-formad metallhästsko och pinne, planka/spikar/hammare. Personerna återanvänder sajtens gemensamma figurmodell. Procedurgenererade träådror, halm, grus och gräs ger ytorna struktur. Den oregelbundna grusgången, instansierade grässtrån, mjukare lövkronor och kullarna skapar djup. Statisk geometri slås ihop per material för mobilprestanda; inga externa bild- eller ljudfiler behövs.
+
+Fem grenmarkörer visar turneringens framsteg. Geväret använder en tryckt tioringad tavla med tydligt sikte. En ljus stödyta visar var veden ska landa och blir grön vid ren placering. Stövelns streckade förhandsbana följer samma fysik som själva kastet. Hammarmätaren glöder när timingen är rätt. Varje gren har en egen kamerakomposition för stående mobil och större skärm.
 
 Stora pekknappar och tangentbord använder samma spelregler. Mobilen kan dra gevärssiktet direkt på tavlan och har extra upp/ned-knappar. Paus och fokusförlust nollställer hållna kontroller. Spelets resurser och lyssnare städas vid stängning. Reducerat grafikläge följer den gemensamma spelmotorn.
 

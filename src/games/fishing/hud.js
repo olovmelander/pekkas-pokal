@@ -88,7 +88,7 @@ export function buildHud(root, zones, species, bottom, touch) {
           <button class="pb-btn" id="fg-start">Kasta i!</button>
           <button class="fi-btn-ghost" id="fi-book-open">${BOOK_ICON}<span>Fångstdagbok</span><b id="fi-book-count">0/6</b></button>
         </div>
-        ${touch ? '' : '<p class="fi-keys"><kbd>Mellanslag</kbd> kastar i · <kbd>←</kbd><kbd>→</kbd> styr · <kbd>?</kbd> regler</p>'}
+        ${touch ? '' : '<p class="fi-keys"><kbd>Mellanslag</kbd> kastar i · <kbd>←</kbd><kbd>→</kbd> styr · <kbd>P</kbd> paus · <kbd>?</kbd> regler</p>'}
       </div>
     </div>
 
@@ -102,12 +102,12 @@ export function buildHud(root, zones, species, bottom, touch) {
       </div>
     </div>
 
-    <button class="pb-info" id="fg-info" aria-label="Så spelar du">?</button>
+    <button class="pb-info" id="fg-info" aria-label="Pausa och visa fiskeregler">?</button>
 
     <div class="pb-help" id="fg-help" hidden>
       <div class="pb-help-card">
         <h3>Så fiskar du</h3>
-        <p class="pb-help-sub">Pekkas Fiske</p>
+        <p class="pb-help-sub">Spelet är pausat · fisken och dina bonusar väntar</p>
         <ul class="pb-help-list">
           <li><i style="--c:#7fd8e8"></i><b>Nedåt — väj</b> Slipp förbi fisken: varje fisk du väjer för höjer multiplikatorn, och en riktigt snäv passering ger extra. Nuddar du en fisk krokas den direkt.</li>
           <li><i style="--c:#8b93ad"></i><b>Skräp</b> Stövlar, burkar och cykeldäck bränner kastet och nollar multiplikatorn.</li>

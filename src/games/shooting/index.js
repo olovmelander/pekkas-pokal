@@ -51,6 +51,8 @@ import { buildShotgun } from './gun.js';
 import { buildGrass, buildSeedHeads } from './grass.js';
 import { Particles, Shards, ShotCloud, buildAmbient } from './fx.js';
 import { buildHud, cardHtml, startPanelHtml, endPanelHtml, fmt } from './hud.js';
+import { createGameClock } from '../shared/game-clock.js';
+import { aimKey, stepKeyboardAim, touchAimOffset } from './input.js';
 
 /** Fill the whole stage: a wide evening vista is this game's hero shot. */
 export const layout = 'full';
@@ -144,6 +146,7 @@ function writeBest(best) {
 export async function createShooting(container) {
   const canvasHost = document.createElement('div');
   canvasHost.className = 'pb-canvas sk-canvas';
+  canvasHost.tabIndex = -1;
   container.appendChild(canvasHost);
 
   const hudHost = document.createElement('div');
@@ -499,10 +502,14 @@ export async function createShooting(container) {
   let countUp = null;
   const pending = []; // shots in flight: { t, records, shotDir, gold }
   const timers = new Set();
+  const flowClock = createGameClock();
   const aim = { x: 0, y: 0.12 }; // NDC
   const finger = { x: 0, y: 0, touch: false }; // NDC of the finger under a touch aim
   const swingLog = []; // { t, dir } — the last ~150 ms of aim directions
   let tracking = false;
+  let activePointer = null;
+  let keyboardAim = false;
+  const aimKeys = { left: false, right: false, up: false, down: false, fine: false };
   const lead = { t: 0, center: new THREE.Vector3(), clay: new THREE.Vector3(), dots: [], radius: 0 };
   const follow = { yaw: 0, pitch: 0 };
   const flare = { t: 0, pos: new THREE.Vector3() };
@@ -519,12 +526,17 @@ export async function createShooting(container) {
   /* ---- Small helpers --------------------------------------------------- */
 
   function later(fn, ms) {
-    const id = setTimeout(() => {
+    const id = flowClock.schedule(() => {
       timers.delete(id);
       fn();
-    }, ms);
+    }, ms / 1000);
     timers.add(id);
     return id;
+  }
+
+  function cancelLater(id) {
+    flowClock.cancel(id);
+    timers.delete(id);
   }
 
   function serie() {
@@ -534,7 +546,7 @@ export async function createShooting(container) {
   function toast(msg, big = false) {
     hud.toast.textContent = msg;
     hud.toast.className = `pb-toast show${big ? ' big' : ''}`;
-    clearTimeout(state.toastId);
+    cancelLater(state.toastId);
     state.toastId = later(() => {
       hud.toast.className = 'pb-toast';
     }, big ? 1700 : 1100);
@@ -555,7 +567,7 @@ export async function createShooting(container) {
   function setPhase(txt, ms = 2800) {
     hud.phase.textContent = txt;
     hud.phase.classList.toggle('show', !!txt);
-    clearTimeout(state.phaseId);
+    cancelLater(state.phaseId);
     if (txt) {
       state.phaseId = later(() => hud.phase.classList.remove('show'), ms);
     }
@@ -566,7 +578,7 @@ export async function createShooting(container) {
     state.hintsShown[key] = true;
     hud.hint.textContent = txt;
     retrigger(hud.hint, 'show');
-    clearTimeout(state.hintId);
+    cancelLater(state.hintId);
     state.hintId = later(() => hud.hint.classList.remove('show'), 4200);
   }
 
@@ -690,9 +702,13 @@ export async function createShooting(container) {
   /* ---- Flow ------------------------------------------------------------ */
 
   function startGame() {
+    clearInput();
+    keyboardAim = false;
+    hud.cross.classList.remove('shot', 'confirmed');
+    canvasHost.focus({ preventScroll: true });
     sfx.resume();
     // Nothing from the last round may fire into this one
-    timers.forEach((id) => clearTimeout(id));
+    timers.forEach(cancelLater);
     timers.clear();
     hud.pops.innerHTML = '';
     hideLead();
@@ -1100,6 +1116,8 @@ export async function createShooting(container) {
   function fire() {
     if (state.phase !== 'flight' || state.shells <= 0 || helpOpen) return;
     state.shells--;
+    retrigger(hud.cross, 'shot');
+    later(() => hud.cross.classList.remove('shot'), 160);
     renderShells();
     sfx.boom();
     recoil = 1;
@@ -1166,6 +1184,8 @@ export async function createShooting(container) {
       const hits = live.filter((r) => r.hit);
       if (hits.length) {
         hits.forEach((r) => smash(r.clay, r.ang / r.r));
+        retrigger(hud.cross, 'confirmed');
+        later(() => hud.cross.classList.remove('confirmed'), 260);
       } else if (live.length) {
         missShot(live.slice().sort((a, b) => a.ang / a.r - b.ang / b.r)[0]);
       }
@@ -1270,8 +1290,8 @@ export async function createShooting(container) {
   function pointerNdc(e) {
     const rect = canvasHost.getBoundingClientRect();
     return {
-      x: ((e.clientX - rect.left) / rect.width) * 2 - 1,
-      y: -(((e.clientY - rect.top) / rect.height) * 2 - 1)
+      x: Math.max(-0.985, Math.min(0.985, ((e.clientX - rect.left) / rect.width) * 2 - 1)),
+      y: Math.max(-0.985, Math.min(0.985, -(((e.clientY - rect.top) / rect.height) * 2 - 1)))
     };
   }
 
@@ -1284,10 +1304,7 @@ export async function createShooting(container) {
    * offset eases off near the top edge so the whole sky stays reachable.
    */
   function touchOffset(fingerY) {
-    const px = Math.min(92, view.h * 0.12);
-    // fingerY is NDC (+1 = top). Within the top band, shrink the lift.
-    const topRoom = ((1 - fingerY) / 2) * view.h;
-    return (Math.min(px, Math.max(0, topRoom - 8)) * 2) / view.h;
+    return touchAimOffset(fingerY, view.h);
   }
 
   function setAimFrom(e, p) {
@@ -1302,7 +1319,10 @@ export async function createShooting(container) {
 
   function onPointerDown(e) {
     sfx.resume();
-    if (helpOpen || e.target.closest(UI) || camBlend < 0.9) return;
+    if (helpOpen || activePointer !== null || e.isPrimary === false || (e.pointerType === 'mouse' && e.button !== 0) || e.target.closest(UI) || camBlend < 0.9) return;
+    keyboardAim = false;
+    activePointer = e.pointerId;
+    canvasHost.setPointerCapture?.(e.pointerId);
     const p = pointerNdc(e);
     // A touch teleports the aim; its jump must not count as swing speed
     if (e.pointerType !== 'mouse' || Math.hypot(p.x - aim.x, p.y - aim.y) > 0.05) resetSwing();
@@ -1315,19 +1335,39 @@ export async function createShooting(container) {
   }
 
   function onPointerMove(e) {
+    if (helpOpen || (activePointer !== null && e.pointerId !== activePointer)) return;
     if (!tracking && e.pointerType !== 'mouse') return;
+    keyboardAim = false;
     setAimFrom(e, pointerNdc(e));
   }
 
   function onPointerUp(e) {
-    if (!tracking) return;
+    if (!tracking || e.pointerId !== activePointer) return;
+    setAimFrom(e, pointerNdc(e));
     tracking = false;
-    if (e.target.closest && e.target.closest(UI)) return;
+    activePointer = null;
+    const hit = document.elementFromPoint(e.clientX, e.clientY);
+    if (helpOpen || hit?.closest(UI)) return;
     fire();
   }
 
-  function onPointerCancel() {
+  function onPointerCancel(e) {
+    if (e && (activePointer === null || e.pointerId !== activePointer)) return;
+    const id = activePointer;
+    activePointer = null;
     tracking = false;
+    resetSwing();
+    if (id !== null && canvasHost.hasPointerCapture?.(id)) canvasHost.releasePointerCapture(id);
+  }
+
+  function clearInput() {
+    onPointerCancel();
+    Object.keys(aimKeys).forEach(key => { aimKeys[key] = false; });
+  }
+
+  function onBlur() {
+    clearInput();
+    if (state.phase !== 'intro' && state.phase !== 'over') setHelp(true);
   }
 
   // Esc closes the help card, not the whole game: caught on the way down,
@@ -1341,11 +1381,24 @@ export async function createShooting(container) {
   }
 
   function onKeyDown(e) {
-    if (e.key === '?') {
-      setHelp(!helpOpen);
+    if (e.key === '?' || e.code === 'KeyP') {
+      e.preventDefault();
+      if (!e.repeat) setHelp(!helpOpen);
       return;
     }
-    if (helpOpen) return;
+    if (helpOpen) {
+      if (e.key === 'Tab') { e.preventDefault(); hud.helpClose.focus(); }
+      return;
+    }
+    const direction = aimKey(e);
+    if (direction) {
+      e.preventDefault();
+      if (!keyboardAim) { clearInput(); keyboardAim = true; }
+      aimKeys[direction] = true;
+      return;
+    }
+    if (e.repeat) return;
+    if ((e.key === ' ' || e.key === 'Enter') && e.target.closest?.('button')) return;
     if (e.key === ' ' || e.key === 'Enter') {
       e.preventDefault();
       if (hud.overlay.classList.contains('show') && (state.phase === 'intro' || state.phase === 'over')) {
@@ -1354,14 +1407,25 @@ export async function createShooting(container) {
         else startGame();
       } else if (state.phase === 'armed') {
         callPull();
+      } else if (state.phase === 'flight') {
+        fire();
       }
     }
   }
 
+  function onKeyUp(e) {
+    const direction = aimKey(e);
+    if (direction) aimKeys[direction] = false;
+  }
+
   function setHelp(open) {
+    clearInput();
     helpOpen = open;
     hud.help.hidden = !open;
-    if (open) tracking = false;
+    hud.info.setAttribute('aria-expanded', String(open));
+    if (open) sfx.ctx?.suspend();
+    else sfx.resume();
+    if (!document.hidden && document.hasFocus()) (open ? hud.helpClose : canvasHost).focus({ preventScroll: true });
   }
 
   function onOverlayClick(e) {
@@ -1386,8 +1450,11 @@ export async function createShooting(container) {
   canvasHost.addEventListener('pointermove', onPointerMove);
   window.addEventListener('pointerup', onPointerUp);
   window.addEventListener('pointercancel', onPointerCancel);
+  canvasHost.addEventListener('lostpointercapture', onPointerCancel);
+  window.addEventListener('blur', onBlur);
   window.addEventListener('keydown', onKeyCapture, true);
   window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('keyup', onKeyUp);
   hud.overlay.addEventListener('click', onOverlayClick);
   hud.pull.addEventListener('click', callPull);
   hud.info.addEventListener('click', onInfo);
@@ -1458,6 +1525,7 @@ export async function createShooting(container) {
     return THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(v), 46, 70);
   }
 
+  let resizePicture = null;
   function resize() {
     const rect = canvasHost.getBoundingClientRect();
     view.w = Math.max(1, Math.floor(rect.width));
@@ -1472,6 +1540,7 @@ export async function createShooting(container) {
     hud.lead.setAttribute('viewBox', `0 0 ${view.w} ${view.h}`);
     camera.aspect = view.aspect;
     camera.updateProjectionMatrix();
+    resizePicture?.();
   }
   const ro = new ResizeObserver(resize);
   ro.observe(canvasHost);
@@ -1591,7 +1660,7 @@ export async function createShooting(container) {
       camera.near = near;
       applied.fov = -1;
     }
-    if (shakeP > 0.001 && !reduceMotion) {
+    if (shakeP > 0.001 && !reduceMotion && dt > 0) {
       camera.position.x += (rand() - 0.5) * shakeP * 0.03;
       camera.position.y += (rand() - 0.5) * shakeP * 0.03;
     }
@@ -1625,12 +1694,12 @@ export async function createShooting(container) {
   const pointScale = () => (renderer.domElement.height / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)));
 
   function updateTimeScale(realDt) {
+    if (helpOpen) return 0;
     let target = 1;
     if (slowT > 0) {
       slowT -= realDt;
       target = 0.2;
     }
-    if (helpOpen) target = 0;
     timeScale += (target - timeScale) * Math.min(1, realDt * (target < timeScale ? 16 : 2.4));
     if (hitStopT > 0) {
       hitStopT -= realDt;
@@ -1711,6 +1780,7 @@ export async function createShooting(container) {
     hud.cross.style.top = `${(-aim.y * 0.5 + 0.5) * 100}%`;
     hud.cross.classList.toggle('show', live && reaction.k < 0.05 && (state.phase === 'flight' || state.phase === 'delay' || !touch));
     hud.cross.classList.toggle('hold', tracking);
+    hud.keyGuide.hidden = !live || !keyboardAim || helpOpen || state.phase !== 'flight' || reaction.k > 0.05;
     const showFinger = live && tracking && finger.touch && reaction.k < 0.05;
     hud.finger.classList.toggle('show', showFinger);
     if (showFinger) {
@@ -1808,7 +1878,15 @@ export async function createShooting(container) {
     const realDt = clampDt(now - last);
     last = now;
     if (!running) return;
-    const t = now / 1000;
+    if (helpOpen) {
+      // The help card is a real pause, including shot flight and delayed series transitions.
+      if (composer) composer.render(0);
+      else renderer.render(scene, camera);
+      return;
+    }
+    flowClock.tick(realDt);
+    if (keyboardAim && ['armed', 'delay', 'flight'].includes(state.phase)) Object.assign(aim, stepKeyboardAim(aim, aimKeys, realDt));
+    const t = flowClock.now;
     const dt = realDt * updateTimeScale(realDt);
 
     if (state.phase === 'delay' && !helpOpen) {
@@ -1821,8 +1899,9 @@ export async function createShooting(container) {
 
     // Swing log in real time: the player's hand doesn't slow down in bullet time
     const dir = aimDir(new THREE.Vector3());
-    swingLog.push({ t, dir });
-    while (swingLog.length > 2 && t - swingLog[0].t > 0.2) swingLog.shift();
+    const handTime = now / 1000;
+    swingLog.push({ t: handTime, dir });
+    while (swingLog.length > 2 && handTime - swingLog[0].t > 0.2) swingLog.shift();
 
     applyCamera(t, realDt);
     shakeP = Math.max(0, shakeP - realDt * 3.5);
@@ -1865,10 +1944,16 @@ export async function createShooting(container) {
   // första render-anropet, vilket kan återställa grafiken på Windows
   // (Direct3D). Compiled for the path that will draw them (see compileFor).
   await compileFor(scene, !!composer);
+  resizePicture = () => {
+    applyCamera(flowClock.now, 0);
+    if (composer) composer.render(0);
+    else renderer.render(scene, camera);
+  };
   last = performance.now();
   raf = requestAnimationFrame(tick);
 
   const onVisibility = () => {
+    if (document.hidden) onBlur();
     running = !document.hidden;
     last = performance.now();
   };
@@ -2007,7 +2092,7 @@ export async function createShooting(container) {
         reaction.target = 1;
         reaction.k = 1;
         hideLead();
-        timers.forEach((id) => clearTimeout(id));
+        timers.forEach(cancelLater);
         timers.clear();
       }
     },
@@ -2038,15 +2123,19 @@ export async function createShooting(container) {
     cancelAnimationFrame(raf);
     running = false;
     ro.disconnect();
-    timers.forEach((id) => clearTimeout(id));
+    timers.forEach(cancelLater);
     timers.clear();
+    flowClock.destroy();
     document.removeEventListener('visibilitychange', onVisibility);
     canvasHost.removeEventListener('pointerdown', onPointerDown);
     canvasHost.removeEventListener('pointermove', onPointerMove);
     window.removeEventListener('pointerup', onPointerUp);
     window.removeEventListener('pointercancel', onPointerCancel);
+    canvasHost.removeEventListener('lostpointercapture', onPointerCancel);
+    window.removeEventListener('blur', onBlur);
     window.removeEventListener('keydown', onKeyCapture, true);
     window.removeEventListener('keydown', onKeyDown);
+    window.removeEventListener('keyup', onKeyUp);
     hud.overlay.removeEventListener('click', onOverlayClick);
     hud.pull.removeEventListener('click', callPull);
     hud.info.removeEventListener('click', onInfo);

@@ -6,9 +6,24 @@ export function precisionScore(distance, radius = 3) {
 }
 
 export function jumpScore(position, board = -3) {
-  if (position < board) return { foul: true, distance: 0, points: 0 };
+  if (position < board) return { foul: true, distance: 0, travel: 0, points: 0 };
   const quality = clamp(1 - (position - board) / 4, 0, 1);
-  return { foul: false, distance: 2 + quality * 5, points: Math.round(quality * 100) };
+  const travel = 2 + quality * 5;
+  const distance = Math.max(0, travel - (position - board));
+  return { foul: false, distance, travel, points: Math.round(distance / 7 * 100) };
+}
+
+/** A direction remains a direction when power changes; only travel changes. */
+export function croquetEnd(start, aim, power) {
+  const angle = clamp(aim, -4.4, 4.4) * 0.19;
+  const distance = 2 + clamp(power, 0, 1) * 7;
+  return { x: start.x + Math.sin(angle) * distance, z: start.z - Math.cos(angle) * distance };
+}
+
+export function fieldThrowScore(kind, distance, opponentDistance = 0.92) {
+  if (kind === 'rings') return distance <= 0.45 ? 100 : precisionScore(distance - 0.45, 2.8);
+  const score = precisionScore(distance, 2.5);
+  return Math.min(100, score + (distance < opponentDistance ? 15 : 0));
 }
 
 export function hoopCrossing(from, to, hoop, radius = 0.68) {

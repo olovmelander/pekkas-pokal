@@ -34,3 +34,14 @@
 .farm-tournament .arcade-body .country-event-list { gap:3px; margin:12px auto; }
 .farm-tournament .arcade-body .country-event-list span { padding:6px 0; }
 @media(max-height:650px) { .farm-tournament .arcade-body .country-event-list { margin:7px auto; gap:0; } .farm-tournament .arcade-body .country-event-list span { padding:3px 0; font-size:12px; } .farm-controls .farm-vertical button { min-height:34px; } }
+.farm-progress { position:absolute; top:108px; left:22px; display:flex; gap:7px; pointer-events:none; }
+.farm-progress span { width:23px; height:23px; display:grid; place-items:center; border:1px solid #f5dcac66; border-radius:50%; color:#eee1bf88; background:#20332688; font-size:10px; font-weight:700; }
+.farm-progress .current { color:#2b2b19; background:#f1d18b; border-color:#ffe8ae; box-shadow:0 0 18px #ebcb7455; }
+.farm-progress .done { color:#dfefc3; border-color:#b2d58c; background:#3b5639b8; }
+.farm-controls { border-color:#f1d79b55; background:linear-gradient(150deg,#20332be8,#13241ff0); }
+.farm-controls .country-hint { min-height:15px; }
+.farm-controls .country-meter { height:10px; }
+.farm-controls .farm-perfect { box-shadow:0 0 17px #f4d78e77; }
+.farm-controls .farm-perfect i { background:#fff2bf; }
+@media(max-width:600px) { .farm-progress { top:90px; left:14px; gap:5px; } .farm-progress span { width:19px; height:19px; font-size:9px; } }
+@media(max-height:560px) and (min-width:600px) { .farm-progress { top:108px; } }

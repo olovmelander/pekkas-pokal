@@ -1515,3 +1515,8 @@
     100% { opacity: 0; }
   }
 }
+
+/* The shot window answers with words as well as colour, without covering the table. */
+.pbf-plunger[data-ready='true'] .pbf-power { border-color: #8ffff0; box-shadow: 0 0 18px #5eead455; }
+.pbf-plunger[data-ready='true'] .pbf-power span { background: linear-gradient(90deg, #2aa898, #b6fff2); }
+.pbf-plunger[data-ready='true'] .pbf-plunger-label { color: #b6fff2; animation: none; }

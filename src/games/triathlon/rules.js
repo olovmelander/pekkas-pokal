@@ -23,6 +23,26 @@ export function raceProgress(stage, distance) {
   return clamp((stage + clamp(distance / STAGES[stage].distance, 0, 1)) / 3, 0, 1);
 }
 
+/** Each rival follows their own three legs; no teleporting into the player's leg. */
+export function rivalAtTime(elapsed, duration, strengths = [1, 1, 1]) {
+  const weights = STAGES.map((leg, i) => leg.distance / (leg.speed * strengths[i]));
+  const total = weights.reduce((sum, weight) => sum + weight, 0);
+  let time = Math.max(0, elapsed);
+  for (let stage = 0; stage < STAGES.length; stage++) {
+    const split = duration * weights[stage] / total;
+    if (time < split || stage === STAGES.length - 1) {
+      const distance = STAGES[stage].distance * clamp(time / split, 0, 1);
+      return { stage, distance, progress: raceProgress(stage, distance), finished: elapsed >= duration };
+    }
+    time -= split;
+  }
+}
+
+export function canDraft(stage, distance, lane, rival) {
+  const gap = rival.distance - distance;
+  return STAGES[stage].id === 'bike' && rival.stage === stage && !rival.finished && gap > 2 && gap < 16 && Math.abs(lane - rival.lane) < 1.05;
+}
+
 export function scoreRace({ seconds, gates, drinks, hits }) {
   return Math.max(0, Math.round(12000 - seconds * 70 + gates * 140 + drinks * 110 - hits * 180));
 }

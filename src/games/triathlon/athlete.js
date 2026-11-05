@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeStaticMeshes } from './mesh-batch.js';
 import { createPerson, appearanceFor, POSES } from '../shared/people.js';
 
 function buildBike(color) {
@@ -29,6 +30,8 @@ function buildBike(color) {
   rod([-0.12, 1.1, -0.28], [0.12, 1.1, -0.28], 0.055, rubber);
   rod(head, [0, 1.12, 0.6], 0.022, alloy);
   rod([-0.29, 1.12, 0.6], [0.29, 1.12, 0.6], 0.024, rubber);
+  mergeStaticMeshes(root);
+  wheels.forEach(mergeStaticMeshes);
   return { root, wheels };
 }
 

@@ -6,7 +6,7 @@ export const TOP_SPEED = 18.3;
 export const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 export function newDriver(distance = 0, lane = 0) {
-  return { distance, lane, lateral: 0, speed: 0, grip: 1, skidding: false, slipstream: 0, hit: 0 };
+  return { distance, lane, lateral: 0, speed: 0, grip: 1, skidding: false, slipstream: 0, hit: 0, wallContact: false, finishTime: null };
 }
 
 export function cornerSpeed(curvature) {
@@ -48,13 +48,17 @@ export function stepDriver(driver, input, curvature, dt) {
   driver.lateral += (desiredLateral - driver.lateral) * Math.min(1, step * (5 + driver.grip * 3));
   driver.lane += driver.lateral * step;
   driver.hit = Math.max(0, driver.hit - step);
+  // Re-arm only after leaving the wall. Scraping is one incident, not a new
+  // crash every cooldown tick; the grass already supplies continuous drag.
+  if (Math.abs(driver.lane) < 5.4) driver.wallContact = false;
   const event = { barrier: false };
   if (Math.abs(driver.lane) > 5.95) {
     driver.lane = Math.sign(driver.lane) * 5.95;
-    driver.lateral *= -0.22;
-    if (driver.hit <= 0) {
+    driver.lateral = -Math.sign(driver.lane) * Math.max(0.7, Math.abs(driver.lateral) * 0.25);
+    if (!driver.wallContact) {
       driver.speed *= 0.65;
       driver.hit = 0.8;
+      driver.wallContact = true;
       event.barrier = true;
     }
   }
@@ -63,6 +67,64 @@ export function stepDriver(driver, input, curvature, dt) {
   const lineScale = clamp(1 - curvature * driver.lane, 0.62, 1.4);
   driver.distance += driver.speed * step / lineScale;
   return event;
+}
+
+/** Both drivers yield momentum and space; the player is not singled out. */
+export function resolveContact(a, b, length) {
+  const gap = trackGap(a.distance, b.distance, length);
+  const overlap = 1.52 - Math.abs(a.lane - b.lane);
+  if (Math.abs(gap) >= 2.05 || overlap <= 0 || a.hit > 0 || b.hit > 0) return false;
+  const side = a.lane === b.lane ? (gap >= 0 ? -1 : 1) : Math.sign(a.lane - b.lane);
+  a.lane = clamp(a.lane + side * (overlap / 2 + 0.04), -5.9, 5.9);
+  b.lane = clamp(b.lane - side * (overlap / 2 + 0.04), -5.9, 5.9);
+  const average = (a.speed + b.speed) / 2;
+  a.speed = Math.min(a.speed, average) * 0.9;
+  b.speed = Math.min(b.speed, average) * 0.9;
+  a.hit = b.hit = 0.65;
+  return true;
+}
+
+/** Rivals choose space before a pass, and obey the same acceleration limit. */
+export function stepRival(driver, index, drivers, route, dt) {
+  const step = clamp(dt, 0, 0.05);
+  const turn = route.curvature(driver.distance);
+  const safeSpeed = Math.min(cornerSpeed(route.curvature(driver.distance + 7)), cornerSpeed(route.curvature(driver.distance + 13)));
+  let target = Math.min(driver.pace, safeSpeed * (0.94 + (4 - index) * 0.008));
+  let lane = Math.sign(turn) * 1.15 + Math.sin(driver.distance * 0.043 + index * 2.1) * 0.45;
+  for (const other of drivers) {
+    if (other === driver || other.finishTime !== null) continue;
+    const gap = trackGap(driver.distance, other.distance, route.length);
+    if (gap > -3.2 && gap < 8 && Math.abs(driver.lane - other.lane) < 1.9) {
+      // Hold the side already occupied when running alongside. Returning to
+      // the ideal line must wait until the overtaking kart has cleared us.
+      const alongside = Math.abs(gap) < 3.2 && Math.abs(driver.lane - other.lane) > 0.12;
+      const passingSide = alongside ? Math.sign(driver.lane - other.lane) : other.lane >= 0 ? -1 : 1;
+      lane = clamp(other.lane + passingSide * 2.05, -3.3, 3.3);
+      if (gap > 0 && gap < 3.2) target = Math.min(target, other.speed + 0.5);
+    }
+  }
+  driver.speed += clamp((target - driver.speed) * 2, -10, 6) * step;
+  const previousLane = driver.lane;
+  driver.lane += clamp((lane - driver.lane) * 1.8, -3.5, 3.5) * step;
+  driver.lateral = step ? (driver.lane - previousLane) / step : 0;
+  driver.hit = Math.max(0, driver.hit - step);
+  driver.distance += driver.speed * step / clamp(1 - turn * driver.lane, 0.62, 1.4);
+}
+
+/** Fractional crossing time makes the order independent of array/frame order. */
+export function markFinish(driver, previousDistance, totalDistance, elapsed, dt) {
+  if (driver.finishTime !== null || driver.distance < totalDistance) return;
+  const fraction = clamp((totalDistance - previousDistance) / Math.max(0.0001, driver.distance - previousDistance), 0, 1);
+  driver.finishTime = elapsed - dt + dt * fraction;
+}
+
+export function raceStandings(drivers) {
+  return [...drivers].sort((a, b) => {
+    if (a.finishTime != null && b.finishTime != null) return a.finishTime - b.finishTime;
+    if (a.finishTime != null) return -1;
+    if (b.finishTime != null) return 1;
+    return b.distance - a.distance;
+  });
 }
 
 export function racePosition(distance, opponents) {

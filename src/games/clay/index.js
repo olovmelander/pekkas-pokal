@@ -35,6 +35,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { guardRenderer, postTarget, addSanitize, RenderWatchdog, gfxNotice, precompile } from '../shared/gfx.js';
 import { Sfx } from './audio.js';
+import { createGameClock } from '../shared/game-clock.js';
 import { N, H, R_MIN, R_MAX, WALL, ClayBody, ringMaps, glazeMaps, clayMaterial, glazeMaterial } from './clay.js';
 import { mulberry, buildStudio, buildWheel, buildSponge, buildEnvScene, disposeScene } from './studio.js';
 import { buildPotterHand } from './hand.js';
@@ -235,6 +236,8 @@ function disposeMaterial(m) {
 export async function createClay(container) {
   const canvasHost = document.createElement('div');
   canvasHost.className = 'pb-canvas';
+  canvasHost.tabIndex = 0;
+  canvasHost.setAttribute('aria-label', 'Drejskivan. Piltangenter väljer höjd och formar leran. G glättar, Enter bränner, P pausar.');
   container.appendChild(canvasHost);
 
   const hudHost = document.createElement('div');
@@ -517,6 +520,12 @@ export async function createClay(container) {
   let smoothing = false;
   let keySmooth = false;
   let helpOpen = false;
+  let paused = false;
+  let modalFocus = null;
+  let keyboardActive = false;
+  let keyboardRow = Math.round(N * 0.5);
+  const shapingKeys = new Set();
+  const clock = createGameClock();
   let shapingEnergy = 0;
   let hover = null;
   let brush = null; // {j, targetR, side, y}
@@ -540,8 +549,7 @@ export async function createClay(container) {
     coached: 0, // seconds of shaping so far; the hint goes once you have the feel
     fast: false,
     heat: 0,
-    lastToast: 0,
-    timers: []
+    lastToast: 0
   };
 
   let high = 0;
@@ -554,19 +562,15 @@ export async function createClay(container) {
   const fmt = (n) => Math.round(n).toLocaleString('sv-SE');
   hud.hi.textContent = fmt(high);
 
-  const later = (fn, ms) => {
-    const id = setTimeout(fn, ms);
-    state.timers.push(id);
-    return id;
-  };
+  const later = (fn, ms) => clock.schedule(fn, ms / 1000);
 
   function toast(msg, big = false) {
     hud.toast.textContent = msg;
     hud.toast.className = `pb-toast show${big ? ' big' : ''}`;
-    clearTimeout(state.lastToast);
-    state.lastToast = setTimeout(() => {
+    clock.cancel(state.lastToast);
+    state.lastToast = clock.schedule(() => {
       hud.toast.className = 'pb-toast';
-    }, big ? 1800 : 1200);
+    }, big ? 1.8 : 1.2);
   }
 
   function setPhaseLabel(txt) {
@@ -605,6 +609,9 @@ export async function createClay(container) {
     state.match = computeMatch();
     const pct = Math.round(state.match * 100);
     hud.meterVal.textContent = `${pct}%`;
+    hud.meter.setAttribute('aria-valuenow', String(pct));
+    const next = STAR_AT.find((threshold) => state.match < threshold);
+    hud.nextStar.textContent = next ? `${Math.max(1, Math.ceil(next * 100 - pct))} % till nästa stjärna` : 'Tre stjärnor — redo för ugnen!';
     hud.meterFill.style.width = `${pct}%`;
     const stars = starsFor(state.match);
     hud.meter.dataset.stars = String(stars);
@@ -752,7 +759,7 @@ export async function createClay(container) {
   }
 
   function finishPiece() {
-    if (state.phase !== 'throw' && state.phase !== 'intro') return;
+    if (paused || helpOpen || (state.phase !== 'throw' && state.phase !== 'intro')) return;
     const p = piece();
     renderMatch();
     const { match } = state;
@@ -863,7 +870,7 @@ export async function createClay(container) {
 
   /** From the verdict: the piece goes to the window, the next lump lands. */
   function nextPiece() {
-    if (state.phase !== 'judge') return;
+    if (paused || helpOpen || state.phase !== 'judge') return;
     hud.verdict.classList.remove('show');
     if (fired) {
       gallery.push({ mesh: fired.mesh, from: fired.mesh.position.clone(), to: studio.sill[gallery.length], t: 0, s0: fired.mesh.scale.x });
@@ -920,9 +927,10 @@ export async function createClay(container) {
   }
 
   function startGame() {
+    if (paused || helpOpen) return;
+    clearInput();
     sfx.resume();
-    state.timers.forEach(clearTimeout);
-    state.timers.length = 0;
+    clock.clear();
     clearGallery();
     seedSplats();
     fx.clear();
@@ -934,6 +942,7 @@ export async function createClay(container) {
     hud.score.textContent = '0';
     hud.overlay.classList.remove('show');
     startPiece();
+    canvasHost.focus({ preventScroll: true });
   }
 
   /* ---- Input ------------------------------------------------------------ */
@@ -973,7 +982,11 @@ export async function createClay(container) {
 
   function onPointerDown(e) {
     sfx.resume();
-    if (helpOpen) return;
+    if (helpOpen || paused) return;
+    e.preventDefault();
+    keyboardActive = false; shapingKeys.clear();
+    canvasHost.setPointerCapture(e.pointerId);
+    canvasHost.focus({ preventScroll: true });
     if (state.phase === 'fire') {
       state.fast = true;
       return;
@@ -984,7 +997,7 @@ export async function createClay(container) {
   }
 
   function onPointerMove(e) {
-    if (state.phase !== 'throw') return;
+    if (paused || helpOpen || state.phase !== 'throw') return;
     const p = pointerToClay(e);
     if (!p) return;
     if (!dragging) {
@@ -1003,41 +1016,88 @@ export async function createClay(container) {
     hover = null;
   }
 
+  function clearInput() {
+    dragging = smoothing = keySmooth = false;
+    brush = hover = null;
+    shapingKeys.clear();
+    hud.smooth.classList.remove('active');
+    sfx.setShaping(0);
+  }
+
+  function syncModal() {
+    const blocked = paused || helpOpen;
+    hud.controlsRoot.inert = blocked;
+    hud.verdict.inert = blocked;
+    hud.overlay.inert = blocked;
+    hud.info.inert = paused;
+    hud.mute.inert = blocked;
+    canvasHost.inert = blocked;
+  }
+
+  function setPaused(open) {
+    if (paused === open) return;
+    if (open) modalFocus = document.activeElement;
+    paused = open;
+    clearInput();
+    hud.pauseScreen.hidden = !open;
+    hud.pauseToggle.setAttribute('aria-pressed', String(open));
+    hud.pauseToggle.setAttribute('aria-label', open ? 'Fortsätt dreja' : 'Pausa drejningen');
+    hud.pauseToggle.innerHTML = `<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="${open ? 'M8 5l11 7-11 7z' : 'M8 5v14M16 5v14'}"/></svg>`;
+    syncModal();
+    if (open) { sfx.silence(); hud.resume.focus({ preventScroll: true }); } else { sfx.resume(); (helpOpen ? hud.helpClose : container.contains(modalFocus) ? modalFocus : canvasHost).focus({ preventScroll: true }); }
+  }
+
   function onKeyDown(e) {
-    if (e.key === '?' || (e.key === 'Escape' && helpOpen)) {
-      setHelp(e.key === '?' ? !helpOpen : false);
+    if ((e.key === 'p' || e.key === 'P') && !e.repeat) { e.preventDefault(); setPaused(!paused); return; }
+    if ((paused || helpOpen) && e.key === 'Tab') {
+      e.preventDefault();
+      const dialog = paused ? hud.pauseScreen : hud.help;
+      const buttons = [...dialog.querySelectorAll('button:not(:disabled)')];
+      const at = buttons.indexOf(document.activeElement);
+      buttons[(at + (e.shiftKey ? -1 : 1) + buttons.length) % buttons.length]?.focus();
       return;
     }
-    if (helpOpen) return;
-    if (e.key === ' ' && (state.phase === 'idle' || state.phase === 'over')) {
+    if (e.key === 'Escape' && (paused || helpOpen)) {
+      e.preventDefault(); e.stopPropagation();
+      if (paused) setPaused(false); else setHelp(false);
+      return;
+    }
+    if (e.key === '?' && !paused) { e.preventDefault(); setHelp(!helpOpen); return; }
+    if (paused || helpOpen) return;
+    const onControl = e.target.closest?.('button, a, input, select, textarea');
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) && state.phase === 'throw') {
+      e.preventDefault(); keyboardActive = true; shapingKeys.add(e.key); canvasHost.focus({ preventScroll: true });
+    } else if ((e.key === 'g' || e.key === 'G') && state.phase === 'throw') {
+      e.preventDefault(); keySmooth = true;
+    } else if (!onControl && !e.repeat && e.key === ' ' && (state.phase === 'idle' || state.phase === 'over')) {
+      e.preventDefault(); startGame();
+    } else if (!onControl && !e.repeat && e.key === 'Enter') {
       e.preventDefault();
-      startGame();
-    } else if (e.key === 'Enter') {
       if (state.phase === 'throw') finishPiece();
       else if (state.phase === 'judge') nextPiece();
-    } else if ((e.key === 'g' || e.key === 'G') && state.phase === 'throw') {
-      keySmooth = true;
-    } else if (e.key === ' ' && state.phase === 'fire') {
-      e.preventDefault();
-      state.fast = true;
+    } else if (!onControl && e.key === ' ' && state.phase === 'fire') {
+      e.preventDefault(); state.fast = true;
     }
   }
 
   function onKeyUp(e) {
     if (e.key === 'g' || e.key === 'G') keySmooth = false;
+    shapingKeys.delete(e.key);
+    if (keyboardActive && !shapingKeys.has('ArrowLeft') && !shapingKeys.has('ArrowRight')) { dragging = false; brush = null; }
   }
 
-  /* Strategy card: pauses the wheel while open */
   function setHelp(open) {
+    if (paused) return;
+    if (open) modalFocus = document.activeElement;
     helpOpen = open;
     hud.help.hidden = !open;
-    if (open) {
-      dragging = false;
-      smoothing = false;
-      keySmooth = false;
-      brush = null;
-      sfx.setShaping(0);
-    }
+    clearInput(); syncModal();
+    if (open) { sfx.silence(); hud.helpClose.focus({ preventScroll: true }); } else (container.contains(modalFocus) ? modalFocus : canvasHost).focus({ preventScroll: true });
+  }
+
+  function onBlur() {
+    clearInput();
+    if (!helpOpen && ['intro', 'throw', 'fire', 'judge'].includes(state.phase)) setPaused(true);
   }
 
   canvasHost.addEventListener('pointerdown', onPointerDown);
@@ -1045,7 +1105,10 @@ export async function createClay(container) {
   canvasHost.addEventListener('pointerleave', onPointerLeave);
   window.addEventListener('pointerup', onPointerUp);
   window.addEventListener('pointercancel', onPointerUp);
-  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('keydown', onKeyDown, true);
+  window.addEventListener('blur', onBlur);
+  hud.pauseToggle.addEventListener('click', () => setPaused(!paused));
+  hud.resume.addEventListener('click', () => setPaused(false));
   window.addEventListener('keyup', onKeyUp);
   hud.panel.addEventListener('click', (e) => {
     if (e.target.closest('[data-act="start"]')) startGame();
@@ -1056,6 +1119,8 @@ export async function createClay(container) {
   hud.helpClose.addEventListener('click', () => setHelp(false));
   const smoothOn = (e) => {
     e.preventDefault();
+    if (paused || helpOpen || state.phase !== 'throw') return;
+    if (e.pointerId !== undefined) hud.smooth.setPointerCapture(e.pointerId);
     smoothing = true;
   };
   const smoothOff = () => {
@@ -1065,6 +1130,9 @@ export async function createClay(container) {
   hud.smooth.addEventListener('pointerup', smoothOff);
   hud.smooth.addEventListener('pointerleave', smoothOff);
   hud.smooth.addEventListener('pointercancel', smoothOff);
+  hud.smooth.addEventListener('lostpointercapture', smoothOff);
+  hud.smooth.addEventListener('keydown', (e) => { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) smoothOn(e); });
+  hud.smooth.addEventListener('keyup', (e) => { if (e.key === ' ' || e.key === 'Enter') smoothOff(); });
   hud.mute.addEventListener('click', () => {
     sfx.muted = !sfx.muted;
     hud.mute.classList.toggle('off', sfx.muted);
@@ -1133,7 +1201,7 @@ export async function createClay(container) {
   // Test hook: a fixed camera for close-ups (window.__ppLera.debugCam)
   let camOverride = null;
 
-  function updateCamera(t, dt) {
+  function updateCamera(t, dt, snap = false) {
     if (camOverride) {
       camera.position.copy(camOverride.pos);
       camera.lookAt(camOverride.look);
@@ -1170,25 +1238,34 @@ export async function createClay(container) {
       // The sill (half-width ~1.3 with its pieces, plus margin) fills the free region
       frameIn(SHOW_LOOK, DIR_SHOW, 1.5, 0.42, 0.92, summaryFree);
     }
-    const k = 1 - Math.exp(-dt * (ph === 'fire' ? 2.4 : 2.0));
+    const k = snap ? 1 : 1 - Math.exp(-dt * (ph === 'fire' ? 2.4 : 2.0));
     camera.position.lerp(camGoal, k);
-    lookAt.lerp(lookGoal, 1 - Math.exp(-dt * 3.2));
+    lookAt.lerp(lookGoal, snap ? 1 : 1 - Math.exp(-dt * 3.2));
     camera.lookAt(lookAt);
     // A little firing rumble (never with reduced motion). Smooth and slow
     // enough to read as a rumble at 30 fps too — a fast sine sampled by a
     // phone's frame rate is a random jitter that makes every edge shimmer
-    if (!reduceMotion && ph === 'fire' && state.heat > 0.5) {
+    if (!reduceMotion && (dt > 0 || snap) && ph === 'fire' && state.heat > 0.5) {
       const s = (state.heat - 0.5) * 0.007;
       const tt = t % 600;
       camera.position.x += (Math.sin(tt * 13.1) + 0.5 * Math.sin(tt * 21.7 + 2)) * s;
       camera.position.y += (Math.sin(tt * 11.3 + 1) + 0.5 * Math.sin(tt * 19.1)) * s * 0.7;
     }
-    if (!reduceMotion && state.wobble > 0.25 && ph === 'throw') {
+    if (!reduceMotion && (dt > 0 || snap) && state.wobble > 0.25 && ph === 'throw') {
       camera.position.x += Math.sin(t * 38) * state.wobble * 0.008;
     }
   }
 
   /* ---- Sizing ----------------------------------------------------------- */
+
+  let renderReady = false;
+
+  function renderScene(dt = 0) {
+    renderer.info.reset();
+    if (usePost) composer.render(dt);
+    else renderer.render(scene, camera);
+    watchdog.afterFrame();
+  }
 
   function resize() {
     const rect = canvasHost.getBoundingClientRect();
@@ -1208,8 +1285,18 @@ export async function createClay(container) {
     fx.setScale((h * pr) / (2 * view.tan));
     hudHost.classList.toggle('lr-wide', view.aspect >= 1.15);
     hudHost.classList.toggle('lr-tall', view.portrait);
-    if (state.phase === 'throw' || state.phase === 'intro') renderMatch();
+    if (state.phase === 'throw' || state.phase === 'intro') {
+      if (paused || helpOpen) drawDiff(hud.diff, piece().profile, r);
+      else renderMatch();
+    }
     if (state.phase === 'judge') measureVerdict();
+    // Resizing clears the canvas. While paused, redraw only the frozen scene
+    // in its new aspect ratio; no simulation, clock, particles or kiln update.
+    if (renderReady && (paused || helpOpen) && !document.hidden) {
+      updateCamera(clock.now, 0, true);
+      guide.group.rotation.y = Math.atan2(camera.position.x, camera.position.z);
+      renderScene(0);
+    }
   }
   const ro = new ResizeObserver(resize);
   ro.observe(canvasHost);
@@ -1357,6 +1444,17 @@ export async function createClay(container) {
   }
 
   function updateThrow(dt, t) {
+    if (keyboardActive) {
+      const vertical = Number(shapingKeys.has('ArrowUp')) - Number(shapingKeys.has('ArrowDown'));
+      const horizontal = Number(shapingKeys.has('ArrowRight')) - Number(shapingKeys.has('ArrowLeft'));
+      keyboardRow = Math.max(3, Math.min(N - 1, keyboardRow + vertical * dt * N * 0.55));
+      const j = Math.round(keyboardRow);
+      hover = { j, targetR: r[j], side: 1, y: j / (N - 1) * H };
+      dragging = horizontal !== 0;
+      brush = horizontal ? { ...hover, targetR: Math.max(R_MIN, Math.min(R_MAX, r[j] + horizontal * 0.2)) } : null;
+      hud.coach.textContent = `Höjd ${Math.round(j / (N - 1) * 100)} % · ↑ ↓ välj höjd · ← tryck in · → dra ut · håll G glättar`;
+      hud.coach.classList.add('show');
+    }
     state.wheelSpeed += (1 - state.wheelSpeed) * Math.min(1, dt * 2);
     state.timeLeft -= dt;
     const secs = Math.max(0, Math.ceil(state.timeLeft));
@@ -1821,20 +1919,20 @@ export async function createClay(container) {
     raf = requestAnimationFrame(tick);
     const raw = nowRaw - last;
     // Test hook (window.__ppLera.freeze): time stands still, frames keep rendering
-    const now = frozenNow ?? nowRaw;
-    const dt = frozenNow === null ? clampDt(raw) * timeScale : 0;
+    // Active time freezes both shape physics and delayed verdict effects.
+    const dt = !paused && !helpOpen && frozenNow === null ? clampDt(raw) * timeScale : 0;
     last = nowRaw;
-    if (!running) return;
+    if (!running || paused || helpOpen) return;
     guardFrameTime(raw);
-    renderer.info.reset();
     if (hudHost.dataset.phase !== state.phase) hudHost.dataset.phase = state.phase;
-    const t = now / 1000;
+    clock.tick(dt);
+    const t = clock.now;
     // Shader clocks are wrapped: a page left open for hours would otherwise
     // feed sin()/fract() numbers too big for the GPU's float precision
     const tw = t % 600;
     plopGap -= dt;
 
-    if (helpOpen) {
+    if (paused || helpOpen) {
       state.wheelSpeed += (0 - state.wheelSpeed) * Math.min(1, dt * 2);
     } else if (state.phase === 'intro') updateIntro(dt);
     else if (state.phase === 'throw') updateThrow(dt, t);
@@ -1853,7 +1951,7 @@ export async function createClay(container) {
     guide.group.visible = state.phase === 'throw' || state.phase === 'intro';
 
     // Spin: clay, wheel head, motion blur fading in with speed
-    sfx.setWheel(state.wheelSpeed);
+    sfx.setWheel(paused || helpOpen ? 0 : state.wheelSpeed);
     const omega = state.wheelSpeed * 9.5;
     state.spin += omega * dt;
     clay.rotation.y = state.spin;
@@ -1894,21 +1992,19 @@ export async function createClay(container) {
     studio.motes.position.y = Math.sin(t * 0.11) * 0.05;
     studio.motes.position.x = Math.sin(t * 0.07) * 0.06;
     swiftIn -= dt;
-    if (swiftIn <= 0) {
+    if (!paused && !helpOpen && swiftIn <= 0) {
       swiftIn = 7 + rand() * 12;
       if (state.phase !== 'fire') sfx.swift();
     }
 
     updateCamera(t, dt);
-    if (usePost) composer.render();
-    else renderer.render(scene, camera);
-    watchdog.afterFrame();
+    renderScene(dt);
   }
 
   const onVisibility = () => {
     running = !document.hidden;
     last = performance.now();
-    if (!running) sfx.silence();
+    if (!running) { clearInput(); sfx.silence(); if (!helpOpen && ['intro', 'throw', 'fire', 'judge'].includes(state.phase)) setPaused(true); } else if (paused || helpOpen) resize();
   };
   document.addEventListener('visibilitychange', onVisibility);
 
@@ -1951,6 +2047,7 @@ export async function createClay(container) {
   glazeTemplates.forEach((m) => {
     m.visible = false;
   });
+  renderReady = true;
   last = performance.now();
   raf = requestAnimationFrame(tick);
 
@@ -1992,6 +2089,8 @@ export async function createClay(container) {
       return { x: rect.left + (work.x * 0.5 + 0.5) * rect.width, y: rect.top + (-work.y * 0.5 + 0.5) * rect.height };
     },
     computeMatch,
+    setPaused,
+    get paused() { return paused; },
     /** Stop the clock (true) or let it run again (false); frames keep rendering. */
     freeze(on = true) {
       frozenNow = on ? performance.now() : null;
@@ -2024,6 +2123,7 @@ export async function createClay(container) {
   function destroy() {
     cancelAnimationFrame(raf);
     running = false;
+    renderReady = false;
     ro.disconnect();
     document.removeEventListener('visibilitychange', onVisibility);
     canvasHost.removeEventListener('pointerdown', onPointerDown);
@@ -2031,10 +2131,12 @@ export async function createClay(container) {
     canvasHost.removeEventListener('pointerleave', onPointerLeave);
     window.removeEventListener('pointerup', onPointerUp);
     window.removeEventListener('pointercancel', onPointerUp);
-    window.removeEventListener('keydown', onKeyDown);
+    window.removeEventListener('keydown', onKeyDown, true);
+    window.removeEventListener('blur', onBlur);
     window.removeEventListener('keyup', onKeyUp);
-    clearTimeout(state.lastToast);
-    state.timers.forEach(clearTimeout);
+    clock.cancel(state.lastToast);
+    clock.clear();
+    clock.destroy();
     delete window.__ppLera;
     gfx.dispose();
     watchdog.dispose();

@@ -52,6 +52,7 @@ export function buildHud(root, { mouse }) {
       <div class="fg-pops" id="pg-pops"></div>
       <div class="pg-keys${mouse ? '' : ' touch'}" id="pg-keys">${keysHint}</div>
       <div class="pg-ghost" id="pg-ghost" aria-hidden="true"><i class="pg-ghost-dot"></i><small>dra · släpp med en flick uppåt</small></div>
+      <div class="pg-stroke" id="pg-stroke" hidden><span id="pg-stroke-text"></span><i><b id="pg-stroke-fill"></b></i></div>
     </div>
 
     <div class="pg-replay" id="pg-replay" aria-hidden="true">
@@ -66,11 +67,11 @@ export function buildHud(root, { mouse }) {
       <div class="pb-panel pg-card" id="pg-panel"></div>
     </div>
 
-    <button class="pb-info" id="pg-info" aria-label="Så spelar du">?</button>
+    <button class="pb-info" id="pg-info" aria-label="Paus och spelregler" aria-expanded="false" title="Paus och spelregler (P / ?)"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg></button>
 
-    <div class="pb-help" id="pg-help" hidden>
+    <div class="pb-help" id="pg-help" role="dialog" aria-modal="true" aria-label="Paus och spelregler" hidden>
       <div class="pb-help-card">
-        <h3>Så spelar du pingis</h3>
+        <h3>Paus · så spelar du pingis</h3>
         <p class="pb-help-sub">Pekkas Pingis · Bredbyn 2019</p>
         <ul class="pb-help-list">
           <li><i style="--c:#7fd8e8"></i><b>Racketen</b> ${mouse ? 'Följer muspekaren' : 'Följer fingret'} (eller ←/→). Möt bollen — träffar du inte är poängen borta.</li>
@@ -82,7 +83,7 @@ export function buildHud(root, { mouse }) {
           <li><i style="--c:#f2c14e"></i><b>Läs bollen</b> Den gyllene ringen visar var bollen studsar, och spårets färg avslöjar skruven innan den gör det.</li>
         </ul>
         <p class="pb-help-tip">Långa dueller lönar sig: varje slag i rallyt höjer poängen du får när du vinner det. Smash-avslut och serve-ess ger extra. Vinn med 3 bollars marginal för silver, 5 för guld.</p>
-        <div class="pb-help-keys">←/→ flyttar · håll ↑ = topspin, ↓ = backspin · mellanslag servar</div>
+        <div class="pb-help-keys">←/→ flyttar · håll ↑ = topspin, ↓ = backspin · mellanslag servar · P / ? pausar</div>
         <button class="pb-btn" data-action="help-close">Tillbaka till bordet</button>
       </div>
     </div>
@@ -130,10 +131,19 @@ export function buildHud(root, { mouse }) {
   }
 
   let toastTimer = 0;
+  const stroke = root.querySelector('#pg-stroke');
+  const strokeText = root.querySelector('#pg-stroke-text');
+  const strokeFill = root.querySelector('#pg-stroke-fill');
   const api = {
     el,
     fmt,
     serveHint,
+    setStroke(spin) {
+      stroke.hidden = Math.abs(spin) < 0.2;
+      stroke.dataset.spin = spin > 0 ? 'top' : 'back';
+      strokeText.textContent = spin > 0 ? '↑ TOPSPIN' : '↓ BACKSPIN';
+      strokeFill.style.transform = `scaleX(${Math.min(1, Math.abs(spin))})`;
+    },
     setScore(n, bump = true) {
       el.score.textContent = fmt(n);
       if (!bump) return;

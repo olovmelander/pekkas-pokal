@@ -57,3 +57,25 @@ blur, paus och växling släpper alla hållna kontroller. Tangentbord använder
 pilar/A/D och mellanslag/W. Porträttkameran dras tillbaka för att bevara hela
 banbredden. Delad runtime sköter paus, ljud av/på, kvalitetsnedtrappning och
 resursstädning. Poängregler och energi simuleras oberoende av bildfrekvens.
+
+## Kvalitetsgranskning och andra designpasset
+
+Rivalerna följde tidigare spelarens aktuella disciplin och placerades med en
+linjär tredjedel av totaltiden. De följer nu egna sim-, löp- och cykelsplittar,
+med små individuella styrkor och avsedd totaltid. Bara en cyklist på samma gren,
+framför spelaren och på samma linje ger lä. Spelarens visuella sidoläge används
+också som kollisionsläge, och flera samtidigt hållna tangentbindningar släpper
+inte varandra. Tempot växlar mjukt; riktningsbyte har kort, konsekvent inbromsning.
+
+Hela den lokala miljön rör sig kontinuerligt längs en 800 m lång bana. Den gamla
+skogen hoppade tillbaka var 32:e meter medan hus och stenar stod stilla. Nu
+stämmer parallaxen mellan markeringar, stränder, hus, skog och föremål. Sjön
+har bredare öppet vatten, bojbana, båtar som gungar och badbryggor. Löparspåret
+har närmare björkkronor, stockar och löv; cykelsträckan öppnar mot inhägnade
+blomsterängar. Funktionärer vid vätskestationerna använder originalspelens
+animerade människomodell. Ljudknappen och pausen styr även den svaga cykelstämman.
+
+Rena simringar i följd och omkörningar ger tydlig återkoppling. Kontrollerna
+benämns efter aktuell aktivitet: kraftiga tag, öka steget och trampa hårdare.
+Resultatet visar fortsatt alla tre splittar i den användarbekräftade ordningen
+simning, löpning, cykling samt längsta obrutna sviten av simringar.

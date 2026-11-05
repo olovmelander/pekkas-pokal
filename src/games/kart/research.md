@@ -45,3 +45,22 @@ Resultatet visar placering, totaltid, snabbaste varv och poäng för tid, placer
 samt ren körning. Personbästa sparas lokalt. Kontroller återställs vid
 pointercancel, förlorad pointer capture, paus och blur. Den gemensamma
 spelmotorn äger paus, ljud, storleksändring och avmontering.
+
+## Kvalitetsgranskning och andra designpasset
+
+Det första fullständiga mobilloppet utan styrning registrerade en ny kollision
+varje 0,8 sekund längs samma däckvall. En sammanhängande skrapning är nu en
+incident; gräsets rullmotstånd kostar fortfarande tid. En ny incident kräver att
+karten lämnat vallen. Kontakt separerar och bromsar båda förare, och rivalerna
+söker en fri omkörningslinje före närkontakt. Målgång ordnas efter interpolerad
+tid vid linjen, så en förare inte kan förlora sin placering på nedvarvningsvarvet.
+
+Föraren ser rattutslag, roterande nav, däckspår vid greppförlust, kurvmarkeringar,
+avstånd till framförvarande och egna varvtider. En låg motorstämma följer
+farten och följer den gemensamma motorns paus, ljudknapp och livscykel.
+
+Miljön har fått en ordentlig träläktare med samma animerade publik som
+originalspelen, björkar mellan barrträden, uppbruten mark, däckstaplar,
+servicebord och bensindunkar i depån, sadeltak på klubbhuset, rörligt tyg i
+vimplarna och en tonad kvällshimmel. Kartarna har rörchassi, sidopoddar,
+numrerade nosar, motorflänsar, bakaxel och synliga fötter vid pedalerna.

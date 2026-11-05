@@ -54,6 +54,8 @@ function createStack(ctx) {
   let active = bundle(-3.6, 2.3, support.width);
   let dropX = 0, fallVelocity = 0;
   const debris = [];
+  const guideMaterial = new THREE.MeshBasicMaterial({ color: 0xf3d493, transparent: true, opacity: 0.3, depthWrite: false });
+  const landingGuide = new THREE.Mesh(new THREE.BoxGeometry(1, 0.055, 1.55), guideMaterial); group.add(landingGuide);
   function spawn() {
     active = bundle(-3.8, baseY + level * 0.58 + 1.8, support.width);
     dropping = false; breakTime = 0.16;
@@ -92,7 +94,10 @@ function createStack(ctx) {
         active.position.x = Math.sin(time * (1.4 + level * 0.065)) * 3.4 + support.x * 0.25;
         active.rotation.z = Math.sin(time * 3) * 0.025;
       }
-      hud(`${level} lager · ${(level * 0.58).toFixed(1)} m`, `${Math.ceil(Math.max(0, 30 - elapsed))} s · tryck när veden är rakt över stapeln`, 1 - elapsed / 30);
+      const aligned = Math.abs(active.position.x - support.x) <= 0.14;
+      landingGuide.position.set(support.x, baseY + level * 0.58 + 0.3, -2); landingGuide.scale.x = support.width;
+      guideMaterial.color.set(aligned ? 0xa9e4ad : 0xf3d493); guideMaterial.opacity = aligned ? 0.6 : 0.25;
+      hud(`${level} lager · ${(level * 0.58).toFixed(1)} m`, `${Math.ceil(Math.max(0, 30 - elapsed))} s · ${!dropping && aligned ? 'MITT ÖVER — SLÄPP!' : 'släpp ovanför den ljusa stödytan'}`, 1 - elapsed / 30);
       if (elapsed >= 30) end();
     },
     down() {
@@ -100,7 +105,8 @@ function createStack(ctx) {
       dropping = true; dropX = active.position.x; fallVelocity = 0; active.rotation.z = 0;
     },
     up() {},
-    cancel() {}
+    cancel() {},
+    dispose() { guideMaterial.dispose(); }
   };
 }
 

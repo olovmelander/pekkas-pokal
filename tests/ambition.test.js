@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { makeDeck, shuffle, cardPoints, legalCards, winningPlay, scoreDeal, passingCards, passHands, chooseCard } from '../src/games/ambition/rules.js';
+import { makeDeck, shuffle, cardPoints, legalCards, winningPlay, scoreDeal, passingCards, passHands, chooseCard, positionAdvice, previewCard } from '../src/games/ambition/rules.js';
 
 const card = (suit, rank) => ({ suit, rank, id: `${suit}-${rank}` });
 const play = (player, suit, rank) => ({ player, card: card(suit, rank) });
@@ -44,6 +44,27 @@ describe('Ambition: risk/reward scoring', () => {
 });
 
 describe('Ambition: passing and complete hands', () => {
+  it('explains public risk and keeps blind kickoff commitments out of previews', () => {
+    expect(positionAdvice([8, 20, 10, 0], [2, 3, 2, 0]).title).toBe('2 till poängzonen');
+    expect(positionAdvice([20, 30, 10, 0], [3, 4, 2, 0]).tone).toBe('gold');
+    expect(positionAdvice([30, 30, 10, 0], [3, 4, 2, 0]).tone).toBe('risk');
+    expect(positionAdvice([51, 20, 9, 0], [7, 4, 2, 0]).score).toBe(40);
+    const hiddenA = [play(1, 'diamonds', 14), play(2, 'clubs', 13), play(3, 'spades', 14)];
+    const hiddenB = [play(1, 'diamonds', 3), play(2, 'clubs', 4), play(3, 'spades', 5)];
+    const preview = (hidden) => previewCard(card('diamonds', 10), hidden, 'diamonds', [0, 0, 0, 0], [0, 0, 0, 0], true);
+    expect(preview(hiddenA)).toEqual(preview(hiddenB));
+    expect(preview(hiddenA).pot).toBe(4);
+    expect(preview(hiddenA).known).toBe(false);
+  });
+  it('can duck an expensive trick that would turn a paying position into the top penalty', () => {
+    const hand = [card('hearts', 14), card('hearts', 5)];
+    const played = [play(1, 'hearts', 10), play(2, 'clubs', 13), play(3, 'spades', 14)];
+    expect(chooseCard(hand, played, 'hearts', [20, 30, 15, 4], [3, 4, 2, 1], 0).rank).toBe(5);
+    const preview = previewCard(hand[0], played, 'hearts', [20, 30, 15, 4], [3, 4, 2, 1]);
+    expect(preview.known).toBe(true);
+    expect(preview.winning).toBe(true);
+    expect(preview.advice.tone).toBe('risk');
+  });
   it('passes simultaneously without duplicating or losing cards in either direction', () => {
     const deck = makeDeck();
     const hands = Array.from({ length: 4 }, (_, i) => deck.slice(i * 13, i * 13 + 13));

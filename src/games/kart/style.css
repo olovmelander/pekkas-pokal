@@ -38,7 +38,7 @@
   .kart-dashboard { bottom: calc(96px + env(safe-area-inset-bottom)); }
 }
 @media (max-height: 500px) and (min-width: 600px) {
-  .kart-race-meta { top: 82px; }
+  .kart-race-meta { top: 108px; }
   .kart-map { top: 80px; width: 112px; height: 90px; }
   .kart-controls { bottom: 10px; }
   .kart-controls button { min-height: 50px; }

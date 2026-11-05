@@ -9,3 +9,20 @@ Källor lästa 2026-11-05:
 - Stockbalansen är en egen balansutmaning. Ingen extern tävlingsregel tillskrivs den.
 
 Uttrycket är en sval svensk sommarkväll: rödmålad stuga med fönsterkarmar, svensk flagga, brygga, sjö, björkar, staket, en mekaniskt uppbyggd kedjekorg och träkubbar. De tre grenarna växlar mellan målval, vindläsning och kontinuerlig balans. Samma fullskärmskontrakt, svenska resultatpaneler, lokala rekord, paus, ljudkontroll och responsiva pek-/tangentkontroller som övriga nya årsspel används.
+# Kvalitetsgenomgång
+
+Kubbplanen har nu tydliga gränser, kastlinje, numrerade mål och en prickad
+kastbåge. Närbilder för varje gren gör att kubbarna, korgen och personen på
+stocken går att läsa även på en stående telefon. Korgjakten visar vindflagga
+och en böjd bana som används både av förhandsvisningen och den verkliga
+frisbeen. En träff slutar på korgens höjd; frisbeen behöver inte längre
+flyttas upp från marken efter landningen.
+
+Stocken ligger över en oval damm med kantsten, vass, träplattformar och
+synliga årsringar och barkstråk. Kameran följer framfarten. HUD visar både
+återstående tid och att stadgning bromsar, så att tidsgränsen är begriplig.
+Allt ingår i samma uttryckligt märkta arkadtolkning; dessa är fortfarande
+inte dokumenterade delgrenar från den verkliga tävlingen 2016.
+
+`tests/lundqvist.test.js` kontrollerar vindkurvans start och slut, fångst på
+korgens riktiga höjd och att träffgränsen stämmer med korgöppningen.

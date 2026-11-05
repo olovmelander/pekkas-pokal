@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { paceStep, raceProgress, scoreRace, formatTime, STAGES } from '../src/games/triathlon/rules.js';
+import { paceStep, raceProgress, scoreRace, formatTime, STAGES, rivalAtTime, canDraft } from '../src/games/triathlon/rules.js';
 
 describe('triathlon pacing', () => {
   it('follows the user-confirmed swim, run, cycle order for Lomsjön 2017', () => {
@@ -82,5 +82,29 @@ describe('triathlon finish and scoring', () => {
   it('formats split times without rolling 59.9 into a false minute', () => {
     expect(formatTime(59.99)).toBe('0:59.9');
     expect(formatTime(60.1)).toBe('1:00.1');
+  });
+});
+
+
+describe('triathlon independent opponents', () => {
+  it('crosses legs according to its own pace and uses the full declared duration', () => {
+    const at25 = rivalAtTime(25, 90), at60 = rivalAtTime(60, 90), finish = rivalAtTime(90, 90);
+    expect(at25.stage).toBe(0); expect(at60.stage).toBe(2);
+    expect(finish.progress).toBe(1); expect(finish.finished).toBe(true);
+    expect(rivalAtTime(89.99, 90).finished).toBe(false);
+    let previous = 0;
+    for (let t = 0; t <= 92; t += 0.1) {
+      const state = rivalAtTime(t, 90, [1.08, 0.98, 1]);
+      expect(state.progress).toBeGreaterThanOrEqual(previous); previous = state.progress;
+    }
+  });
+  it('never drafts a different discipline, a finished rider, or one behind', () => {
+    const r = { stage: 2, distance: 110, lane: 0, finished: false };
+    expect(canDraft(2, 100, 0, r)).toBe(true);
+    expect(canDraft(1, 100, 0, r)).toBe(false);
+    expect(canDraft(2, 100, 0, { ...r, stage: 1 })).toBe(false);
+    expect(canDraft(2, 100, 0, { ...r, finished: true })).toBe(false);
+    expect(canDraft(2, 115, 0, r)).toBe(false);
+    expect(canDraft(2, 100, 2, r)).toBe(false);
   });
 });

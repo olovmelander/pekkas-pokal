@@ -1,13 +1,22 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { countrySurfaces, countrySky } from './materials.js';
 
 export function buildCountryWorld(scene, lake = false) {
   const world = new THREE.Group();
   scene.add(world);
+  const surfaces = countrySurfaces();
+  countrySky(scene, lake);
   const materials = new Map();
+  const woodColors = new Set([0xb5a27a, 0xc8b68c, 0x755239, 0x8c372c, 0xb64e37, 0x783027, 0x835034, 0x65402b, 0xb6a179, 0x7c6d50, 0x785e42, 0xbfa27a, 0x9c7560, 0x9e7047, 0x795a35, 0xc7a674, 0x825a37, 0xd8b77c, 0x976b42, 0x705033, 0x8f653e, 0x675238, 0xd4ab6d, 0xae844e, 0xbd945b, 0xaf8252, 0x9b7954, 0xae8a60]);
   const material = (color, metalness = 0) => {
     const key = `${color}:${metalness}`;
-    if (!materials.has(key)) materials.set(key, new THREE.MeshStandardMaterial({ color, roughness: metalness ? 0.38 : 0.88, metalness }));
+    if (!materials.has(key)) {
+      const m = new THREE.MeshStandardMaterial({ color, roughness: metalness ? 0.38 : 0.88, metalness });
+      if (woodColors.has(color)) { m.map = surfaces.wood; m.bumpMap = surfaces.wood; m.bumpScale = 0.035; }
+      if ([0xd1aa4c, 0xd7b858, 0xd4ab54].includes(color)) { m.map = surfaces.straw; m.bumpMap = surfaces.straw; m.bumpScale = 0.06; }
+      materials.set(key, m);
+    }
     return materials.get(key);
   };
   function mesh(geometry, color, x = 0, y = 0, z = 0, parent = world, metalness = 0) {
@@ -21,10 +30,40 @@ export function buildCountryWorld(scene, lake = false) {
   const box = (w, h, d, c, x, y, z, p) => mesh(new THREE.BoxGeometry(w, h, d), c, x, y, z, p);
   const cylinder = (r, h, c, x, y, z, p, rt = r) => mesh(new THREE.CylinderGeometry(rt, r, h, 12), c, x, y, z, p);
   const ground = mesh(new THREE.PlaneGeometry(170, 180), lake ? 0x668361 : 0x7d8b45, 0, -0.035, -28);
+  ground.material.map = surfaces.grass; ground.material.bumpMap = surfaces.grass; ground.material.bumpScale = 0.09;
   ground.rotation.x = -Math.PI / 2;
   ground.castShadow = false;
-  const path = box(8, 0.025, 78, lake ? 0xb0a379 : 0xaa8b59, 0, 0, -24);
-  path.castShadow = false;
+  const pathPositions = [], pathUVs = [], pathIndices = [];
+  const length = lake ? 42 : 78, width = lake ? 5.2 : 7.2;
+  for (let i = 0; i <= 26; i++) {
+    const z = 12 - i / 26 * length;
+    const edge = Math.sin(i * 1.7) * 0.24 + Math.cos(i * 2.3) * 0.12;
+    for (const side of [-1, 1]) { pathPositions.push(side * (width / 2 + edge), 0.01, z); pathUVs.push(side > 0 ? 1 : 0, i / 26); }
+    if (i < 26) { const j = i * 2; pathIndices.push(j, j + 1, j + 2, j + 1, j + 3, j + 2); }
+  }
+  const pathGeometry = new THREE.BufferGeometry();
+  pathGeometry.setAttribute('position', new THREE.Float32BufferAttribute(pathPositions, 3));
+  pathGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(pathUVs, 2)); pathGeometry.setIndex(pathIndices); pathGeometry.computeVertexNormals();
+  const path = mesh(pathGeometry, lake ? 0xb9ac83 : 0xb09b72);
+  path.material.map = surfaces.gravel; path.material.bumpMap = surfaces.gravel; path.material.bumpScale = 0.07; path.castShadow = false;
+  // Low wooded hills close the horizon, while atmospheric layers keep the yard readable.
+  for (let i = 0; i < 9; i++) {
+    const hill = mesh(new THREE.SphereGeometry(1, 32, 16), i % 2 ? 0x8caa97 : 0xa8b5a1, -75 + i * 18, -3.8, -83 - i % 3 * 9);
+    hill.scale.set(24, 6 + i % 3 * 1.7, 21); hill.castShadow = false;
+  }
+  const bladeGeometry = new THREE.BufferGeometry();
+  bladeGeometry.setAttribute('position', new THREE.Float32BufferAttribute([-0.04, 0, 0, 0.04, 0, 0, 0, 0.32, 0.03, 0, 0, -0.04, 0, 0, 0.04, 0.03, 0.26, 0], 3));
+  bladeGeometry.computeVertexNormals();
+  const grassMat = new THREE.MeshStandardMaterial({ color: 0x6d874d, roughness: 1, side: THREE.DoubleSide });
+  const grass = new THREE.InstancedMesh(bladeGeometry, grassMat, 1900);
+  const blade = new THREE.Object3D();
+  for (let i = 0; i < 1900; i++) {
+    const side = i % 2 ? -1 : 1;
+    blade.position.set(side * (width / 2 + 0.35 + (i * 0.618033 % 1) * 13), 0, 12 - (i * 0.381966 % 1) * 78);
+    blade.rotation.y = i * 2.399; blade.scale.setScalar(0.7 + i % 7 * 0.14); blade.updateMatrix(); grass.setMatrixAt(i, blade.matrix);
+    grass.setColorAt(i, new THREE.Color().setHSL(0.21 + i % 3 * 0.013, 0.23 + i % 5 * 0.025, 0.27 + i % 6 * 0.025));
+  }
+  world.add(grass);
   for (let side = -1; side <= 1; side += 2) {
     for (let z = 8; z > -65; z -= 5) {
       cylinder(0.09, 1, 0xb5a27a, side * 5, 0.5, z);
@@ -39,12 +78,12 @@ export function buildCountryWorld(scene, lake = false) {
     cylinder(0.16, 2.5, birch ? 0xe3dcc6 : 0x755239, 0, 1.25, 0, p);
     if (birch) {
       for (let i = 0; i < 4; i++) {
-        const leaf = mesh(new THREE.IcosahedronGeometry(1.1, 1), [0x8caa58, 0x628a4a, 0xa0b76b][i % 3], Math.sin(i * 2) * 0.8, 2.8 + i * 0.27, Math.cos(i * 2) * 0.55, p);
+        const leaf = mesh(new THREE.SphereGeometry(1.1, 12, 8), [0x8caa58, 0x628a4a, 0xa0b76b][i % 3], Math.sin(i * 2) * 0.8, 2.8 + i * 0.27, Math.cos(i * 2) * 0.55, p);
         leaf.scale.y = 0.9;
       }
       for (let i = 0; i < 5; i++) box(0.31, 0.08, 0.3, 0x6e6b53, 0, 0.3 + i * 0.43, 0, p);
     } else {
-      for (let i = 0; i < 3; i++) mesh(new THREE.ConeGeometry(1.3 - i * 0.25, 2, 7), [0x375945, 0x456949, 0x54784e][i], 0, 1.8 + i * 0.8, 0, p);
+      for (let i = 0; i < 3; i++) mesh(new THREE.ConeGeometry(1.3 - i * 0.25, 2, 11), [0x375945, 0x456949, 0x54784e][i], 0, 1.8 + i * 0.8, 0, p);
     }
   }
   for (let i = 0; i < 42; i++) {
@@ -95,6 +134,11 @@ export function buildCountryWorld(scene, lake = false) {
     water.rotation.x = -Math.PI / 2;
     water.material = new THREE.MeshStandardMaterial({ color: 0x6096a0, roughness: 0.29, metalness: 0.35 });
     water.castShadow = false;
+    for (let i = 0; i < 26; i++) {
+      const z = 9 - i * 1.35, x = 11.3 + Math.sin(i * 2.3) * 0.65;
+      const stone = mesh(new THREE.DodecahedronGeometry(0.3 + i % 4 * 0.08), 0x8e9987, x, 0.12, z); stone.scale.y = 0.6;
+      for (let j = 0; j < 3; j++) { const reed = cylinder(0.025, 1 + j * 0.18, 0x7e8d51, x + j * 0.16, 0.5 + j * 0.09, z + j * 0.13); reed.rotation.z = Math.sin(i + j) * 0.12; }
+    }
     for (let i = 0; i < 15; i++) box(2.7, 0.12, 0.47, i % 2 ? 0x9b7954 : 0xae8a60, 13.3 + i * 0.45, 0.25, 2.5);
     const cottage = new THREE.Group(); cottage.position.set(-11.5, 0, -12); world.add(cottage);
     box(6, 3.4, 6, 0xa24e3e, 0, 1.7, 0, cottage);
@@ -150,5 +194,5 @@ export function buildCountryWorld(scene, lake = false) {
     world.add(object);
   }
   originals.forEach((geometry) => geometry.dispose());
-  return { world, mesh, box, cylinder, material, disposeMaterials: () => materials.forEach((m) => m.dispose()) };
+  return { world, mesh, box, cylinder, material, disposeMaterials: () => { materials.forEach((m) => m.dispose()); surfaces.dispose(); } };
 }

@@ -1,7 +1,8 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { dressCircuit } from './art.js';
 
 const ROAD_WIDTH = 4.5;
-const PALETTE = [0xf2c05c, 0xf16b54, 0x57a6c2, 0x78a96a, 0xbb8bdd, 0xe8e3ce];
 
 function label(text, color = '#ffe6a8', background = '#14332c') {
   const canvas = document.createElement('canvas');
@@ -43,7 +44,7 @@ export function createRoute() {
 
 export function createCircuit(scene) {
   const route = createRoute();
-  const { sample, curvature, length, curve } = route;
+  const { sample, length } = route;
   const materials = {};
   function material(color, opts = {}) {
     const key = `${color}-${JSON.stringify(opts)}`;
@@ -62,6 +63,16 @@ export function createCircuit(scene) {
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = -0.08;
   ground.receiveShadow = true;
+  const lawn = document.createElement('canvas'); lawn.width = lawn.height = 128;
+  const lawnContext = lawn.getContext('2d'), pixels = lawnContext.createImageData(128, 128);
+  for (let i = 0; i < 16384; i++) {
+    let noise = Math.imul(i ^ 2012, 0x45d9f3b); noise = Math.imul(noise ^ (noise >>> 16), 0x45d9f3b);
+    const variation = ((noise >>> 0) / 4294967296 - 0.5) * 16 + Math.sin((i % 128) * 0.14) * Math.cos(Math.floor(i / 128) * 0.11) * 6;
+    pixels.data.set([100 + variation, 117 + variation, 65 + variation * 0.6, 255], i * 4);
+  }
+  lawnContext.putImageData(pixels, 0, 0);
+  const lawnMap = new THREE.CanvasTexture(lawn); lawnMap.colorSpace = THREE.SRGBColorSpace; lawnMap.wrapS = lawnMap.wrapT = THREE.RepeatWrapping; lawnMap.repeat.set(38, 38);
+  ground.material.map = lawnMap; ground.material.color.set(0xffffff);
   scene.add(ground);
 
   function ribbon(halfWidth, y, color) {
@@ -109,7 +120,7 @@ export function createCircuit(scene) {
   asphalt.material.map = grainTexture;
   const dummy = new THREE.Object3D();
   const curb = new THREE.InstancedMesh(new THREE.BoxGeometry(0.75, 0.12, length / 150 + 0.05), material(0xffffff), 300);
-  const barrier = new THREE.InstancedMesh(new THREE.BoxGeometry(0.65, 0.68, length / 115 - 0.05), material(0xffffff), 230);
+  const barrier = new THREE.InstancedMesh(new THREE.BoxGeometry(0.35, 0.38, length / 115 - 0.05), material(0xffffff), 230);
   for (let i = 0; i < 150; i++) {
     for (let side = 0; side < 2; side++) {
       const s = sample(i / 150 * length, (side ? 1 : -1) * 4.65);
@@ -123,7 +134,7 @@ export function createCircuit(scene) {
   for (let i = 0; i < 115; i++) {
     for (let side = 0; side < 2; side++) {
       const s = sample(i / 115 * length, (side ? 1 : -1) * 6.7);
-      dummy.position.copy(s.position).setY(0.32);
+      dummy.position.copy(s.position).setY(0.19);
       dummy.rotation.set(0, s.angle, 0);
       dummy.updateMatrix();
       barrier.setMatrixAt(i * 2 + side, dummy.matrix);
@@ -157,7 +168,12 @@ export function createCircuit(scene) {
   clubhouse.position.set(-12, 0, -56);
   scene.add(clubhouse);
   box(18, 5, 8, 0x964c37, 0, 2.5, 0, clubhouse);
-  box(19.2, 0.45, 9.2, 0x3d4945, 0, 5.2, 0, clubhouse);
+  for (const side of [-1, 1]) {
+    const roof = box(19.2, 0.23, 5.2, 0x3d4945, 0, 5.5, side * 2.05, clubhouse);
+    roof.rotation.x = side * 0.25;
+  }
+  for (let x = -8.7; x < 9; x += 0.62) box(0.055, 4.9, 0.05, 0x783f30, x, 2.5, 4.05, clubhouse);
+  box(0.7, 2, 0.8, 0x6a6254, -5, 6.4, -1.7, clubhouse);
   for (const x of [-6, -2, 2, 6]) {
     box(2.6, 2.1, 0.1, 0xecd4a1, x, 2.7, 4.05, clubhouse);
     box(0.13, 2.2, 0.15, 0xe4dcca, x, 2.7, 4.12, clubhouse);
@@ -204,38 +220,18 @@ export function createCircuit(scene) {
     hill.scale.set(38 + i % 3 * 7, 13 + i % 4 * 4, 31);
     scene.add(hill);
   }
-  // Warm festival pennants.
-  for (let i = 0; i < 15; i++) {
-    const s = sample(i / 15 * length, 8.8);
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 3.4, 5), material(0xe2d4aa));
-    pole.position.copy(s.position).setY(1.7);
-    const flag = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.6), material(i % 2 ? 0xe8b652 : 0x436876, { side: THREE.DoubleSide }));
-    flag.position.copy(s.position).setY(3.05);
-    flag.position.x += 0.6;
-    flag.rotation.y = 0.3;
-    scene.add(pole, flag);
-  }
-  // A few spectators: instanced bodies and heads, bright clothing read at speed.
-  const bodies = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.23, 0.6, 2, 5), material(0xffffff), 36);
-  const heads = new THREE.InstancedMesh(new THREE.SphereGeometry(0.20, 6, 5), material(0xdab58e), 36);
-  for (let i = 0; i < 36; i++) {
-    const s = sample((i / 36 * 0.32 + 0.02) * length, -8.2 - (i % 3) * 0.7);
-    dummy.position.copy(s.position).setY(0.85);
-    dummy.scale.set(1, 1 + (i % 4) * 0.08, 1);
-    dummy.rotation.set(0, 0, 0);
-    dummy.updateMatrix();
-    bodies.setMatrixAt(i, dummy.matrix);
-    bodies.setColorAt(i, new THREE.Color(PALETTE[i % PALETTE.length]));
-    dummy.position.y = 1.52;
-    dummy.scale.setScalar(1);
-    dummy.updateMatrix();
-    heads.setMatrixAt(i, dummy.matrix);
-  }
-  scene.add(bodies, heads);
-  return { sample, curvature, length, curve };
+  const art = dressCircuit(scene, route);
+  const portalMaterials = new Set();
+  gantry.traverse(object => { if (object.material && object.position.y > 4) { object.material = object.material.clone(); portalMaterials.add(object.material); } });
+  return {
+    ...route, ...art,
+    fadePortal(opacity) {
+      portalMaterials.forEach(material => { material.opacity = opacity; material.transparent = opacity < 1; material.depthWrite = opacity > 0.9; });
+    }
+  };
 }
 
-export function createKart(color) {
+export function createKart(color, number = 1) {
   const root = new THREE.Group();
   const shadowCanvas = document.createElement('canvas');
   shadowCanvas.width = shadowCanvas.height = 64;
@@ -266,12 +262,37 @@ export function createKart(color) {
   part(new THREE.BoxGeometry(1.68, 0.23, 0.4), dark, 0, 0.33, -1.15);
   part(new THREE.BoxGeometry(0.8, 0.55, 0.65), dark, 0, 0.7, -0.4);
   part(new THREE.BoxGeometry(0.38, 0.52, 0.65), metal, 0.7, 0.61, -0.58);
-  const wheels = [];
-  for (const x of [-0.88, 0.88]) {
-    for (const z of [-0.78, 0.75]) {
-      const wheel = part(new THREE.CylinderGeometry(0.31, 0.31, 0.3, 12), dark, x, 0.31, z);
-      wheel.rotation.z = Math.PI / 2;
-      wheels.push(wheel);
+  // Welded frame, moulded side pods and exposed rear axle read as a real rental kart.
+  function rod(a, b, radius, material = metal) {
+    const from = new THREE.Vector3(...a), to = new THREE.Vector3(...b), vector = to.clone().sub(from);
+    const item = part(new THREE.CylinderGeometry(radius, radius, vector.length(), 8), material, 0, 0, 0);
+    item.position.copy(from).add(to).multiplyScalar(0.5);
+    item.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), vector.normalize()); return item;
+  }
+  for (const side of [-1, 1]) {
+    rod([side * 0.7, 0.31, -0.95], [side * 0.7, 0.31, 1.13], 0.065, dark);
+    const pod = part(new THREE.CapsuleGeometry(0.19, 0.72, 3, 8), paint, side * 0.64, 0.43, -0.05); pod.rotation.x = Math.PI / 2;
+    rod([side * 0.28, 0.76, -0.05], [side * 0.22, 0.53, 0.48], 0.115, dark);
+    part(new THREE.BoxGeometry(0.19, 0.12, 0.34), dark, side * 0.22, 0.49, 0.66);
+  }
+  rod([-1.0, 0.3, -0.8], [1.0, 0.3, -0.8], 0.055);
+  for (let i = 0; i < 5; i++) part(new THREE.BoxGeometry(0.44, 0.032, 0.57), metal, 0.72, 0.55 + i * 0.07, -0.57);
+  rod([0.9, 0.52, -0.7], [0.9, 0.52, -1.28], 0.09, dark);
+  const numberCanvas = document.createElement('canvas'); numberCanvas.width = 128; numberCanvas.height = 96;
+  const numberContext = numberCanvas.getContext('2d'); numberContext.fillStyle = '#f3df9c'; numberContext.fillRect(0, 0, 128, 96);
+  numberContext.fillStyle = '#1e2e2b'; numberContext.font = 'bold 70px sans-serif'; numberContext.textAlign = 'center'; numberContext.fillText(String(number), 64, 73);
+  const plate = part(new THREE.PlaneGeometry(0.48, 0.36), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(numberCanvas) }), 0, 0.51, 1.311);
+  plate.rotation.x = -0.12;
+  const wheels = [], frontPivots = [];
+  for (const x of [-0.88, 0.88]) for (const z of [-0.78, 0.75]) {
+    const pivot = new THREE.Group(); pivot.position.set(x, 0.31, z); root.add(pivot);
+    const wheel = new THREE.Group(); pivot.add(wheel); wheels.push(wheel);
+    if (z > 0) frontPivots.push(pivot);
+    const tire = new THREE.Mesh(new THREE.CylinderGeometry(0.31, 0.31, 0.31, 18), dark); tire.rotation.z = Math.PI / 2; tire.castShadow = true; wheel.add(tire);
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.32, 10), metal); hub.rotation.z = Math.PI / 2; wheel.add(hub);
+    const hubStripe = new THREE.Mesh(new THREE.BoxGeometry(0.33, 0.045, 0.25), dark); wheel.add(hubStripe);
+    for (const edge of [-0.12, 0.12]) {
+      const shoulder = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.04, 5, 18), dark); shoulder.rotation.y = Math.PI / 2; shoulder.position.x = edge; wheel.add(shoulder);
     }
   }
   // The driver is a helmeted racing silhouette, seated with both hands on the wheel.
@@ -285,5 +306,26 @@ export function createKart(color) {
     const arm = part(new THREE.CapsuleGeometry(0.09, 0.4, 2, 6), paint, x, 1.01, 0.13);
     arm.rotation.x = Math.PI / 2.7;
   }
-  return { root, wheels, steering, color };
+  // Static painted, rubber and metal pieces each become one draw call.
+  mergeParts(root, new Set([contact, plate, steering]));
+  wheels.forEach(wheel => mergeParts(wheel));
+  return { root, wheels, frontPivots, steering, color };
+}
+
+
+function mergeParts(parent, exclude = new Set()) {
+  const batches = new Map();
+  for (const child of [...parent.children]) {
+    if (!child.isMesh || exclude.has(child)) continue;
+    child.updateMatrix();
+    const geometry = child.geometry.clone().applyMatrix4(child.matrix);
+    if (!batches.has(child.material)) batches.set(child.material, []);
+    batches.get(child.material).push(geometry);
+    parent.remove(child); child.geometry.dispose();
+  }
+  for (const [material, geometries] of batches) {
+    const merged = new THREE.Mesh(mergeGeometries(geometries), material);
+    merged.castShadow = merged.receiveShadow = true; parent.add(merged);
+    geometries.forEach(geometry => geometry.dispose());
+  }
 }

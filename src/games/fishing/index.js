@@ -24,6 +24,8 @@
  */
 
 import * as THREE from 'three';
+import { createGameClock } from '../shared/game-clock.js';
+import { dodgeMultiplier, bottomReward, tapRadiusNdc, isPerfectCatch } from './rules.js';
 import { guardRenderer, RenderWatchdog, gfxNotice, precompile } from '../shared/gfx.js';
 import { Sfx } from './audio.js';
 import { SPECIES, JUNK, fishAssets, Shoal, spawnJunk, disposeAssets, speciesSvg } from './species.js';
@@ -500,8 +502,7 @@ export async function createFishing(container) {
     steered: false,
     cheer: 0,
     clock: 0,
-    tossT: 0,
-    timers: []
+    tossT: 0
   };
 
   const progress = loadProgress();
@@ -509,11 +510,9 @@ export async function createFishing(container) {
   const fmt = (n) => Math.round(n).toLocaleString('sv-SE');
   hud.hi.textContent = fmt(progress.high);
 
-  const later = (fn, ms) => {
-    const id = setTimeout(fn, ms);
-    state.timers.push(id);
-    return id;
-  };
+  const gameClock = createGameClock();
+  let running = true;
+  const later = (fn, ms) => gameClock.schedule(fn, ms / 1000);
 
   /* Camera scratch vectors — declared up here because startToss() cuts the
      camera directly and runs before the loop section. */
@@ -564,8 +563,8 @@ export async function createFishing(container) {
   function toast(msg, big = false) {
     hud.toast.textContent = msg;
     hud.toast.className = `pb-toast show${big ? ' big' : ''}`;
-    clearTimeout(state.lastToast);
-    state.lastToast = setTimeout(() => {
+    gameClock.cancel(state.lastToast);
+    state.lastToast = later(() => {
       hud.toast.className = 'pb-toast';
     }, big ? 1900 : 1200);
   }
@@ -578,9 +577,14 @@ export async function createFishing(container) {
     replay(hud.announce, 'show');
   }
 
-  function setPhaseLabel(txt) {
+  let phaseLabelTimer = null;
+  function setPhaseLabel(txt, ms = 0, follow = '') {
+    gameClock.cancel(phaseLabelTimer);
+    phaseLabelTimer = null;
     hud.phase.textContent = txt;
     hud.phase.classList.toggle('show', !!txt);
+    hud.phase.classList.toggle('fi-phase-compact', !ms && !!txt && txt.length < 25);
+    if (ms) phaseLabelTimer = later(() => setPhaseLabel(follow), ms);
   }
 
   function renderMult() {
@@ -672,8 +676,7 @@ export async function createFishing(container) {
         cell: CELL.BUBBLE, color: 0xdff8ff, wob: 0.6
       });
     }
-    setPhaseLabel('VÄJ FÖR FISKEN — djupare ner simmar det finare');
-    later(() => setPhaseLabel(''), 2600);
+    setPhaseLabel('VÄJ FÖR FISKEN — djupare ner simmar det finare', 2600, '↓ VÄJ · NERÅT');
     renderCasts();
     renderMult();
     renderMission();
@@ -683,12 +686,12 @@ export async function createFishing(container) {
     f.dodged = true;
     state.dodges++;
     state.rec.dodges = state.dodges;
-    state.mult = Math.min(10, 1 + state.dodges * 0.5);
+    const near = Math.abs(dx) < rx + 0.6;
+    state.mult = dodgeMultiplier(state.dodges, state.rec.near + Number(near));
     sfx.dodge(state.dodges);
     // A close shave pays extra — the reason to thread a gap rather than
     // swing wide around everything
-    if (Math.abs(dx) < rx + 0.6) {
-      state.mult = Math.min(10, state.mult + 0.25);
+    if (near) {
       state.rec.near++;
       sfx.nearMiss();
       popScore('SNÄVT!', f.mesh.position, 'near');
@@ -723,9 +726,9 @@ export async function createFishing(container) {
     angler.trigger(reason === 'junk' ? 'junk' : reason === 'bottom' ? 'big' : 'strike');
     boatRock(0.08, -0.32, -0.12); // the strike snatches the bow down
     if (reason === 'bottom') {
-      const bonus = 1500 * state.mult;
+      const { bonus, multiplier } = bottomReward(state.mult);
       addScore(bonus, lure.position, `BOTTEN +${fmt(bonus)}`, 'gold');
-      state.mult = Math.min(12, state.mult + 2);
+      state.mult = multiplier;
       state.rec.bottom = true;
       announce('BOTTENKÄNNING!', 'Full multiplikator', 'gold');
       sfx.legend();
@@ -741,8 +744,7 @@ export async function createFishing(container) {
       announce('KROKAD!', fish.sp.name);
     }
     renderMult();
-    setPhaseLabel('VEVA! Nu gäller det att träffa allt');
-    later(() => setPhaseLabel(''), 2200);
+    setPhaseLabel('VEVA! Nu gäller det att träffa allt', 2200, '↑ FÅNGA · UPPÅT');
   }
 
   function catchOne(f, first) {
@@ -956,6 +958,9 @@ export async function createFishing(container) {
   }
 
   function startGame() {
+    gameClock.clear();
+    releaseInput();
+    state.lastCatchT = -9;
     sfx.resume();
     state.score = 0;
     state.castNo = 1;
@@ -1003,6 +1008,7 @@ export async function createFishing(container) {
   }
 
   function onPointerDown(e) {
+    if (!running || (e.pointerType === 'mouse' && e.button !== 0)) return;
     sfx.resume();
     if (helpOpen || bookOpen || e.target.closest('.pb-overlay, .pb-mute, .pb-info, .pb-help, .fi-book')) return;
     if (state.phase === 'toss') {
@@ -1013,11 +1019,14 @@ export async function createFishing(container) {
       skipCard();
       return;
     }
+    if (!steering()) return;
     dragging = true;
+    canvasHost.setPointerCapture?.(e.pointerId);
     steerTo(e);
   }
 
   function onPointerMove(e) {
+    if (!running || helpOpen || bookOpen || !steering()) return;
     // A mouse steers by hovering — on a desktop that is the natural
     // gesture; a finger has to be down
     if (dragging || (e.pointerType === 'mouse' && steering())) steerTo(e);
@@ -1028,13 +1037,15 @@ export async function createFishing(container) {
   }
 
   function onKeyDown(e) {
+    if (e.target.closest?.('input, textarea, select')) return;
     const k = e.key.toLowerCase();
-    if (k === '?' || (k === 'escape' && (helpOpen || bookOpen))) {
+    if (k === '?' || k === 'p' || (k === 'escape' && (helpOpen || bookOpen))) {
       if (bookOpen) setBook(false);
-      else setHelp(k === '?' ? !helpOpen : false);
+      else setHelp(k === '?' || k === 'p' ? !helpOpen : false);
       return;
     }
-    if (helpOpen || bookOpen) return;
+    if (helpOpen || bookOpen || !running) return;
+    if (['arrowleft', 'arrowright', 'a', 'd'].includes(k) && steering()) e.preventDefault();
     if (k === 'arrowleft' || k === 'a') {
       if (!e.repeat) state.targetX = Math.max(-REACH, state.targetX - 1.4);
       keys.left = true;
@@ -1065,13 +1076,13 @@ export async function createFishing(container) {
   function tryTapFish(e) {
     const p = pointerToNdc(e);
     let bestF = null;
-    let bestD = 0.17; // a generous thumb in NDC
+    let bestD = tapRadiusNdc(canvasHost.clientWidth, canvasHost.clientHeight);
     state.caught.forEach((f) => {
       if (!f.air || f.air.done) return;
       ndc.copy(f.mesh.position).project(camera);
       // On a wide screen an NDC unit across is more pixels than one down —
       // scale x so the thumb radius stays round on a monitor
-      const d = Math.hypot((ndc.x - p.x) * Math.max(1, camera.aspect), ndc.y - p.y);
+      const d = Math.hypot((ndc.x - p.x) * camera.aspect, ndc.y - p.y);
       if (d < bestD) {
         bestD = d;
         bestF = f;
@@ -1115,7 +1126,9 @@ export async function createFishing(container) {
   function finishToss() {
     if (state.tossDone) return; // a tap and a splash can land on the same frame
     state.tossDone = true;
-    const all = state.caught.length > 0 && state.caught.every((f) => f.air && f.air.done === 'hit');
+    const all = isPerfectCatch(state.caught.length, state.rec.tapped);
+    state.slowOn = false;
+    hudHost.classList.remove('fi-slow');
     if (all) state.rec.perfect = true;
     if (all && state.caught.length > 1) {
       angler.trigger('perfect');
@@ -1129,26 +1142,49 @@ export async function createFishing(container) {
       state.cheer = 2;
     }
     checkMission();
-    later(endCast, 1000);
+    later(endCast, 1500);
   }
 
   /* Strategy card and fångstdagbok: both pause the game while open */
   function setHelp(open) {
     helpOpen = open;
     hud.help.hidden = !open;
-    if (open) dragging = false;
+    if (open) releaseInput();
   }
 
   function setBook(open) {
     bookOpen = open;
     if (open) renderBook(hud, progress, SPECIES, speciesSvg, fmt, fmtKg);
     hud.book.hidden = !open;
-    if (open) dragging = false;
+    if (open) releaseInput();
+  }
+
+  function releaseInput() {
+    dragging = false;
+    keys.left = false;
+    keys.right = false;
+  }
+
+  function onBlur() {
+    releaseInput();
+    if (state.phase !== 'idle' && state.phase !== 'over') setHelp(true);
+  }
+
+  function onKeyCapture(e) {
+    if (e.key === 'Escape' && (helpOpen || bookOpen)) {
+      e.preventDefault();
+      e.stopPropagation();
+      setHelp(false);
+      setBook(false);
+    }
   }
 
   canvasHost.addEventListener('pointerdown', onPointerDown);
   canvasHost.addEventListener('pointermove', onPointerMove);
   window.addEventListener('pointerup', onPointerUp);
+  window.addEventListener('pointercancel', onPointerUp);
+  window.addEventListener('blur', onBlur);
+  window.addEventListener('keydown', onKeyCapture, true);
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', onKeyUp);
   hud.start.addEventListener('click', startGame);
@@ -1195,7 +1231,6 @@ export async function createFishing(container) {
 
   let raf = 0;
   let last = performance.now();
-  let running = true;
   let clockT = 0;          // the game's own time, see CLOCK_WRAP
   let eyeUnder = false;    // last frame: was the camera under the surface?
   let anglerAct = 'rest';  // for the test hook
@@ -1773,11 +1808,13 @@ export async function createFishing(container) {
     let dt = clampDt(rawMs);
     last = now;
     if (!running) return;
+    if (helpOpen || bookOpen) { renderer.render(scene, camera); return; }
     adapt(rawMs);
     // Test hook: time can be frozen (or stepped by a fixed amount) so a
     // close-up can be taken mid-motion — the frame still renders
     if (frozen !== null) dt = frozen;
-    const rdt = dt; // real time, for the camera and UI
+    gameClock.tick(dt);
+    const rdt = dt; // active time, for the camera and UI
     clockT = (clockT + rdt) % CLOCK_WRAP;
     const t = clockT;
     state.clock += dt;
@@ -2008,6 +2045,7 @@ export async function createFishing(container) {
   const onVisibility = () => {
     running = !document.hidden;
     last = performance.now();
+    if (document.hidden) onBlur();
   };
   document.addEventListener('visibilitychange', onVisibility);
 
@@ -2051,6 +2089,7 @@ export async function createFishing(container) {
   /* Deterministic hooks for automated tests */
   window.__ppFiske = {
     state,
+    clock: gameClock,
     scene,
     camera,
     renderer,
@@ -2157,11 +2196,14 @@ export async function createFishing(container) {
     canvasHost.removeEventListener('pointerdown', onPointerDown);
     canvasHost.removeEventListener('pointermove', onPointerMove);
     window.removeEventListener('pointerup', onPointerUp);
+    window.removeEventListener('pointercancel', onPointerUp);
+    window.removeEventListener('blur', onBlur);
+    window.removeEventListener('keydown', onKeyCapture, true);
     window.removeEventListener('keydown', onKeyDown);
     window.removeEventListener('keyup', onKeyUp);
-    clearTimeout(state.lastToast);
-    state.timers.forEach(clearTimeout);
-    delete window.__ppFiske;
+    gameClock.cancel(state.lastToast);
+    gameClock.destroy();
+    if (window.__ppFiske?.state === state) delete window.__ppFiske;
 
     gfx.dispose();
     watchdog.dispose();

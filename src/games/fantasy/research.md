@@ -26,3 +26,34 @@ Mus och touch använder samma knappar. Tangentbord fungerar med vanliga fokusbar
 ## Verifiering
 
 `tests/fantasy.test.js` kontrollerar budget, platser och dubbletter, tillåtet spelarbyte, kaptensmultiplikator, poängregler återställning av kaptensval vid ångrat byte, delade placeringar och deterministiska matchresultat för alla spelare över flera säsonger. Integrationskontroll behöver även öppna, spela fem omgångar, spela om och stänga spelet i webbläsare på telefon- och datorstorlek.
+
+## Fördjupad spelbarhetspass
+
+Lagets samlade prognos och kaptensbidrag visas nu direkt ovanför startfemman.
+Varje plats visar väntade poäng och matchsvårighet. Marknaden visar upp till
+tre kommande matcher och skillnaden mot spelaren som skulle ersättas. Mobilen
+har separata lag- och marknadsvyer med en synlig positionsväljare, så ett byte
+inte kräver att man letar längst ned bakom hela startfemman.
+
+Rivalerna planerar nu också ett spelarbyte, sin kapten och sitt engångskort.
+De följer samma budget och transfergräns och använder bara de offentliga
+prognoserna. Framtida matchresultat konsulteras aldrig. En testjämförelse
+verifierar identiska AI-beslut för olika resultatseed med samma spelschema.
+
+Matchpresentationen har en femomgångsöversikt och en konkret jämförelse mellan
+lagets prognos och verkliga utfall. Säsongens slut visar också kaptensvalens
+extra poäng och bästa omgång. Stadion reagerar på resultatraderna med markerad
+spelare, riktad bollbana, jublande publik, målreaktion och uppdaterad arenaannons;
+riktiga strålkastarljus bidrar till kvällsscenen.
+
+Nya tester verifierar prognosens kaptensmultiplikator, återstående spelschema,
+AI:ns lagbudget/ett-byte/ett-kort och utfallsanalysen. En komplett webbläsarkörning
+med renderingen avstängd verifierade fem omgångar, mobilens vybyte, transfer och
+ångrat byte, trippelkapten, resultat, omspel och stängning utan JavaScript-fel.
+
+De nya vyerna har granskats med riktig rendering i 320 × 568 och 844 × 390.
+En klippt fortsättknapp i liggande resultatläge rättades genom att göra
+resultatpanelen separat rullbar och hålla knappen synlig; riktig browserklick
+verifierade nästa omgång. Matchkameran flyttades in över planen så att
+läktartaket inte skymmer spelet. Ett nytt omslag fångades i 1100 × 773 från
+den spelbara scenen med strålkastare och matchannons.

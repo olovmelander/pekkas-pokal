@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { createPerson, appearanceFor, POSES } from '../shared/people.js';
 
-export function buildStadium(scene) {
+export function buildStadium(scene, { reducedMotion = false } = {}) {
   const root = new THREE.Group();
   scene.add(root);
   const mat = (color, roughness = 0.7) => new THREE.MeshStandardMaterial({ color, roughness });
@@ -102,6 +102,10 @@ export function buildStadium(scene) {
       const lamps = box(4.6, 1.5, 0.35, dark, x, 15, z);
       lamps.lookAt(0, 0, 0);
       for (let i = 0; i < 4; i++) box(0.75, 0.9, 0.42, lampMat, x - 1.5 + i, 15, z + (z > 0 ? -0.2 : 0.2));
+      const light = new THREE.SpotLight(0xdcecff, 180, 75, 0.8, 0.8, 1.3);
+      light.position.set(x, 14.5, z);
+      light.target.position.set(x * 0.2, 0, z * 0.2);
+      root.add(light, light.target);
     }
   }
   const ball = add(new THREE.IcosahedronGeometry(0.35, 1), white, 0, 0.45, 0);
@@ -121,18 +125,66 @@ export function buildStadium(scene) {
     root.add(person.root);
     people.push({ person, x: person.root.position.x, z: person.root.position.z, i });
   }
+  const marker = add(new THREE.RingGeometry(0.65, 0.85, 48), new THREE.MeshBasicMaterial({ color: 0xffd47b, transparent: true, opacity: 0.9, depthWrite: false }), 0, 0.12, 0);
+  marker.rotation.x = -Math.PI / 2;
+  marker.visible = false;
+  const trailPoints = new Float32Array(45);
+  const trailGeometry = new THREE.BufferGeometry();
+  trailGeometry.setAttribute('position', new THREE.BufferAttribute(trailPoints, 3));
+  const trail = new THREE.Line(trailGeometry, new THREE.LineBasicMaterial({ color: 0xffdf9e, transparent: true, opacity: 0.55 }));
+  trail.frustumCulled = false;
+  trail.visible = false;
+  root.add(trail);
+  let highlight = null;
+  let highlightTime = 0;
+  const setBall = (t) => {
+    const source = people[highlight.slot];
+    const isSave = !highlight.goals && highlight.saves >= 3;
+    const startX = isSave ? -5 : source.x;
+    const startZ = isSave ? 10 : source.z;
+    const endX = Math.sin(highlight.slot * 2.3) * 2.3;
+    const endZ = isSave ? 22 : -24;
+    return [startX + (endX - startX) * t, 0.42 + Math.sin(Math.PI * t) * (isSave ? 1.2 : 2.7), startZ + (endZ - startZ) * t];
+  };
   return {
     ball,
+    highlight(row, slot) {
+      highlight = { ...row, slot };
+      highlightTime = 0;
+      ctx.fillStyle = '#101c2b'; ctx.fillRect(0, 0, 1024, 80);
+      ctx.fillStyle = '#ffe2a0'; ctx.font = 'bold 31px Georgia';
+      ctx.fillText(`${row.goals ? 'MÅÅÅL!   ' : ''}${row.player.name.toUpperCase()}    +${row.total} POÄNG`, 512, 51);
+      banner.needsUpdate = true;
+    },
     update(dt, time, live, celebration) {
+      if (highlight) highlightTime += dt;
+      const highlightActive = highlight && highlightTime < 2.25;
+      crowd.position.y = !reducedMotion && celebration > 0 ? Math.abs(Math.sin(time * 7)) * 0.12 : 0;
       people.forEach(({ person, x, z, i }) => {
         const move = live ? 1 : 0.12;
         person.root.position.x = x + Math.sin(time * 0.8 + i * 2) * 3.1 * move;
         person.root.position.z = z + Math.sin(time * 0.53 + i) * 4.2 * move;
-        person.setPose(live ? POSES.walk(time * 6 + i) : POSES.stand(time), 0.2);
+        const hero = highlightActive && i === highlight.slot;
+        person.setPose(hero && highlightTime > 1.2 && highlight.goals ? POSES.cheer(time) : live ? POSES.walk(time * 6 + i) : POSES.stand(time), 0.2);
         person.setExpression(celebration > 0 ? 'grin' : 'focus', 0.6);
         person.update(dt, time);
       });
-      ball.position.set(Math.sin(time * 0.75) * 8, 0.45 + (celebration > 0 ? Math.abs(Math.sin(time * 4)) * 3 : 0), Math.sin(time * 0.5) * 15);
+      marker.visible = !!highlightActive;
+      trail.visible = !!highlightActive && (highlight.goals || highlight.assists || highlight.saves >= 3);
+      if (highlightActive) {
+        const source = people[highlight.slot].person.root.position;
+        marker.position.set(source.x, 0.14, source.z);
+        marker.scale.setScalar(reducedMotion ? 1 : 1 + Math.sin(highlightTime * 5) * 0.12);
+      }
+      if (trail.visible) {
+        const progress = Math.min(1, highlightTime / 1.4);
+        ball.position.set(...setBall(progress));
+        for (let i = 0; i < 15; i++) {
+          const p = setBall(Math.max(0, progress - (14 - i) * 0.018));
+          trailPoints.set(p, i * 3);
+        }
+        trailGeometry.attributes.position.needsUpdate = true;
+      } else ball.position.set(Math.sin(time * 0.75) * 8, 0.45, Math.sin(time * 0.5) * 15);
       ball.rotation.x = time;
       ball.rotation.z = time * 0.7;
     },

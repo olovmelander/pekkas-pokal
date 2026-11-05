@@ -54,6 +54,31 @@ export function scoreDeal(captured, tricks) {
   });
 }
 
+/** Explain the visible position, without predicting any hidden cards. */
+export function positionAdvice(captured, tricks, player = 0) {
+  const yours = captured[player];
+  const highestOther = Math.max(...captured.filter((_, i) => i !== player));
+  if (yours >= 51) return { tone: 'gold', title: 'Slam!', detail: '51 eller mer ger 40 matchpoäng.', score: 40 };
+  if (captured.some((n) => n >= 51)) return { tone: 'risk', title: 'Rivalen har slam', detail: 'Den här given ger bara slammaren poäng.', score: 0 };
+  if (tricks[player] === 0) return { tone: 'calm', title: 'Nollan lever', detail: 'Noll stick kan löna sig. Ett stick bryter nollan.', score: scoreDeal(captured, tricks)[player] };
+  if (yours < 10) return { tone: 'calm', title: `${10 - yours} till poängzonen`, detail: 'Minst 10 tagna behövs för vanliga matchpoäng.', score: 0 };
+  if (yours >= highestOther) return { tone: 'risk', title: 'Du har för mycket', detail: 'Flest tagna ger noll. Släpp stick eller sikta på 51.', score: 0 };
+  return { tone: 'gold', title: 'Du ligger i poängzonen', detail: `${highestOther - yours} poäng till delad topp. Flest tagna ger noll.`, score: yours };
+}
+
+/** A preview considers only already visible cards; kickoff commitments stay hidden. */
+export function previewCard(card, plays, ledSuit, captured, tricks, kickoff = false) {
+  const publicPlays = kickoff ? [] : plays;
+  const suit = kickoff ? 'diamonds' : ledSuit || card.suit;
+  const pot = publicPlays.reduce((total, play) => total + cardPoints(play.card), cardPoints(card) + (kickoff ? 3 : 0));
+  const winning = winningPlay([...publicPlays, { player: 0, card }], suit)?.player === 0;
+  const after = captured.slice();
+  const afterTricks = tricks.slice();
+  after[0] += pot;
+  afterTricks[0]++;
+  return { pot, winning, known: !kickoff && publicPlays.length === 3, advice: positionAdvice(after, afterTricks) };
+}
+
 /** Uses only its own hand and the public trick/score; never peeks at rival hands. */
 export function chooseCard(hand, plays, ledSuit, captured, tricks, player, kickoff = false) {
   const legal = legalCards(hand, ledSuit);
@@ -69,7 +94,14 @@ export function chooseCard(hand, plays, ledSuit, captured, tricks, player, kicko
     const winner = winningPlay([...plays, { card, player }], ledSuit);
     const wins = winner?.player === player;
     const trickValue = plays.reduce((total, play) => total + cardPoints(play.card), cardPoints(card));
-    if (wins) return wantsPoints ? 20 + trickValue - card.rank * 0.2 : -40 - trickValue;
+    if (wins) {
+      const after = captured[player] + trickValue;
+      const endangered = after >= mostOther && after >= 10 && after < 51;
+      const overshoot = endangered && captured[player] >= 10 && captured[player] < 40;
+      if (after >= 51) return 100 + trickValue;
+      if (overshoot) return -30 - trickValue;
+      return wantsPoints ? 20 + trickValue - card.rank * 0.2 : -40 - trickValue;
+    }
     // Discard expensive cards when ducking, but keep useful high cards while collecting.
     return wantsPoints ? -cardPoints(card) - card.rank * 0.1 : 10 + cardPoints(card) + card.rank * 0.1;
   };

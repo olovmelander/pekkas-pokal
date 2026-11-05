@@ -39,9 +39,12 @@
   .triathlon-game .tri-surge { padding: 8px 16px; }
 }
 @media (max-height: 520px) {
-  .triathlon-game .tri-dashboard { top: 82px; left: 14px; max-width: 255px; padding: 8px 12px; }
+  .triathlon-game .tri-dashboard { top: 108px; left: 14px; max-width: 255px; padding: 8px 12px; }
   .triathlon-game .tri-help { display: none; }
   .triathlon-game .tri-controls { bottom: 12px; }
   .triathlon-game .tri-control { min-height: 48px; min-width: 54px; }
   .triathlon-game .tri-callout { bottom: 77px; }
 }
+
+.triathlon-game .tri-surge.pushing { border-color: #ffe29a; box-shadow: 0 0 24px #f5cc662c, inset 0 1px 0 #ffffff30; }
+.triathlon-game .tri-control:focus-visible { outline: 3px solid #fff4c6; outline-offset: 3px; }

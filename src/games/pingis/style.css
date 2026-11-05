@@ -1280,3 +1280,15 @@
     display: none;
   }
 }
+
+/* Live spin tells a flick what it is doing before the ball leaves the bat. */
+.pg-ui .pg-stroke { position: absolute; bottom: calc(18px + env(safe-area-inset-bottom)); right: max(14px, env(safe-area-inset-right)); min-width: 126px; padding: 8px 14px; border: 1px solid currentColor; border-radius: 20px; color: #ffad75; background: #1b1011db; text-align: center; pointer-events: none; box-shadow: 0 4px 20px #0004; }
+.pg-ui .pg-stroke[hidden] { display: none; }
+.pg-ui .pg-stroke[data-spin='back'] { color: #c1a8ff; background: #17132cdb; }
+.pg-ui .pg-stroke > span { display: block; font-size: 10px; font-weight: 800; letter-spacing: .12em; }
+.pg-ui .pg-stroke > i { display: block; height: 3px; margin-top: 5px; overflow: hidden; border-radius: 3px; background: #ffffff24; }
+.pg-ui .pg-stroke b { display: block; height: 100%; background: currentColor; transform-origin: left; }
+.pg-ui .pb-info, .pg-ui .pb-mute { width: 44px; height: 44px; }
+.pg-ui .pb-info { right: max(112px, calc(env(safe-area-inset-right) + 100px)); }
+@media (max-aspect-ratio: 1/1) { .pg-ui .pg-stroke { bottom: calc(120px + env(safe-area-inset-bottom)); } }
+@media (max-height: 450px) { .pg-ui .pg-stroke { bottom: calc(12px + env(safe-area-inset-bottom)); padding: 6px 10px; } }

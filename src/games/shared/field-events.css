@@ -32,6 +32,12 @@
 .field-game .field-meter.balance i { width: 5px !important; border-radius: 4px; background: #fff; box-shadow: 0 0 8px #fff; transform: translateX(-50%); }
 .field-game .field-meter.balance b { display: none; }
 .field-game .field-stamp { position: absolute; right: 18px; top: 145px; text-align: right; color: #fffa; font-size: 10px; text-shadow: 0 1px 5px #173323; letter-spacing: .15em; text-transform: uppercase; pointer-events: none; }
+.field-game .field-result-number { color:#f3d594; font:400 56px/1 var(--ff-serif,Georgia,serif); margin:12px 0 18px; font-variant-numeric:tabular-nums; }
+.field-game .field-result-number small { display:block; margin-top:7px; font:11px/1.4 var(--font-body,sans-serif); color:#c9ccbd; letter-spacing:.12em; text-transform:uppercase; }
+.field-game .field-scorecard { display:grid; grid-template-columns:1fr auto; gap:9px 24px; margin:16px 0; text-align:left; padding:15px 0; border-block:1px solid #dec99c2b; }
+.field-game .field-scorecard span { color:#d8ddce; font-size:13px; }
+.field-game .field-scorecard b { color:#f3d594; font-size:14px; font-variant-numeric:tabular-nums; }
+.field-game .field-scorecard small { font-size:10px; color:#aaa; margin-left:3px; font-weight:400; }
 @media (max-width: 540px) {
   .field-game .field-console { padding: 11px 13px; bottom: max(10px, env(safe-area-inset-bottom)); }
   .field-game .field-progress { top: 85px; }
@@ -45,4 +51,6 @@
   .field-game .field-stamp { display: none; }
   .field-game .field-buttons button { min-height: 44px; }
   .field-game .field-hint { margin: 3px 0 5px; }
+  .field-game .field-result-number { font-size:34px; margin:6px 0; }
+  .field-game .field-scorecard { margin:7px 0; padding:8px 0; gap:4px 18px; }
 }

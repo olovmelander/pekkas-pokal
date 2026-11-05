@@ -1152,3 +1152,15 @@
   12%, 72% { opacity: 1; transform: translate(-50%, -50%); }
   100% { opacity: 0; transform: translate(-50%, -50%); }
 }
+
+/* A readable attack phrase: shape, words and a closing window, not color alone. */
+.fen .fen-cue { position: absolute; left: 50%; bottom: calc(var(--safe-b) + 38px); transform: translateX(-50%); width: min(230px, 36vw); padding: 10px 14px; color: #ffd5c6; background: #231711e8; border: 1px solid #ee98766b; border-radius: 12px; text-align: center; pointer-events: none; box-shadow: 0 5px 24px #0004; }
+.fen .fen-cue[hidden] { display: none; }
+.fen .fen-cue strong { display: block; font-size: 10px; letter-spacing: .1em; }
+.fen .fen-cue > span { display: block; height: 3px; margin-top: 7px; overflow: hidden; background: #ffffff1a; border-radius: 4px; }
+.fen .fen-cue i { display: block; height: 100%; background: currentColor; transform-origin: left; }
+.fen .fen-cue[data-tone='covered'] { color: #b8eafa; border-color: #79c2db66; background: #10252de8; }
+.fen .fen-cue[data-tone='open'] { color: #b9f6cf; border-color: #83dca066; background: #142d22ed; }
+.fen[data-orient='portrait'] .fen-cue { bottom: calc(var(--safe-b) + 177px); width: min(240px, 68vw); }
+.fen[data-orient='portrait'] .fen-coach { bottom: calc(var(--safe-b) + 242px); }
+@media (max-height: 450px) and (orientation: landscape) { .fen .fen-cue { bottom: calc(var(--safe-b) + 14px); padding: 7px 10px; } }

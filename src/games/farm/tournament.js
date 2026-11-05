@@ -16,10 +16,13 @@ export const FARM_EVENTS = [
 ];
 
 export async function createFarmTournament(container) {
-  const game = createArcade(container, { id: 'farm', title: 'Pekkas Bondespel', subtitle: 'Billsta · 2015', accent: '#efc370', sky: '#d5b58c', fog: '#d5b58c' });
+  const game = createArcade(container, { id: 'farm', title: 'Pekkas Bondespel', subtitle: 'Billsta · 2015', accent: '#efc370', sky: '#c6d6d6', fog: '#c0d1ca' });
   game.root.classList.add('farm-tournament');
   const { scene, camera } = game;
-  scene.fog = new THREE.Fog('#d5b58c', 40, 115);
+  game.sun.position.set(-12, 24, 10); game.sun.intensity = 3;
+  game.ambient.intensity = 2.1;
+  game.renderer.toneMappingExposure = 1.15;
+  scene.fog = new THREE.Fog('#c0d1ca', 40, 115);
   const world = buildCountryWorld(scene, false);
   const props = new THREE.Group(); scene.add(props);
   const person = createPerson(appearanceFor('Per Vikman', { detail: 'low', outfit: { top: 'shirt', topColor: 0xc79a57, bottom: 'jeans', bottomColor: 0x405361, shoes: 'boots' } }));
@@ -31,6 +34,7 @@ export async function createFarmTournament(container) {
   const controls = document.createElement('div'); controls.className = 'country-controls farm-controls'; controls.hidden = true;
   controls.innerHTML = '<div class="country-round"><span class="country-kicker"></span><strong></strong><span class="country-hint"></span></div><div class="country-meter"><span class="country-zone"></span><i></i></div><div class="country-readout" role="status" aria-live="polite"></div><div class="farm-vertical" hidden><button type="button" data-input="up" aria-label="Sikta uppåt">↑</button><button type="button" data-input="down" aria-label="Sikta nedåt">↓</button></div><div class="country-actions"><button type="button" data-input="left" aria-label="Vänster">←</button><button type="button" data-input="action" class="country-action farm-action">SKJUT</button><button type="button" data-input="right" aria-label="Höger">→</button></div>';
   game.ui.appendChild(controls);
+  const progress = document.createElement('div'); progress.className = 'farm-progress'; progress.setAttribute('aria-label', 'Kvällens fem grenar'); game.ui.appendChild(progress);
   const hint = controls.querySelector('.country-hint'), readout = controls.querySelector('.country-readout'), fill = controls.querySelector('.country-meter i');
   const meter = controls.querySelector('.country-meter'), action = controls.querySelector('[data-input="action"]');
   const held = { left: false, right: false, up: false, down: false, action: false };
@@ -53,6 +57,7 @@ export async function createFarmTournament(container) {
       if (mode !== 'playing') return;
       readout.textContent = label; hint.textContent = detail;
       fill.style.width = `${clamp(value, 0, 1) * 100}%`;
+      meter.classList.toggle('farm-perfect', FARM_EVENTS[index].kind === 'hammer' && Math.abs(value - 0.5) < 0.06 || FARM_EVENTS[index].kind === 'boot' && value > 0.94);
       game.setHUD('BONDESPELEN', `${total().toLocaleString('sv-SE')} p`, `Gren ${index + 1}/5 · ${FARM_EVENTS[index].title}`);
     }
   };
@@ -65,6 +70,7 @@ export async function createFarmTournament(container) {
     disposeEvent(); focusHeight = 1; trackZ = 0;
     const entry = FARM_EVENTS[index];
     event = entry.kind === 'rifle' ? createRifleEvent(ctx) : ['stack', 'hammer'].includes(entry.kind) ? createWoodEvent(entry.kind, ctx) : createThrowEvent(entry.kind, ctx);
+    progress.innerHTML = FARM_EVENTS.map((item, i) => `<span class="${i < index ? 'done' : i === index ? 'current' : ''}" title="${item.title}">${i < index ? '✓' : i + 1}</span>`).join('');
     controls.querySelector('.country-kicker').textContent = `GREN ${index + 1} AV 5`;
     controls.querySelector('strong').textContent = entry.title;
     action.textContent = entry.verb;
@@ -148,8 +154,16 @@ export async function createFarmTournament(container) {
       event.step(dt, elapsed, { direction, vertical, held: held.action || game.keys.has('Space') });
     }
     const narrow = camera.aspect < 0.85;
-    const target = new THREE.Vector3(narrow ? 0.2 : 8.5, (narrow ? 14 : 11) + focusHeight * 0.5, trackZ + (narrow ? 24 : 20));
-    camera.position.lerp(target, 1 - Math.exp(-dt * 5)); camera.lookAt(0, focusHeight, trackZ - 3);
+    const { kind } = FARM_EVENTS[index];
+    const framing = kind === 'rifle' ? (narrow ? [0.25, 7, 12.5, 2.1, -5, 43] : [4, 6.5, 12, 2, -5, 40])
+      : kind === 'hammer' ? (narrow ? [0.1, 9, 16, 1.8, -2, 45] : [5.5, 6.8, 10, 1.7, -2, 38])
+        : kind === 'stack' ? (narrow ? [0.15, 10 + focusHeight, 18, focusHeight + 1, -2, 44] : [7, 7 + focusHeight, 15, focusHeight + 1, -2, 42])
+          : kind === 'horseshoe' ? (narrow ? [0.2, 11, 16, 0.8, -3, 45] : [6.5, 9, 16, 0.8, -3, 40])
+            : (narrow ? [0.2, 11 + focusHeight * 0.45, 21, focusHeight, -3, 47] : [8.5, 9 + focusHeight * 0.45, 20, focusHeight, -3, 43]);
+    const target = new THREE.Vector3(framing[0], framing[1], trackZ + framing[2]);
+    camera.position.lerp(target, 1 - Math.exp(-dt * 4));
+    camera.fov += (framing[5] - camera.fov) * Math.min(1, dt * 4); camera.updateProjectionMatrix();
+    camera.lookAt(0, framing[3], trackZ + framing[4]);
     person.setPose(mode === 'result' ? POSES.cheer(time) : POSES.idle(time), 0.2); person.update(dt, time);
     spectators.forEach((p, i) => { p.setPose(mode === 'result' ? POSES.clap(time + i) : POSES.idle(time + i), 0.2); p.update(dt, time); });
   });

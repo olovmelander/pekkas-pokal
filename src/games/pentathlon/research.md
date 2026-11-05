@@ -64,3 +64,25 @@ inte kostar var sitt ritkommando på telefonen; rörlig utrustning hålls separa
 
 `tests/field-games.test.js` verifierar avståndspoäng, övertramp, krocketbågens
 riktning och öppning, medaljgränser samt kraftmätarens cykel.
+
+## Kvalitetsgenomgång
+
+Den första spelbara versionens vida kamera gjorde målen för små på telefon.
+Varje gren har nu en närmare kamerakomposition; häcklopp och balans följer
+personen och krocket följer bollen mellan bågarna. Landskapet har mjuka
+höjdskillnader, fjärran kullar, oregelbundna trädkronor med grenar, varierat
+gräs, bänkar, blomkrukor och avgränsade banor. Detaljerna ingår fortfarande
+i materialbatcherna i stället för separata ritkommandon.
+
+Precision bygger på begriplig återkoppling: en prickad bana visar kastet,
+ringen får full poäng när den omsluter pinnen, och boule säger både avståndet
+och om klotet kom närmare än referensklotet. Krockets vinkel hålls konstant
+när kraften ändras. Tidigare flyttade högre kraft även riktningen, vilket
+gjorde siktet missvisande. Längdhopp mäts nu från plankan till den faktiska
+landningen, och metertalet skrivs ut tillsammans med poängen. Häckloppets
+”hoppa nu” ligger inom den giltiga hoppperioden. Balansvinden börjar mjukare.
+
+Resultatvyerna visar separata grenrader och medaljgränser. Delade
+marktexturer behålls mellan grenarna; endast grenens egna skylttexturer
+städas vid grenbyte. Regeltesterna täcker också riktningsstabil krocket,
+att alla tre bågar kan nås och att redovisad hopplängd stämmer med landningen.

@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { mergeStaticMeshes } from './mesh-batch.js';
+import { addCourseDetails } from './world-details.js';
 
 /** The course is a little moving diorama: warm forest, turquoise water, red cottages. */
 export function buildCourse(scene) {
@@ -20,12 +22,13 @@ export function buildCourse(scene) {
     const tile = document.createElement('canvas'); tile.width = tile.height = 128;
     const context = tile.getContext('2d'), pixels = context.createImageData(128, 128);
     for (let i = 0; i < 128 * 128; i++) {
-      const grain = (Math.sin(i * 75.31) * 27837.73) % 1 * 13;
+      let noise = Math.imul(i ^ 17551, 0x45d9f3b); noise = Math.imul(noise ^ (noise >>> 16), 0x45d9f3b);
+      const grain = ((noise >>> 0) / 4294967296 - 0.5) * 18;
       pixels.data.set([rgb[0] + grain, rgb[1] + grain, rgb[2] + grain, 255], i * 4);
     }
     context.putImageData(pixels, 0, 0);
     const texture = new THREE.CanvasTexture(tile); texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(3, 70); texture.colorSpace = THREE.SRGBColorSpace;
+    texture.repeat.set(3, 250); texture.colorSpace = THREE.SRGBColorSpace;
     material.map = texture; material.color.set(0xffffff);
   }
   const geometries = {
@@ -54,8 +57,8 @@ export function buildCourse(scene) {
       '#include <color_fragment>\nfloat ripple = sin(triWater.x * 3.5 + triWater.y * 5.0 + triTime * 1.2) * sin(triWater.y * 4.0 - triTime * .8); diffuseColor.rgb *= .97 + .1 * ripple; float glint = pow(max(0., ripple), 18.) * exp(-pow((triWater.x + 10.) * .08, 2.)); diffuseColor.rgb += vec3(.8, .7, .45) * glint * .45;'
     );
   };
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(200, 260, 40, 80), waterMaterial);
-  water.rotation.x = -Math.PI / 2; water.position.set(0, -0.15, -80); water.receiveShadow = true;
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(200, 800, 40, 120), waterMaterial);
+  water.rotation.x = -Math.PI / 2; water.position.set(0, -0.15, -350); water.receiveShadow = true;
   world.add(water);
   const banks = new THREE.Group(); world.add(banks);
   const grassCanvas = document.createElement('canvas'); grassCanvas.width = grassCanvas.height = 128;
@@ -69,30 +72,31 @@ export function buildCourse(scene) {
   grassTexture.colorSpace = THREE.SRGBColorSpace; grass.map = grassTexture; grass.color.set(0xffffff);
   function bankStrip(side, innerOffset, width, material) {
     const vertices = [], indices = [], uv = [];
-    for (let i = 0; i <= 65; i++) {
+    for (let i = 0; i <= 200; i++) {
       const z = 40 - i * 4;
-      const coast = 7.5 + Math.sin(z * 0.022 + side) * 1.7 + Math.sin(z * 0.075) * 0.55;
+      const coast = 13.5 + Math.sin(z * 0.022 + side) * 3.5 + Math.sin(z * 0.075) * 1.2;
       vertices.push(side * (coast + innerOffset), -0.08, z, side * (coast + innerOffset + width), -0.04, z);
       uv.push((coast + innerOffset) / 6, z / 6, (coast + innerOffset + width) / 6, z / 6);
-      if (i < 65) { const a = i * 2; indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+      if (i < 200) { const a = i * 2; indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
     }
     const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); geo.setIndex(indices); geo.computeVertexNormals();
     const materialSide = material.clone(); materialSide.side = THREE.DoubleSide;
     const bank = new THREE.Mesh(geo, materialSide); bank.receiveShadow = true; banks.add(bank);
   }
   for (const side of [-1, 1]) { bankStrip(side, 0, 0.55, sand); bankStrip(side, 0.55, 80, grass); }
-  const road = mesh(geometries.box, asphalt, 0, -0.23, -80, 9.5, 0.3, 230);
-  const roadEdge = mesh(geometries.box, sand, 0, -0.3, -80, 12.5, 0.3, 230);
+  const road = mesh(geometries.box, asphalt, 0, -0.23, -350, 9.5, 0.3, 800);
+  const roadEdge = mesh(geometries.box, sand, 0, -0.3, -350, 12.5, 0.3, 800);
   road.visible = roadEdge.visible = false;
+  const land = mesh(geometries.box, grass, 0, -0.4, -350, 155, 0.3, 800); land.visible = false;
   const stripes = new THREE.Group(); world.add(stripes);
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < 110; i++) {
     mesh(geometries.box, cream, -4.2, -0.065, -i * 7, 0.11, 0.02, 3, stripes);
     mesh(geometries.box, cream, 4.2, -0.065, -i * 7, 0.11, 0.02, 3, stripes);
   }
   stripes.visible = false;
 
   // Instanced forest: hundreds of trees, only five draw calls.
-  const treeCount = 160;
+  const treeCount = 540;
   const trunks = new THREE.InstancedMesh(geometries.cylinder, trunk, treeCount);
   const tiers = [pine, pineLight, pine].map(material => new THREE.InstancedMesh(geometries.cone, material, treeCount));
   [trunks, ...tiers].forEach(item => { item.castShadow = true; world.add(item); });
@@ -101,7 +105,7 @@ export function buildCourse(scene) {
   const random = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
   for (let i = 0; i < treeCount; i++) {
     const side = i % 2 ? -1 : 1;
-    const x = side * (11 + random() * 26), z = 30 - random() * 220, h = 2.4 + random() * 3.4;
+    const x = side * (17 + random() * 33), z = 30 - random() * 780, h = 2.4 + random() * 3.4;
     dummy.position.set(x, h * 0.25, z); dummy.scale.set(0.13, h * 0.55, 0.13); dummy.updateMatrix();
     trunks.setMatrixAt(i, dummy.matrix);
     tiers.forEach((item, n) => {
@@ -110,23 +114,23 @@ export function buildCourse(scene) {
       dummy.rotation.y = random() * Math.PI; dummy.updateMatrix(); item.setMatrixAt(i, dummy.matrix);
     });
   }
-  const rockCount = 70;
+  const rockCount = 240;
   const rocks = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), mat(0x87928a), rockCount);
   rocks.receiveShadow = true; rocks.castShadow = true; world.add(rocks);
   for (let i = 0; i < rockCount; i++) {
     const side = i % 2 ? -1 : 1;
-    const z = 15 - random() * 190;
-    const coast = 7.5 + Math.sin(z * 0.022 + side) * 1.7 + Math.sin(z * 0.075) * 0.55;
+    const z = 30 - random() * 780;
+    const coast = 13.5 + Math.sin(z * 0.022 + side) * 3.5 + Math.sin(z * 0.075) * 1.2;
     dummy.position.set(side * (coast + random() * 0.65), -0.02, z);
     const size = 0.12 + random() * 0.3;
     dummy.scale.set(size * 1.4, size * 0.7, size); dummy.rotation.set(random(), random(), random());
     dummy.updateMatrix(); rocks.setMatrixAt(i, dummy.matrix);
   }
-  const reeds = new THREE.InstancedMesh(new THREE.ConeGeometry(0.08, 0.8, 4), mat(0x6d8e5c), 150);
+  const reeds = new THREE.InstancedMesh(new THREE.ConeGeometry(0.08, 0.8, 4), mat(0x6d8e5c), 450);
   world.add(reeds);
-  for (let i = 0; i < 150; i++) {
-    const side = i % 2 ? -1 : 1, z = 15 - random() * 190;
-    const coast = 7.5 + Math.sin(z * 0.022 + side) * 1.7 + Math.sin(z * 0.075) * 0.55;
+  for (let i = 0; i < 450; i++) {
+    const side = i % 2 ? -1 : 1, z = 30 - random() * 780;
+    const coast = 13.5 + Math.sin(z * 0.022 + side) * 3.5 + Math.sin(z * 0.075) * 1.2;
     dummy.position.set(side * (coast + random() * 0.4), 0.18, z);
     dummy.scale.setScalar(0.7 + random() * 0.8); dummy.rotation.set(0, random(), random() * 0.14);
     dummy.updateMatrix(); reeds.setMatrixAt(i, dummy.matrix);
@@ -134,10 +138,10 @@ export function buildCourse(scene) {
   // Layered distant hills make the horizon complete in wide screens too.
   for (let i = 0; i < 14; i++) {
     const mountain = mesh(geometries.sphere, mat(i % 2 ? 0x779b8e : 0x89a89a), -130 + i * 20, 1, -190 - i % 3 * 13, 30, 6 + i % 4 * 3.4, 27);
-    mountain.castShadow = false;
+    mountain.castShadow = false; scene.attach(mountain);
   }
   const sun = mesh(geometries.sphere, new THREE.MeshBasicMaterial({ color: 0xffedc8, fog: false }), -45, 36, -160, 6, 6, 6);
-  sun.castShadow = false;
+  sun.castShadow = false; scene.attach(sun);
 
   // A pair of red cottages with real window recesses, roof boards and a jetty.
   function cottage(x, z) {
@@ -152,18 +156,20 @@ export function buildCourse(scene) {
     }
     mesh(geometries.box, cream, 0, 0.9, 1.8, 0.9, 1.8, 0.13, house);
     mesh(geometries.box, trunk, 0, 0.08, 4, 3.8, 0.2, 3, house);
+    mergeStaticMeshes(house);
     return house;
   }
-  cottage(12, -33); cottage(-16, -105);
-  for (let i = 0; i < 14; i++) mesh(geometries.box, trunk, 8.4, 0.04, -20 + i * 0.46, 4, 0.1, 0.4);
+  cottage(19, -33); cottage(-24, -105); cottage(22, -230); cottage(-25, -360); cottage(24, -495); cottage(-21, -610);
+  for (let i = 0; i < 14; i++) mesh(geometries.box, trunk, 13.4, 0.04, -20 + i * 0.46, 8, 0.1, 0.4);
 
   const decorations = new THREE.Group(); world.add(decorations);
-  for (let i = 0; i < 24; i++) {
+  for (let i = 0; i < 95; i++) {
     for (const side of [-1, 1]) {
       mesh(geometries.cylinder, cream, side * 5.8, 0.8, -i * 8, 0.045, 1.6, 0.045, decorations);
       mesh(geometries.box, i % 2 ? red : gold, side * 5.8 + 0.3, 1.4, -i * 8, 0.6, 0.38, 0.035, decorations);
     }
   }
+  mergeStaticMeshes(decorations);
   // The finish structure appears only near the end of each leg.
   const finish = new THREE.Group(); world.add(finish);
   mesh(geometries.box, gold, -4.8, 2.5, 0, 0.3, 5, 0.3, finish);
@@ -175,23 +181,26 @@ export function buildCourse(scene) {
   const texture = new THREE.CanvasTexture(bannerCanvas); texture.colorSpace = THREE.SRGBColorSpace;
   const banner = new THREE.Mesh(new THREE.PlaneGeometry(9.2, 1.15), new THREE.MeshBasicMaterial({ map: texture, transparent: true }));
   banner.position.set(0, 4.85, 0.13); finish.add(banner);
+  const details = addCourseDetails(world);
   let currentDiscipline = null;
   return {
     world,
+    dispose() { details.dispose(); },
     update(discipline, distance, remaining, time) {
       if (currentDiscipline !== discipline) {
         currentDiscipline = discipline;
-        road.visible = roadEdge.visible = discipline !== 'swim'; stripes.visible = discipline === 'bike';
+        road.visible = roadEdge.visible = land.visible = discipline !== 'swim'; stripes.visible = discipline === 'bike';
         road.material = discipline === 'run' ? trail : asphalt;
-        water.position.x = discipline !== 'swim' ? -45 : 0;
+        water.position.x = discipline !== 'swim' ? -110 : 0;
         banks.position.x = discipline !== 'swim' ? 1 : 0;
       }
       if (waterMaterial.userData.shader) waterMaterial.userData.shader.uniforms.triTime.value = time;
-      stripes.position.z = distance % 7;
-      decorations.position.z = distance % 8;
-      // Trees and roadside flags slide by, while distant hills remain stable.
-      [trunks, ...tiers].forEach(item => { item.position.z = distance % 32; });
-      finish.position.z = -remaining + 2;
+      // A finite 800 m scene travels continuously past the athlete. Nothing
+      // wraps near the camera, so trees, shores, cottages and markings agree.
+      world.position.z = distance;
+      if (asphalt.map) asphalt.map.offset.y = 0;
+      finish.position.z = -(distance + remaining) + 2;
+      details.update(discipline, time);
       finish.visible = remaining < 120;
     }
   };

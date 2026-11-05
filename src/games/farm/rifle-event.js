@@ -6,25 +6,39 @@ export function createRifleEvent(ctx) {
   board.position.set(0, 3.1, -7);
   box(4.8, 4.5, 0.18, 0x785e42, 0, 0, -0.1, board);
   for (const x of [-1.9, 1.9]) cylinder(0.1, 5.4, 0xbfa27a, x, 0.15, -0.16, board);
-  for (let i = 0; i < 6; i++) {
-    const disc = mesh(new THREE.CircleGeometry(1.6 - i * 0.245, 48), i % 2 ? 0x343c35 : 0xefe5c7, 0, 0, 0.015 + i * 0.004, board);
-    disc.castShadow = false;
+  const paper = document.createElement('canvas'); paper.width = paper.height = 512;
+  const ink = paper.getContext('2d'); ink.fillStyle = '#eee4ca'; ink.fillRect(0, 0, 512, 512);
+  ink.fillStyle = '#30352f'; ink.beginPath(); ink.arc(256, 256, 173, 0, Math.PI * 2); ink.fill();
+  for (let ring = 1; ring <= 10; ring++) {
+    const radius = ring * 23.3;
+    ink.strokeStyle = ring <= 7 ? '#ece5cfaa' : '#434b3a99'; ink.lineWidth = ring === 10 ? 2 : 1;
+    ink.beginPath(); ink.arc(256, 256, radius, 0, Math.PI * 2); ink.stroke();
+    if (ring > 1 && ring < 10) {
+      ink.fillStyle = ring <= 7 ? '#eee6cf' : '#424938'; ink.font = '12px Georgia'; ink.textAlign = 'center'; ink.textBaseline = 'middle';
+      ink.fillText(String(11 - ring), 256 + radius - 11, 256); ink.fillText(String(11 - ring), 256, 256 - radius + 11);
+    }
   }
+  ink.fillStyle = '#554c37'; ink.font = 'bold 11px Georgia'; ink.textAlign = 'left'; ink.fillText('BILLSTA · 2015', 18, 23);
+  ink.textAlign = 'right'; ink.fillText('LUFTGEVÄR', 494, 23);
+  const paperTexture = new THREE.CanvasTexture(paper); paperTexture.colorSpace = THREE.SRGBColorSpace;
+  const paperMat = new THREE.MeshStandardMaterial({ map: paperTexture, roughness: 0.95 });
+  const targetPaper = new THREE.Mesh(new THREE.PlaneGeometry(3.52, 3.52), paperMat); targetPaper.position.z = 0.04; board.add(targetPaper);
+  for (const x of [-1.6, 1.6]) for (const y of [-1.6, 1.6]) mesh(new THREE.SphereGeometry(0.025, 6, 4), 0x9d9f8b, x, y, 0.055, board);
   const sight = new THREE.Group(); board.add(sight);
   const circle = mesh(new THREE.TorusGeometry(0.17, 0.018, 5, 28), 0xf2bf5c, 0, 0, 0.13, sight);
   circle.material = new THREE.MeshBasicMaterial({ color: 0xffc957 });
   for (const rotation of [0, Math.PI / 2]) {
     const line = box(0.032, 0.5, 0.02, 0xf5c76a, 0, 0, 0.13, sight); line.rotation.z = rotation;
   }
-  const gun = new THREE.Group(); group.add(gun); gun.position.set(0.65, 1.25, 5.7);
+  const gun = new THREE.Group(); group.add(gun); gun.position.set(0.65, 1.25, 2.9);
   const stock = box(0.25, 0.3, 0.88, 0x835034, 0, -0.05, 0.3, gun); stock.rotation.x = -0.12;
   box(0.12, 0.28, 0.15, 0x65402b, 0, -0.25, 0.03, gun);
   box(0.14, 0.13, 0.55, 0x3b4444, 0, 0.1, -0.23, gun);
   const barrel = cylinder(0.035, 1.3, 0x424a48, 0, 0.11, -0.95, gun); barrel.rotation.x = Math.PI / 2;
   const scope = cylinder(0.07, 0.45, 0x37423f, 0, 0.29, -0.28, gun); scope.rotation.x = Math.PI / 2;
   for (const z of [-0.1, -0.4]) box(0.08, 0.18, 0.07, 0x505957, 0, 0.2, z, gun);
-  box(1.5, 0.1, 1.1, 0xb6a179, 0.65, 0.9, 6, group);
-  for (const x of [0.1, 1.2]) box(0.08, 0.9, 0.75, 0x7c6d50, x, 0.45, 6, group);
+  box(1.5, 0.1, 1.1, 0xb6a179, 0.65, 0.9, 3.2, group);
+  for (const x of [0.1, 1.2]) box(0.08, 0.9, 0.75, 0x7c6d50, x, 0.45, 3.2, group);
   const shotLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineBasicMaterial({ color: 0xffedb5, transparent: true, opacity: 0.65 }));
   group.add(shotLine); shotLine.visible = false;
   let x = 0, y = 0, time = 0, cooldown = 0, shots = 0, score = 0, done = false, pending = false;
@@ -63,11 +77,11 @@ export function createRifleEvent(ctx) {
       sight.position.set(x + driftX, y + driftY, 0);
       gun.rotation.y = -(x + driftX) * 0.07;
       gun.rotation.x = (y + driftY) * 0.065;
-      gun.position.z = 5.7 + Math.max(0, cooldown - 0.22) * 0.45;
+      gun.position.z = 2.9 + Math.max(0, cooldown - 0.22) * 0.45;
       shotLine.visible = cooldown > 0.28;
       ctx.hud(`LUFTGEVÄR · ${shots}/10 SKOTT`, 'Dra siktet på tavlan · pilar/WASD · tryck SKJUT', shots / 10);
       if (pending && cooldown === 0) { done = true; ctx.finish(score / 10, `Tio skott: ${(score / 1000).toFixed(1)} av 10 i genomsnitt. Siktet rör sig med andningen — välj ögonblicket.`); }
     },
-    dispose() { circle.material.dispose(); shotLine.material.dispose(); }
+    dispose() { circle.material.dispose(); shotLine.material.dispose(); paperMat.dispose(); paperTexture.dispose(); }
   };
 }

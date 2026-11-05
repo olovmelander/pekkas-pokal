@@ -1,10 +1,12 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createArcade } from './arcade.js';
 import { createPerson, appearanceFor, POSES } from './people.js';
 import { buildCountryWorld } from '../farm/world.js';
 import { clamp, landing, precisionScore, advanceBalance, kubbHit, medal } from '../farm/rules.js';
+import { discPosition, throwIsCaught } from '../lundqvist/rules.js';
 
-/** Two short, deliberately fictional country tournaments. No historical subevents are asserted. */
+/** Reusable country events used by the 2016 arcade interpretation. */
 export async function createCountryGames(container, config) {
   const game = await createArcade(container, {
     id: config.id, title: config.title, subtitle: `${config.place} · ${config.year}`,
@@ -13,7 +15,7 @@ export async function createCountryGames(container, config) {
   game.root.classList.add('country-game', `country-${config.id}`);
   const { scene, camera } = game;
   scene.fog = new THREE.Fog(scene.background || 0xc8c7a4, 38, 115);
-  const { mesh, box, cylinder, disposeMaterials } = buildCountryWorld(scene, config.theme === 'lake');
+  const { mesh, box, cylinder, material, disposeMaterials } = buildCountryWorld(scene, config.theme === 'lake');
   const actor = createPerson(appearanceFor(config.champion, {
     detail: 'low', outfit: { top: 'shirt', topColor: config.theme === 'lake' ? 0x8cbaac : 0xc79a57, bottom: 'jeans', bottomColor: 0x405361, shoes: 'boots' }
   }));
@@ -52,6 +54,9 @@ export async function createCountryGames(container, config) {
   let elapsed = 0, raceZ = 7, cargo = 100, playerX = 0, obstacles = [], carry = null;
   let balance = { tilt: 0, velocity: 0, cargo: 100, progress: 0 }, blocks = [], water = null;
   let lastHUD = '', updateCounter = 0;
+  let previewDots = null, windFlag = null;
+  const previewDummy = new THREE.Object3D();
+  const cameraTarget = new THREE.Vector3(), cameraLook = new THREE.Vector3(0, 1, -2), lookTarget = new THREE.Vector3();
   const isThrow = () => ['bale', 'kubb', 'disc'].includes(config.events[eventIndex].kind);
   function clearInput() {
     held.left = held.right = held.action = false;
@@ -68,7 +73,7 @@ export async function createCountryGames(container, config) {
     if (mode !== 'playing' || game.paused || !charging) return;
     charging = false;
     const end = landing(aim, power, wind);
-    flight = { t: 0, end, duration: 1.05 + power * 0.6, power };
+    flight = { t: 0, end, duration: 1.05 + power * 0.6, power, wind, caught: throwIsCaught(end, target) };
     projectile.visible = true;
     game.tone(180, 0.1, 'triangle');
     actor.setExpression('focus');
@@ -90,7 +95,7 @@ export async function createCountryGames(container, config) {
       if (name === 'action') release();
     });
     game.listen(button, 'pointercancel', () => { held[name] = false; charging = false; button.classList.remove('held'); });
-    game.listen(button, 'lostpointercapture', () => { held[name] = false; button.classList.remove('held'); });
+    game.listen(button, 'lostpointercapture', () => { held[name] = false; if (name === 'action') charging = false; button.classList.remove('held'); });
     // Enter activates a focused control without needing pointer events.
     game.listen(button, 'keydown', (e) => {
       if (e.code !== 'Enter') return;
@@ -121,18 +126,53 @@ export async function createCountryGames(container, config) {
   }
   function resetProps() {
     props.traverse((node) => {
+      if (node.isInstancedMesh) node.dispose();
       if (node.geometry) disposableProps.add(node.geometry);
-      if (node.material?.userData?.transient) node.material.dispose();
+      if (node.material?.userData?.transient) { node.material.map?.dispose(); node.material.dispose(); }
       // Materials come from the world's cache and live until the whole game is destroyed.
     });
     props.clear();
     for (const geometry of disposableProps) geometry.dispose();
     disposableProps.clear();
   }
+  function batchStaticProps() {
+    props.updateMatrixWorld(true);
+    const inverse = props.matrixWorld.clone().invert();
+    const batches = new Map(), originals = new Set();
+    props.traverse((object) => {
+      if (!object.isMesh) return;
+      const key = `${object.material.uuid}:${object.castShadow}`;
+      if (!batches.has(key)) batches.set(key, { material: object.material, shadow: object.castShadow, geometries: [] });
+      const geometry = object.geometry.index ? object.geometry.toNonIndexed() : object.geometry.clone();
+      geometry.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inverse, object.matrixWorld));
+      batches.get(key).geometries.push(geometry);
+      originals.add(object.geometry);
+    });
+    props.clear();
+    for (const batch of batches.values()) {
+      const merged = new THREE.Mesh(mergeGeometries(batch.geometries), batch.material);
+      merged.castShadow = batch.shadow; merged.receiveShadow = true; props.add(merged);
+      batch.geometries.forEach((geometry) => geometry.dispose());
+    }
+    originals.forEach((geometry) => geometry.dispose());
+  }
   function ring(x, z, radius, color = 0xf1cb6f, parent = props) {
     const m = mesh(new THREE.TorusGeometry(radius, 0.045, 6, 56), color, x, 0.08, z, parent);
     m.rotation.x = -Math.PI / 2;
     return m;
+  }
+  function plaque(text, x, y, z, width = 1.5, parent = props) {
+    const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 160;
+    const c = canvas.getContext('2d'); c.fillStyle = '#234b40'; c.fillRect(0, 0, 512, 160);
+    c.strokeStyle = '#dbc582'; c.lineWidth = 4; c.strokeRect(7, 7, 498, 146);
+    c.fillStyle = '#f4e3b3'; c.font = 'bold 58px Georgia'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(text, 256, 84, 470);
+    const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
+    const material = new THREE.MeshStandardMaterial({ map: texture, roughness: 1, side: THREE.DoubleSide }); material.userData.transient = true;
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(width, width / 3.2), material); sign.position.set(x, y, z); parent.add(sign); return sign;
+  }
+  function timberBridge(z) {
+    for (let i = 0; i < 6; i++) box(2.3, 0.12, 0.27, i % 2 ? 0xb48d5d : 0xc09a69, 0, 0.45, z - 0.8 + i * 0.3, props);
+    for (const x of [-0.85, 0.85]) cylinder(0.1, 0.7, 0x6b573e, x, 0.35, z, props);
   }
   function bale(parent, size = 1) {
     const g = new THREE.Group(); parent.add(g);
@@ -157,10 +197,21 @@ export async function createCountryGames(container, config) {
   }
   function buildEvent() {
     resetProps();
+    previewDots = null; windFlag = null;
     const { kind } = config.events[eventIndex];
     actor.root.position.set(0, 0, 7);
     actor.root.rotation.set(0, Math.PI, 0);
     if (isThrow()) {
+      const court = box(7.4, 0.04, 19.5, kind === 'kubb' ? 0x78945e : 0x7e9d68, 0, 0.015, -1.7, props); court.castShadow = false;
+      const grass = material(config.theme === 'lake' ? 0x668361 : 0x7d8b45).map.clone();
+      grass.repeat.set(2.2, 5.8); grass.needsUpdate = true;
+      court.material = new THREE.MeshStandardMaterial({ color: kind === 'kubb' ? 0x8da768 : 0x91ab71, map: grass, bumpMap: grass, bumpScale: 0.025, roughness: 1 });
+      court.material.userData.transient = true;
+      for (const x of [-3.75, 3.75]) box(0.035, 0.035, 19.5, 0xe2d4ad, x, 0.06, -1.7, props);
+      box(7.5, 0.035, 0.07, 0xf2dfac, 0, 0.06, 6.55, props);
+      const line = ring(0, 7, 0.55, 0xeed8a3); line.scale.z = 0.7;
+      const previewMaterial = new THREE.MeshBasicMaterial({ color: 0xf8e5b0 }); previewMaterial.userData.transient = true;
+      previewDots = new THREE.InstancedMesh(new THREE.SphereGeometry(0.045, 6, 4), previewMaterial, 22); props.add(previewDots);
       if (kind === 'bale') projectile = bale(props, 0.8);
       else if (kind === 'disc') projectile = cylinder(0.29, 0.07, 0xecc566, 0, 0, 0, props);
       else projectile = cylinder(0.09, 0.65, 0xd9ba7a, 0, 0, 0, props);
@@ -171,16 +222,32 @@ export async function createCountryGames(container, config) {
           { x: -2.1, z: -5.8, king: false }, { x: 0, z: -5.8, king: false },
           { x: 2.1, z: -5.8, king: false }, { x: 0, z: -9, king: true }
         ];
-        blocks.forEach((b) => {
+        blocks.forEach((b, i) => {
           b.down = false;
           b.mesh = box(b.king ? 0.5 : 0.36, b.king ? 1.25 : 0.85, 0.4, b.king ? 0xd9b758 : 0xe4c493, b.x, b.king ? 0.625 : 0.425, b.z, props);
           if (b.king) for (let i = -1; i <= 1; i++) box(0.12, 0.18, 0.4, 0xd9b758, i * 0.17, 0.71, 0, b.mesh);
+          else {
+            for (const y of [-0.2, 0.15]) box(0.37, 0.018, 0.41, 0xc49e66, 0, y, 0, b.mesh);
+            plaque(String(i + 1), b.x, 0.18, b.z + 0.7, 0.45);
+          }
+          b.guide = ring(b.x, b.z, b.king ? 0.7 : 0.65, b.king ? 0xbfae66 : 0xe7e1c0);
         });
-        ring(0, -9, 0.8, 0xd5b155);
+        for (const x of [-3.2, 3.2]) for (const z of [-10, 6.5]) {
+          cylinder(0.045, 0.6, 0xd7b978, x, 0.3, z, props);
+          box(0.3, 0.2, 0.02, 0xe8d2a1, x + 0.12, 0.57, z, props);
+        }
+        plaque('KUBBAR FÖRST · KUNGEN SIST', 0, 1.8, -12, 4.8);
       } else {
         targetProp = new THREE.Group(); props.add(targetProp);
-        if (kind === 'disc') basket(targetProp);
-        else { ring(0, 0, 1.4, 0xeac66a, targetProp); ring(0, 0, 2.6, 0xd6c59b, targetProp); ring(0, 0, 0.3, 0xffe4a0, targetProp); }
+        if (kind === 'disc') {
+          basket(targetProp);
+          ring(0, 0, 0.85, 0xc1d0a2, targetProp);
+          plaque('KORG', 0, 2.5, 0, 0.85, targetProp);
+          cylinder(0.04, 2.6, 0xd6c59b, 3.25, 1.3, -4.5, props);
+          windFlag = new THREE.Group(); windFlag.position.set(3.25, 2.4, -4.5); props.add(windFlag);
+          const flag = mesh(new THREE.PlaneGeometry(0.9, 0.4, 6, 2), 0xd99b6b, 0.46, 0, 0, windFlag);
+          flag.material = new THREE.MeshStandardMaterial({ color: 0xdca375, side: THREE.DoubleSide, roughness: 1 }); flag.material.userData.transient = true;
+        } else { ring(0, 0, 1.4, 0xeac66a, targetProp); ring(0, 0, 2.6, 0xd6c59b, targetProp); ring(0, 0, 0.3, 0xffe4a0, targetProp); }
       }
       nextTarget();
     } else if (kind === 'race') {
@@ -214,9 +281,28 @@ export async function createCountryGames(container, config) {
         for (const z of [-8.5, 6.5]) {
           const end = cylinder(0.47, 0.02, 0xb49462, 0, 0.25, z, props);
           end.rotation.x = Math.PI / 2;
+          for (const r of [0.16, 0.29, 0.4]) {
+            const growth = mesh(new THREE.TorusGeometry(r, 0.015, 5, 30), 0x7d633e, 0, 0.25, z + (z < 0 ? -0.015 : 0.015), props);
+            growth.rotation.x = 0;
+          }
         }
-        const mat = mesh(new THREE.PlaneGeometry(9, 19), 0x699394, 0, 0.01, -1, props);
-        mat.rotation.x = -Math.PI / 2;
+        const pond = mesh(new THREE.CircleGeometry(7, 64), 0x648b89, 0, 0.025, -1, props);
+        pond.rotation.x = -Math.PI / 2; pond.scale.set(0.7, 1.4, 1); pond.castShadow = false;
+        for (const z of [7.3, -9.3]) timberBridge(z);
+        for (let i = 0; i < 30; i++) {
+          const angle = i / 30 * Math.PI * 2, x = Math.sin(angle) * 4.6, z = -1 + Math.cos(angle) * 9.2;
+          const rock = mesh(new THREE.IcosahedronGeometry(0.32 + i % 3 * 0.09, 1), i % 2 ? 0x879180 : 0x9a9b87, x, 0.08, z, props); rock.scale.set(1.3, 0.6, 1);
+          for (let j = 0; j < 2; j++) {
+            const reed = cylinder(0.02, 0.6 + j * 0.25, 0xa1a06a, x + j * 0.12, 0.35, z, props); reed.rotation.z = Math.sin(i) * 0.15;
+          }
+        }
+        for (const r of [1.1, 1.8, 2.5]) {
+          const ripple = ring(2.2, 1.1, r, 0x86a5a0); ripple.scale.z = 0.55;
+        }
+        for (let i = 0; i < 7; i++) box(0.025, 0.018, 14.8, 0x9c7a49, -0.35 + i * 0.115, 0.61 + Math.sin(i / 6 * Math.PI) * 0.11, -1, props);
+        plaque('ANDRA SIDAN VÄNTAR', 0, 1.5, -10.5, 3.3);
+        // The bridge, pond edge and reeds never move; keep their rich detail cheap on phones.
+        batchStaticProps();
       }
     }
   }
@@ -230,6 +316,7 @@ export async function createCountryGames(container, config) {
     target = [{ x: -1.5, z: -5 }, { x: 2.1, z: -8.4 }, { x: -0.7, z: -10.4 }][attempts % 3];
     wind = kind === 'disc' ? [-0.65, 1.05, -1.25][attempts % 3] : 0;
     targetProp.position.set(target.x, 0, target.z);
+    if (windFlag) windFlag.rotation.y = wind < 0 ? Math.PI : 0;
   }
   function hud() {
     const event = config.events[eventIndex];
@@ -249,7 +336,7 @@ export async function createCountryGames(container, config) {
       marker.position.x = predicted.x;
       marker.position.z = predicted.z;
       marker.visible = !flight;
-      hint.textContent = charging ? 'Släpp när kraften når det ljusa fältet' : '← → sikta · håll och släpp mellanslag';
+      hint.textContent = charging ? 'Släpp vid det ljusa fältet · följ kastbågen' : '← → sikta längs kastbågen · håll & släpp';
       readout.textContent = event.kind === 'kubb' ? `${attempts}/6 kast · ${blocks.filter((b) => b.down).length}/4 fällda` : `Kast ${Math.min(attempts + 1, 3)}/3 · ${Math.round(power * 100)} % kraft${wind ? ` · Vind ${wind < 0 ? '←' : '→'} ${Math.abs(wind).toFixed(1)}` : ''}`;
     } else if (event.kind === 'race') {
       meter.classList.remove('balance');
@@ -262,8 +349,8 @@ export async function createCountryGames(container, config) {
       meter.style.setProperty('--zone', '50%');
       fill.style.width = '4px';
       fill.style.left = `${clamp(50 + balance.tilt * 37, 0, 100)}%`;
-      hint.textContent = '← → balansera · håll mellanslag för att stadga';
-      readout.textContent = `${Math.round(balance.cargo)} % ${event.kind === 'bucket' ? 'mjölk' : 'balans'} kvar · ${Math.min(100, Math.round(balance.progress / 18 * 100))} % av sträckan`;
+      hint.textContent = held.action ? 'Du stadgar dig · släpp för att gå vidare' : '← → små motrörelser · håll för att stadga';
+      readout.textContent = `${Math.round(balance.cargo)} % ${event.kind === 'bucket' ? 'mjölk' : 'balans'} · ${Math.min(100, Math.round(balance.progress / 18 * 100))} % av sträckan · ${Math.ceil(Math.max(0, 50 - elapsed))} s kvar`;
     }
   }
   function startEvent() {
@@ -277,6 +364,7 @@ export async function createCountryGames(container, config) {
     fill.style.left = '0';
     buildEvent();
     hud();
+    actionButton.focus({ preventScroll: true });
   }
   function eventIntro() {
     mode = 'intro';
@@ -328,6 +416,7 @@ export async function createCountryGames(container, config) {
       }
       if (hit.index >= 0) {
         const b = blocks[hit.index]; b.down = true; b.mesh.rotation.z = 1.45; b.mesh.position.y = 0.2;
+        b.guide.visible = false;
         gained = b.king ? 400 : 200;
         game.toast(b.king ? 'Kungen är din!' : 'Kubb nere!');
         eventScores.push(gained);
@@ -358,14 +447,33 @@ export async function createCountryGames(container, config) {
     }
     aim = clamp(aim + input() * dt * 0.55, -1, 1);
     if (charging) power = 0.08 + 0.92 * (0.5 - Math.cos((clock - throwStart) * 2.2) * 0.5);
+    const { kind } = config.events[eventIndex];
+    const predicted = landing(aim, power, wind);
+    if (previewDots) {
+      previewDots.visible = !flight;
+      for (let i = 0; i < 22; i++) {
+        const k = (i + 1) / 23;
+        const p = kind === 'disc' ? discPosition(predicted, power, wind, k, throwIsCaught(predicted, target)) : { x: predicted.x * k, y: 1 + Math.sin(k * Math.PI) * (2 + power * 2) - k * 0.65, z: 7 + (predicted.z - 7) * k };
+        previewDummy.position.set(p.x, p.y, p.z); previewDummy.updateMatrix(); previewDots.setMatrixAt(i, previewDummy.matrix);
+      }
+      previewDots.instanceMatrix.needsUpdate = true;
+    }
+    if (windFlag) {
+      const flag = windFlag.children[0], vertices = flag.geometry.attributes.position;
+      for (let i = 0; i < vertices.count; i++) vertices.setZ(i, Math.sin(clock * 5 + vertices.getX(i) * 6) * 0.065 * (vertices.getX(i) + 0.5));
+      vertices.needsUpdate = true;
+    }
     if (flight) {
       flight.t += dt;
       const t = clamp(flight.t / flight.duration, 0, 1);
-      projectile.position.set(flight.end.x * t, 1 + Math.sin(t * Math.PI) * (2 + flight.power * 2) - t * 0.65, 7 + (flight.end.z - 7) * t);
-      if (config.events[eventIndex].kind === 'disc') projectile.rotation.y += dt * 18;
+      if (kind === 'disc') {
+        const point = discPosition(flight.end, flight.power, flight.wind, t, flight.caught);
+        projectile.position.set(point.x, point.y, point.z);
+        projectile.rotation.z = Math.sin(t * Math.PI) * flight.wind * 0.12;
+      } else projectile.position.set(flight.end.x * t, 1 + Math.sin(t * Math.PI) * (2 + flight.power * 2) - t * 0.65, 7 + (flight.end.z - 7) * t);
+      if (kind === 'disc') projectile.rotation.y += dt * 18;
       else projectile.rotation.x += dt * 5;
       if (t >= 1) {
-        if (config.events[eventIndex].kind === 'disc' && Math.hypot(flight.end.x - target.x, flight.end.z - target.z) < 0.7) projectile.position.set(target.x, 1.03, target.z);
         landThrow();
       }
     }
@@ -420,11 +528,16 @@ export async function createCountryGames(container, config) {
   game.onFrame((dt, time) => {
     clock = time;
     const narrow = camera.aspect < 0.85;
-    const racing = config.events[eventIndex].kind === 'race' && (mode === 'playing' || mode === 'result');
-    const followZ = racing ? raceZ : 0;
-    const cameraTarget = new THREE.Vector3(narrow ? 0.5 : 11, narrow ? 15 : 11.5, followZ + (narrow ? 24 : 20));
+    const currentKind = config.events[eventIndex].kind;
+    const racing = currentKind === 'race' && (mode === 'playing' || mode === 'result');
+    const balancing = currentKind === 'log' && mode === 'playing';
+    const followZ = racing ? raceZ : balancing ? Math.min(0, actor.root.position.z + 0.5) : 0;
+    const active = mode === 'playing';
+    cameraTarget.set(narrow ? (balancing ? 1.6 : 0.8) : 7.8, active ? (balancing ? 7.2 : 9.3) : 11.5, followZ + (active ? (balancing ? 12.5 : 17.2) : 22));
     camera.position.lerp(cameraTarget, 1 - Math.exp(-dt * 4));
-    camera.lookAt(0, 0.8, followZ - (racing ? 7 : 2.5));
+    const foreground = narrow && active ? (balancing ? 0.5 : 2.2) : balancing ? -1 : -0.5;
+    lookTarget.set(container.clientHeight < 500 && !narrow ? 2 : 0, balancing ? 0.8 : 0.65, followZ + (racing ? -7 : foreground));
+    cameraLook.lerp(lookTarget, 1 - Math.exp(-dt * 4)); camera.lookAt(cameraLook);
     if (mode === 'playing') {
       elapsed += dt;
       if (isThrow()) updateThrow(dt);

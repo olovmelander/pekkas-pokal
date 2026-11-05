@@ -50,3 +50,32 @@ resultat, omspel, regelblad, paus/fortsätt, byte till 844 × 390 och stängning
 utan kvarvarande canvas. AI-väntetider accelererades endast i testets
 nätverksinterception. Inga JavaScript-fel registrerades. Normal desktop- och
 landscape-smoketest passerade också. Skärmbilder granskades visuellt.
+
+## Fördjupad spelbarhetspass
+
+Kort väljs nu först för granskning och bekräftas med **Spela**. Förhandsvisningen
+använder bara redan öppna kort; de tre dolda öppningskorten påverkar aldrig
+informationen som visas. Bordet anger utspelad färg och synlig poängpott.
+Den egna poängzonen förklaras löpande och ett sista kort i sticket kan visa
+den exakta konsekvensen av att vinna det. Det ändrar inga poängregler.
+
+AI:n undviker numera ett dyrt stick som skulle förvandla en betalande mellanplats
+till straffet för flest poäng. Den ser fortfarande bara sin egen hand och
+öppna kort. En givöversikt visar de tre delresultaten. Spelaren kan låta
+sticket ligga kvar en liten stund eller gå vidare direkt. Vinnaren reagerar
+vid bordet och poängmarker rör sig mot vinnarens plats.
+
+Handen kan navigeras med vänster/höger, Home/End och Enter. Fokus hålls kvar
+över turbyten. Regelbladet har dialogsemantik, eget fokusvarv och stängs med
+Escape. Mobilens kortlayout och den låga liggande layouten har egna mått.
+
+Nya tester täcker information som inte får läcka i det blinda sticket,
+förhandsvisningens exakta sista-kort-fall, poängzoner och AI:ns riskval.
+En komplett webbläsarkörning med renderingen avstängd verifierade 39 bekräftade
+drag, tre givar, givöversikt, resultat och omspel utan JavaScript-fel.
+
+De nya vyerna har därefter granskats med riktig rendering i 320 × 568 och
+844 × 390: kortval, bekräftelseknapp, tydlig pott, regelblad och Escape-beteende.
+Ett nytt omslag fångades i 1100 × 773 från den spelbara 3D-scenen. På större
+skärmar använder salongens tre personer nu högre detaljnivå; mobil behåller
+de lättare modellerna. Textilväv och solfjädrar av kort tillför bordsdetaljer.

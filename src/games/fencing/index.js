@@ -37,6 +37,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { guardRenderer, postTarget, addSanitize, RenderWatchdog, gfxNotice, precompile } from '../shared/gfx.js';
 import { Sfx } from './audio.js';
+import { takeFeint, openingRemaining } from './combat-rules.js';
 import { Fencer, Animator, P, POSE_LEN } from './fencer.js';
 import { mulberry, glowTexture, buildSalle, buildEnvScene } from './salle.js';
 import { Sparks, Trail, Flashes, Confetti, starTexture, ringTexture } from './fx.js';
@@ -155,6 +156,7 @@ function save(key, value) {
 export async function createFencing(container) {
   const canvasHost = document.createElement('div');
   canvasHost.className = 'pb-canvas';
+  canvasHost.tabIndex = -1;
   container.appendChild(canvasHost);
   const hudHost = document.createElement('div');
   hudHost.className = 'pb-ui fen';
@@ -853,7 +855,7 @@ export async function createFencing(container) {
   /* ---- Combat resolution (timings as measured in v1) ------------------ */
 
   function playerLunge(isFeint) {
-    if (state.phase !== 'live' || meS.pose === 'lunge' || meS.pose === 'stagger') return;
+    if (helpOpen || state.phase !== 'live' || meS.pose === 'lunge' || meS.pose === 'stagger') return;
     meS.pose = isFeint ? 'feint' : 'lunge';
     meS.t = 0;
     meS.resolved = false;
@@ -992,15 +994,10 @@ export async function createFencing(container) {
       }
       case 'telegraph': {
         const tele = ai.tele || o.telegraph;
-        if (ai.willFeint && ai.t > tele * 0.62 && ai.shownLine === ai.line) {
+        if (takeFeint(ai, tele, rand)) {
           // The switch: the real attack moves to another line late
-          let other = Math.floor(rand() * 3);
-          while (other === ai.line) other = Math.floor(rand() * 3);
-          ai.line = other;
-          ai.shownLine = other;
-          ai.switchT = 0.25;
           sfx.feint();
-          hud.sub(`BYTER TILL ${LINE_NAME[other]}!`, 'red');
+          hud.sub(`BYTER TILL ${LINE_NAME[ai.line]}!`, 'red');
         }
         if (ai.t >= tele) {
           ai.pose = 'attack';
@@ -1126,6 +1123,7 @@ export async function createFencing(container) {
   /* ---- Input ---------------------------------------------------------- */
 
   function setLine(i) {
+    if (helpOpen) return;
     if (state.phase !== 'live' && state.phase !== 'ready' && state.phase !== 'intro') return;
     if (i === meS.line) return;
     meS.line = i;
@@ -1177,19 +1175,31 @@ export async function createFencing(container) {
 
   function onKeyDown(e) {
     const k = e.key;
-    if (k === '?' || (k === 'Escape' && helpOpen)) {
-      setHelp(k === '?' ? !helpOpen : false);
+    if (k === '?' || k.toLowerCase() === 'p' || (k === 'Escape' && helpOpen)) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!e.repeat) setHelp(k === 'Escape' ? false : !helpOpen);
       return;
     }
-    if (helpOpen || e.repeat) return;
+    if (helpOpen) {
+      if (k === 'Tab') { e.preventDefault(); el.helpClose.focus(); }
+      return;
+    }
+    if (e.repeat) return;
     if (state.phase === 'replay' || state.phase === 'ceremony') {
-      skipReplay();
+      if (k === ' ' || k === 'Enter' || k === 'Escape') {
+        e.preventDefault(); e.stopPropagation(); skipReplay();
+      }
       return;
     }
     if (k === ' ' || k === 'Enter') {
+      const button = e.target.closest?.('button');
+      if (button && !el.lineBtns.includes(button) && button !== el.lunge && button !== el.feint) return;
       e.preventDefault();
-      if (el.screen.classList.contains('show')) primary();
-      else if (k === ' ') playerLunge(false);
+      if (button?.dataset.line !== undefined) setLine(Number(button.dataset.line));
+      else if (button === el.feint) playerLunge(true);
+      else if (el.screen.classList.contains('show')) primary();
+      else playerLunge(false);
       return;
     }
     if (k === 'ArrowUp' || k === 'w' || k === 'W') {
@@ -1206,41 +1216,58 @@ export async function createFencing(container) {
   // Vertical swipes anywhere on the piste also move the guard
   let swipe = null;
   function onPointerDown(e) {
+    if (helpOpen || e.isPrimary === false || (e.pointerType === 'mouse' && e.button !== 0)) return;
     sfx.resume();
     if (state.phase === 'replay' || state.phase === 'ceremony') {
       skipReplay();
       return;
     }
-    swipe = { y: e.clientY, line: meS.line };
+    swipe = { id: e.pointerId, y: e.clientY };
+    canvasHost.setPointerCapture?.(e.pointerId);
   }
   function onPointerMove(e) {
-    if (!swipe) return;
+    if (helpOpen || !swipe || e.pointerId !== swipe.id) return;
     const dy = e.clientY - swipe.y;
     if (Math.abs(dy) > 36) {
       setLine(Math.max(0, Math.min(2, meS.line + (dy < 0 ? -1 : 1))));
       swipe.y = e.clientY;
     }
   }
-  function onPointerUp() {
+  function onPointerUp(e) {
+    if (e && swipe && e.pointerId !== swipe.id) return;
+    const id = swipe?.id;
     swipe = null;
+    if (id !== undefined && canvasHost.hasPointerCapture?.(id)) canvasHost.releasePointerCapture(id);
   }
 
   function setHelp(open) {
+    onPointerUp();
     helpOpen = open;
     el.help.hidden = !open;
+    el.info.setAttribute('aria-expanded', String(open));
+    if (open) sfx.ctx?.suspend();
+    else sfx.resume();
+    if (!document.hidden && document.hasFocus()) (open ? el.helpClose : canvasHost).focus({ preventScroll: true });
+  }
+  function onBlur() {
+    onPointerUp();
+    if (['intro', 'ready', 'live', 'touch', 'replay'].includes(state.phase)) setHelp(true);
   }
 
   const lineDown = (e) => {
+    if (helpOpen || e.isPrimary === false || e.button !== 0) return;
     e.preventDefault();
     sfx.resume();
     setLine(Number(e.currentTarget.dataset.line));
   };
   const lungeDown = (e) => {
+    if (helpOpen || e.isPrimary === false || e.button !== 0) return;
     e.preventDefault();
     sfx.resume();
     playerLunge(false);
   };
   const feintDown = (e) => {
+    if (helpOpen || e.isPrimary === false || e.button !== 0) return;
     e.preventDefault();
     sfx.resume();
     playerLunge(true);
@@ -1263,7 +1290,10 @@ export async function createFencing(container) {
   canvasHost.addEventListener('pointerdown', onPointerDown);
   window.addEventListener('pointermove', onPointerMove);
   window.addEventListener('pointerup', onPointerUp);
-  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('pointercancel', onPointerUp);
+  canvasHost.addEventListener('lostpointercapture', onPointerUp);
+  window.addEventListener('blur', onBlur);
+  window.addEventListener('keydown', onKeyDown, true);
   el.panel.addEventListener('click', onPanelClick);
   el.lineBtns.forEach((b) => b.addEventListener('pointerdown', lineDown));
   el.lunge.addEventListener('pointerdown', lungeDown);
@@ -1407,7 +1437,7 @@ export async function createFencing(container) {
     }
   }
 
-  function updateCamera(dt, t) {
+  function updateCamera(dt, t, snap = false) {
     if (camCut === 'intro') {
       // Start on the opponent's mask, then let the rate carry us out
       foe.j.head.getWorldPosition(v3);
@@ -1421,14 +1451,14 @@ export async function createFencing(container) {
       camCut = '';
     }
     cameraGoal(t);
-    const k = 1 - Math.exp(-goal.rate * dt);
+    const k = snap ? 1 : 1 - Math.exp(-goal.rate * dt);
     cam.pos.lerp(goal.pos, k);
     cam.look.lerp(goal.look, k);
     cam.fov += (goal.fov - cam.fov) * k;
     cam.roll += (goal.roll - cam.roll) * k;
     cam.shift.lerp(goal.shift, k);
     camera.position.copy(cam.pos);
-    if (shake.power > 0.001) {
+    if (shake.power > 0.001 && dt > 0) {
       shake.power = Math.max(0, shake.power - dt * 4);
       const s = shake.power * 0.05;
       camera.position.x += (Math.random() - 0.5) * s;
@@ -1458,6 +1488,7 @@ export async function createFencing(container) {
 
   /* ---- Sizing --------------------------------------------------------- */
 
+  let resizePicture = null;
   function resize() {
     const rect = canvasHost.getBoundingClientRect();
     const w = Math.max(1, Math.floor(rect.width));
@@ -1474,6 +1505,7 @@ export async function createFencing(container) {
     camera.updateProjectionMatrix();
     salle.setMoteScale(rtSize.y * 0.05);
     hudHost.dataset.orient = aspect < 0.9 ? 'portrait' : 'landscape';
+    resizePicture?.();
   }
   const ro = new ResizeObserver(resize);
   ro.observe(canvasHost);
@@ -1565,6 +1597,14 @@ export async function createFencing(container) {
 
   function updateTelegraph(dt, t) {
     const live = state.phase === 'live';
+    const opening = live ? openingRemaining(ai.pose, ai.t) : 0;
+    if (opening > 0) {
+      hud.cue(ai.pose === 'stagger' ? 'RIPOST · STÖT NU' : 'ÖPPEN LINJE · STÖT', 'open', opening / openingRemaining(ai.pose, 0));
+    } else if (live && (ai.pose === 'telegraph' || ai.pose === 'attack')) {
+      const covered = meS.line === ai.shownLine;
+      const duration = ai.pose === 'telegraph' ? ai.tele || opp().telegraph : opp().attackDur * 0.7;
+      hud.cue(`${covered ? 'GARD KLAR' : 'PARERA'} · ${LINE_NAME[ai.shownLine]}`, covered ? 'covered' : 'danger', 1 - ai.t / duration);
+    } else hud.cue('');
     // Glint on the attacking blade
     if (ai.pose === 'telegraph' && live) {
       const k = ai.t / (ai.tele || opp().telegraph);
@@ -1638,6 +1678,8 @@ export async function createFencing(container) {
 
   /** One step of the world. Kept apart from rendering so tests can step it. */
   function simulate(realDt) {
+    // Pause the pose, the attack window and the replay at precisely the same instant.
+    if (helpOpen) return;
     clock += realDt;
     const t = clock;
     // Hit-stop: the world nearly freezes for a few frames on impact
@@ -1722,11 +1764,12 @@ export async function createFencing(container) {
   }
 
   const onVisibility = () => {
+    if (document.hidden) onBlur();
     running = !document.hidden;
     last = performance.now();
     if (sfx.ctx) {
       if (document.hidden) sfx.ctx.suspend();
-      else sfx.ctx.resume();
+      else if (!helpOpen) sfx.ctx.resume();
     }
   };
   document.addEventListener('visibilitychange', onVisibility);
@@ -1754,6 +1797,10 @@ export async function createFencing(container) {
   // With the composer in use three draws into a render target (linear, no
   // tone mapping) — compile those program variants, not the screen ones
   await precompile(renderer, scene, camera, usePost ? { target: composer.renderTarget1 } : {});
+  resizePicture = () => {
+    updateCamera(0, clock, true);
+    drawFrame();
+  };
   hidden.forEach((o) => {
     o.visible = false;
   });
@@ -1890,7 +1937,10 @@ export async function createFencing(container) {
     canvasHost.removeEventListener('pointerdown', onPointerDown);
     window.removeEventListener('pointermove', onPointerMove);
     window.removeEventListener('pointerup', onPointerUp);
-    window.removeEventListener('keydown', onKeyDown);
+    window.removeEventListener('pointercancel', onPointerUp);
+    canvasHost.removeEventListener('lostpointercapture', onPointerUp);
+    window.removeEventListener('blur', onBlur);
+    window.removeEventListener('keydown', onKeyDown, true);
     hud.dispose();
     if (window.__ppFakt) delete window.__ppFakt;
     gfx.dispose();

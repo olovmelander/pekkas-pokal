@@ -39,6 +39,7 @@ export function createArcade(container, options = {}) {
   let elapsed = 0;
   let toastUntil = 0;
   let audio = null;
+  const voices = new Set();
   let muted = false;
   let onStart = null;
   let resumeFocus = null;
@@ -94,13 +95,14 @@ export function createArcade(container, options = {}) {
   resize();
 
   function wakeAudio() {
-    if (muted || dead) return;
+    if (muted || paused || dead) return;
     try {
       if (!audio) {
         const Context = window.AudioContext || window.webkitAudioContext;
         if (Context) audio = new Context();
       }
       if (audio?.state === 'suspended') audio.resume().catch(() => {});
+      if (audio) voices.forEach((voice) => voice.connect());
     } catch { /* Sound is optional. */ }
   }
   function tone(frequency = 440, duration = 0.12, type = 'sine') {
@@ -124,6 +126,47 @@ export function createArcade(container, options = {}) {
     soundButton.textContent = muted ? 'Ljud av' : 'Ljud på';
     soundButton.setAttribute('aria-label', muted ? 'Slå på ljud' : 'Stäng av ljud');
     soundButton.setAttribute('aria-pressed', String(muted));
+  }
+  /** A continuous, quiet voice for engine/wind feedback. Nodes are created
+   * only after a player gesture; the shell owns pause, mute and disposal. */
+  function createVoice({ type = 'triangle', frequency = 80, gain = 0 } = {}) {
+    let oscillator = null;
+    let volume = null;
+    let stopped = false;
+    let hz = frequency;
+    let level = gain;
+    const voice = {
+      connect() {
+        if (!audio || stopped || oscillator) return;
+        oscillator = audio.createOscillator();
+        volume = audio.createGain();
+        oscillator.type = ['sine', 'square', 'sawtooth', 'triangle'].includes(type) ? type : 'triangle';
+        oscillator.frequency.value = Math.max(35, Math.min(12000, hz));
+        volume.gain.value = Math.max(0, Math.min(0.08, level));
+        oscillator.connect(volume);
+        volume.connect(audio.destination);
+        oscillator.start();
+      },
+      set(nextFrequency, nextGain) {
+        if (stopped || dead) return;
+        if (Number.isFinite(nextFrequency)) hz = Math.max(35, Math.min(12000, nextFrequency));
+        if (Number.isFinite(nextGain)) level = Math.max(0, Math.min(0.08, nextGain));
+        if (!oscillator) return;
+        oscillator.frequency.setTargetAtTime(hz, audio.currentTime, 0.06);
+        volume.gain.setTargetAtTime(level, audio.currentTime, 0.06);
+      },
+      stop() {
+        if (stopped) return;
+        stopped = true;
+        voices.delete(voice);
+        oscillator?.stop();
+        oscillator?.disconnect();
+        volume?.disconnect();
+      }
+    };
+    voices.add(voice);
+    if (audio && !dead) voice.connect();
+    return { set: voice.set, stop: voice.stop };
   }
   function setPaused(value) {
     if (dead || paused === value) return;
@@ -154,9 +197,10 @@ export function createArcade(container, options = {}) {
       const buttons = [...root.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), summary, a[href], [tabindex="0"]'), document.querySelector('#game-close')]
         .filter((element) => element && !element.closest('[inert]') && element.getClientRects().length && getComputedStyle(element).visibility !== 'hidden');
       const index = buttons.indexOf(document.activeElement);
-      if (buttons.length && (index < 0 || (event.shiftKey ? index === 0 : index === buttons.length - 1))) {
+      if (buttons.length) {
         event.preventDefault();
-        buttons[event.shiftKey ? buttons.length - 1 : 0].focus({ preventScroll: true });
+        const next = index < 0 ? (event.shiftKey ? buttons.length - 1 : 0) : (index + (event.shiftKey ? -1 : 1) + buttons.length) % buttons.length;
+        buttons[next].focus({ preventScroll: true });
       }
       return;
     }
@@ -177,6 +221,7 @@ export function createArcade(container, options = {}) {
     muted = !muted;
     try { localStorage.setItem('pp-arcade-muted', String(muted)); } catch { /* private mode */ }
     updateMute();
+    root.dispatchEvent(new CustomEvent('arcademute', { detail: { muted } }));
     if (muted) audio?.suspend().catch(() => {});
     else { wakeAudio(); tone(640, 0.08); }
   });
@@ -209,6 +254,9 @@ export function createArcade(container, options = {}) {
     }
   }
   function hidePanel() {
+    toastElement.classList.remove('show');
+    toastElement.textContent = '';
+    toastUntil = elapsed;
     panel.hidden = true;
     root.classList.remove('arcade-has-panel');
     syncModal();
@@ -265,11 +313,13 @@ export function createArcade(container, options = {}) {
     callbacks.clear();
     keys.clear();
     profile.dispose();
+    [...voices].forEach((voice) => voice.stop());
     if (audio && audio.state !== 'closed') audio.close().catch(() => {});
     const geometries = new Set();
     const materials = new Set();
     const textures = new Set();
     scene.traverse((object) => {
+      if (object.isInstancedMesh) object.dispose();
       if (object.geometry) geometries.add(object.geometry);
       if (object.material) (Array.isArray(object.material) ? object.material : [object.material]).forEach((m) => materials.add(m));
       if (object.isLight) object.shadow?.map?.dispose();
@@ -292,8 +342,9 @@ export function createArcade(container, options = {}) {
   frame = requestAnimationFrame(tick);
   return {
     THREE, scene, camera, renderer, root, ui, keys, sun, ambient, reducedMotion,
-    listen, showPanel, hidePanel, setHUD, toast, tone, loadBest, saveBest, destroy, setPaused,
+    listen, showPanel, hidePanel, setHUD, toast, tone, createVoice, loadBest, saveBest, destroy, setPaused,
     onFrame(callback) { callbacks.add(callback); return () => callbacks.delete(callback); },
-    get paused() { return paused; }
+    get paused() { return paused; },
+    get muted() { return muted; }
   };
 }

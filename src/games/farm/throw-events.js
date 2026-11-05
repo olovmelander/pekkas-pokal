@@ -5,11 +5,19 @@ export function createThrowEvent(kind, ctx) {
   const boot = kind === 'boot';
   const projectile = new THREE.Group(); group.add(projectile);
   if (boot) {
-    cylinder(0.27, 0.8, 0x425e43, 0, 0.35, 0, projectile, 0.32);
-    const foot = mesh(new THREE.SphereGeometry(0.33, 16, 10), 0x425e43, 0, -0.04, -0.23, projectile); foot.scale.set(0.85, 0.65, 1.65);
-    box(0.56, 0.12, 1.05, 0x2e3c31, 0, -0.2, -0.2, projectile);
-    cylinder(0.325, 0.05, 0xd0b36c, 0, 0.76, 0, projectile);
-    const hole = cylinder(0.26, 0.006, 0x202d27, 0, 0.792, 0, projectile); hole.castShadow = false;
+    // The long toe faces the camera, so the rubber boot reads even on a phone.
+    const shaft = cylinder(0.205, 0.91, 0x425e43, 0, 0.41, -0.19, projectile, 0.275); shaft.scale.z = 0.82;
+    const foot = mesh(new THREE.SphereGeometry(0.32, 18, 12), 0x49694c, 0, -0.035, 0.34, projectile);
+    foot.scale.set(0.86, 0.61, 2.0);
+    // A dark welt, rounded toe sole and separate heel make a visible L-shaped profile.
+    box(0.57, 0.12, 1.04, 0x28352b, 0, -0.2, 0.17, projectile);
+    const soleToe = cylinder(0.285, 0.12, 0x28352b, 0, -0.2, 0.69, projectile); soleToe.scale.z = 1.12;
+    box(0.5, 0.18, 0.38, 0x202c25, 0, -0.22, -0.19, projectile);
+    for (let z = 0.04; z <= 0.8; z += 0.19) box(0.59, 0.025, 0.04, 0x536348, 0, -0.19, z, projectile);
+    const cuff = cylinder(0.285, 0.065, 0xd0b36c, 0, 0.885, -0.19, projectile); cuff.scale.z = 0.82;
+    const hole = cylinder(0.235, 0.008, 0x202d27, 0, 0.922, -0.19, projectile); hole.scale.z = 0.82; hole.castShadow = false;
+    box(0.1, 0.2, 0.055, 0xd0b36c, 0, 0.91, -0.43, projectile);
+    box(0.02, 0.68, 0.035, 0x71856a, 0.225, 0.43, -0.13, projectile);
     for (let z = 0; z >= -40; z -= 5) {
       box(7, 0.025, 0.07, 0xd2c79f, 0, 0.04, z, group);
       cylinder(0.045, 0.55, 0xead4a1, 3.7, 0.27, z, group);
@@ -28,6 +36,9 @@ export function createThrowEvent(kind, ctx) {
     const sand = cylinder(1.65, 0.05, 0xc5b583, 0, 0.025, 0, stake); sand.castShadow = false;
   }
   const marker = mesh(new THREE.TorusGeometry(0.28, 0.027, 5, 24), 0xffedbd, 0, 0.05, -6, group); marker.rotation.x = Math.PI / 2;
+  const arcGeometry = new THREE.BufferGeometry(); arcGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(19 * 3), 3));
+  const arcMaterial = new THREE.LineDashedMaterial({ color: 0xe7dbaa, transparent: true, opacity: 0.45, dashSize: 0.3, gapSize: 0.2 });
+  const arc = new THREE.Line(arcGeometry, arcMaterial); arc.frustumCulled = false; group.add(arc); arc.visible = boot;
   let angle = 42, aim = 0, charge = 0, power = 0.1, holding = false, phase = 'aim', flight = null;
   let attempt = 0, wait = 0, score = 0, best = 0, target = { x: -1.4, z: -5.5 }, done = false;
   const maximum = bootRange(1, 44);
@@ -48,6 +59,7 @@ export function createThrowEvent(kind, ctx) {
       ctx.tone(210, 0.1, 'triangle');
     },
     cancel() { holding = false; },
+    dispose() { arcMaterial.dispose(); },
     step(dt, time, input) {
       if (done) return;
       if (phase === 'aim') {
@@ -57,8 +69,15 @@ export function createThrowEvent(kind, ctx) {
         marker.visible = !boot;
         marker.position.set(aim * 4.5, 0.06, 6 - (5 + power * 15));
         projectile.rotation.z = boot ? (angle - 45) * 0.012 : 0;
+        if (boot) {
+          arc.visible = true;
+          const duration = bootRange(power, angle) / ((8 + power * 12) * Math.cos(angle * Math.PI / 180));
+          const positions = arcGeometry.attributes.position;
+          for (let i = 0; i <= 18; i++) { const p = bootTrajectory(power, angle, duration * i / 18); positions.setXYZ(i, 0, Math.max(0.22, p.height), 6 - p.distance); }
+          positions.needsUpdate = true; arc.computeLineDistances();
+        }
       } else if (phase === 'flight') {
-        flight.t += dt; marker.visible = false;
+        flight.t += dt; marker.visible = false; arc.visible = false;
         if (boot) {
           const pos = bootTrajectory(flight.power, flight.angle, flight.t);
           projectile.position.set(0, Math.max(0.22, pos.height), 6 - pos.distance);
