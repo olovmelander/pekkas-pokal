@@ -1569,7 +1569,7 @@ export async function createPinball(container, opts = {}) {
     const dur = clamp(base / Math.max(9, b.speed), 0.9, 2.1);
     state.riders.push({
       ball: b, side, t: 0, dur,
-      v: clamp(b.speed * 0.8, 20, 36),
+      v: clamp(b.speed * 0.9, 26, 40),
       len: refs.rampCurves[side].getLength()
     });
     const flap = refs.rampFlaps && refs.rampFlaps[side];
@@ -1615,7 +1615,7 @@ export async function createPinball(container, opts = {}) {
   function releaseRider(r) {
     const ex = L.ramps[r.side].exit;
     // A ball that came down the wire fast leaves it a little faster
-    const k = clamp((r.v || 22) / 22, 0.85, 1.2);
+    const k = clamp((r.v || 30) / 30, 0.85, 1.15);
     r.ball.place(ex.x, ex.y, (ex.vx || 0) * k, ex.vy * k);
     r.ball.live = true;
     state.balls.push(r.ball);
@@ -2212,8 +2212,15 @@ export async function createPinball(container, opts = {}) {
     state.lastNudge = now;
     state.nudges = state.nudges.filter((t) => now - t < 3200);
     state.nudges.push(now);
+    // Tilt bob: every shove swings the plumb bob, which settles again with
+    // a ~1.4 s half-life. Quick shoves add up; shoves a second or more apart
+    // only ever earn warnings.
+    const settle = (now - (state.bobAt || now)) / 1000;
+    state.bob = (state.bob || 0) * 0.5 ** (settle / 1.4) + 1;
+    state.bobAt = now;
+    const bobStage = state.bob > 3 ? 3 : state.bob > 2.2 ? 2 : state.bob > 1.5 ? 1 : 0;
 
-    if (state.nudges.length > 3) {
+    if (bobStage >= 3) {
       state.tilted = true;
       flipL.pressed = false;
       flipR.pressed = false;
@@ -2225,9 +2232,9 @@ export async function createPinball(container, opts = {}) {
       return;
     }
     // The warning escalates: a word of caution, then the real warning, then TILT
-    if (state.nudges.length === 2) {
+    if (bobStage === 1) {
       say(['FÖRSIKTIGT'], { prio: 1, dur: 0.8 });
-    } else if (state.nudges.length === 3) {
+    } else if (bobStage === 2) {
       dmd.warning();
       sfx.warning();
       fireFlasher('both', 0.5);
@@ -2936,7 +2943,7 @@ export async function createPinball(container, opts = {}) {
         // The wire costs speed on the climb and gives it back on the way
         // down: the ball's pace (and its rolling sound) follows the bends
         const tan = refs.rampCurves[r.side].getTangentAt(Math.min(1, r.t));
-        r.v = clamp(r.v - (tan.y * 62 - tan.z * 14) * dt, 12, 40);
+        r.v = clamp(r.v - (tan.y * 30 - tan.z * 12) * dt, 16, 42);
         r.t += (r.v * dt) / r.len;
         if (r.t >= 1) {
           state.riders.splice(ri, 1);
@@ -3060,7 +3067,11 @@ export async function createPinball(container, opts = {}) {
     // The nudge button warms up with each recent nudge: the tilt bob made visible
     {
       const nowN = performance.now();
-      const heat = state.phase === 'play' && !state.tilted ? state.nudges.filter((x) => nowN - x < 3200).length : 0;
+      // Read off the same settling tilt bob doNudge uses, as a forecast:
+      // amber when a nudge now would draw a warning, red when it would TILT.
+      // The colour cools as the cabinet settles.
+      const bob = (state.bob || 0) * 0.5 ** (Math.max(0, nowN - (state.bobAt || nowN)) / 1400);
+      const heat = state.phase === 'play' && !state.tilted ? (bob + 1 > 3 ? 3 : bob + 1 > 2.2 ? 2 : 0) : 0;
       if (hud.nudge.dataset.heat !== String(heat)) hud.nudge.dataset.heat = String(heat);
     }
 

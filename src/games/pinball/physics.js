@@ -8,6 +8,17 @@
  *
  * Everything is a capsule (segment + radius) or a circle. That covers walls,
  * rails, flippers, posts and bumpers with one pair of collision routines.
+ *
+ * Feel notes (measured with the headless rig in the pin-feel report):
+ * - Substeps are sized from ball speed PLUS flipper sweep speed, so nothing
+ *   ever moves more than ~0.19 units relative to anything it can hit.
+ * - Friction is Coulomb and impact-only. The ball rolls, so a resting
+ *   contact neither drags it nor holds it balanced on a round cap.
+ * - Flippers are solenoid-driven with a compliant end-of-stroke hold and
+ *   rubber that deadens with impact speed: cradles, catches and passes.
+ * - Pop bumpers and slingshots are active coils: they fire on contact,
+ *   throw at a near-constant speed with a few degrees of scatter, and then
+ *   need a moment to recharge.
  */
 
 /* ------------------------------------------------------------------ vectors */
