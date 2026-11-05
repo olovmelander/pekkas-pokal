@@ -328,6 +328,10 @@ table,
 #loading-screen.hidden {
   opacity: 0;
   visibility: hidden;
+  /* Click-through from the first frame of the fade: visibility only flips at
+     the end of the transition, and a slow first frame could otherwise leave an
+     invisible layer over a game that has just opened */
+  pointer-events: none;
 }
 
 .loader-mark {

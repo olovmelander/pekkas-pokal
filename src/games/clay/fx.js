@@ -280,7 +280,7 @@ class Splats {
 export const HeatHazeShader = {
   uniforms: {
     tDiffuse: { value: null },
-    uTime: { value: 0 },
+    uPhase: { value: new THREE.Vector3() }, // ripple phases, wrapped to [0, 2π) on the CPU
     uStrength: { value: 0 },
     uCenter: { value: new THREE.Vector2(0.7, 0.6) },
     uRadius: { value: new THREE.Vector2(0.12, 0.25) }
@@ -293,7 +293,7 @@ export const HeatHazeShader = {
     }`,
   fragmentShader: /* glsl */ `
     uniform sampler2D tDiffuse;
-    uniform float uTime;
+    uniform vec3 uPhase;
     uniform float uStrength;
     uniform vec2 uCenter;
     uniform vec2 uRadius;
@@ -303,8 +303,8 @@ export const HeatHazeShader = {
       // 1 − smoothstep, not smoothstep(1.0, 0.15, …): reversed edges are undefined in GLSL
       float m = (1.0 - smoothstep(0.15, 1.0, length(d))) * uStrength;
       // Rising ripples: phase runs with height so the shimmer climbs
-      float a = sin(vUv.y * 90.0 - uTime * 7.0) + 0.6 * sin(vUv.y * 151.0 + vUv.x * 37.0 - uTime * 11.0);
-      float b = cos(vUv.x * 70.0 + vUv.y * 20.0 - uTime * 5.0);
+      float a = sin(vUv.y * 90.0 - uPhase.x) + 0.6 * sin(vUv.y * 151.0 + vUv.x * 37.0 - uPhase.y);
+      float b = cos(vUv.x * 70.0 + vUv.y * 20.0 - uPhase.z);
       gl_FragColor = texture2D(tDiffuse, vUv + vec2(a * 0.0028, b * 0.0018) * m);
     }`
 };

@@ -1205,3 +1205,78 @@
     animation: none;
   }
 }
+
+/* ---- Korta telefoner: varje kort får plats eller rullar med fingret ------
+   Menyn, presentationskortet, matchkortet, mästarkortet och hjälpen rullar
+   med ett finger utan att dra med sig sidan, och huvudknappen klistrar sig
+   mot kortets nederkant så att den alltid går att nå. */
+
+.pg-ui .pg-card,
+.pg-ui .pg-intro-card,
+.pg-ui .pb-help-card {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  pointer-events: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pg-ui .pg-intro-card {
+  max-height: 100%;
+}
+
+.pg-ui .pb-help-card {
+  max-height: calc(100% - 8px);
+}
+
+.pg-ui .pg-card [data-action='tour'],
+.pg-ui .pg-card [data-action='next'],
+.pg-ui .pg-intro-card [data-action='play'],
+.pg-ui .pb-help-card [data-action='help-close'] {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+}
+
+.pg-ui .pg-card .pg-btns {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  padding-top: 8px;
+  background: linear-gradient(180deg, rgba(16, 12, 10, 0), rgba(16, 12, 10, 0.94) 35%);
+}
+
+@media (max-height: 600px) {
+  /* The how-to lines are in the help card too: a short screen keeps the ladder and the button */
+  .pg-ui .pg-card.pg-menu .fg-steps {
+    display: none;
+  }
+
+  .pg-ui .pg-card {
+    padding-top: 16px;
+  }
+
+  .pg-ui .pg-card.pg-menu p {
+    margin-top: 4px;
+    font-size: 0.86rem;
+  }
+}
+
+@media (max-height: 360px) {
+  .pg-ui .pg-card .pg-hint,
+  .pg-ui .pg-card.pg-menu .pg-bests {
+    display: none;
+  }
+
+  .pg-ui .pg-card h2 {
+    font-size: 1.45rem;
+  }
+}
+
+@media (max-height: 400px) {
+  /* A phone on its side: the result, the medal and the button; the stats wait */
+  .pg-ui .pg-card.pg-result .pg-statrow,
+  .pg-ui .pg-card.pg-result .pg-medal-drop small {
+    display: none;
+  }
+}

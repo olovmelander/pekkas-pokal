@@ -1912,3 +1912,31 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---------------------------------------------- very short landscape phones */
+
+/* The action row always stays tappable above the palette canvas, and on a
+   phone held sideways with browser bars (≈300 px tall) the palette gives way
+   so the buttons never sit on top of it */
+.pm-ui .pm-actions {
+  position: relative;
+  z-index: 2;
+}
+
+@media (max-height: 360px) {
+  .pm-ui.pm-wide .pm-panel {
+    gap: 6px;
+    padding: 8px 10px;
+    max-height: calc(100% - 64px);
+    top: calc(50% + 20px);
+  }
+
+  .pm-ui.pm-wide .pm-chip {
+    width: 44px;
+    height: 44px;
+  }
+
+  .pm-ui.pm-wide .pm-palette-wrap {
+    min-height: 60px;
+  }
+}

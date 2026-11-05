@@ -734,8 +734,15 @@ function buildKiln(metal) {
     roughness: 0.95,
     side: THREE.BackSide
   });
-  const chamber = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.05, 1.2), chamberMat);
-  chamber.position.set(0, 1.145, 0.1);
+  // The firebrick lining sits 1.5 cm INSIDE the steel shell on every side.
+  // It used to share the shell's inner planes exactly (walls at x = ±0.45,
+  // floor 0.62, roof 1.67, back −0.5): two surfaces at the same depth, so
+  // with the door open the brick and the steel fought pixel by pixel, and
+  // the firing rumble re-rolled the pattern every frame — the flicker seen
+  // on phones (and the bloom of the hot brick made it pulse). Its front
+  // face stays on the opening's plane; seen from outside it is culled.
+  const chamber = new THREE.Mesh(new THREE.BoxGeometry(0.87, 1.02, 1.17), chamberMat);
+  chamber.position.set(0, 1.145, 0.115);
   g.add(chamber);
 
   // The door, hinged on its right edge: it swings open away from the

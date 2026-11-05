@@ -137,7 +137,7 @@ export function startPanelHtml({ best, ludvig, medals, touch }) {
     </ul>
     <div class="sk-goals">${chips}</div>
     ${bestLine}
-    <button class="pb-btn" data-act="start">Ladda och klart!</button>
+    <div class="sk-cta"><button class="pb-btn" data-act="start">Ladda och klart!</button></div>
   `;
 }
 

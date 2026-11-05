@@ -605,8 +605,12 @@
 
 .pb-help-card {
   width: min(430px, 100%);
-  max-height: min(86vh, 720px);
+  /* % of the help layer = the visible stage (100vh would include the space
+     under a phone browser's toolbars) */
+  max-height: min(100%, 720px);
   overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
   padding: 22px 22px 18px;
   border-radius: 18px;
   background: linear-gradient(165deg, rgba(21, 27, 52, 0.97), rgba(12, 16, 32, 0.97));

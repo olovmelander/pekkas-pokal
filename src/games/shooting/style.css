@@ -1359,3 +1359,53 @@
     top: 70%;
   }
 }
+
+/* ---------------------------------------------- panels on short screens */
+
+/* A shown panel takes the finger: on a short phone screen (browser bars, large
+   text) it scrolls instead of letting the swipe fall through to the field, and
+   the start button rides along at its bottom edge so it is always in reach. */
+.sk-ui .sk-overlay.show .sk-panel {
+  pointer-events: auto;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.sk-ui .sk-panel.start {
+  padding-bottom: 0;
+}
+
+.sk-ui .sk-cta {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin: 0 -26px;
+  padding: 6px 26px 22px;
+  background: linear-gradient(180deg, rgba(16, 11, 8, 0), rgba(16, 11, 8, 0.94) 34%);
+}
+
+.sk-ui .sk-cta .pb-btn {
+  position: static;
+  margin-top: 6px;
+  box-shadow: 0 8px 26px rgba(242, 193, 78, 0.3);
+}
+
+@media (max-aspect-ratio: 1/1) {
+  .sk-ui .sk-panel {
+    max-height: calc(100% - 76px - env(safe-area-inset-top));
+  }
+
+  .sk-ui .sk-cta {
+    margin: 0 -18px;
+    padding: 4px 18px 16px;
+  }
+}
+
+@media (min-aspect-ratio: 1/1) and (max-height: 520px) {
+  .sk-ui .sk-cta {
+    margin: 0 -16px;
+    padding: 4px 16px 12px;
+  }
+}
+
