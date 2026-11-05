@@ -1226,7 +1226,8 @@ class ScoreBox {
     this.lampMats.forEach((m, i) => {
       const on = this.on[i];
       // Lit lamps hum a little, as the real ones do through a camera
-      const target = on ? 7 + Math.sin(t * 50) * 0.4 : 0.05;
+      // (bright enough for bloom to take the lamp, not to blow it into a white orb)
+      const target = on ? 4.6 + Math.sin(t * 50) * 0.3 : 0.05;
       m.emissiveIntensity += (target - m.emissiveIntensity) * Math.min(1, dt * (on ? 30 : 8));
       lightI += on && this.spill !== false ? 2.1 : 0;
     });

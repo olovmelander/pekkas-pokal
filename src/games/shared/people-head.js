@@ -65,6 +65,9 @@ export function headField(F) {
   const { nose } = F;
   const my = FACE.mouthY;
   const nl = 0.006 * (F.noseLen - 1);
+  const eyeS = F.eyeSize ?? 1;
+  // A longer nose also reaches lower
+  const nd = 0.012 * (F.noseLen - 1);
   // Extended likeness knobs (all default to 1, jawSq to 0.5)
   const faceL = F.faceL ?? 1;
   const noseW = F.noseW ?? 1;
@@ -77,7 +80,7 @@ export function headField(F) {
     const ax = Math.abs(x);
     // The skull: a short occiput that curves down and in towards the neck,
     // and a forehead that slopes back from the brow
-    let d = ell2(x, y, z, 0, 0.02, -0.012, 0.0835 * F.headW, 0.097, 0.084, 0.095, 0.087 * F.headL);
+    let d = ell2(x, y, z, 0, 0.02, -0.01, 0.0835 * F.headW, 0.097, 0.082, 0.093, 0.083 * F.headL);
     d = smin(d, ell(x, y, z, 0, 0.045, 0.019, 0.064 * F.headW, 0.05, 0.058), 0.03);
     d = smin(d, ell(x, y, z, 0, -0.024 - cs * 0.4, 0.035, 0.067 * F.cheek, 0.07 + cs * 0.4, 0.057), 0.036);
     // The jaw: a clear lower edge rising from the chin to the angle of the
@@ -101,14 +104,14 @@ export function headField(F) {
     d = smin(d, ell(ax, y, z, 0.0052, my + 0.0063, 0.0866, 0.0075, 0.0043, 0.0071 * F.lips), 0.003);
     d = smin(d, ell(x, y, z, 0, my - 0.0066, 0.0855, 0.0165, 0.0076 * F.lips, 0.0093 * F.lips), 0.0036);
     // Nose: a soft, short bridge, a round button tip, two small wings
-    if (F.sockets !== false) d = smin(d, cap(x, y, z, 0, 0.008, 0.0842, 0, -0.022, 0.1015 + nl, 0.0058, 0.0082 * nose), 0.007);
+    if (F.sockets !== false) d = smin(d, cap(x, y, z, 0, 0.008, 0.0842, 0, -0.022 - nd, 0.1015 + nl, 0.0058 * noseW ** 0.5, 0.0082 * nose * noseW ** 0.4), 0.007);
     else d = smin(d, cap(x, y, z, 0, -0.006, 0.084, 0, -0.022, 0.094, 0.005, 0.0075), 0.008);
-    d = smin(d, sph(x, y, z, 0, -0.0272 - 0.004 * (nose - 1), 0.0998 + nl + 0.006 * (nose - 1), 0.0108 * nose ** 1.4 * noseW ** 0.3), 0.0055);
-    d = smin(d, sph(ax, y, z, 0.0108 * nose * noseW, -0.0338, 0.0893, 0.0078 * nose * noseW ** 0.5), 0.0055);
+    d = smin(d, sph(x, y, z, 0, -0.0272 - 0.004 * (nose - 1) - nd, 0.0998 + nl + 0.006 * (nose - 1), 0.0108 * nose ** 1.4 * noseW ** 0.3), 0.0055);
+    d = smin(d, sph(ax, y, z, 0.0108 * nose * noseW, -0.0338 - nd * 0.7, 0.0893, 0.0078 * nose * noseW ** 0.5), 0.0055);
     // Eye sockets, just bigger than the lids so the lids frame the eye
     if (F.sockets !== false) {
-      d = smax(d, -sph(x, y, z, ex, ey, ez, FACE.eyeR + 0.0019), 0.004);
-      d = smax(d, -sph(x, y, z, -ex, ey, ez, FACE.eyeR + 0.0019), 0.004);
+      d = smax(d, -sph(x, y, z, ex, ey, ez, FACE.eyeR * eyeS + 0.0019), 0.004);
+      d = smax(d, -sph(x, y, z, -ex, ey, ez, FACE.eyeR * eyeS + 0.0019), 0.004);
     }
     return d;
   };
@@ -588,7 +591,7 @@ function buildMouthInside(b, ctx) {
 /** Eyeball with iris and pupil as crisp rings, and its two lids. */
 export function buildEyes(b, ctx) {
   const { toModel, res, look } = ctx;
-  const R = FACE.eyeR;
+  const R = FACE.eyeR * (ctx.face.eyeSize ?? 1);
   for (const s of [1, -1]) {
     const S = s > 0 ? 'L' : 'R';
     const c = [s * FACE.eyeX, FACE.eyeY, FACE.eyeZ];
@@ -677,7 +680,7 @@ export const LID_CLOSED_LO = -0.07;
 function buildLid(b, ctx, s, c, upper) {
   const { toModel } = ctx;
   const S = s > 0 ? 'L' : 'R';
-  const R = FACE.eyeR;
+  const R = FACE.eyeR * (ctx.face.eyeSize ?? 1);
   // The upper lid is a thick, soft fold with a dark lash line along its
   // edge (it frames the eye from any distance); the lower lid is thinner
   const eyeOpen = Math.min(1.04, ctx.face.eyeOpen ?? 1);
@@ -971,8 +974,8 @@ export const HAIR_STYLES = {
   messy: { h: 0.0135, side: 0.005, ramp: 0.05, fringeLocks: 2.2, lockDepth: 6, crown: [0.05, 0.92, -0.38], groove: 0.002, noise: 0.0042, clumps: 0.0048, front: 0.0045, tufts: 3.2, jag: 3.4 },
   // Medium length, wavy, tucked behind the ears and over the collar at the back
   wavy: {
-    h: 0.0165, side: 0.0105, ramp: 0.045, crown: [0.12, 0.85, -0.5], groove: 0.002, noise: 0.003, clumps: 0.004, front: 0.006,
-    part: 24, waves: 0.0035, lower: 9, lowerBack: 15, fringe: 0.0035, lockDepth: 8
+    h: 0.017, side: 0.0122, ramp: 0.045, crown: [0.12, 0.85, -0.5], groove: 0.002, noise: 0.003, clumps: 0.004, front: 0.006,
+    part: 24, waves: 0.0042, lower: 10, lowerBack: 21, fringe: 0.0035, lockDepth: 9
   },
   // A neat short cut with the temples receding
   receding: { h: 0.0086, side: 0.0042, ramp: 0.065, crown: [0, 0.9, -0.43], groove: 0.0014, front: 0.0028, recede: 9 }
@@ -1445,6 +1448,76 @@ function buildLongBeard(b, ctx) {
       return [['jaw', (1 - k) * 0.7], ['head', (1 - k) * 0.3], ['neck', k * (1 - c)], ['chest', k * c]];
     }
   });
+  if (high) buildBeardLocks(b, ctx);
+}
+
+/**
+ * Loose locks over the front of a long beard: separate tapering strands that
+ * start under the moustache and along the jaw, follow the beard's curve and
+ * end at their own lengths, so the silhouette is ragged and the strands catch
+ * the light one by one.
+ */
+function buildBeardLocks(b, ctx) {
+  const { toModel } = ctx;
+  const core = (t) => {
+    const y = lerp(-0.066, -0.268, t);
+    const zc = lerp(0.034, 0.093, sstep(0, 0.65, t)) + 0.008 * Math.sin(t * Math.PI) - 0.006 * sstep(0.85, 1, t);
+    const w = 0.072 * (1 - 0.74 * Math.pow(t, 1.9)) * (1 + 0.1 * Math.sin(t * Math.PI));
+    const dd = 0.056 * (1 - 0.68 * Math.pow(t, 1.6));
+    return { y, zc, w, dd };
+  };
+  const N = 9;
+  const rings = 8;
+  const cols = 5;
+  const weight = (p, q) => {
+    const k = sstep(0.12, 0.55, q.t);
+    const c = sstep(0.4, 0.95, q.t);
+    return [['jaw', (1 - k) * 0.7], ['head', (1 - k) * 0.3], ['neck', k * (1 - c)], ['chest', k * c]];
+  };
+  for (let k = 0; k < N; k++) {
+    const h1 = hash01(k * 7 + 3);
+    const h2 = hash01(k * 13 + 1);
+    // Round the front and sides of the beard (a = 0 is straight ahead)
+    const a0 = lerp(-1.75, 1.75, (k + 0.5) / N) + (h1 - 0.5) * 0.18;
+    const t0 = 0.02 + 0.12 * h2;
+    const t1 = lerp(0.62, 1.02, 1 - Math.abs(a0) / 1.9) * (0.88 + 0.16 * h1);
+    const r0 = 0.017 + 0.006 * h2;
+    const sway = (h1 - 0.5) * 0.35;
+    const shade = 0.74 + 0.26 * h1 * (Math.cos(a0) > 0.3 ? 1 : 0.6);
+    const P = [];
+    const tsArr = [];
+    for (let i = 0; i < rings; i++) {
+      const u = i / (rings - 1);
+      const t = Math.min(1, lerp(t0, t1, u));
+      const c = core(t);
+      const a = a0 + sway * Math.sin(u * Math.PI);
+      // Half sunk into the beard: they swell out of it and sink back in
+      const out = -0.1 + 0.45 * Math.sin(u * Math.PI * 0.9);
+      const x = Math.sin(a) * (c.w + r0 * out);
+      const z = c.zc + Math.cos(a) * (c.dd + r0 * out) * (Math.cos(a) > 0 ? 1 : 0.75);
+      P.push(new THREE.Vector3(x, c.y, z));
+      tsArr.push(t);
+    }
+    const pts = [];
+    for (let i = 0; i < rings; i++) {
+      const u = i / (rings - 1);
+      const T = P[Math.min(rings - 1, i + 1)].clone().sub(P[Math.max(0, i - 1)]).normalize();
+      // Flatten the lock against the beard (its outward direction)
+      const outDir = new THREE.Vector3(P[i].x, 0, P[i].z - core(tsArr[i]).zc).normalize();
+      const S = new THREE.Vector3().crossVectors(T, outDir).normalize();
+      const Nn = new THREE.Vector3().crossVectors(S, T).normalize();
+      const r = r0 * (i === rings - 1 ? 0 : Math.pow(1 - u, 0.6) * (0.75 + 0.25 * Math.sin(Math.min(1, u * 3) * Math.PI * 0.5)));
+      for (let j = 0; j < cols; j++) {
+        const ang = (j / cols) * Math.PI * 2;
+        const q = P[i].clone().addScaledVector(S, Math.cos(ang) * r).addScaledVector(Nn, Math.sin(ang) * r * 0.32);
+        const lit = 1 + 0.12 * Math.sin(ang);
+        pts.push({ p: toModel([q.x, q.y, q.z]), region: REGION.HAIR, tint: [shade * lit * 1.04, shade * lit, shade * lit * 0.94], mat: MAT.SKIN, t: tsArr[i] });
+      }
+    }
+    const mid = P[Math.floor(rings / 2)];
+    const cm = core(tsArr[Math.floor(rings / 2)]);
+    emitGrid(b, { pts, rows: rings, cols, center: new THREE.Vector3(...toModel([mid.x * 0.6, mid.y, cm.zc])), poles: [rings - 1], weight });
+  }
 }
 
 /* ------------------------------------------------------------ glasses */

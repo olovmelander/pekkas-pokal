@@ -1137,13 +1137,6 @@ export function buildHand(b, ctx, side) {
       let k = 1;
       const fz = (p[2] - W.z) / hs;
       for (const kn of knuckles) k -= 0.05 * gauss(fz - kn[2], 0.006) * gauss(y - kn[1], 0.008);
-      if (glove) {
-        // Three stitched seams down the back of the glove, between the knuckles
-        for (let i = 0; i < 3; i++) {
-          const fs = (knuckles[i][2] + knuckles[i + 1][2]) / 2;
-          k -= 0.24 * gauss(fz - fs, 0.0024) * sstep(-0.012, -0.04, y) * sstep(-0.1, -0.08, y);
-        }
-      }
       return gt([tintSkin[0] * k, tintSkin[1] * k, tintSkin[2] * k]);
     },
     weight: (p) => {

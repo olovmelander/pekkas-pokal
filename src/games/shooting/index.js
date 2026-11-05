@@ -279,19 +279,19 @@ export async function createShooting(container) {
 
   /* The shooter's own arms: a people-system person in gloves and an olive
      shooting jacket, living in the gun's frame. The gun is a camera-space
-     miniature (its units are ~1.5× real), so the person is drawn 2.6
+     miniature (its units are ~1.5× real), so the person is drawn 2.8
      "units" tall to match it; the chest sits below the bottom of the frame
      and the head and neck are folded away, so only the sleeves and the
      gloved hands ever show — gripping the forend and the pistol grip with
      the shared power grip, solved with IK every frame. */
   const shooter = createPerson({
-    name: 'Skytten', height: 2.6, build: 'average', skin: SKIN_TONES.light,
+    name: 'Skytten', height: 2.8, build: 'average', skin: SKIN_TONES.light,
     hair: { style: 'buzz' },
     outfit: { top: 'jacket', topColor: 0x6f7a55, bottom: 'trousers', bottomColor: 0x3b3a34 },
-    gloves: { side: 'both', color: 0xdcc093, cuff: false }
+    gloves: { side: 'both', color: 0xe9dfcc, cuff: false }
   });
   shooter.root.rotation.y = Math.PI; // face down the barrels (−z)
-  shooter.root.position.set(-0.1, -2.4, -0.1);
+  shooter.root.position.set(-0.1, -2.55, -0.1);
   shooter.mesh.castShadow = false;
   shooter.mesh.receiveShadow = false;
   gun.group.add(shooter.root);
@@ -1686,7 +1686,7 @@ export async function createShooting(container) {
     // toothpick in the corner; grow it back about halfway
     gun.group.scale.setScalar(THREE.MathUtils.clamp(0.55 * Math.sqrt(tanV / 0.43), 0.52, 0.7));
     const portrait = view.aspect < 1;
-    gunBase.set(0.66 * tanV * view.aspect * (portrait ? 0.62 : 0.6), -0.66 * tanV * (portrait ? 0.8 : 0.9), -0.66);
+    gunBase.set(0.66 * tanV * view.aspect * (portrait ? 0.62 : 0.6), -0.66 * tanV * (portrait ? 0.74 : 0.82), -0.66);
     gunBase.y -= (1 - raise) * 0.45;
     gun.group.position.copy(gunBase);
     gun.group.position.z += recoil * 0.08;

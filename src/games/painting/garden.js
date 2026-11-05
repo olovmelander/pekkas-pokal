@@ -1105,14 +1105,22 @@ export function buildGarden({ lowTier = false } = {}) {
     refs.extras.push(grass);
     group.add(grass);
 
-    // Daisies and clover heads in the near lawn
+    // Daisies, buttercups and clover heads in the near lawn — in drifts,
+    // the way they spread through a lawn, not sprinkled evenly
     const heads = [];
-    for (let i = 0; i < (lowTier ? 90 : 200); i++) {
-      const s = 0.012 + rand() * 0.01;
+    const rd = mulberry(7177);
+    const drifts = Array.from({ length: 14 }, () => [-7 + rd() * 14, -8 + rd() * 9.5, 0.4 + rd() * 0.9, rd()]);
+    for (let i = 0; i < (lowTier ? 110 : 260); i++) {
+      const [cx, cz, spread, kind] = drifts[i % drifts.length];
+      const a = rd() * Math.PI * 2;
+      const d = Math.sqrt(rd()) * spread;
+      const s = 0.012 + rd() * 0.01;
+      const pick = rd();
       heads.push({
-        pos: [-7 + rand() * 14, 0.05 + rand() * 0.06, -8 + rand() * 9.5],
+        pos: [cx + Math.cos(a) * d * 1.4, 0.05 + rd() * 0.06, cz + Math.sin(a) * d],
         scale: [s, s * 0.45, s],
-        color: rand() < 0.65 ? 0xe4e2d6 : rand() < 0.6 ? 0xe0b83c : 0xb87a9c
+        // Each drift mostly one flower: daisies, buttercups or clover
+        color: kind < 0.55 ? (pick < 0.9 ? 0xe8e6da : 0xe0b83c) : kind < 0.8 ? (pick < 0.8 ? 0xe6bf3a : 0xe8e6da) : pick < 0.85 ? 0xc48aa8 : 0xe8e6da
       });
     }
     const headMesh = instanced(new THREE.IcosahedronGeometry(1, 0), heads);

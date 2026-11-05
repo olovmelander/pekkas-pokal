@@ -12,9 +12,11 @@
  *  - when a lump lands he walks to his place, points at it and says what
  *    he wants
  *  - while you throw he stands by the kiln with his arms folded (for real:
- *    forearm over forearm, not an X at the wrists), watching your hands; a
- *    new star earns a nod and a smile, three stars raise his eyebrows, an
- *    off-centre wobble a frown and a shake of the head
+ *    forearm over forearm, not an X at the wrists), watching your hands —
+ *    or takes his boxwood rib out of his apron pocket and turns it over in
+ *    his hand (the shared 'flat' grip), putting it back before he needs the
+ *    hand again; a new star earns a nod and a smile, three stars raise his
+ *    eyebrows, an off-centre wobble a frown and a shake of the head
  *  - he shuts the kiln door himself, hand round its bar, watches it fire
  *    with his hands on his hips, pulls the door open and steps back out of
  *    the way of the hot piece
@@ -206,6 +208,46 @@ function armUp(t, out) {
   return p;
 }
 
+/**
+ * His wooden rib: a kidney-ish card of boxwood for smoothing a wall, built
+ * to the shared grip library's 'flat' convention — the origin on the middle
+ * of the held edge at mid-thickness, +Y the top face, the card along +Z.
+ */
+function buildRib(s) {
+  const L = 0.135 * s;
+  const W = 0.08 * s;
+  const T = 0.0055 * s;
+  const sh = new THREE.Shape();
+  sh.moveTo(-L / 2, 0);
+  sh.lineTo(L / 2, 0);
+  sh.quadraticCurveTo(L / 2 + 0.012 * s, W * 0.6, L * 0.28, W);
+  // the working edge, gently concave
+  sh.quadraticCurveTo(0, W * 0.82, -L * 0.28, W);
+  sh.quadraticCurveTo(-L / 2 - 0.012 * s, W * 0.6, -L / 2, 0);
+  const hole = new THREE.Path();
+  hole.absarc(0, W * 0.46, 0.011 * s, 0, Math.PI * 2, true);
+  sh.holes.push(hole);
+  const geo = new THREE.ExtrudeGeometry(sh, { depth: T, bevelEnabled: true, bevelThickness: T * 0.25, bevelSize: T * 0.3, bevelSegments: 1, curveSegments: 8 });
+  geo.translate(0, 0, -T / 2);
+  geo.rotateX(Math.PI / 2);
+  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0xb07e4c, roughness: 0.68 }));
+  mesh.castShadow = true;
+  return mesh;
+}
+
+/** Waiting with his rib: left hand on the hip, the right turning the rib over in front of him. */
+function ribHold(t, out) {
+  const p = POSES.handsOnHips(t, out);
+  const turn = Math.sin(t * 0.9) * 0.25;
+  p.shoulderR = [0, 0, 0];
+  p.upperArmR = [-0.3, 0.32, -0.12];
+  p.forearmR = [-1.55, 0, 0];
+  p.handR = [0.15 + Math.sin(t * 0.6) * 0.08, 0.5 + turn, 0.35];
+  p.chest = [0.02, 0.05, 0];
+  p.head = [0.14, 0.05, 0];
+  return p;
+}
+
 /** Forearm out, fist forward; the thumb goes up with the hand library's 'thumbsUp' grip. */
 function thumbsUp(t, out) {
   const p = POSES.handsOnHips(t, out);
@@ -252,7 +294,7 @@ function leanIn(t, out) {
 /** Upper-body layers in blend order: [weight name, pose function]. */
 const LAYERS = [
   ['crossed', POSES.armsCrossed], ['hips', POSES.handsOnHips], ['point', POSES.point], ['clap', POSES.clap],
-  ['cheer', POSES.cheer], ['armUp', armUp], ['thumb', thumbsUp], ['shrug', shrug], ['lean', leanIn], ['explain', POSES.explain]
+  ['cheer', POSES.cheer], ['armUp', armUp], ['thumb', thumbsUp], ['shrug', shrug], ['lean', leanIn], ['explain', POSES.explain], ['rib', ribHold]
 ];
 
 /**
@@ -283,6 +325,12 @@ export function createKeramiker({
   // Solve every grip he will use now, while the game loads (each first
   // setGrip runs a 5–50 ms finger solve that people.js then caches), so
   // none of them costs a hitch mid-game
+  const rib = buildRib(s);
+  const RIB_GRIP = { thickness: 0.0055 * s };
+  // In his apron pocket until he wants it: the card down in the pocket, its edge peeking out
+  const RIB_POCKET = { position: [-0.06 * s, -0.085 * s, 0.152 * s], rotation: [Math.PI / 2 - 0.1, 0, 0.08] };
+  person.attach(rib, 'hips', RIB_POCKET);
+  person.setGrip('R', 'flat', { ...RIB_GRIP, blend: 0 });
   for (const g of ['thumbsUp', 'point', 'fist']) person.setGrip('R', g, { blend: 0 });
   person.setGrip('L', 'fist', { blend: 0 });
   person.setGrip('L', 'power', { diameter: 0.05, blend: 0 });
@@ -314,6 +362,7 @@ export function createKeramiker({
     doorAnchor: null,
     gripR: null,
     gripL: null,
+    ribHeld: false,
     backing: false,
     chin: 0,
     expr: '',
@@ -423,7 +472,7 @@ export function createKeramiker({
     st.poseSwap += dt;
     const swap = Math.floor(st.poseSwap / 9) % 2 === 1;
     goalW.crossed = swap ? 0 : 1;
-    goalW.hips = swap ? 1 : 0;
+    goalW.rib = swap ? 1 : 0;
     express('watch', { focus: 0.35 });
     const c = st.cue;
     // Coming over from the start screen: the "this one" waits till he is at his place
@@ -433,7 +482,7 @@ export function createKeramiker({
       // "This one": points at the lump and says what he wants
       goalW.point = window01(age, 0.1, 1.9, 0.3);
       goalW.crossed = 0;
-      goalW.hips = 0;
+      goalW.rib = 0;
       plan.talk = age > 0.2 && age < 1.7;
       plan.look = age < 0.9 ? ctx.camera : ctx.attention;
       express('tell', { smile: 0.35 });
@@ -713,6 +762,20 @@ export function createKeramiker({
     locomotion(dt);
     pose(dt, t);
     hands(dt, t, ctx);
+    // The rib: taken out of the apron pocket when he settles to wait, put
+    // back before the hand is needed for anything else
+    const wantRib = w.rib > 0.5 && w.point < 0.2 && w.thumb < 0.2 && st.chin < 0.2;
+    if (wantRib !== st.ribHeld) {
+      st.ribHeld = wantRib;
+      if (wantRib) {
+        person.hold(rib, 'R', 'flat', { ...RIB_GRIP, blend: 0.22 });
+        st.gripR = 'rib';
+      } else {
+        person.release('R', { blend: 0.22 });
+        person.attach(rib, 'hips', RIB_POCKET);
+        st.gripR = null;
+      }
+    }
     // His right hand's shape from the shared hand library (people.js setGrip),
     // eased in and out: a real thumbs-up, a pointing index, a fist under the
     // chin or in the air; otherwise the pose's own relaxed fingers
@@ -720,7 +783,7 @@ export function createKeramiker({
     if (w.thumb > 0.35) gripR = 'thumbsUp';
     else if (w.point > 0.35) gripR = 'point';
     else if (st.chin > 0.4 || w.armUp > 0.35 || w.cheer > 0.35) gripR = 'fist';
-    if (gripR !== st.gripR) {
+    if (!st.ribHeld && gripR !== st.gripR) {
       st.gripR = gripR;
       person.setGrip('R', gripR, { blend: 0.2 });
     }
@@ -760,6 +823,8 @@ export function createKeramiker({
       st.verdict = null;
     },
     dispose() {
+      rib.geometry.dispose();
+      rib.material.dispose();
       beret.geometry.dispose();
       beret.children[0].geometry.dispose();
       beret.material.dispose();

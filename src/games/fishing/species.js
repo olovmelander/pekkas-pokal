@@ -171,11 +171,11 @@ function bodyGeometry(profile, rings, radial, paint) {
  */
 function finMembrane(rays, root, tip, look, matrix) {
   const cols = rays * 2 + 1;
-  const rows = [0, 0.45, 0.8, 1];
+  const rows = [0, 0.62, 1];
   const ray = new THREE.Color(look.color).multiplyScalar(look.rayDark ?? 0.62);
   const mem = new THREE.Color(look.color).lerp(new THREE.Color(0xffffff), look.pale ?? 0.1);
-  const aRay = look.aRay || [1, 0.97, 0.92, 0.75];
-  const aMem = look.aMem || [0.9, 0.74, 0.52, 0.16];
+  const aRay = look.aRay || [1, 0.94, 0.75];
+  const aMem = look.aMem || [0.9, 0.62, 0.16];
   const pos = [];
   const col = [];
   const idx = [];
@@ -256,17 +256,25 @@ const C = (h) => new THREE.Color(h);
 
 /** Smooth spine profile from control points, plus body proportions. */
 function makeProfile(points, opts) {
+  // A Catmull-Rom curve through the control points: the outline flows
+  // from snout to tail in one line, with no shoulder at every point (the
+  // old per-segment smoothstep gave heads a bulb)
+  const n = points.length;
   const radius = (u) => {
     const t = Math.min(1, Math.max(0, u));
-    for (let i = 0; i < points.length - 1; i++) {
-      const a = points[i], b = points[i + 1];
-      if (t >= a[0] && t <= b[0]) {
-        const k = (t - a[0]) / (b[0] - a[0] || 1);
-        const s = k * k * (3 - 2 * k); // smoothstep keeps the body organic
-        return a[1] + (b[1] - a[1]) * s;
-      }
-    }
-    return points[points.length - 1][1];
+    let i = 0;
+    while (i < n - 2 && t > points[i + 1][0]) i++;
+    const p0 = points[Math.max(0, i - 1)];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[Math.min(n - 1, i + 2)];
+    const dx = p2[0] - p1[0] || 1;
+    const k = (t - p1[0]) / dx;
+    const m1 = ((p2[1] - p0[1]) / ((p2[0] - p0[0]) || 1)) * dx;
+    const m2 = ((p3[1] - p1[1]) / ((p3[0] - p1[0]) || 1)) * dx;
+    const k2 = k * k;
+    const k3 = k2 * k;
+    return Math.max(0.01, (2 * k3 - 3 * k2 + 1) * p1[1] + (k3 - 2 * k2 + k) * m1 + (-2 * k3 + 3 * k2) * p2[1] + (k3 - k2) * m2);
   };
   const sm = (e0, e1, x) => {
     const k = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)));
@@ -600,7 +608,7 @@ function buildFins(sp, backY, sideZ, lite) {
     return [q * q * p0x + 2 * q * k * p1x + k * k * p2x, q * q * p0y + 2 * q * k * p1y];
   };
   out.push(finMembrane(rays(8), (t) => [tx + 0.035, rh * (1 - 2 * t)], tailTipAt,
-    { color: tailC, aMem: [0.92, 0.76, 0.54, 0.16] }));
+    { color: tailC, aMem: [0.92, 0.66, 0.16] }));
 
   /* Dorsal fins along the back, raked back */
   F.dorsal.forEach((d) => {
@@ -625,7 +633,7 @@ function buildFins(sp, backY, sideZ, lite) {
     out.push(finMembrane(rays(d.rays || 7), root, tip, {
       color: dorC,
       notch: spiny ? 0.6 : 0.95,
-      aRay: spiny ? [0.98, 0.96, 0.92, 0.86] : undefined,
+      aRay: spiny ? [0.98, 0.94, 0.86] : undefined,
       // The perch's black spot at the back of its spiny dorsal
       spot: d.spot ? (t, r) => smoothK(0.6, 0.78, t) * smoothK(0.15, 0.45, r) * 0.95 : null
     }));
@@ -661,7 +669,7 @@ function buildFins(sp, backY, sideZ, lite) {
       const m = new THREE.Matrix4().makeTranslation(0, y, sd * zs)
         .multiply(new THREE.Matrix4().makeRotationX(-sd * splay))
         .multiply(new THREE.Matrix4().makeTranslation(0, -y, 0));
-      out.push(finMembrane(rays(5), root, tip, { color: finC, pale: 0.16, aMem: [0.85, 0.66, 0.44, 0.12] }, m));
+      out.push(finMembrane(rays(5), root, tip, { color: finC, pale: 0.16, aMem: [0.85, 0.55, 0.12] }, m));
     });
   };
   if (F.pectoral) side(F.pectoral.at, F.pectoral.len, 0.35, 0.6, 0.92, false);
@@ -681,7 +689,7 @@ function buildSpecies(sp, lite) {
   };
   const sideZ = (u) => profile.radius(u) * profile.width * profile.wK(u);
 
-  const parts = [{ geometry: bodyGeometry(profile, lite ? 22 : 30, lite ? 12 : 16, paint) }];
+  const parts = [{ geometry: bodyGeometry(profile, lite ? 18 : 26, lite ? 12 : 14, paint) }];
 
   // The adipose fin of salmon and whitefish: small, fleshy, opaque
   if (sp.fins.adipose) {
@@ -699,10 +707,10 @@ function buildSpecies(sp, lite) {
   const ey = profile.radius(0.15) * profile.height * profile.hK(eu) * 0.34;
   const ez = sideZ(eu);
   [1, -1].forEach((s) => {
-    const iris = new THREE.SphereGeometry(sp.eye * 0.82, 10, 7);
+    const iris = new THREE.SphereGeometry(sp.eye * 0.82, 8, 5);
     iris.applyMatrix4(M(ex, ey, s * ez * 0.86, 0, 1, 1, 0.42));
     parts.push({ geometry: iris, color: C(sp.iris) });
-    const pupil = new THREE.SphereGeometry(sp.eye * 0.5, 8, 5);
+    const pupil = new THREE.SphereGeometry(sp.eye * 0.5, 6, 3);
     pupil.applyMatrix4(M(ex + 0.015, ey, s * (ez * 0.86 + sp.eye * 0.22), 0, 1, 1, 0.4));
     parts.push({ geometry: pupil, color: EYE_DARK });
   });
@@ -864,7 +872,6 @@ export function fishAssets(lite = false) {
   return ASSETS;
 }
 
-const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
 const TAU = Math.PI * 2;
 
 /**
@@ -924,28 +931,33 @@ export class Shoal {
     });
   }
 
-  sync() {
+  /**
+   * Copy the proxies into the instance buffers. Only fish within `band`
+   * metres (vertically) of `focusY` are written — packed to the front, with
+   * the count cut to match — so the GPU never shades the forty-odd fish
+   * swimming far above or below the frame.
+   */
+  sync(focusY = 0, band = Infinity) {
     this.meshes.forEach((mesh, i) => {
       const list = this.lists[i];
       const swim = mesh.geometry.attributes.aSwim;
       const arr = swim.array;
-      for (let k = 0; k < list.length; k++) {
-        const f = list[k];
-        if (f.visible) {
-          f.mesh.updateMatrix();
-          mesh.setMatrixAt(k, f.mesh.matrix);
-        } else {
-          mesh.setMatrixAt(k, HIDDEN);
-        }
+      let k = 0;
+      for (let j = 0; j < list.length; j++) {
+        const f = list[j];
+        if (!f.visible || Math.abs(f.mesh.position.y - focusY) > band) continue;
+        f.mesh.updateMatrix();
+        mesh.setMatrixAt(k, f.mesh.matrix);
         // The stroke only needs the phase modulo 2π — wrapped, it stays a
         // small number however long the lake has been open (big arguments
         // to sin() lose precision on many GPUs)
         arr[k * 4] = f.phase % TAU;
         arr[k * 4 + 1] = f.amp;
         arr[k * 4 + 2] = f.flash;
+        k++;
       }
-      mesh.count = list.length;
-      this.fins[i].count = list.length;
+      mesh.count = k;
+      this.fins[i].count = k;
       mesh.instanceMatrix.needsUpdate = true;
       swim.needsUpdate = true;
     });

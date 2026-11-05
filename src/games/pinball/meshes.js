@@ -501,6 +501,8 @@ export function createMaterials(THREE, playfieldTexture) {
     // Lit castle windows and the GI bulbs: self-lit, held under the bloom
     // threshold so the small shapes never sparkle in and out of the bloom
     window: new THREE.MeshBasicMaterial({ color: 0xffb35c }),
+    // The lit cut edges of the clear ramps (kept under the bloom threshold)
+    rampEdge: new THREE.MeshBasicMaterial({ color: 0xa9b9e4 }),
     bulb: new THREE.MeshBasicMaterial({ color: 0xfff0d0 }),
     wood: new THREE.MeshStandardMaterial({
       color: 0x8a5a2b,
@@ -1036,7 +1038,7 @@ export function rampCurve(THREE, path) {
  * A wireform habitrail: two chrome tubes riding either side of the curve,
  * with periodic U-shaped cross ties. The Medieval Madness look.
  */
-function buildWireform(THREE, curve, materials) {
+function buildWireform(THREE, curve, materials, t0 = 0) {
   const g = new THREE.Group();
   const railR = 0.07;
   const halfGap = 0.34;
@@ -1045,7 +1047,7 @@ function buildWireform(THREE, curve, materials) {
   [-1, 1].forEach((side) => {
     const pts = [];
     for (let i = 0; i <= 60; i++) {
-      const t = i / 60;
+      const t = t0 + ((1 - t0) * i) / 60;
       const p = curve.getPointAt(t);
       const tan = curve.getTangentAt(t);
       const perp = new THREE.Vector3(-tan.z, 0, tan.x);
@@ -1060,6 +1062,7 @@ function buildWireform(THREE, curve, materials) {
   // Cross ties: shallow U-loops under the ball path
   for (let i = 1; i < 12; i++) {
     const t = i / 12;
+    if (t < t0 + 0.02) continue;
     const p = curve.getPointAt(t);
     const tan = curve.getTangentAt(t);
     const tie = new THREE.Mesh(
@@ -1072,6 +1075,120 @@ function buildWireform(THREE, curve, materials) {
     g.add(tie);
   }
   return g;
+}
+
+/**
+ * The clear plastic entrance of a ramp: a U-channel of polycarbonate
+ * carrying the ball up off the playfield until the wireform takes over at
+ * `t1`. Returns geometries (in table space) for the plastic, its two lit
+ * top edges, and the floor sticker; buildTable merges them across ramps.
+ */
+const RAMP_PLASTIC_T = 0.2;
+function plasticRampParts(THREE, curve, t1, row) {
+  const N = 30;
+  const hw = 0.6;
+  const wallH = 0.44;
+  const pos = [];
+  const idx = [];
+  const tops = [[], []];
+  const perp = new THREE.Vector3();
+  const frame = (t) => {
+    const p = curve.getPointAt(t);
+    const tan = curve.getTangentAt(t);
+    perp.set(-tan.z, 0, tan.x);
+    if (perp.lengthSq() < 1e-6) perp.set(1, 0, 0);
+    perp.normalize();
+    return p;
+  };
+  for (let i = 0; i <= N; i++) {
+    const t = (t1 * i) / N;
+    const p = frame(t);
+    const floor = p.y - 0.045;
+    const ring = [
+      p.clone().addScaledVector(perp, -(hw + 0.07)).setY(floor + wallH),
+      p.clone().addScaledVector(perp, -hw).setY(floor),
+      p.clone().addScaledVector(perp, hw).setY(floor),
+      p.clone().addScaledVector(perp, hw + 0.07).setY(floor + wallH)
+    ];
+    ring.forEach((v) => pos.push(v.x, v.y, v.z));
+    tops[0].push(ring[0]);
+    tops[1].push(ring[3]);
+    if (i < N) {
+      const a = i * 4;
+      for (let k = 0; k < 3; k++) idx.push(a + k, a + k + 4, a + k + 1, a + k + 1, a + k + 4, a + k + 5);
+    }
+  }
+  const plastic = new THREE.BufferGeometry();
+  plastic.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  plastic.setIndex(idx);
+  plastic.computeVertexNormals();
+  const edges = tops.map((pts) => new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), N, 0.028, 5, false).toNonIndexed());
+  // The sticker: a decal on the channel floor just inside the mouth
+  const spos = [];
+  const suv = [];
+  const sidx = [];
+  const M = 8;
+  const ts0 = 0.012;
+  const ts1 = 0.075;
+  for (let i = 0; i <= M; i++) {
+    const t = ts0 + ((ts1 - ts0) * i) / M;
+    const p = frame(t);
+    const y = p.y - 0.045 + 0.012;
+    [-1, 1].forEach((side) => {
+      const v = p.clone().addScaledVector(perp, side * (hw - 0.06)).setY(y);
+      spos.push(v.x, v.y, v.z);
+      suv.push(side < 0 ? 0 : 1, (row + i / M) / 2);
+    });
+    if (i < M) {
+      const a = i * 2;
+      sidx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+    }
+  }
+  const sticker = new THREE.BufferGeometry();
+  sticker.setAttribute('position', new THREE.Float32BufferAttribute(spos, 3));
+  sticker.setAttribute('uv', new THREE.Float32BufferAttribute(suv, 2));
+  sticker.setIndex(sidx);
+  sticker.computeVertexNormals();
+  return { plastic, edges, sticker };
+}
+
+/** Two ramp-floor stickers on one canvas: chevrons up the ramp in gold on crimson */
+function rampStickerTexture(THREE) {
+  const W = 128;
+  const H = 512;
+  const cv = document.createElement('canvas');
+  cv.width = W;
+  cv.height = H;
+  const g = cv.getContext('2d');
+  [0, 1].forEach((row) => {
+    // Canvas rows run top-down; texture v runs bottom-up
+    const y0 = (1 - row) * (H / 2);
+    const y1 = y0 + H / 2;
+    g.fillStyle = 'rgba(140,16,40,0.92)';
+    g.beginPath();
+    g.roundRect(10, y0 + 10, W - 20, H / 2 - 20, 14);
+    g.fill();
+    g.strokeStyle = '#f2c14e';
+    g.lineWidth = 5;
+    g.stroke();
+    g.fillStyle = '#f2c14e';
+    for (let k = 0; k < 3; k++) {
+      const cy = y1 - 50 - k * 62;
+      g.beginPath();
+      g.moveTo(28, cy + 14);
+      g.lineTo(W / 2, cy - 18);
+      g.lineTo(W - 28, cy + 14);
+      g.lineTo(W - 28, cy + 30);
+      g.lineTo(W / 2, cy - 2);
+      g.lineTo(28, cy + 30);
+      g.closePath();
+      g.fill();
+    }
+  });
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
 }
 
 /* ------------------------------------------------------------------ castle */
@@ -2227,10 +2344,18 @@ export function buildTable(THREE, mergeGeometries, materials) {
   /* ---- Wireform ramps ---- */
   refs.rampCurves = {};
   refs.rampArches = {};
-  ['left', 'right'].forEach((side) => {
+  // Clear plastic entrances, merged across both ramps (three draws in all)
+  const rampPlastic = [];
+  const rampEdges = [];
+  const rampStickers = [];
+  ['left', 'right'].forEach((side, row) => {
     const curve = rampCurve(THREE, L.ramps[side].path);
     refs.rampCurves[side] = curve;
-    group.add(buildWireform(THREE, curve, materials));
+    group.add(buildWireform(THREE, curve, materials, RAMP_PLASTIC_T - 0.01));
+    const parts = plasticRampParts(THREE, curve, RAMP_PLASTIC_T, row);
+    rampPlastic.push(parts.plastic);
+    rampEdges.push(...parts.edges);
+    rampStickers.push(parts.sticker);
 
     // Entrance portal: a golden arch at the capture point, flashed on capture
     const p0 = curve.getPointAt(0);
@@ -2259,6 +2384,36 @@ export function buildTable(THREE, mergeGeometries, materials) {
     flap.add(lip);
     group.add(flap);
   });
+  {
+    // Polycarbonate: nearly invisible face-on, bright where it turns away
+    // (the env catches it), never writing depth so the ball shows through
+    const plastic = new THREE.Mesh(mergeGeometries(rampPlastic, false), tameGlints(new THREE.MeshStandardMaterial({
+      color: 0xe4ecff,
+      roughness: 0.06,
+      metalness: 0,
+      transparent: true,
+      opacity: 0.17,
+      envMapIntensity: 1.1,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    }), 0.7));
+    plastic.renderOrder = 4;
+    plastic.userData.keep = true;
+    group.add(plastic);
+    // The cut edges of the plastic carry the light: thin lit lines on top
+    group.add(new THREE.Mesh(mergeGeometries(rampEdges, false), materials.rampEdge));
+    const sticker = new THREE.Mesh(mergeGeometries(rampStickers, false), new THREE.MeshStandardMaterial({
+      map: rampStickerTexture(THREE),
+      roughness: 0.45,
+      metalness: 0,
+      alphaTest: 0.4,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2
+    }));
+    sticker.userData.keep = true;
+    group.add(sticker);
+  }
 
   /* ---- Apron: the angled plate over the drain ---- */
   {

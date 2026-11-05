@@ -375,22 +375,35 @@ fabSeam = max(fabSeam, fabLine(abs(fabP.y - 1.441), 0.004) * step(abs(fabP.x), 0
   float fabGlint = step(0.9, fabR) * fabFade;
   diffuseColor.rgb *= 1.0 + (fabR - 0.5) * 0.1 * fabFade;
   diffuseColor.rgb *= 1.0 - 0.22 * fabSeam;
+  float fabCollar = 0.0;
 #else
   float fabGlint = 0.0;
+  // The lamé's stand-up collar round the neck (the jacket's own collar
+  // under it): woven-metal grey, on the cloth mesh
+  float fabCollar = smoothstep(1.45, 1.462, fabP.y) * (1.0 - smoothstep(0.1, 0.118, abs(fabP.x)));
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0, 0.0, 0.0), fabCollar);
+  fabSeam = max(fabSeam, fabLine(abs(fabP.y - 1.456), 0.004) * step(abs(fabP.x), 0.11));
   diffuseColor.rgb *= 1.0 - 0.2 * fabSeam;
 #endif`;
 const FAB_ROUGH = /* glsl */ `
+roughnessFactor = mix(roughnessFactor, 0.66, fabCollar);
 roughnessFactor = clamp(roughnessFactor + 0.12 * fabSeam - 0.14 * fabGlint, 0.32, 1.0);`;
+const FAB_METAL = /* glsl */ `
+metalnessFactor = mix(metalnessFactor, 0.44, fabCollar);`;
 const FAB_NORMAL = /* glsl */ `
 {
   // Soft folds: shallow, irregular ridges, deeper round the waist
   float fabWaist = 1.0 - 0.55 * smoothstep(1.0, 1.4, fabV);
   #ifdef FAB_LAME
-    float fabA = 0.0019 * fabWaist;
+    float fabA = 0.0026 * fabWaist;
   #else
     float fabA = 0.0011 * fabWaist;
   #endif
   float fabH = fabA * (sin(fabV * 47.0 + 1.7 * sin(fabU * 19.0)) + 0.55 * sin(fabU * 33.0 - fabV * 11.0));
+  #ifdef FAB_LAME
+    // Metal thread creases finer than cotton: a second, smaller set
+    fabH += 0.0009 * sin(fabV * 131.0 + 2.3 * sin(fabU * 57.0 + fabV * 9.0));
+  #endif
   normal = fabPerturb(-vViewPosition, normal, vec2(dFdx(fabH), dFdy(fabH)), faceDirection);
 }`;
 
@@ -403,6 +416,7 @@ function fabricCompile(shader) {
     .replace('#include <common>', `#include <common>${FAB_FRAG_PARS}`)
     .replace('#include <color_fragment>', `#include <color_fragment>${FAB_COLOR}`)
     .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>${FAB_ROUGH}`)
+    .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>${FAB_METAL}`)
     .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>${FAB_NORMAL}`);
 }
 
@@ -559,9 +573,9 @@ export class Fencer {
     if (lame) {
       // Lamé is woven metal thread, not plate: mid-grey silver with a soft
       // sheen, the room only faintly mirrored in it
-      lame.roughness = 0.56;
-      lame.metalness = 0.55;
-      lame.envMapIntensity = 0.42;
+      lame.roughness = 0.66;
+      lame.metalness = 0.44;
+      lame.envMapIntensity = 0.36;
       lame.color.setRGB(0.9, 0.91, 0.93);
       makeFabric(lame, p.scale, true);
       lame.emissive.copy(this.flashColor);
@@ -707,7 +721,9 @@ export class Fencer {
     this.wValid = relax < 0.001 || relax > 0.999;
     this._setBend(p[P.bend] * (1 - relax));
     const { lame } = person.materials;
-    if (lame) lame.emissiveIntensity = p[P.flash] * 1.6;
+    // The touch lights the lamé up — bright enough to read, not so bright
+    // that bloom swallows the whole fencer
+    if (lame) lame.emissiveIntensity = p[P.flash] * 1.2;
   }
 
   _capture(qs, hp) {
