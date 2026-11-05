@@ -1123,6 +1123,14 @@
   .fen[data-mode='final'] .fen-h { font-size: 1.5rem; margin-top: 2px; }
   .fen-recap { margin-top: 8px; gap: 3px; }
   .fen-recap div { padding: 4px 10px; font-size: 0.72rem; }
+  /* The side panels start below the close button: win the height back */
+  .fen[data-orient='landscape'][data-mode='bracket'] .fen-screen,
+  .fen[data-orient='landscape'][data-mode='result'] .fen-screen,
+  .fen[data-orient='landscape'][data-mode='final'] .fen-screen { padding-bottom: max(6px, env(safe-area-inset-bottom)); }
+  .fen[data-orient='landscape'][data-mode='bracket'] .fen-kicker { display: none; }
+  .fen[data-orient='landscape'][data-mode='bracket'] .fen-panel { padding: 10px 14px; }
+  .fen[data-orient='landscape'][data-mode='bracket'] .fen-bracket { margin-top: 0; }
+  .fen[data-orient='landscape'][data-mode='bracket'] .fen-go { margin-top: 8px; }
   .fen-total { margin-top: 6px; }
   .fen-total b { font-size: 1.45rem; }
   .fen[data-mode='final'] .fen-panel { padding-top: 10px; padding-bottom: 10px; }

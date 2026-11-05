@@ -469,9 +469,9 @@ export function buildRange(rand, { envMap, lite = false } = {}) {
   // lip and the dark launch slot show from the station), a side door, and
   // red-and-white marker poles so the shooter can find it at a glance
   props.put(box(3.6, 1.05, 2.6), 0x9b998f, { at: [0, 0.5, -17.2], darken: 0.35 });
-  props.put(box(3.9, 0.13, 2.9), 0x7d7c74, { at: [0, 1.08, -17.2] });
+  props.put(box(3.9, 0.13, 2.9), 0xa8a69c, { at: [0, 1.08, -17.2] });
   props.put(box(2.5, 0.24, 0.06), 0x0b0e0b, { at: [0, 0.9, -15.88] });
-  props.put(box(2.7, 0.04, 0.12), 0x5a5a54, { at: [0, 1.02, -15.86] });
+  props.put(box(2.7, 0.04, 0.12), 0x8a8a82, { at: [0, 1.02, -15.86] });
   const berm = new THREE.Shape();
   berm.moveTo(0, 0);
   berm.lineTo(2.6, 0);

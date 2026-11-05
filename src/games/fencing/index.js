@@ -1345,7 +1345,7 @@ export async function createFencing(container) {
         goal.look.set(v3.x, 1.02 + tall * 0.3, 0);
         goal.pos.set(v3.x + 0.35 + drift, 1.32, d);
         goal.fov = 34;
-        goal.shift.set(lerp(0.3, 0.26, smoothstep(1.6, 2.1, aspect)), 0.5);
+        goal.shift.set(lerp(0.3, 0.26, smoothstep(1.6, 2.1, aspect)) - tall * 0.05, 0.5);
       }
       goal.rate = 1.6;
     } else if (ph === 'title' || ph === 'bracket' || ph === 'final' || ph === 'result') {

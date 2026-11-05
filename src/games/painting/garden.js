@@ -1001,6 +1001,8 @@ export function buildGarden({ lowTier = false } = {}) {
       sunDir: SUN_DIR
     });
     refs.forest = forest;
+    // The watchdog's simpler garden swaps the foliage shader for plain Lambert
+    refs.windy.push(...forest.meshes);
     group.add(forest.group);
 
     // The dappled light, from the near birch's canopy
@@ -1486,6 +1488,19 @@ export function buildEasel(artMaterial, w = 1.5, h = 1.15) {
     });
   }
 
+  if (artMaterial) {
+    // Your own beer, on the grass by the easel's left foot. Ten each, said the brief.
+    const bottle = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.039, 0.21, 9), lambert(0x4a2f14));
+    bottle.position.set(-0.62, 0.105, 0.24);
+    g.add(bottle);
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.021, 0.075, 8), lambert(0x4a2f14));
+    neck.position.set(-0.62, 0.247, 0.24);
+    g.add(neck);
+    const label = new THREE.Mesh(new THREE.CylinderGeometry(0.0395, 0.0395, 0.07, 9, 1, true), lambert(0xe8d9a8));
+    label.position.set(-0.62, 0.1, 0.24);
+    g.add(label);
+  }
+
   const frame = new THREE.Mesh(new THREE.BoxGeometry(w + 0.09, h + 0.09, 0.05), lambert(0xc4a878));
   frame.position.set(0, 0.98 + h / 2, 0.01);
   woodG.add(frame);
@@ -1586,6 +1601,25 @@ export function buildFieldEasels(list) {
     const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.02, 0.07, 7), lambert(0x4a2f14));
     neck.position.set(bx, 0.235, bz);
     field.add(neck);
+    // A paint box open on the grass on the other side, tubes in its tray
+    const px2 = x - Math.cos(ry) * 0.42 * side - Math.sin(ry) * 0.25;
+    const pz2 = z + Math.sin(ry) * 0.42 * side - Math.cos(ry) * 0.25;
+    const box = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.07, 0.22), lambert(0x7a5634));
+    box.position.set(px2, 0.035, pz2);
+    box.rotation.y = ry + 0.3 * side;
+    field.add(box);
+    const lid = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.2, 0.02), lambert(0x8a643c));
+    lid.position.set(px2 - Math.sin(box.rotation.y) * 0.12, 0.1, pz2 - Math.cos(box.rotation.y) * 0.12);
+    lid.rotation.set(-0.35, box.rotation.y, 0, 'YXZ');
+    field.add(lid);
+    [0xc0242c, 0xe8b419, 0x22459b, 0xf4f2ea].forEach((col, k) => {
+      const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.013, 0.1, 6), lambert(col));
+      tube.rotation.set(Math.PI / 2, 0, 0);
+      tube.rotation.y = box.rotation.y;
+      const o = -0.11 + k * 0.07;
+      tube.position.set(px2 + Math.cos(box.rotation.y) * o, 0.082, pz2 - Math.sin(box.rotation.y) * o);
+      field.add(tube);
+    });
   });
   const mesh = bake(field);
   if (mesh) mesh.receiveShadow = true;

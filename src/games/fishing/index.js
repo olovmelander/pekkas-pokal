@@ -1985,9 +1985,10 @@ export async function createFishing(container) {
     bubbles.update(dt, t);
     spray.update(dt, t);
     ripples.update(dt);
-    // Draw only the fish near the frame: within 24 m of the eye's depth
-    // (from above the water, the top 24 m are all that shows through it)
-    shoal.sync(Math.min(0, camera.position.y), 24);
+    // Draw only the fish near the frame: within 22 m of the eye's depth
+    // under water; from above it, only the top 17 m show through the lake
+    if (camera.position.y > 0) shoal.sync(-3, 14.5); // the catch in the air included
+    else shoal.sync(camera.position.y, 22);
     updateCamera(dt, rdt);
     updateAtmosphere(t);
     sfx.setDepth(state.depth, BOTTOM, !(camera.position.y < -0.3));

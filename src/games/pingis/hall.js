@@ -1071,6 +1071,13 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1, profile = null 
       bucket.add(b);
     }
     statics.add(bucket);
+    // …and the strays nobody has picked up yet, against the barriers
+    [[-2.7, -2.2], [2.72, -0.9], [-1.4, -3.38], [2.2, 1.6]].forEach(([x, z]) => {
+      const b = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 6), ballMat);
+      b.position.set(x, 0.02, z);
+      statics.add(b);
+    });
+    refs.courtMats = { clubRed, towel };
   }
 
   /* ---- Court barriers: the red surround a competition puts up --------- */
@@ -1252,6 +1259,40 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1, profile = null 
     board.position.set(-1.97, 2.42, BACK + 0.25);
     group.add(board);
     refs.scoreboard = board;
+
+    /* The scorer's table beside the net, its little flip counter showing
+       the same score as the big board (it shares the board's painted
+       texture, so it costs one draw and no painting) */
+    const { clubRed, towel } = refs.courtMats;
+    const desk = new THREE.Group();
+    desk.position.set(-2.2, 0, -0.25);
+    desk.rotation.y = 0.45; // squared to the player's end of the hall
+    const deskTop = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.04, 0.45), towel);
+    deskTop.position.y = 0.72;
+    desk.add(deskTop);
+    const skirt = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, 0.02), clubRed);
+    skirt.position.set(0, 0.45, 0.225);
+    desk.add(skirt);
+    const counterMat = lambert(0x17140f);
+    [[-0.36, -0.19], [0.36, -0.19], [-0.36, 0.19], [0.36, 0.19]].forEach(([x, z]) => {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.7, 0.03), counterMat);
+      leg.position.set(x, 0.35, z);
+      desk.add(leg);
+    });
+    const counter = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.28, 0.08), counterMat);
+    counter.position.set(0, 0.88, 0);
+    counter.rotation.x = -0.12;
+    desk.add(counter);
+    statics.add(desk);
+    const mini = new THREE.Mesh(new THREE.PlaneGeometry(0.44, 0.22), board.material);
+    // Proud of its box by a centimetre and depth-offset like the big board
+    mini.position.set(0, 0.885, 0.046);
+    mini.rotation.x = -0.12;
+    const miniHolder = new THREE.Group();
+    miniHolder.position.copy(desk.position);
+    miniHolder.rotation.copy(desk.rotation);
+    miniHolder.add(mini);
+    group.add(miniHolder);
   }
 
   /* Prize table on stage right: the cups for the night, under a spot */

@@ -460,25 +460,32 @@ function headTint(p, ctx, n) {
   let bl = 1;
   // Warm cheeks, nose and lips; cooler, darker under the jaw
   // A vinyl toy's painted blush: warm, soft-edged apples of the cheeks
-  const cheek = gauss(ax - 0.049, 0.016) * gauss(y + 0.029, 0.013) * sstep(0.03, 0.07, z) * ctx.face.blush;
-  r += cheek * 0.035;
-  g -= cheek * 0.085;
-  bl -= cheek * 0.075;
-  const nose = gauss(ax, 0.012) * gauss(y + 0.03, 0.014) * sstep(0.088, 0.1, z);
-  g -= nose * 0.06;
-  bl -= nose * 0.055;
-  // A cooler, slightly darker jaw and chin where a beard grows
-  const jawCool = (ctx.look.facialHair && !ctx.crowd ? 1 : 0) * sstep(-0.05, -0.075, y) * sstep(0.0, 0.04, z) * 0.04;
+  // Warmth where blood is close to the skin: the apples of the cheeks, the
+  // nose tip, a touch over the brow; a faintly yellower forehead
+  const cheek = gauss(ax - 0.048, 0.019) * gauss(y + 0.029, 0.016) * sstep(0.03, 0.07, z) * ctx.face.blush;
+  r += cheek * 0.05;
+  g -= cheek * 0.1;
+  bl -= cheek * 0.09;
+  const nose = gauss(ax, 0.011) * gauss(y + 0.03, 0.013) * sstep(0.086, 0.1, z);
+  r += nose * 0.025;
+  g -= nose * 0.075;
+  bl -= nose * 0.07;
+  const forehead = sstep(0.03, 0.06, y) * sstep(0.03, 0.06, z) * 0.025;
+  bl -= forehead;
+  // A cooler jaw and chin where the beard grows (a five o'clock shadow on the clean-shaven)
+  const fh = ctx.look.facialHair;
+  const jawCool = ctx.crowd ? 0 : (fh ? 0.045 : 0.03 * beardMask(p)) * (fh ? sstep(-0.05, -0.075, y) * sstep(0.0, 0.04, z) : 1);
   r -= jawCool;
-  g -= jawCool * 0.6;
+  g -= jawCool * 0.55;
+  bl += fh ? 0 : jawCool * 0.15;
   const my0 = FACE.mouthY;
   const lipX = 1 - sstep(0.016, 0.024, ax);
   const upper = lipX * sstep(my0 + 0.0095, my0 + 0.0065, y) * sstep(my0 - 0.0005, my0 + 0.001, y);
   const lower = lipX * sstep(my0 - 0.0125, my0 - 0.009, y) * sstep(my0 + 0.0005, my0 - 0.001, y);
   const lips = (upper * 1.2 + lower * 0.95) * sstep(0.07, 0.085, z) * ctx.face.lipTone;
-  r -= lips * 0.05;
-  g -= lips * 0.29;
-  bl -= lips * 0.25;
+  r -= lips * 0.02;
+  g -= lips * 0.3;
+  bl -= lips * 0.27;
   // The lower lip casts a soft shadow on the chin; a pale roll edges the upper lip
   const lipShadow = lipX * gauss(y - (my0 - 0.0142), 0.0026) * sstep(0.07, 0.085, z) * 0.12;
   const lipRoll = (1 - sstep(0.012, 0.021, ax)) * gauss(y - (my0 + 0.0101), 0.0011) * sstep(0.075, 0.088, z) * 0.035;
@@ -540,7 +547,6 @@ function headTint(p, ctx, n) {
   if (ctx.look.shaved && !ctx.crowd) tint = scalpShadow(p, tint, ctx);
   // Under and round a full beard the skin takes the beard's colour, so the
   // beard's edge on the cheek is soft rather than cut out
-  const fh = ctx.look.facialHair;
   if ((fh === 'beard' || fh === 'fullBeard') && !ctx.crowd) tint = beardShade(p, tint, ctx);
   return tint;
 }
@@ -802,7 +808,7 @@ export function buildEars(b, ctx) {
   const { toModel, res, face } = ctx;
   const es = face.ears;
   // Skin-matched and a touch warmer: light through a thin ear reads red
-  const warm = [1.05, 0.9, 0.86];
+  const warm = [1.07, 0.88, 0.83];
   for (const s of [1, -1]) {
     const c = [s * 0.0775, -0.012, -0.012];
     const rot = new THREE.Euler(0.2, s * -0.3, s * -0.04);
@@ -923,7 +929,7 @@ function beardShade(p, tint, ctx) {
       return Math.min(1.1, (h + 0.03) / (sk + 0.03));
     });
   }
-  const m = beardMask(p) * 0.3;
+  const m = beardMask(p) * 0.42;
   return tint.map((v, i) => v * (1 + (ctx.beardRatio[i] - 1) * m));
 }
 
@@ -962,23 +968,28 @@ function slerpDir(a, b, t) {
 export const HAIR_STYLES = {
   bald: null,
   buzz: { h: 0.0022, side: 0.0019, ramp: 0.05, crown: [0, 0.9, -0.43], groove: 0.0002, buzz: true },
-  crop: { chunk: 0.0032, chunks: 11, cols: 36, h: 0.0098, side: 0.0047, ramp: 0.075, crown: [0, 0.9, -0.43], groove: 0.0015, front: 0.0045 },
+  crop: { chunk: 0.0034, chunks: 11, cols: 36, h: 0.0115, side: 0.005, fringeLocks: 1.6, lift: 0.003, ramp: 0.075, crown: [0, 0.9, -0.43], groove: 0.0015, front: 0.0045 },
   tousled: { chunk: 0.004, chunks: 11, twist: 2.2, cols: 36, h: 0.0138, side: 0.0068, ramp: 0.08, crown: [0.1, 0.92, -0.38], groove: 0.0012, noise: 0.0035, fringe: 0.006, front: 0.003 },
-  sidePart: { chunk: 0.0036, chunks: 10, cols: 36, h: 0.0152, side: 0.0066, ramp: 0.055, crown: [0.3, 0.9, -0.3], groove: 0.0018, part: 34, front: 0.0068 },
-  sweptBack: { h: 0.0142, side: 0.0064, ramp: 0.06, crown: [0, 0.85, -0.52], groove: 0.0042, grooveTint: 0.5, cols: 40, combed: true, quiff: 0.0095, front: 0.0068 },
+  sidePart: { chunk: 0.0034, chunks: 12, twist: 0.6, cols: 36, h: 0.0152, fringeLocks: 1.2, combed: true, side: 0.0066, ramp: 0.055, crown: [0.3, 0.9, -0.3], groove: 0.0018, part: 34, front: 0.0068 },
+  sweptBack: { chunk: 0.0026, chunks: 15, twist: 0.4, h: 0.0152, side: 0.0066, ramp: 0.06, crown: [0, 0.85, -0.52], groove: 0.0042, grooveTint: 0.5, cols: 40, combed: true, quiff: 0.0095, front: 0.0068 },
   curly: { h: 0.02, side: 0.0145, ramp: 0.07, crown: [0, 0.9, -0.43], groove: 0, curls: 0.0055, front: 0.004 },
   long: { h: 0.0105, side: 0.0115, ramp: 0.05, crown: [0, 0.82, -0.57], groove: 0.0012, long: true, front: 0.003, part: 0 },
   bun: { h: 0.0068, side: 0.0052, ramp: 0.05, crown: [0, 0.82, -0.57], groove: 0.0016, bun: true },
   balding: { h: 0.0048, side: 0.0045, ramp: 0.08, crown: [0, 0.9, -0.43], groove: 0.0006, balding: true },
   // Short, a little unruly on top
-  messy: { chunk: 0.0042, chunks: 12, twist: 2.4, cols: 36, h: 0.0135, side: 0.005, ramp: 0.05, fringeLocks: 2.2, lockDepth: 6, crown: [0.05, 0.92, -0.38], groove: 0.002, noise: 0.0042, clumps: 0.0048, front: 0.0045, tufts: 3.2, jag: 3.4 },
+  messy: { chunk: 0.0046, chunks: 12, twist: 2.4, cols: 36, h: 0.015, lift: 0.004, side: 0.005, ramp: 0.05, fringeLocks: 2.2, lockDepth: 6, crown: [0.05, 0.92, -0.38], groove: 0.002, noise: 0.0042, clumps: 0.0048, front: 0.0045, tufts: 3.2, jag: 3.4 },
   // Medium length, wavy, tucked behind the ears and over the collar at the back
   wavy: {
     chunk: 0.0042, chunks: 9, twist: 2.6, cols: 36, h: 0.017, side: 0.0122, ramp: 0.045, crown: [0.12, 0.85, -0.5], groove: 0.002, noise: 0.003, clumps: 0.004, front: 0.006,
     part: 24, waves: 0.0042, lower: 10, lowerBack: 21, fringe: 0.0035, lockDepth: 9
   },
+  // Side-swept: a parting on the left and a soft wave of volume lifting off the forehead
+  sideSwept: {
+    chunk: 0.004, chunks: 10, twist: 3.2, cols: 36, h: 0.0165, side: 0.0064, ramp: 0.05, crown: [0.25, 0.9, -0.35], groove: 0.0016,
+    part: 30, front: 0.0075, lift: 0.0085, liftAt: -12, sweep: -0.55, fringeLocks: 1.4
+  },
   // A neat short cut with the temples receding
-  receding: { chunk: 0.003, chunks: 11, cols: 36, h: 0.0086, side: 0.0042, ramp: 0.065, crown: [0, 0.9, -0.43], groove: 0.0014, front: 0.0028, recede: 9 }
+  receding: { chunk: 0.0032, chunks: 11, cols: 36, h: 0.0102, fringeLocks: 1.4, lift: 0.0025, side: 0.0042, ramp: 0.065, crown: [0, 0.9, -0.43], groove: 0.0014, front: 0.0028, recede: 9 }
 };
 export const HAIR_STYLE_NAMES = Object.keys(HAIR_STYLES);
 
@@ -1088,14 +1099,19 @@ export function buildHair(b, ctx) {
       // narrow grooves, running from the hairline to the crown with a twist
       let chunk = 0;
       if (high && st.chunk) {
-        const ph = psi * (st.chunks ?? 10) + noise3(psi * 2, tt * 3, 4.2) * 1.8 + tt * (st.twist ?? 1.4);
-        chunk = Math.pow(Math.abs(Math.sin(ph)), 0.55) - 0.62;
-        h += st.chunk * chunk * sstep(0.04, 0.22, tt) * sstep(1, 0.72, tt);
+        // Phase by column, so every clump spans the same few columns and each
+        // groove lands on a column (crisp at this resolution); the twist and
+        // a little noise run the grooves diagonally from hairline to crown
+        const ph = j * Math.PI / (st.chunkCols ?? 4) + noise3(psi * 2, tt * 3, 4.2) * 0.9 + tt * (st.twist ?? 1.4);
+        chunk = Math.pow(Math.abs(Math.sin(ph)), 0.42) - 0.66;
+        h += st.chunk * 2.1 * chunk * sstep(0.04, 0.22, tt) * sstep(1, 0.72, tt);
+        // Grooves never reach the scalp
+        h = Math.max(h, 0.0016 * sstep(0.02, 0.12, tt));
       }
       // Not a ball: a little flatter over the crown, fuller at the upper
       // corners of the head, so the outline squares off like a real cut
       if (!st.curls) {
-        h *= 1 - 0.16 * sstep(0.78, 1, tt);
+        h *= 1 - 0.06 * sstep(0.78, 1, tt);
         const elD = Math.asin(clamp(d[1], -1, 1)) / DEG;
         h += st.h * 0.28 * gauss((elD - 46) / 15, 1) * Math.abs(Math.sin(psi)) ** 1.5 * sstep(0.1, 0.4, tt);
       }
@@ -1128,6 +1144,14 @@ export function buildHair(b, ctx) {
         p[1] += q;
         p[2] += q * 0.3;
       }
+      if (st.lift && high && covered < 0.5) {
+        // Volume lifting off the forehead and swept over to one side, away from the parting
+        const fr2 = Math.max(0, Math.cos(psi - (st.liftAt ?? 0) * DEG)) ** 2.2;
+        const q = st.lift * fr2 * sstep(0.0, 0.1, tt) * sstep(0.62, 0.15, tt);
+        p[1] += q;
+        p[2] += q * 0.35;
+        p[0] += (st.sweep ?? 0) * q;
+      }
       if (st.fringe && covered < 0.5) {
         const f = st.fringe * Math.max(0, Math.cos(psi)) ** 2 * sstep(0.25, 0.04, tt) * sstep(0, 0.03, tt);
         p[2] += f * 0.6;
@@ -1138,9 +1162,11 @@ export function buildHair(b, ctx) {
       const strand = noise3(psi * 11, tt * 3, 2.3) * 0.6 + noise3(d[0] * 45, d[1] * 45, d[2] * 45) * 0.4 + chunk * 0.9;
       // A stylised sheen band across the top of the head, broken by the strands
       const elevD = Math.asin(clamp(d[1], -1, 1)) / DEG;
-      const sheen = high ? gauss(elevD - 60, 11) * (0.55 + 0.45 * strand) * sstep(0.1, 0.4, tt) : 0;
-      // Combing grooves read as darker lines between lighter strands
-      const shade = (0.6 + 0.4 * edge) * (0.9 + 0.2 * top) * (1 + 0.2 * strand) * (1 + 0.2 * sheen) * (1 - 0.3 * partK) * (1 + (st.grooveTint ?? 0.12) * gv);
+      const sheen = high ? gauss(elevD - 58, 12) * (0.5 + 0.5 * Math.max(0, chunk + 0.66)) * sstep(0.1, 0.4, tt) : 0;
+      // Combing grooves and the gaps between clumps read darker (the roots
+      // show there); the clumps' crowns catch a lighter sheen
+      const shade = (0.58 + 0.42 * edge) * (0.9 + 0.2 * top) * (1 + 0.16 * strand) * (1 + 0.34 * sheen) * (1 - 0.3 * partK) *
+        (1 + (st.grooveTint ?? 0.12) * gv) * (1 + 0.42 * chunk);
       const region = st.buzz && !ctx.crowd ? REGION.FIXED : REGION.HAIR;
       const base = st.buzz && !ctx.crowd ? ctx.buzzColor : [1, 1, 1];
       pts.push({ p: toModel(p), region, tint: base.map((v) => v * shade), mat: MAT.SKIN, cov: covered });
@@ -1327,7 +1353,7 @@ export function buildFacialHair(b, ctx, kind) {
   if (kind === 'beard' || kind === 'fullBeard') {
     const full = kind === 'fullBeard';
     const O = [0, -0.045, 0];
-    const cols = high ? 20 : 9;
+    const cols = high ? 26 : 9;
     const rows = high ? [0, 0.08, 0.22, 0.4, 0.6, 0.78, 0.91, 1] : [0, 0.35, 0.7, 1];
     const pts = [];
     // Elevations (from O) of the neck line and of the cheek/lip line
@@ -1356,7 +1382,10 @@ export function buildFacialHair(b, ctx, kind) {
         // Texture only inside the beard, so its outline stays clean
         if (high) h += (full ? 0.0016 : 0.0006) * noise3(sp[0] * 120, sp[1] * 120, sp[2] * 120) * edge * edge;
         // Low detail: stand well clear of the coarse face so the beard reads solid, not patchy
-        h = h * edge - 0.0016 * (1 - edge) + (high ? 0 : 0.006 * edge + 0.0055);
+        // High detail: the edge settles just above the skin (whose colour
+        // already blends into the beard) instead of cutting into it, so the
+        // outline on the cheek is smooth rather than sawtoothed
+        h = high ? h * edge + 0.0005 * (1 - edge) : h * edge - 0.0016 * (1 - edge) + 0.006 * edge + 0.0055;
         const p = [sp[0] + nrm[0] * h, sp[1] + nrm[1] * h, sp[2] + nrm[2] * h];
         if (full) p[1] -= 0.007 * chin * sstep(0.6, 0.1, t) * edge;
         const shade = (0.74 + 0.26 * edge) * (1 + 0.12 * noise3(p[0] * 220, p[1] * 220, p[2] * 220));
@@ -1435,7 +1464,9 @@ function buildLongBeard(b, ctx) {
       const dHalf = 0.056 * (1 - 0.68 * Math.pow(tl, 1.6)) * round;
       // Strand clumps: ridges and furrows running down the beard, stronger in front
       // Big locks twisting a little as they fall, small strands on top of them
-      const ridge = high ? Math.sin(a * 6 + tl * 3.2 + noise3(a * 1.7, tl * 3, 3.1) * 1.8) : 0;
+      // Irregular, twisting ridges (two incommensurate waves and noise), not even pleats
+      const ridge = high ? clamp(0.6 * Math.sin(a * 4.3 + tl * 4.5 + noise3(a * 1.3, tl * 2.2, 3.1) * 2.4) +
+        0.45 * Math.sin(a * 7.1 - tl * 3 + 1.7) + 0.35 * noise3(a * 3.3, tl * 4, 8.2), -1, 1) : 0;
       const fine = high ? (j % 2 ? 1 : -1) * (0.35 + 0.3 * noise3(a * 3, tl * 7, 5.3)) : 0;
       const clump = (0.0075 * ridge + 0.0012 * fine) * sstep(0.04, 0.25, t) * (0.55 + 0.45 * Math.max(0, ca)) + (high ? 0.0028 * noise3(a * 5, tl * 9, 1.3) : 0);
       const front = ca > 0 ? 1 : 0.72;
@@ -1474,9 +1505,9 @@ function buildBeardLocks(b, ctx) {
     const dd = 0.056 * (1 - 0.68 * Math.pow(t, 1.6));
     return { y, zc, w, dd };
   };
-  const N = 7;
+  const N = 10;
   const rings = 8;
-  const cols = 5;
+  const cols = 6;
   const weight = (p, q) => {
     const k = sstep(0.12, 0.55, q.t);
     const c = sstep(0.4, 0.95, q.t);
@@ -1485,12 +1516,16 @@ function buildBeardLocks(b, ctx) {
   for (let k = 0; k < N; k++) {
     const h1 = hash01(k * 7 + 3);
     const h2 = hash01(k * 13 + 1);
+    const h3 = hash01(k * 29 + 5);
     // Round the front and sides of the beard (a = 0 is straight ahead)
-    const a0 = lerp(-1.75, 1.75, (k + 0.5) / N) + (h1 - 0.5) * 0.18;
-    const t0 = 0.02 + 0.12 * h2;
-    const t1 = lerp(0.62, 1.02, 1 - Math.abs(a0) / 1.9) * (0.88 + 0.16 * h1);
-    const r0 = 0.017 + 0.006 * h2;
-    const sway = (h1 - 0.5) * 0.35;
+    // Uneven spacing so neighbours overlap; widths and lengths vary a lot
+    const a0 = lerp(-1.8, 1.8, (k + 0.5) / N) + (h3 - 0.5) * 0.45;
+    const t0 = 0.02 + 0.16 * h2;
+    const t1 = Math.min(1.04, lerp(0.55, 1.03, 1 - Math.abs(a0) / 1.95) * (0.8 + 0.28 * h1));
+    const r0 = 0.011 + 0.016 * h2 * h2 + 0.004 * h3;
+    // Twist round the beard as it falls; the outer locks curl out at the end
+    const sway = (h1 - 0.5) * 0.7 + (h3 - 0.5) * 0.3;
+    const curl = Math.abs(a0) > 1.0 ? Math.sign(a0) * (0.25 + 0.35 * h3) : 0;
     const shade = 0.8 + 0.16 * h1 * (Math.cos(a0) > 0.3 ? 1 : 0.6);
     const P = [];
     const tsArr = [];
@@ -1498,9 +1533,9 @@ function buildBeardLocks(b, ctx) {
       const u = i / (rings - 1);
       const t = Math.min(1, lerp(t0, t1, u));
       const c = core(t);
-      const a = a0 + sway * Math.sin(u * Math.PI);
+      const a = a0 + sway * Math.sin(u * Math.PI) + curl * u * u;
       // Half sunk into the beard: they swell out of it and sink back in
-      const out = -0.2 + 0.42 * Math.sin(u * Math.PI * 0.9);
+      const out = -0.25 + 0.5 * Math.sin(u * Math.PI * 0.85) + 0.9 * Math.abs(curl) * u * u * u;
       const x = Math.sin(a) * (c.w + r0 * out);
       const z = c.zc + Math.cos(a) * (c.dd + r0 * out) * (Math.cos(a) > 0 ? 1 : 0.75);
       P.push(new THREE.Vector3(x, c.y, z));
@@ -1514,10 +1549,11 @@ function buildBeardLocks(b, ctx) {
       const outDir = new THREE.Vector3(P[i].x, 0, P[i].z - core(tsArr[i]).zc).normalize();
       const S = new THREE.Vector3().crossVectors(T, outDir).normalize();
       const Nn = new THREE.Vector3().crossVectors(S, T).normalize();
-      const r = r0 * (i === rings - 1 ? 0 : Math.pow(1 - u, 0.6) * (0.75 + 0.25 * Math.sin(Math.min(1, u * 3) * Math.PI * 0.5)));
+      // Swells out of the beard, then tapers to a point like a clump of hair
+      const r = r0 * (i === rings - 1 ? 0 : Math.pow(1 - u, 1.15) * (0.55 + 0.45 * Math.sin(Math.min(1, u * 3.2) * Math.PI * 0.5)) * 1.25);
       for (let j = 0; j < cols; j++) {
         const ang = (j / cols) * Math.PI * 2;
-        const q = P[i].clone().addScaledVector(S, Math.cos(ang) * r).addScaledVector(Nn, Math.sin(ang) * r * 0.32);
+        const q = P[i].clone().addScaledVector(S, Math.cos(ang) * r).addScaledVector(Nn, Math.sin(ang) * r * 0.5);
         const lit = 1 + 0.12 * Math.sin(ang);
         pts.push({ p: toModel([q.x, q.y, q.z]), region: REGION.HAIR, tint: [shade * lit * 1.04, shade * lit, shade * lit * 0.94], mat: MAT.SKIN, t: tsArr[i] });
       }

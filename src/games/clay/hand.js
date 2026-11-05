@@ -516,6 +516,8 @@ export function buildPotterHand() {
   const qa = new THREE.Quaternion();
   const qLean = new THREE.Quaternion();
   const qYaw = new THREE.Quaternion();
+  const qRoll = new THREE.Quaternion();
+  const vx = new THREE.Vector3(1, 0, 0);
   const vy = new THREE.Vector3(0, 1, 0);
   const qInv = new THREE.Quaternion();
   const vz = new THREE.Vector3(0, 0, 1);
@@ -544,6 +546,7 @@ export function buildPotterHand() {
    * o.curv    the wall's profile curvature there (a convex wall < 0 curls the fingers in)
    * o.press   0..1 how hard: deeper curl, the hand leans into the wall
    * o.grip    0..1 extra curl (holding the sponge)
+   * o.low     0..1 near the foot (outside): the hand turns to lie along the wall
    * o.yaw     the contact point's azimuth round the pot (+ toward the viewer)
    * o.reach   inside only: where the elbow goes (over the pot's mouth), in this group's space
    * o.t       clock, for a living micro-motion
@@ -590,6 +593,10 @@ export function buildPotterHand() {
     qLean.setFromAxisAngle(vz, press * 0.07);
     qYaw.setFromAxisAngle(vy, -(o.yaw || 0));
     qa.setFromRotationMatrix(m4).premultiply(qYaw).multiply(qLean);
+    // Down at the foot there is no room under the hand: it turns in the
+    // wall's plane until the fingers run along the clay, the wrist up and
+    // toward the viewer, clear of the wheel head
+    if (!o.inside && o.low) qa.multiply(qRoll.setFromAxisAngle(vx, -o.low * 1.25));
     handBone.position.set(0, 0, 0);
     handBone.quaternion.copy(qa);
     // the contact pad on the origin (after the curl)

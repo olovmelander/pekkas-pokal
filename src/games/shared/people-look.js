@@ -34,7 +34,7 @@ const P = (o) => o;
  * characters may (glasses 'sun', shades 'up' | 'shirt').
  */
 export const PARTICIPANTS = {
-  'Olov Melander': P({ height: 1.81, build: 'average', skin: 'light', hair: ['sidePart', 'brown'], eyes: 'blue', smile: 0.45,
+  'Olov Melander': P({ height: 1.81, build: 'average', skin: 'light', hair: ['sideSwept', 'brown'], eyes: 'blue', smile: 0.45,
     face: { headW: 1.06, faceL: 0.93, jaw: 1.02, jawSq: 0.3, chin: 0.95, cheek: 1.16, cheekbone: 0.92, nose: 0.92, noseLen: 0.86, noseW: 1.08, brow: 0.98, browArch: 0.8, mouth: 1.12, eyeSize: 1.04, eyeOpen: 1.03, eyeTilt: 0.03 },
     browThick: 1.0,
     outfit: { topColor: 0xcfc5b2, bottom: 'shorts', bottomColor: 0x1c1d22 } }),

@@ -282,8 +282,8 @@ export async function createPingis(container) {
   // of going to silhouette against his own hall.
   // Off to the left, so faces are modelled — the key comes high from the
   // right, this fills the shadow side softly, the rim (below) draws the edge
-  const faceFill = new THREE.DirectionalLight(0xffe2c4, 0.5);
-  faceFill.position.set(-2.8, 2.3, 5.2);
+  const faceFill = new THREE.DirectionalLight(0xffe2c4, 0.34);
+  faceFill.position.set(-4.5, 2.2, 3.2);
   scene.add(faceFill);
 
   // A back light from the stage lip, high over his shoulders: it rims the
@@ -1237,7 +1237,9 @@ export async function createPingis(container) {
     } else {
       // A long rally earns him applause too — it is a friendly hall
       crowd.react(rally >= 8 ? 'applause' : 'groan', power);
-      if (rally >= 4) sfx.groan();
+      // …and you hear what you see: a polite hand for a long one, a groan otherwise
+      if (rally >= 8) sfx.applause(false);
+      else if (rally >= 4) sfx.groan();
     }
     if (foe) foe.cue(mine ? 'lost' : 'point', power);
   }

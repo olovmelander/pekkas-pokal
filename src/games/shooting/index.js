@@ -591,9 +591,12 @@ export async function createShooting(container) {
     const el = document.createElement('div');
     el.className = `fg-pop sk-pop ${cls}`;
     el.textContent = text;
-    el.style.left = `${Math.min(view.w - 70, Math.max(70, s.x))}px`;
     el.style.top = `${Math.min(view.h - 40, Math.max(90, s.y - 16))}px`;
     hud.pops.appendChild(el);
+    // Keep the whole word on screen: the pop is centred on its anchor, so a
+    // long one ("GULDDUVAN +800") near an edge needs half its width of room
+    const half = Math.min(view.w / 2 - 8, el.offsetWidth * 0.6 + 12);
+    el.style.left = `${Math.min(view.w - half, Math.max(half, s.x))}px`;
     later(() => el.remove(), 1300);
   }
 

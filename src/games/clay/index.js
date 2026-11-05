@@ -1433,7 +1433,9 @@ export async function createClay(container) {
     }
     hand.position.lerp(pos, Math.min(1, dt * 22));
     hand.userData.k = Math.min(1, (hand.userData.k || 0) + dt * 8);
-    const s = 0.86 + 0.14 * hand.userData.k;
+    // (a narrow neck only takes a smaller reach: the hand gathers in)
+    const fit = o.fit || 1;
+    const s = (0.86 + 0.14 * hand.userData.k) * fit;
     hand.scale.set(side * s, s, s);
     if (o.inside) o.reach = reachOf(side, s);
     potter.pose(o);
@@ -1457,6 +1459,21 @@ export async function createClay(container) {
     return out.set(side * rad * Math.cos(yaw), y, rad * Math.sin(yaw));
   }
 
+  /**
+   * Inside the pot the hand rises from the fingers' contact toward the
+   * mouth; where the wall narrows above (a vase's shoulder and neck) it
+   * leans in to stay inside the clay instead of following the wall.
+   */
+  function insideSlope(j, slope) {
+    const h = H / (N - 1);
+    const rc = innerR(j) - 0.012;
+    let s = slope;
+    for (let k = 1; k <= 16 && j + k < N; k++) {
+      s = Math.min(s, (innerR(j + k) - 0.04 - rc) / (k * h));
+    }
+    return Math.max(-2, s);
+  }
+
   /** Hand at the contact point, sponge while smoothing, slip thrown off. */
   function updateHands(dt, t) {
     const b = brush && dragging ? brush : null;
@@ -1477,11 +1494,12 @@ export async function createClay(container) {
         // Pulling out works from INSIDE the pot: fingers down the inner
         // wall, pads pressing outward, the forearm over the rim
         contactAt(handPos, b.side, Math.max(0.05, innerR(b.j) - 0.012), b.y, IN_YAW).x += shake;
-        placeHand(handPos, b.side, { inside: true, slope: ws.slope, curv: -ws.curv, press, t, yaw: IN_YAW }, dt);
+        const fit = Math.max(0.6, Math.min(1, innerR(b.j) / 0.5));
+        placeHand(handPos, b.side, { inside: true, slope: insideSlope(b.j, ws.slope), curv: -ws.curv, press, t, yaw: IN_YAW, fit }, dt);
       } else {
         // Pushing in: palm and finger pads on the outer wall
         contactAt(handPos, b.side, shownR(b.j) + 0.01, b.y, OUT_YAW).x += shake;
-        placeHand(handPos, b.side, { inside: false, slope: ws.slope, curv: ws.curv, press, t, yaw: OUT_YAW }, dt);
+        placeHand(handPos, b.side, { inside: false, slope: ws.slope, curv: ws.curv, press, t, yaw: OUT_YAW, low: smooth(0.6, 0.12, b.y) }, dt);
       }
       // Slip flies off the spinning wall, tangent to the rotation — always a
       // few at full speed, more the harder the clay is worked
@@ -1507,7 +1525,7 @@ export async function createClay(container) {
       if (!b) {
         const ws = wallShape(j);
         handPos.set(r[j] + 0.19 * squeeze, u * H - 0.05, 0.05);
-        placeHand(handPos, 1, { inside: false, slope: ws.slope, curv: ws.curv, press: 0.3, grip: 1, t, yaw: 0.25 }, dt);
+        placeHand(handPos, 1, { inside: false, slope: ws.slope, curv: ws.curv, press: 0.3, grip: 1, t, yaw: 0.25, low: smooth(0.6, 0.12, u * H) }, dt);
       }
     } else if (!b && state.coached < 1.2 && state.phase === 'throw' && guide.worst.d > 0.11) {
       // First time at the wheel: until you have worked the clay for a moment,
@@ -1524,7 +1542,10 @@ export async function createClay(container) {
       hand.position.copy(handPos);
       const s = pull ? 1 : 0.6 + 0.4 * reach;
       hand.scale.set(s, s, s);
-      potter.pose({ inside: pull, slope: ws.slope, curv: pull ? -ws.curv : ws.curv, press: reach * 0.6, t, yaw: pull ? IN_YAW : OUT_YAW, reach: pull ? reachOf(1, s) : null });
+      potter.pose({
+        inside: pull, slope: pull ? insideSlope(j, ws.slope) : ws.slope, curv: pull ? -ws.curv : ws.curv, press: reach * 0.6, t,
+        yaw: pull ? IN_YAW : OUT_YAW, reach: pull ? reachOf(1, s) : null, low: smooth(0.6, 0.12, y)
+      });
       hand.visible = pull || reach > 0.05;
     } else if (!b) {
       hand.visible = false;
