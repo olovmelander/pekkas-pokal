@@ -463,13 +463,13 @@ export function buildForest(rand, { lite = false, wind, sunDir } = {}) {
     const n = Math.round(70 * q);
     for (let i = 0; i < n; i++) {
       const x = -80 + (i / n) * 160 + (rand() - 0.5) * 3;
-      const zz = -44 - rand() * 12;
-      const h = 11 + rand() * 11;
+      const zz = -50 - rand() * 12;
+      const h = 9 + rand() * 7;
       addSpruce(far, rand, x, -0.5, zz, h, { tiers: lite ? 5 : 6, arms: 5, tint: sprTint(), haze: 0.42 + rand() * 0.1, sway: 0.5 });
     }
     // The west side, behind the wrap
     for (let i = 0; i < Math.round(26 * q); i++) {
-      addSpruce(far, rand, -44 - rand() * 12, -0.5, -40 + i * 2.6 + rand() * 2, 11 + rand() * 9, {
+      addSpruce(far, rand, -48 - rand() * 12, -0.5, -44 + i * 2.8 + rand() * 2, 9 + rand() * 7, {
         tiers: lite ? 5 : 6, arms: 5, tint: sprTint(), haze: 0.42 + rand() * 0.1, sway: 0.5
       });
     }
@@ -486,8 +486,10 @@ export function buildForest(rand, { lite = false, wind, sunDir } = {}) {
       for (let c = 0; c < cluster && t < 1; c++) {
         const [x, z] = pos(t, rand());
         if (clearOf(x, z)) {
-          const old = rand() < 0.2;
-          const h = old ? 15 + rand() * 6 : 6.5 + rand() * 8;
+          // Garden-edge spruce: mostly young, now and then an old one
+          // standing out of them — low enough to leave the sky to the bunting
+          const old = rand() < 0.16;
+          const h = old ? 10.5 + rand() * 3.5 : 5 + rand() * 4.5;
           addSpruce(edge, rand, x, -0.3, z, h, {
             tiers: lite ? 6 : Math.round(8 + h * 0.2), arms: lite ? 5 : 7, tint: sprTint(), tipColor: SPRUCE_TIP,
             tipLight: 0.35, haze: haze + rand() * 0.05, trunk: !lite, elbow: !lite && (old || rand() < 0.3), twigs: lite ? 0 : 3
@@ -500,10 +502,10 @@ export function buildForest(rand, { lite = false, wind, sunDir } = {}) {
     }
   };
   // North, behind the hedge and the house; then round to the west
-  placeRow((t, j) => [-34 + t * 76, -24.5 - j * 5.5], Math.round(34 * q), 0.12);
-  placeRow((t, j) => [-25 - j * 5, -22 + t * 38], Math.round(18 * q), 0.1);
+  placeRow((t, j) => [-36 + t * 78, -27.5 - j * 5], Math.round(34 * q), 0.14);
+  placeRow((t, j) => [-27.5 - j * 5, -25 + t * 41], Math.round(18 * q), 0.12);
   // A second line among and behind them, a little hazier
-  placeRow((t, j) => [-40 + t * 84, -31 - j * 5], Math.round(30 * q), 0.22);
+  placeRow((t, j) => [-44 + t * 88, -35 - j * 6], Math.round(30 * q), 0.26);
 
   /* Birches in front of the spruce, in loose groups */
   for (let i = 0; i < (lite ? 7 : 13); i++) {
@@ -511,20 +513,20 @@ export function buildForest(rand, { lite = false, wind, sunDir } = {}) {
     const n = 1 + Math.floor(rand() * 3);
     for (let k = 0; k < n; k++) {
       const bx = gx + (rand() - 0.5) * 4;
-      const bz = -21 - rand() * 3;
+      const bz = -24 - rand() * 3;
       if (!clearOf(bx, bz)) continue;
-      addBirch(edge, rand, bx, -0.2, bz, 6 + rand() * 4.5, { haze: 0.08, clumps: lite ? 8 : 14, detail: 0, clumpScale: 0.8, leaf: 0x8cab4c });
+      addBirch(edge, rand, bx, -0.2, bz, 5 + rand() * 3, { haze: 0.08, clumps: lite ? 8 : 14, detail: 0, clumpScale: 0.8, leaf: 0x8cab4c });
     }
   }
   for (let i = 0; i < (lite ? 3 : 6); i++) {
-    addBirch(edge, rand, -21 - rand() * 2.5, -0.2, -15 + rand() * 26, 6 + rand() * 4, { haze: 0.06, clumps: lite ? 8 : 14, detail: 0, clumpScale: 0.8, leaf: 0x8cab4c });
+    addBirch(edge, rand, -23.5 - rand() * 2.5, -0.2, -15 + rand() * 26, 5 + rand() * 3, { haze: 0.06, clumps: lite ? 8 : 14, detail: 0, clumpScale: 0.8, leaf: 0x8cab4c });
   }
   emit(edge);
 
   /* Undergrowth along the edge: saplings, junipers, bushes, fireweed */
   const under = new Growth();
   const BUSHES = [0x4d6b32, 0x5b7a36, 0x3f5e2e, 0x6b8340];
-  const footAt = (r) => (r < 0.72 ? [-30 + rand() * 62, -19.5 - rand() * 3.5] : [-19.5 - rand() * 3, -18 + rand() * 30]);
+  const footAt = (r) => (r < 0.72 ? [-30 + rand() * 62, -22.5 - rand() * 3.5] : [-22 - rand() * 3, -20 + rand() * 32]);
   for (let i = 0; i < (lite ? 45 : 95); i++) {
     const [ux, uz] = footAt(rand());
     if (!clearOf(ux, uz)) continue;
@@ -561,11 +563,13 @@ export function buildForest(rand, { lite = false, wind, sunDir } = {}) {
   /* The garden's own birches: two carry the bunting, one stands behind the
      player's shoulder, its crown out of frame but its shade on the lawn */
   const near = new Growth();
-  [[-8.6, -8.4, 7.2], [9.2, -8.8, 7.6], [-7.6, 4.4, 7.8]].forEach(([bx, bz, h]) => {
+  [[-8.6, -8.4, 7.0], [9.2, -8.8, 7.4], [-7.6, 4.4, 7.6]].forEach(([bx, bz, h]) => {
     addBirch(near, rand, bx, 0, bz, h, {
-      clumps: lite ? 22 : 44, detail: 1, radius: 0.15, sides: 7, top: 0.46, spread: 0.24, clumpScale: 0.86, leaf: 0x86a648,
-      // Nearly straight, so the bunting's line meets the stem where it should
-      bend: 0.15
+      clumps: lite ? 22 : 40, detail: 1, radius: 0.15, sides: 7, top: 0.56, spread: 0.2, clumpScale: 0.82, leaf: 0x86a648,
+      // Nearly straight and swaying gently, so the bunting's line stays on
+      // the stem where it is tied
+      bend: 0.15,
+      sway: 0.55
     });
   });
   const nearMesh = emit(near, true);

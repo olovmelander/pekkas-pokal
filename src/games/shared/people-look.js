@@ -53,7 +53,7 @@ export const PARTICIPANTS = {
     face: { headW: 0.92, faceL: 1.14, jaw: 0.97, jawSq: 1.0, chin: 1.16, cheek: 0.87, cheekbone: 1.4, nose: 1.08, noseLen: 1.24, noseW: 0.9, brow: 1.08, browArch: 0.25, lips: 0.9, eyeSize: 0.95, eyeOpen: 0.93, eyeTilt: 0.05, headL: 1.02 },
     outfit: { top: 'linen', topColor: 0xc8cebd, bottom: 'shorts', bottomColor: 0xbca785 } }),
   'Erik Vallgren': P({ height: 1.86, build: 'average', skin: 'fair', hair: ['receding', 'darkBlond'], smile: 0.35, eyes: 'blue',
-    face: { headW: 1.1, faceL: 1.02, jaw: 1.13, jawSq: 0.8, chin: 1.04, cheek: 1.16, cheekbone: 0.92, nose: 1.05, noseLen: 1.02, noseW: 1.12, brow: 1.0, browArch: -0.2, eyeSize: 0.92, eyeOpen: 0.86, eyeTilt: -0.02 },
+    face: { headW: 1.1, faceL: 1.02, jaw: 1.13, jawSq: 0.8, chin: 1.04, cheek: 1.16, cheekbone: 0.92, nose: 1.05, noseLen: 1.02, noseW: 1.12, brow: 1.0, browArch: -0.2, eyeSize: 0.95, eyeOpen: 0.9, eyeTilt: -0.02 },
     outfit: { topColor: 0xb3b5b5, bottom: 'shorts', bottomColor: 0x1f2638 } }),
   'Henrik Lundqvist': P({ height: 1.83, build: 'slim', skin: 'light', hair: ['messy', 'darkBrown'], glasses: 'rect', glassesColor: 0x141416, eyes: 'hazel',
     face: { headW: 0.94, faceL: 1.08, jaw: 0.95, jawSq: 1.0, chin: 1.05, cheek: 0.9, cheekbone: 1.2, nose: 1.02, noseLen: 1.1, noseW: 0.9, brow: 1.12, browArch: -0.75, browTilt: 0.2, eyeSize: 0.95, eyeOpen: 0.94 }, browThick: 1.3,

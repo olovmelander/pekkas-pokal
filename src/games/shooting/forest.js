@@ -496,7 +496,7 @@ export function buildForest(rand, { lite = false } = {}) {
   const birchAt = (bx, bz, haze, sz = 1) => {
     const h = (7 + rand() * 6) * sz;
     // 95 m out a 20-face clump reads the same as an 80-face one
-    addBirch(edge, rand, bx, -0.3, bz, h, { haze, clumps: lite ? 8 : 13 + Math.floor(rand() * 5), detail: 0 });
+    addBirch(edge, rand, bx, -0.3, bz, h, { haze, clumps: lite ? 9 : 20 + Math.floor(rand() * 6), clumpScale: lite ? 0.9 : 0.78, detail: 0 });
   };
   for (let i = 0; i < (lite ? 12 : 22); i++) {
     const gx = -150 + rand() * 300;

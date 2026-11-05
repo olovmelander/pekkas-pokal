@@ -976,6 +976,103 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1, profile = null 
   });
   statics.add(table);
 
+  /* ---- The floor round the table ---------------------------------------
+     A village hall is a gym on weekdays: its old painted lines (a faded
+     centre circle and line, the yellow badminton lines) show between the
+     barriers, the lacquer is scuffed dark where the players stand, and the
+     court has its things — a towel box in the corner, the ball bucket. */
+  {
+    const parts = [];
+    const paint = (geo, hex, x, z, ry = 0) => {
+      geo.rotateX(-Math.PI / 2);
+      if (ry) geo.rotateY(ry);
+      geo.translate(x, 0, z);
+      const c = new THREE.Color(hex);
+      const n = geo.attributes.position.count;
+      const col = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) col.set([c.r, c.g, c.b], i * 3);
+      geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      geo.deleteAttribute('uv');
+      parts.push(geo);
+    };
+    const WHITE = 0xcfc6b2;
+    const RED = 0x8e3326;
+    const YELLOW = 0xbf9a3e;
+    paint(new THREE.RingGeometry(1.74, 1.8, 72), WHITE, 0, 0);
+    paint(new THREE.PlaneGeometry(HALL_W - 0.3, 0.05), RED, 0, 0);
+    [-2.62, 2.62].forEach((x) => paint(new THREE.PlaneGeometry(0.05, 6.6), YELLOW, x, -0.2));
+    paint(new THREE.PlaneGeometry(5.29, 0.05), YELLOW, 0, -3.18);
+    paint(new THREE.PlaneGeometry(5.29, 0.05), YELLOW, 0, 3.1);
+    const lines = new THREE.Mesh(mergeGeometries(parts, false), new THREE.MeshStandardMaterial({
+      vertexColors: true, roughness: 0.55, metalness: 0,
+      // A coat of paint under the lacquer: depth-offset, not lifted (see the table top)
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
+    }));
+    parts.forEach((g) => g.dispose());
+    lines.position.y = 0.001;
+    lines.receiveShadow = true;
+    lines.userData.keep = true;
+    group.add(lines);
+
+    // Scuffs: rubber soles drag the lacquer dark where the players work
+    const scuffGeo = [];
+    const srand = mulberry(31);
+    for (let i = 0; i < 14; i++) {
+      // Half behind each end of the table, where the feet go
+      const g = new THREE.PlaneGeometry(0.5 + srand() * 0.7, 0.28 + srand() * 0.3);
+      g.rotateX(-Math.PI / 2);
+      g.rotateY((srand() - 0.5) * 1.2);
+      g.translate((srand() - 0.5) * 2.2, 0, (i % 2 ? 1 : -1) * (1.85 + srand() * 0.7));
+      scuffGeo.push(g);
+    }
+    const scuffs = new THREE.Mesh(mergeGeometries(scuffGeo, false), new THREE.MeshBasicMaterial({
+      map: glow, color: 0x24170c, transparent: true, opacity: 0.2, depthWrite: false,
+      polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3
+    }));
+    scuffGeo.forEach((g) => g.dispose());
+    scuffs.position.y = 0.002;
+    scuffs.renderOrder = 1;
+    scuffs.userData.keep = true;
+    group.add(scuffs);
+
+    // The towel box in the back right corner of the court, a towel over it
+    const clubRed = lambert(0xa8202c);
+    const towel = lambert(0xf1ece0);
+    const box = new THREE.Group();
+    box.position.set(2.5, 0, -3.15);
+    box.rotation.y = -0.35;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.44, 0.26), clubRed);
+    body.position.y = 0.22;
+    body.castShadow = true;
+    box.add(body);
+    const top = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.03, 0.3), towel);
+    top.position.y = 0.455;
+    box.add(top);
+    const flap = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.22, 0.02), towel);
+    flap.position.set(-0.04, 0.35, 0.145);
+    flap.rotation.x = 0.06;
+    box.add(flap);
+    statics.add(box);
+
+    // The ball bucket in the back left corner, heaped with spares
+    const bucket = new THREE.Group();
+    bucket.position.set(-2.45, 0, -3.1);
+    const pail = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.14, 0.3, 18, 1, true), lambert(0x2a4a6e, { side: THREE.DoubleSide }));
+    pail.position.y = 0.15;
+    pail.castShadow = true;
+    bucket.add(pail);
+    const ballMat = standard(0xfbf6ec, 0.45);
+    const brand = mulberry(53);
+    for (let i = 0; i < 22; i++) {
+      const a = brand() * Math.PI * 2;
+      const r = Math.sqrt(brand()) * 0.13;
+      const b = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 6), ballMat);
+      b.position.set(Math.cos(a) * r, 0.28 + brand() * 0.03 + (0.13 - r) * 0.3, Math.sin(a) * r);
+      bucket.add(b);
+    }
+    statics.add(bucket);
+  }
+
   /* ---- Court barriers: the red surround a competition puts up --------- */
   const barMats = [
     standard(0xffffff, 0.75, { map: barrierTexture('PEKKAS POKAL', 'BREDBYN 2019') }),
@@ -1098,7 +1195,7 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1, profile = null 
     halo.renderOrder = 3;
   });
   // A warm wash down onto the stage from those lights
-  const stageWash = new THREE.PointLight(0xffc58a, 2.2, 6, 2);
+  const stageWash = new THREE.PointLight(0xffc58a, 3.6, 7.5, 2);
   stageWash.position.set(0, OPEN_TOP - 0.6, STAGE_Z - 0.4);
   group.add(stageWash);
 

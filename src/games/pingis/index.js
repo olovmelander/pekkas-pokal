@@ -246,7 +246,10 @@ export async function createPingis(container) {
   const base = { fov: 50, pos: new THREE.Vector3(), look: new THREE.Vector3() };
 
   /* Lights — hierarchy: hemisphere fill, one casting key, lamp accents */
-  const hemi = new THREE.HemisphereLight(0x9aa8c8, 0x241a10, 0.3);
+  // A warm evening fill: the sky term is the lamplit ceiling and walls of a
+  // timber hall, not a blue sky, and the bounce off the floor is honey
+  const HEMI = 0.44;
+  const hemi = new THREE.HemisphereLight(0xdcc4a2, 0x3c2916, HEMI);
   scene.add(hemi);
 
   const key = new THREE.DirectionalLight(0xffe2b0, 1.55);
@@ -277,20 +280,29 @@ export async function createPingis(container) {
 
   // A low fill from the player's side so the opponent's face reads instead
   // of going to silhouette against his own hall.
-  const faceFill = new THREE.DirectionalLight(0xffe8d0, 0.55);
-  faceFill.position.set(0.5, 2.2, 6);
+  // Off to the left, so faces are modelled — the key comes high from the
+  // right, this fills the shadow side softly, the rim (below) draws the edge
+  const faceFill = new THREE.DirectionalLight(0xffe2c4, 0.5);
+  faceFill.position.set(-2.8, 2.3, 5.2);
   scene.add(faceFill);
 
   // A back light from the stage lip, high over his shoulders: it rims the
   // opponent's head, shoulders and bat arm in warm light so he stands out
   // from the people behind him — the broadcast look. A cone, not a sun,
-  // so the floor and the table do not wash out. Not on phones: one more
-  // light in every shader for a figure a few hundred pixels tall.
+  // so the floor and the table do not wash out. On every tier: on a phone
+  // the opponent is the one big figure in the frame.
+  const rim = new THREE.SpotLight(0xffc48a, 16, 9, 0.5, 0.7, 2);
+  rim.position.set(0.3, 3.5, -4.5);
+  rim.target.position.set(0, 1.2, -2.1);
+  scene.add(rim, rim.target);
+  // The wall sconces really light the people sitting under them (the wide
+  // desktop lens is the one that sees the wall seating)
   if (!low) {
-    const rim = new THREE.SpotLight(0xffc48a, 16, 9, 0.5, 0.7, 2);
-    rim.position.set(0.3, 3.5, -4.5);
-    rim.target.position.set(0, 1.2, -2.1);
-    scene.add(rim, rim.target);
+    [[-4.05, -1.7], [4.05, -1.45]].forEach(([x, z]) => {
+      const sconce = new THREE.PointLight(0xffb878, 3.2, 5, 2);
+      sconce.position.set(x, 2.45, z);
+      scene.add(sconce);
+    });
   }
 
   /* World */
@@ -2219,7 +2231,7 @@ export async function createPingis(container) {
 
     /* Match-point drama */
     drama.v += (drama.target - drama.v) * Math.min(1, dt * 2.5);
-    hemi.intensity = 0.3 * (1 - 0.5 * drama.v);
+    hemi.intensity = HEMI * (1 - 0.5 * drama.v);
     key.intensity = 1.55 * (1 + 0.28 * drama.v);
     pendants[2].intensity = 5 * (1 - 0.55 * drama.v);
     hall.refs.lampMats.forEach((l, i) => {

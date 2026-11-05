@@ -204,6 +204,8 @@ export class Foe {
     this.fresh = true;
     this.split = 0;
     this.wasReading = false;
+    this.walkT = 99; // seconds into the walk-on (99: not walking)
+    this.walkRate = 1;
     this.mode = '';
     this.react = { kind: '', t: 9, dur: 0, power: 0 };
     this.modeT = 0;
@@ -261,8 +263,17 @@ export class Foe {
     this.vx += (vx - this.vx) * Math.min(1, dt * 10);
     this.pos.set(v.x, 0, v.z);
     this.root.position.copy(this.pos);
-    // The walk-on: only while the card comes up, and only from a standstill
-    const walkT = v.mode === 'intro' ? (this.mode === 'intro' ? this.modeT + dt : 0) : 99;
+    // The walk-on, while the card comes up. Sent to the table before he has
+    // arrived, he hurries the last steps (half a second) instead of
+    // jumping onto his mark; leaving for the menu ends it outright.
+    if (v.mode === 'intro' && this.mode !== 'intro') {
+      this.walkT = 0;
+      this.walkRate = 1;
+    } else if (v.mode !== 'intro' && this.walkT < WALK_IN.dur) {
+      if (v.mode === 'play') this.walkRate = Math.max(this.walkRate, (WALK_IN.dur - this.walkT) / 0.5);
+      else this.walkT = 99;
+    }
+    const { walkT } = this;
     const walking = walkT < WALK_IN.dur;
     if (walking) {
       const k = walkT / WALK_IN.dur;
@@ -270,7 +281,9 @@ export class Foe {
       this.root.position.x += along * WALK_IN.dist;
       // Facing the way he walks (world −x), turning to you at the end
       this.root.rotation.y = -Math.PI / 2 * (1 - smoothstep(1 - WALK_IN.turn / WALK_IN.dur, 1, k));
-      this.walkPhase = (this.walkPhase || 0) + (dt * (6 * k * (1 - k) * WALK_IN.dist / WALK_IN.dur) / (WALK_STRIDE * this.s)) * Math.PI * 2;
+      const speed = (6 * k * (1 - k) * WALK_IN.dist / WALK_IN.dur) * this.walkRate;
+      this.walkPhase = (this.walkPhase || 0) + ((dt * speed) / (WALK_STRIDE * this.s)) * Math.PI * 2;
+      this.walkT += dt * this.walkRate;
     } else if (this.root.rotation.y !== 0) {
       this.root.rotation.y = 0;
       this.planted = false;

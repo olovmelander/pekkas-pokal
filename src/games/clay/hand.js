@@ -35,7 +35,7 @@
 import * as THREE from 'three';
 
 /** Real hand metres → the wheel's magnified world. */
-const HS = 3.3;
+const HS = 3.7;
 
 const DIGITS = [
   // name, knuckle [x, y, z], segment lengths, base radius, rest curl per joint
@@ -373,10 +373,12 @@ export function buildPotterHand() {
         c.lerp(SKIN_RED, Math.min(0.6, knuck * 0.7 + smooth(0.75, 1, s) * 0.35));
         c.lerp(SKIN_PALM, palmSide * 0.4);
         // the slip coat: everything past the middle joint, the pads most
-        const slip = smooth(0.2, 0.62, s) * (0.7 + 0.3 * palmSide) * (0.85 + 0.15 * Math.sin(s * 40 + fi * 2));
-        return c.lerp(SLIP, Math.min(0.9, slip));
+        // the slip: a wet coat on the pads and fingertips, thinning toward the
+        // knuckles — the skin still reads against the clay
+        const slip = smooth(0.45, 0.85, s) * (0.45 + 0.4 * palmSide) * (0.85 + 0.15 * Math.sin(s * 40 + fi * 2));
+        return c.lerp(SLIP, Math.min(0.8, slip));
       },
-      wetOf: (s, palmSide) => smooth(0.2, 0.62, s) * (0.75 + 0.25 * palmSide),
+      wetOf: (s, palmSide) => smooth(0.35, 0.8, s) * (0.6 + 0.4 * palmSide),
       thinOf: (s) => 0.55 + 0.45 * smooth(0.6, 1, s)
     });
     // the nail, on the back of the last joint
@@ -421,14 +423,14 @@ export function buildPotterHand() {
     });
 
   // Palm: an arched, rounded box — fuller on the palm side, the knuckle row on top
-  blob(B, V(0.001, 0.05, 0.0), V(0.0145, 0.056, 0.042), iHand, (p) => {
+  blob(B, V(0.001, 0.046, 0.0), V(0.0145, 0.06, 0.042), iHand, (p) => {
     const c = SKIN.clone();
     const palm = smooth(0, -0.012 * HS, p.x);
     c.lerp(SKIN_PALM, palm * 0.5);
     // slip smears up the palm side and across the knuckles
     return c.lerp(SLIP, Math.min(0.6, palm * smooth(0.04 * HS, 0.1 * HS, p.y) * 0.8 + 0.25 * smooth(0.08 * HS, 0.1 * HS, p.y)));
   }, {
-    power: 2.7,
+    power: 2.5,
     latN: 12,
     lonN: 18,
     thin: 0.25,
@@ -437,6 +439,10 @@ export function buildPotterHand() {
       if (p.x < 0) p.x *= 1.25 - 0.3 * Math.max(0, p.y);
       else p.x *= 0.85;
       p.x += -0.18 * p.z * p.z;
+      // narrowing and thinning into the wrist, so hand and forearm are one shape
+      const w = smooth(-1.05, 0.25, p.y);
+      p.z *= 0.7 + 0.3 * w;
+      p.x *= 0.8 + 0.2 * w;
     }
   });
   // Thenar pad: the thumb's fleshy root on the palm
@@ -486,7 +492,7 @@ export function buildPotterHand() {
   const axis = new THREE.Vector3(0, 1, 0);
   ring(B, V(0, -FOREARM * 0.86, 0), axis, 0.043 * HS, 0.011 * HS, iUpper, LINEN, 1.25);
   ring(B, V(0, -FOREARM * 0.93, 0), axis, 0.045 * HS, 0.01 * HS, iUpper, LINEN_SHADE, 1.1);
-  const sl = [V(0, -FOREARM * 0.92, 0), V(0, -FOREARM * 1.05, 0), V(0.01, -FOREARM * 1.5, 0.02), V(0.02, -FOREARM * 2.6, 0.05)];
+  const sl = [V(0, -FOREARM * 0.92, 0), V(0, -FOREARM * 1.05, 0), V(0.01, -FOREARM * 1.6, 0.02), V(0.02, -FOREARM * 3.6, 0.05)];
   tube(B, sl, [iUpper, iUpper, iUpper], (s) => ({ rx: (0.042 + 0.008 * s) * HS, rz: (0.045 + 0.008 * s) * HS, flat: 1 }), {
     back: new THREE.Vector3(1, 0, 0),
     ringN: 14,
@@ -521,7 +527,7 @@ export function buildPotterHand() {
   const dir = new THREE.Vector3();
   const up = new THREE.Vector3();
   const upOut = new THREE.Vector3(0.5, -0.5, 0.7);
-  const upIn = new THREE.Vector3(0.35, 0.2, 0.92);
+  const upIn = new THREE.Vector3(0.72, 0.5, 0.48);
   const qb = new THREE.Quaternion();
   // the middle finger's middle pad, in its middle phalanx's frame: the contact point
   const md = DIGITS[1];

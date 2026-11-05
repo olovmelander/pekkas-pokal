@@ -501,8 +501,6 @@ export function createMaterials(THREE, playfieldTexture) {
     // Lit castle windows and the GI bulbs: self-lit, held under the bloom
     // threshold so the small shapes never sparkle in and out of the bloom
     window: new THREE.MeshBasicMaterial({ color: 0xffb35c }),
-    // The lit cut edges of the clear ramps (kept under the bloom threshold)
-    rampEdge: new THREE.MeshBasicMaterial({ color: 0xa9b9e4 }),
     bulb: new THREE.MeshBasicMaterial({ color: 0xfff0d0 }),
     wood: new THREE.MeshStandardMaterial({
       color: 0x8a5a2b,
@@ -1173,6 +1171,12 @@ function buildWireform(THREE, curve, materials, t0 = 0) {
  * top edges, and the floor sticker; buildTable merges them across ramps.
  */
 const RAMP_PLASTIC_T = 0.2;
+// Where the two ramp-floor stickers are printed on the plastics' sheet, in
+// its playfield units (the band above every plastic is free)
+const STICKER_AREA = [
+  { x0: -10.0, x1: -8.6, y0: 13.75, y1: 16.05 },
+  { x0: -8.3, x1: -6.9, y0: 13.75, y1: 16.05 }
+];
 function plasticRampParts(THREE, curve, t1, row) {
   const N = 30;
   const hw = 0.6;
@@ -1226,7 +1230,9 @@ function plasticRampParts(THREE, curve, t1, row) {
     [-1, 1].forEach((side) => {
       const v = p.clone().addScaledVector(perp, side * (hw - 0.06)).setY(y);
       spos.push(v.x, v.y, v.z);
-      suv.push(side < 0 ? 0 : 1, (row + i / M) / 2);
+      // Printed on the plastics' shared sheet (see STICKER_AREA)
+      const ar = STICKER_AREA[row];
+      suv.push(side < 0 ? ar.x0 : ar.x1, ar.y0 + ((ar.y1 - ar.y0) * i) / M);
     });
     if (i < M) {
       const a = i * 2;
@@ -1239,45 +1245,6 @@ function plasticRampParts(THREE, curve, t1, row) {
   sticker.setIndex(sidx);
   sticker.computeVertexNormals();
   return { plastic, edges, sticker };
-}
-
-/** Two ramp-floor stickers on one canvas: chevrons up the ramp in gold on crimson */
-function rampStickerTexture(THREE) {
-  const W = 128;
-  const H = 512;
-  const cv = document.createElement('canvas');
-  cv.width = W;
-  cv.height = H;
-  const g = cv.getContext('2d');
-  [0, 1].forEach((row) => {
-    // Canvas rows run top-down; texture v runs bottom-up
-    const y0 = (1 - row) * (H / 2);
-    const y1 = y0 + H / 2;
-    g.fillStyle = 'rgba(140,16,40,0.92)';
-    g.beginPath();
-    g.roundRect(10, y0 + 10, W - 20, H / 2 - 20, 14);
-    g.fill();
-    g.strokeStyle = '#f2c14e';
-    g.lineWidth = 5;
-    g.stroke();
-    g.fillStyle = '#f2c14e';
-    for (let k = 0; k < 3; k++) {
-      const cy = y1 - 50 - k * 62;
-      g.beginPath();
-      g.moveTo(28, cy + 14);
-      g.lineTo(W / 2, cy - 18);
-      g.lineTo(W - 28, cy + 14);
-      g.lineTo(W - 28, cy + 30);
-      g.lineTo(W / 2, cy - 2);
-      g.lineTo(28, cy + 30);
-      g.closePath();
-      g.fill();
-    }
-  });
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
-  return tex;
 }
 
 /* ------------------------------------------------------------------ castle */
@@ -1705,6 +1672,34 @@ function plasticsTexture(THREE, pieces) {
     g.stroke(path);
     g.restore();
   });
+  // The ramp-floor stickers: chevrons up the ramp, gold on crimson
+  STICKER_AREA.forEach((ar) => {
+    const x0 = X(ar.x0);
+    const x1 = X(ar.x1);
+    const y0 = Y(ar.y1);
+    const y1 = Y(ar.y0);
+    g.fillStyle = '#8c1028';
+    g.beginPath();
+    g.roundRect(x0 + 4, y0 + 4, x1 - x0 - 8, y1 - y0 - 8, 10);
+    g.fill();
+    g.strokeStyle = GOLD;
+    g.lineWidth = 4;
+    g.stroke();
+    g.fillStyle = GOLD;
+    const w = x1 - x0;
+    for (let k = 0; k < 3; k++) {
+      const cy = y1 - (y1 - y0) * (0.2 + k * 0.28);
+      g.beginPath();
+      g.moveTo(x0 + w * 0.2, cy + w * 0.12);
+      g.lineTo(x0 + w * 0.5, cy - w * 0.16);
+      g.lineTo(x0 + w * 0.8, cy + w * 0.12);
+      g.lineTo(x0 + w * 0.8, cy + w * 0.26);
+      g.lineTo(x0 + w * 0.5, cy - w * 0.02);
+      g.lineTo(x0 + w * 0.2, cy + w * 0.26);
+      g.closePath();
+      g.fill();
+    }
+  });
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
@@ -1719,7 +1714,7 @@ function plasticsTexture(THREE, pieces) {
  * The print is also the emissive map, tinted every frame with the GI colour
  * by the game, so the plastics glow with the string and recolour with it.
  */
-function buildPlastics(THREE, materials, mergeGeometries) {
+function buildPlastics(THREE, materials, mergeGeometries, extra = []) {
   const group = new THREE.Group();
   const pieces = plasticOutlines();
   const tex = plasticsTexture(THREE, pieces);
@@ -1747,6 +1742,8 @@ function buildPlastics(THREE, materials, mergeGeometries) {
     geo.translate(0, PLASTIC_Y + 0.02, 0);
     return geo;
   });
+  // The ramp stickers print on the same sheet, so they ride in this mesh
+  extra.forEach((x) => geos.push(x.index ? x.toNonIndexed() : x));
   const mesh = new THREE.Mesh(mergeGeometries(geos, false), mat);
   mesh.castShadow = true;
   mesh.userData.keep = true;
@@ -2489,19 +2486,10 @@ export function buildTable(THREE, mergeGeometries, materials) {
     plastic.renderOrder = 4;
     plastic.userData.keep = true;
     group.add(plastic);
-    // The cut edges of the plastic carry the light: thin lit lines on top
-    group.add(new THREE.Mesh(mergeGeometries(rampEdges, false), materials.rampEdge));
-    const sticker = new THREE.Mesh(mergeGeometries(rampStickers, false), new THREE.MeshStandardMaterial({
-      map: rampStickerTexture(THREE),
-      roughness: 0.45,
-      metalness: 0,
-      alphaTest: 0.4,
-      polygonOffset: true,
-      polygonOffsetFactor: -2,
-      polygonOffsetUnits: -2
-    }));
-    sticker.userData.keep = true;
-    group.add(sticker);
+    // The cut edges of the plastic carry the GI's light: thin lit lines on
+    // top, in the bulbs' material (it follows the GI colour, and batches)
+    rampEdges.forEach((geo) => group.add(new THREE.Mesh(geo, materials.bulb)));
+    refs.rampStickers = rampStickers;
   }
 
   /* ---- Apron: the angled plate over the drain ---- */
@@ -2828,7 +2816,8 @@ export function buildTable(THREE, mergeGeometries, materials) {
   }
 
   /* ---- Plastics, GI bulbs, flashers and the lamp matrix ---- */
-  const plastics = buildPlastics(THREE, materials, mergeGeometries);
+  const plastics = buildPlastics(THREE, materials, mergeGeometries, refs.rampStickers);
+  delete refs.rampStickers;
   group.add(plastics.group);
   refs.plastics = plastics.material;
   const flashers = buildFlashers(THREE, materials);

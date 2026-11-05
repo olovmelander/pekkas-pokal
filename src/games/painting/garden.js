@@ -448,16 +448,16 @@ function lawnMacro() {
   blob(-2.55, -3.5, 1.3, 'rgba(120,128,110,0.6)', 0.2);
   blob(5.9, -8.6, 1.7, 'rgba(120,128,110,0.6)', 0.2);
   // The forest's edge: longer, darker grass under the trees
-  const edge = ctx.createLinearGradient(0, pz(-26), 0, pz(-17));
+  const edge = ctx.createLinearGradient(0, pz(-29), 0, pz(-20));
   edge.addColorStop(0, 'rgba(110,124,104,0.9)');
   edge.addColorStop(1, 'rgba(110,124,104,0)');
   ctx.fillStyle = edge;
-  ctx.fillRect(0, pz(-32), N, 15 * k);
-  const west = ctx.createLinearGradient(px(-27), 0, px(-18), 0);
+  ctx.fillRect(0, pz(-32), N, 12 * k);
+  const west = ctx.createLinearGradient(px(-28), 0, px(-20), 0);
   west.addColorStop(0, 'rgba(110,124,104,0.9)');
   west.addColorStop(1, 'rgba(110,124,104,0)');
   ctx.fillStyle = west;
-  ctx.fillRect(0, 0, px(-18), N);
+  ctx.fillRect(0, 0, px(-20), N);
   // Back to neutral at the map's edge, so the tiled lawn carries on beyond
   const fade = (x0, y0, x1, y1) => {
     const g = ctx.createLinearGradient(x0, y0, x1, y1);
