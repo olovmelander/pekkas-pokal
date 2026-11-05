@@ -32,8 +32,11 @@
     '--silver': '#cfd4dc',
     '--bronze': '#d39468',
     '--accent-2': '#8fb3d9',
-    '--chart-grid': 'rgba(255,236,200,0.06)',
-    '--chart-tick': '#8a8377',
+    '--chart-grid': 'rgba(255,236,200,0.1)',
+    '--chart-tick': '#a39b8c',
+    '--chart-muted': 'rgba(196,186,168,0.32)',
+    '--chart-focus': '#e9bf5c',
+    '--text-3': '#9a9285',
     '--surface-solid': '#15171d',
     '--border-strong': 'rgba(255,236,200,0.15)',
     '--text-1': '#f4efe6',
@@ -66,14 +69,6 @@
     return h;
   }
 
-  // Serier i diagrammen: guldet först, sedan dämpade nordiska toner som går
-  // att skilja åt både i mörkt och ljust tema.
-  const PALETTE = [
-    '#e9bf5c', '#8fb3d9', '#7cc2a8', '#ec7a8f', '#b99be8',
-    '#f0a35e', '#6fc9d1', '#d3cc6a', '#9aa6f2', '#df8cc4',
-    '#a9c97c', '#d9a27a', '#b5ada0'
-  ];
-
   /** Initialer på en rund bricka, tonad efter namnet. */
   function avatarHTML(name, cls) {
     return `<span class="avatar${cls ? ` ${cls}` : ''}" style="--hue:${nameHue(name)}" aria-hidden="true">${esc(initials(name))}</span>`;
@@ -94,8 +89,33 @@
 
   const ORDINALS = ['', 'första', 'andra', 'tredje', 'fjärde', 'femte', 'sjätte', 'sjunde', 'åttonde', 'nionde', 'tionde'];
 
-  function formatNumber(n) {
-    return new Intl.NumberFormat('sv-SE').format(n);
+  /**
+   * Alla tal på sidan går genom den här: decimalkomma, tunt mellanrum som
+   * tusentalsavgränsare och riktigt minustecken (sv-SE).
+   *   formatNumber(1523)             → "1 523"
+   *   formatNumber(3.857, 1)         → "3,9"
+   *   formatNumber(35, { sign: true }) → "+35", formatNumber(-9, …) → "−9"
+   */
+  const NUMBER_FORMATS = {};
+  function formatNumber(n, opts) {
+    if (n == null || Number.isNaN(n)) return '—';
+    const o = typeof opts === 'number' ? { decimals: opts } : opts || {};
+    const d = o.decimals == null ? null : o.decimals;
+    const key = `${d}|${o.sign ? 1 : 0}`;
+    if (!NUMBER_FORMATS[key]) {
+      NUMBER_FORMATS[key] = new Intl.NumberFormat('sv-SE', {
+        ...(d == null ? {} : { minimumFractionDigits: d, maximumFractionDigits: d }),
+        ...(o.sign ? { signDisplay: 'exceptZero' } : {})
+      });
+    }
+    return NUMBER_FORMATS[key].format(n);
+  }
+
+  /** Svenska ordningstal i kortform: 1:a, 2:a, 3:e … 11:e, 21:a. */
+  function ordinalShort(n) {
+    const r100 = n % 100;
+    const r10 = n % 10;
+    return `${n}:${(r10 === 1 || r10 === 2) && r100 !== 11 && r100 !== 12 ? 'a' : 'e'}`;
   }
 
   /* ======================================================================
@@ -127,8 +147,9 @@
     achCategory: 'all',
     currentView: null,
     appliedHash: null,
-    modalChart: null,
-    lastFocus: null,
+    pageKey: null, // vilken vy eller sida (år, profil) som visas — styr scrollen
+    pages: {}, // senast byggda års- och profilsida, så bakåt inte bygger om dem
+    yearMap: null,
     game: null,
     gameYear: null,
     gameLoadingYear: null,
@@ -162,6 +183,9 @@
       icon: '🏺',
       colors: ['#7a3f22', '#170e09'],
       cover: 'games/clay.webp',
+      coverBlur:
+        'data:image/webp;base64,UklGRqAAAABXRUJQVlA4IJQAAABwBACdASoYABEAPt1cpUyopSOiMAgBEBuJQBYj5oa2AW9SDyhRXzGqsylzMAD+o3UfRqs+ErfkbmsEIqEzmZ2LUdc5+CbQmjqjf9OBpeTp1bubRPRm/SVEvCukAVUnthB8U0esFnyHsPs6HS9TeQQsm6Bcv/bfgdHnW48CATQJNE9H8F6xZKi2h1VpREe/Ho/HgAAA',
+      coverFocus: '62% 50%',
       module: 'src/games/clay/index.js'
     },
     {
@@ -172,6 +196,8 @@
       icon: '🎨',
       colors: ['#a8482a', '#191a2e'],
       cover: 'games/painting.webp',
+      coverBlur:
+        'data:image/webp;base64,UklGRqoAAABXRUJQVlA4IJ4AAACwBACdASoYABEAPt1kqU+opaOiKAqpEBuJYgAAMAfVYt3O9zpmoU1ZvrpAS7gAAPwhICVpYEiTlVizFnZNdsHD1C2D8GjJ+tL1kpO4nR3/lYZMGpL6B8yFSqGlzd8/opMxnuLL56IYp37atijtjX8TCtSrNYEVj2vWG8sdOZTZSh39wpU4avGw4tVPpSUQOkbuzby4kbr2OcLcrAAAAA==',
       module: 'src/games/painting/index.js'
     },
     {
@@ -182,6 +208,9 @@
       icon: '🏓',
       colors: ['#8e1f28', '#150a0b'],
       cover: 'games/pingis.webp',
+      coverBlur:
+        'data:image/webp;base64,UklGRp4AAABXRUJQVlA4IJIAAABQBQCdASoYABEAPt1kqE+opSOiKAqpEBuJZACxHxAv/gF4kV87JTKSQpc3U9TokleB/AAA/vKmsYfFwlsyMdXekhHh6v/RPYlgXc68B4L0M1eJmydUSMp8Tqb6rt9MizlS/Xn6fq/cvaVJMM3aSI5QBCJgYYt8SrlBWDv55rxPkOAcJfQbDpPb5Duy4mubsPAAAA==',
+      coverFocus: '58% 50%',
       module: 'src/games/pingis/index.js'
     },
     {
@@ -192,6 +221,8 @@
       icon: '🥏',
       colors: ['#9a6a24', '#1a160d'],
       cover: 'games/shooting.webp',
+      coverBlur:
+        'data:image/webp;base64,UklGRqgAAABXRUJQVlA4IJwAAADwBACdASoYABEAPt1kqE+opaOiKAqpEBuJQBllgkb/K7h93rRebjtPCei9WjuTuvAA4mVHz8yADubjz2jbmXIaoOVKv7uSGL/GWtEdslwpfxyXqs09rBcXtE8f8a98IjPlIXENacsS/+MJrCGSqYvj6OybOMnW01YABVefRVhVX04p0jtO9asyPrpcFkMnVVAXk+FkH+TstKFfgAA=',
       module: 'src/games/shooting/index.js'
     },
     {
@@ -202,6 +233,9 @@
       icon: '🤺',
       colors: ['#34446e', '#0c0e18'],
       cover: 'games/fencing.webp',
+      coverBlur:
+        'data:image/webp;base64,UklGRrgAAABXRUJQVlA4IKwAAAAwBQCdASoYABEAPt1grE8opSQiKAqpEBuJYgCxHzQ6SA8RUTXKJh9zJWr3nolQAGPTkAD+3Wp78lig9/j3QkxOgF/044Yhme5uRAyJ542Xwo7Ldg4j8wnb4afyZOMTWAXSkTK9DOwuN7wfhkMJBrqdbqGtHKrloF85WTFPjE1+WBc+XACgHRuphuFwMZCcxIR/DccMiML1/biL8XDc8big9ICLS+nEDAGnJwAA',
+      coverFocus: '44% 50%',
       module: 'src/games/fencing/index.js'
     },
     {
@@ -212,6 +246,8 @@
       icon: '🎣',
       colors: ['#245e69', '#091317'],
       cover: 'games/fishing.webp',
+      coverBlur:
+        'data:image/webp;base64,UklGRq4AAABXRUJQVlA4IKIAAACQBACdASoYABEAPt1YpE2opKMiMBgMARAbiWMAnQAQ1/MEw7Xzp0Oc9t+6W6AA/rYfMLjjvkU2QbdTJ1LRIixebU8F4+/JX7JCD319aDBy5CSkAD7CipN5o3M62AKp65hcNSYwWZhPp3VGPzg4IhMZaL2oKmbFHcSi9J7nopm17NRCQyrl+uIAgCoWN+zV7c0CQW52Gw0+0JWdoZh4y3pUNAA=',
       module: 'src/games/fishing/index.js'
     },
     {
@@ -222,11 +258,19 @@
       icon: '🎯',
       colors: ['#4e2475', '#11091a'],
       cover: 'games/pinball.webp',
+      coverBlur:
+        'data:image/webp;base64,UklGRoAAAABXRUJQVlA4IHQAAABwBACdASoYABEAPt1iqk8opaOiKAqpEBuJQBhmghu+VGekbsZscsIyEqFdwAD+8w2YBEEFMG65ytpU+qENMVB1PkndwTvr+JfUTfPcQ87T5f3vQuwVZkfSnvmOSg8uO1Gswu9E6p8VyKlWCAtvQFRxDIQAAA==',
       module: 'src/games/pinball/index.js'
     }
   ];
 
   const gameRoute = (year) => `#/spel/${year}`;
+  /** Adresserna till årets sida och en deltagares profilsida. */
+  const yearHash = (year) => `#/ar/${year}`;
+  const personHash = (id) => {
+    const p = App.data.participants.find((x) => x.id === id);
+    return `#/deltagare/${p ? slugify(p.name) : id}`;
+  };
 
   /* ======================================================================
      Data loading & processing
@@ -591,7 +635,7 @@
     const eligible = rows.filter((s) => s.starts >= 5);
     if (eligible.length) {
       const bestAvg = [...eligible].sort((a, b) => a.avg - b.avg)[0];
-      facts.push(`Bäst snittplacering (minst 5 starter): ${bestAvg.participant.name} med ${bestAvg.avg.toFixed(1)}.`);
+      facts.push(`Bäst snittplacering (minst 5 starter): ${bestAvg.participant.name} med ${formatNumber(bestAvg.avg, 1)}.`);
     }
 
     const lasts = by('lasts');
@@ -681,10 +725,16 @@
 
   function applyChartTheme() {
     if (typeof Chart === 'undefined') return;
+    // sv-SE ger decimalkomma och mellanslag som tusentalsavgränsare i axlarna
+    Chart.defaults.locale = 'sv-SE';
     Chart.defaults.font.family = "'Schibsted Grotesk', system-ui, sans-serif";
     Chart.defaults.font.size = 12;
+    // Axeltext och förklaringar minst 4,5:1 mot korten i båda teman
     Chart.defaults.color = cssVar('--chart-tick');
     Chart.defaults.borderColor = cssVar('--chart-grid');
+    Chart.defaults.scale.grid.color = cssVar('--chart-grid');
+    Chart.defaults.scale.border.color = cssVar('--border-strong');
+    Chart.defaults.plugins.legend.labels.color = cssVar('--text-2');
     Chart.defaults.plugins.legend.labels.usePointStyle = true;
     Chart.defaults.plugins.legend.labels.boxWidth = 8;
     Chart.defaults.plugins.legend.labels.padding = 14;
@@ -727,11 +777,218 @@
     const g = horizontal
       ? ctx.createLinearGradient(0, 0, canvas.clientWidth || 400, 0)
       : ctx.createLinearGradient(0, canvas.clientHeight || 300, 0, 0);
-    g.addColorStop(0, cssVar('--gold-deep'));
-    g.addColorStop(0.7, cssVar('--gold'));
-    g.addColorStop(1, cssVar('--gold-hi'));
+    // I ljust tema blir det ljusaste guldet nästan osynligt mot elfenbenet,
+    // så staplarna får en mörkare skala där (minst 3:1 i stapelns ände)
+    const stops = currentTheme() === 'light'
+      ? ['#8d6214', '#a8761c', '#b4832a']
+      : [cssVar('--gold-deep'), cssVar('--gold'), cssVar('--gold-hi')];
+    g.addColorStop(0, stops[0]);
+    g.addColorStop(0.7, stops[1]);
+    g.addColorStop(1, stops[2]);
     return g;
   }
+
+  /* ---------- Diagramhjälp: årsaxel, inställda år, fokuslinjer ---------- */
+
+  /** Årtal från första till sista med inställda år (2020) insatta som luckor. */
+  function yearAxis(years) {
+    if (!years.length) return [];
+    const cancelled = new Set(App.data.competitions.filter((c) => c.isCovid).map((c) => c.year));
+    const out = [];
+    for (let y = years[0]; y <= years[years.length - 1]; y++) {
+      if (years.includes(y) || cancelled.has(y)) out.push(y);
+    }
+    return out;
+  }
+
+  const cancelledYears = () => App.data.competitions.filter((c) => c.isCovid).map((c) => c.year);
+
+  /** Ett tonat band med texten "Inställt" över år som inte blev av. */
+  const cancelledBandPlugin = {
+    id: 'ppCancelled',
+    beforeDatasetsDraw(chart) {
+      const { x } = chart.scales;
+      const area = chart.chartArea;
+      const labels = chart.data.labels || [];
+      if (!x || labels.length < 2) return;
+      const step = Math.abs(x.getPixelForValue(1) - x.getPixelForValue(0));
+      const { ctx } = chart;
+      cancelledYears().forEach((year) => {
+        const i = labels.indexOf(year);
+        if (i < 0) return;
+        const px = x.getPixelForValue(i);
+        const w = Math.max(12, step * 0.7);
+        ctx.save();
+        ctx.fillStyle = cssVar('--chart-grid');
+        ctx.fillRect(px - w / 2, area.top, w, area.bottom - area.top);
+        ctx.fillStyle = cssVar('--chart-tick');
+        ctx.font = "600 12px 'Schibsted Grotesk', system-ui, sans-serif";
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'right';
+        ctx.translate(px, area.top + 6);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillText('Inställt', 0, 0);
+        ctx.restore();
+      });
+    }
+  };
+
+  /** Streckad linje där en serie hoppar över år (inställt eller ej start). */
+  const gapDash = (ctx) => (ctx.p0.skip || ctx.p1.skip ? [3, 4] : undefined);
+
+  /**
+   * Namn vid linjernas slut. Den markerade linjen får alltid sitt namn; på
+   * breda diagram får de andra sina också, så länge de inte krockar.
+   */
+  const endLabelsPlugin = {
+    id: 'ppEndLabels',
+    afterDatasetsDraw(chart) {
+      const { ctx, chartArea } = chart;
+      const wide = chart.width >= 520;
+      const items = [];
+      chart.data.datasets.forEach((ds, di) => {
+        if (!ds.ppId) return;
+        const meta = chart.getDatasetMeta(di);
+        for (let i = ds.data.length - 1; i >= 0; i--) {
+          if (ds.data[i] != null && meta.data[i]) {
+            items.push({ x: meta.data[i].x, y: meta.data[i].y, text: ds.label, focus: !!ds.ppFocus });
+            break;
+          }
+        }
+      });
+      items.sort((a, b) => Number(b.focus) - Number(a.focus));
+      const placed = [];
+      const surface = cssVar('--surface');
+      ctx.save();
+      ctx.textBaseline = 'middle';
+      ctx.lineJoin = 'round';
+      items.forEach((it) => {
+        if (!it.focus && !wide) return;
+        ctx.font = it.focus
+          ? "700 13px 'Schibsted Grotesk', system-ui, sans-serif"
+          : "500 12px 'Schibsted Grotesk', system-ui, sans-serif";
+        const w = ctx.measureText(it.text).width;
+        // Till höger om punkten; får det inte plats där, ovanför eller under till vänster
+        const spots = [
+          { x: it.x + 8, y: it.y, align: 'left' },
+          { x: it.x - 4, y: it.y - 13, align: 'right' },
+          { x: it.x - 4, y: it.y + 13, align: 'right' }
+        ];
+        const boxOf = (s) => ({
+          x1: s.align === 'left' ? s.x : s.x - w,
+          x2: s.align === 'left' ? s.x + w : s.x,
+          y1: s.y - 8,
+          y2: s.y + 8
+        });
+        const free = (b) =>
+          b.x2 <= chartArea.right + 6 &&
+          b.y1 >= chartArea.top - 4 &&
+          b.y2 <= chartArea.bottom + 4 &&
+          !placed.some((p) => b.x1 < p.x2 && b.x2 > p.x1 && b.y1 < p.y2 && b.y2 > p.y1);
+        const spot = spots.find((s) => free(boxOf(s)));
+        if (!spot) return;
+        const box = boxOf(spot);
+        const { x, y, align } = spot;
+        placed.push(box);
+        ctx.textAlign = align;
+        ctx.strokeStyle = surface;
+        ctx.lineWidth = 4;
+        ctx.strokeText(it.text, x, y);
+        ctx.fillStyle = it.focus ? cssVar('--text-1') : cssVar('--chart-tick');
+        ctx.fillText(it.text, x, y);
+      });
+      ctx.restore();
+    }
+  };
+
+  /** Stil för fokusdiagram: en markerad linje i guld, resten tunna och dämpade. */
+  function styleFocusDatasets(datasets, focusId) {
+    const focus = cssVar('--chart-focus');
+    const muted = cssVar('--chart-muted');
+    const surface = cssVar('--surface');
+    datasets.forEach((ds) => {
+      const f = ds.ppId === focusId;
+      ds.ppFocus = f;
+      ds.borderColor = f ? focus : muted;
+      ds.backgroundColor = f ? focus : muted;
+      ds.borderWidth = f ? 3 : 1.25;
+      ds.pointRadius = f ? (ds.ppPointRadius || 3.5) : 0;
+      ds.pointHoverRadius = f ? 6 : 4;
+      ds.pointHitRadius = 10;
+      ds.pointBackgroundColor = f ? (ds.ppPointColors || focus) : muted;
+      ds.pointBorderColor = surface;
+      ds.pointBorderWidth = f ? 1.5 : 0;
+      ds.order = f ? 0 : 1;
+    });
+  }
+
+  /** Tryck eller klick på en linje markerar den. */
+  function pickNearestLine(onPick) {
+    return (evt, _els, chart) => {
+      const hit = chart.getElementsAtEventForMode(evt, 'nearest', { intersect: false, axis: 'xy' }, false)[0];
+      if (hit) onPick(chart.data.datasets[hit.datasetIndex].ppId);
+    };
+  }
+
+  /**
+   * Namnchips under ett fokusdiagram. Skapas en gång per diagramkort och
+   * ritas om när markeringen byts. Chipsen är knappar (aria-pressed).
+   */
+  function renderFocusChips(canvasId, people, focusId, onPick, label) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const wrap = canvas.closest('.chart-wrap');
+    let row = document.getElementById(`${canvasId}-focus`);
+    if (!row) {
+      row = document.createElement('div');
+      row.id = `${canvasId}-focus`;
+      row.className = 'chip-row focus-chips';
+      row.setAttribute('role', 'group');
+      row.setAttribute('aria-label', label);
+      wrap.insertAdjacentElement('afterend', row);
+      row.addEventListener('click', (e) => {
+        const chip = e.target.closest('[data-focus]');
+        if (chip) row.ppOnPick(chip.getAttribute('data-focus'));
+      });
+    }
+    row.ppOnPick = onPick;
+    row.innerHTML = `<span class="focus-chips-label" aria-hidden="true">Följ</span>${people
+      .map(
+        (p) =>
+          `<button type="button" class="chip${p.id === focusId ? ' active' : ''}" data-focus="${esc(p.id)}" aria-pressed="${p.id === focusId}">${esc(shortName(p.name))}</button>`
+      )
+      .join('')}`;
+  }
+
+  /** Byt markering i ett befintligt diagram utan att bygga om det. */
+  function refocusChart(canvasId, focusId, describe) {
+    const chart = App.charts[canvasId];
+    if (chart) {
+      styleFocusDatasets(chart.data.datasets, focusId);
+      chart.update(prefersReducedMotion() ? 'none' : undefined);
+    }
+    const row = document.getElementById(`${canvasId}-focus`);
+    if (row) {
+      $$('[data-focus]', row).forEach((chip) => {
+        const on = chip.getAttribute('data-focus') === focusId;
+        chip.classList.toggle('active', on);
+        chip.setAttribute('aria-pressed', String(on));
+      });
+    }
+    const canvas = document.getElementById(canvasId);
+    if (canvas && describe) canvas.setAttribute('aria-label', describe);
+  }
+
+  const personName = (id) => {
+    const p = App.data.participants.find((x) => x.id === id);
+    return p ? shortName(p.name) : '';
+  };
+
+  /** Markerad deltagare i statistikens linjediagram (placering och Elo). */
+  const chartFocus = { stats: null, medals: null };
+  let lastFilterIds = [];
+  const describeElo = () =>
+    `Linjediagram: Elo-rating per år. Markerad: ${personName(chartFocus.stats)}`;
 
   /* ======================================================================
      Rendering — Översikt
@@ -765,6 +1022,7 @@
       nameEl.textContent = 'Okänd';
     }
     $('#hero-year').textContent = latest ? latest.year : '';
+    if (latest) $('#hero-year').setAttribute('href', yearHash(latest.year));
 
     const p = champ ? App.data.participants.find((x) => x.name === champ) : null;
     const s = p ? stats.per[p.id] : null;
@@ -777,16 +1035,22 @@
     }
 
     if (s) {
-      const item = (disc, num, label) => `
-        <li class="cm-item">
+      // Etiketten står före talet för skärmläsare ("Guld: 4"), men visas under det
+      const item = (disc, num, label, title) => `
+        <li class="cm-item${disc ? '' : ' cm-avg'}"${title ? ` title="${esc(title)}"` : ''}>
           <span class="medal-disc ${disc}" aria-hidden="true">${disc ? '' : '⌀'}</span>
-          <span><span class="cm-num">${num}</span><span class="cm-label">${label}</span></span>
+          <span class="cm-text"><span class="cm-num">${num}</span><span class="cm-label">${label}</span></span>
         </li>`;
       $('#hero-champion-medals').innerHTML =
-        item('gold', s.gold, 'Guld') +
-        item('silver', s.silver, 'Silver') +
-        item('bronze', s.bronze, 'Brons') +
-        item('', s.avg.toFixed(1), 'Snitt');
+        item('gold', formatNumber(s.gold), 'Guld') +
+        item('silver', formatNumber(s.silver), 'Silver') +
+        item('bronze', formatNumber(s.bronze), 'Brons') +
+        item(
+          '',
+          formatNumber(s.avg, 1),
+          'Snitt&shy;placering<span class="cm-hint"> · lägre är bättre</span>',
+          `Genomsnittlig placering över ${s.starts} starter — lägre är bättre`
+        );
     }
 
     // Spela-knappen pekar på årets spel om det finns, annars på arkaden
@@ -1092,13 +1356,14 @@
         sub: (() => {
           if (!winsLeader) return '';
           const tied = stats.medalRank.filter((s) => s.gold === winsLeader.gold && s !== winsLeader);
+          const wins = `${formatNumber(winsLeader.gold)} ${winsLeader.gold === 1 ? 'seger' : 'segrar'}`;
           return tied.length
-            ? `${winsLeader.gold} vinster · delas med ${tied.map((s) => shortName(s.participant.name)).join(', ')}`
-            : `${winsLeader.gold} vinster`;
+            ? `${wins} · delas med ${tied.map((s) => shortName(s.participant.name)).join(', ')}`
+            : wins;
         })()
       },
-      { icon: ICONS.star, value: stats.champion ? shortName(stats.champion) : '—', label: 'Regerande', sub: stats.latest ? `${stats.latest.name.trim()} ${stats.latest.year}` : '' },
-      { icon: ICONS.home, value: hostLeader && hostLeader.hostCount ? shortName(hostLeader.participant.name) : '—', label: 'Värdmästare', sub: hostLeader ? `${hostLeader.hostCount} arrangemang` : '' },
+      { icon: ICONS.star, value: stats.champion ? shortName(stats.champion) : '—', label: 'Regerande mästare', sub: stats.latest ? `${stats.latest.name.trim()} ${stats.latest.year}` : '' },
+      { icon: ICONS.home, value: hostLeader && hostLeader.hostCount ? shortName(hostLeader.participant.name) : '—', label: 'Värdmästare', sub: hostLeader ? `${formatNumber(hostLeader.hostCount)} arrangemang` : '' },
       { icon: ICONS.pin, value: locations.size, label: 'Platser', sub: 'besökta', count: true }
     ];
 
@@ -1106,7 +1371,7 @@
       .map(
         (k, i) => `
         <div class="kpi stagger" role="listitem" style="--stagger-i:${i}">
-          <span class="kpi-value${k.count ? '' : ' is-name'}" data-count="${k.count ? k.value : ''}">${k.count ? '0' : esc(k.value)}</span>
+          <span class="kpi-value${k.count ? '' : ' is-name'}" data-count="${k.count ? k.value : ''}">${k.count ? formatNumber(k.value) : esc(k.value)}</span>
           <span class="kpi-label">${esc(k.label)}</span>
           ${k.sub ? `<span class="kpi-sub">${esc(k.sub)}</span>` : ''}
         </div>`
@@ -1148,23 +1413,21 @@
             legend: { display: false },
             tooltip: {
               callbacks: {
-                label: (c) => ` ${c.parsed.x} ${c.parsed.x === 1 ? 'seger' : 'segrar'}`
+                label: (c) => ` ${formatNumber(c.parsed.x)} ${c.parsed.x === 1 ? 'seger' : 'segrar'}`
               }
             }
           },
           scales: {
             x: { grid: { color: cssVar('--chart-grid') }, ticks: { precision: 0 } },
-            y: { grid: { display: false }, ticks: { autoSkip: false } }
+            y: { grid: { display: false }, ticks: { autoSkip: false, color: cssVar('--text-2') } }
           }
         }
       };
     });
 
     registerChart('participation-chart', (canvas) => {
-      const years = [];
-      const minYear = App.stats.byYearAsc[0].year;
-      const maxYear = App.stats.byYearAsc[App.stats.byYearAsc.length - 1].year;
-      for (let y = minYear; y <= maxYear; y++) years.push(y);
+      // Alla år från start till nu; 2020 blir en lucka med ett "Inställt"-band
+      const years = yearAxis(App.stats.byYearAsc.map((c) => c.year));
       const counts = years.map((y) => {
         const comp = App.data.competitions.find((c) => c.year === y);
         return comp && !comp.isCovid && comp.participantCount > 0 ? comp.participantCount : null;
@@ -1186,16 +1449,19 @@
               borderColor: accent2,
               backgroundColor: fill,
               fill: true,
-              tension: 0.35,
+              // Monoton kurva: aldrig under eller över de verkliga värdena
+              cubicInterpolationMode: 'monotone',
               spanGaps: false,
-              pointBackgroundColor: cssVar('--gold'),
-              pointBorderColor: 'transparent',
+              pointBackgroundColor: cssVar('--chart-focus'),
+              pointBorderColor: cssVar('--surface'),
+              pointBorderWidth: 1.5,
               pointRadius: 4,
               pointHoverRadius: 6,
               borderWidth: 2.5
             }
           ]
         },
+        plugins: [cancelledBandPlugin],
         options: {
           maintainAspectRatio: false,
           plugins: {
@@ -1203,12 +1469,12 @@
             tooltip: {
               callbacks: {
                 title: (items) => `År ${items[0].label}`,
-                label: (c) => ` ${c.parsed.y} deltagare`
+                label: (c) => ` ${formatNumber(c.parsed.y)} deltagare`
               }
             }
           },
           scales: {
-            x: { grid: { display: false } },
+            x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkipPadding: 8 } },
             y: { beginAtZero: true, grid: { color: cssVar('--chart-grid') }, ticks: { precision: 0 } }
           }
         }
@@ -1289,7 +1555,7 @@
         .sort((a, b) => a.year - b.year)
         .map(
           (c) =>
-            `<div><strong>${c.year}</strong> · ${esc(c.name.trim())}${c.winner ? ` — 🏆 ${esc(shortName(c.winner))}` : ''}</div>`
+            `<div><a class="pop-year" href="${yearHash(c.year)}">${c.year}</a> · ${esc(c.name.trim())}${c.winner ? ` — 🏆 ${esc(shortName(c.winner))}` : ''}</div>`
         )
         .join('');
       marker.bindPopup(`<div class="pop-title">${esc(name)}</div>${rows}`);
@@ -1420,29 +1686,108 @@
     renderMedalTable();
     initMedalSort();
 
+    renderMedalRace();
+  }
+
+  /**
+   * Medaljracet: medaljer sammanlagt år för år. Tabellen ovanför visar
+   * slutsumman; det här visar när medaljerna kom. En deltagare i taget är
+   * markerad (guldlinje med medaljfärgade prickar), övriga är tunna linjer.
+   */
+  function renderMedalRace() {
+    const canvas = $('#medal-chart');
+    if (!canvas) return;
+    const withMedals = App.stats.medalRank.filter((s) => s.total > 0);
+    if (!withMedals.length) return;
+    if (!chartFocus.medals) chartFocus.medals = withMedals[0].participant.id;
+
+    const card = canvas.closest('.card');
+    if (card && !card.dataset.race) {
+      card.dataset.race = '1';
+      const h = card.querySelector('h2');
+      const sub = card.querySelector('.card-sub');
+      if (h) h.textContent = 'Medaljracet';
+      if (sub) sub.textContent = 'Medaljer sammanlagt, år för år. Prickarna visar när de kom. Tryck på en linje eller ett namn för att följa någon annan.';
+    }
+
+    const years = yearAxis(App.stats.byYearAsc.map((c) => c.year));
+    const medalAt = (s, y) => {
+      const pos = s.yearPositions[y];
+      return pos >= 1 && pos <= 3 ? pos : 0;
+    };
+    const medalColors = { 1: cssVar('--gold'), 2: cssVar('--silver'), 3: cssVar('--bronze') };
+    const medalWord = { 1: 'guld', 2: 'silver', 3: 'brons' };
+
+    const describe = () =>
+      `Linjediagram: medaljer sammanlagt per år. Markerad: ${personName(chartFocus.medals)}`;
+    const pick = (id) => {
+      chartFocus.medals = id;
+      refocusChart('medal-chart', id, describe());
+    };
+
     registerChart('medal-chart', () => {
-      const withMedals = rank.filter((s) => s.total > 0);
+      const datasets = withMedals.map((s) => {
+        let sum = 0;
+        const data = years.map((y) => {
+          if (cancelledYears().includes(y)) return null;
+          sum += medalAt(s, y) ? 1 : 0;
+          return sum;
+        });
+        return {
+          label: shortName(s.participant.name),
+          ppId: s.participant.id,
+          data,
+          ppMedals: years.map((y) => medalAt(s, y)),
+          ppPointColors: years.map((y) => medalColors[medalAt(s, y)] || 'transparent'),
+          ppPointRadius: years.map((y) => (medalAt(s, y) ? 5 : 0)),
+          spanGaps: true,
+          tension: 0,
+          segment: { borderDash: gapDash }
+        };
+      });
+      styleFocusDatasets(datasets, chartFocus.medals);
+      canvas.setAttribute('aria-label', describe());
       return {
-        type: 'bar',
-        data: {
-          labels: withMedals.map((s) => shortName(s.participant.name)),
-          datasets: [
-            { label: 'Guld', data: withMedals.map((s) => s.gold), backgroundColor: cssVar('--gold'), borderRadius: 4, maxBarThickness: 22 },
-            { label: 'Silver', data: withMedals.map((s) => s.silver), backgroundColor: cssVar('--silver'), borderRadius: 4, maxBarThickness: 22 },
-            { label: 'Brons', data: withMedals.map((s) => s.bronze), backgroundColor: cssVar('--bronze'), borderRadius: 4, maxBarThickness: 22 }
-          ]
-        },
+        type: 'line',
+        data: { labels: years, datasets },
+        plugins: [cancelledBandPlugin, endLabelsPlugin],
         options: {
-          indexAxis: 'y',
           maintainAspectRatio: false,
-          plugins: { legend: { position: 'bottom' } },
+          layout: { padding: { right: 8, top: 8 } },
+          interaction: { mode: 'nearest', intersect: false, axis: 'xy' },
+          onClick: pickNearestLine(pick),
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                title: (items) => `${items[0].dataset.label} · ${items[0].label}`,
+                label: (c) => {
+                  const m = c.dataset.ppMedals[c.dataIndex];
+                  const total = formatNumber(c.parsed.y);
+                  return m ? ` Tog ${medalWord[m]} — ${total} medaljer totalt` : ` ${total} medaljer totalt`;
+                }
+              }
+            }
+          },
           scales: {
-            x: { stacked: true, grid: { color: cssVar('--chart-grid') }, ticks: { precision: 0 } },
-            y: { stacked: true, grid: { display: false }, ticks: { autoSkip: false } }
+            x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkipPadding: 8 } },
+            y: {
+              beginAtZero: true,
+              ticks: { precision: 0 },
+              title: { display: true, text: 'Medaljer totalt', color: cssVar('--chart-tick') }
+            }
           }
         }
       };
     });
+
+    renderFocusChips(
+      'medal-chart',
+      withMedals.map((s) => s.participant),
+      chartFocus.medals,
+      pick,
+      'Välj vem som markeras i medaljracet'
+    );
   }
 
   const MEDAL_SORTERS = {
@@ -1466,36 +1811,73 @@
       rows.reverse();
     }
 
+    // På telefon blir varje rad ett rutnät (responsive.css); rollerna håller
+    // kvar tabellsemantiken när display ändras.
     const maxTotal = Math.max(...base.map((s) => s.total), 1);
+    const medalCell = (n, cls, word) =>
+      `<td class="num-col m-${cls}${n ? '' : ' zero'}" role="cell"><span class="pip ${cls}" aria-hidden="true"></span>${formatNumber(n)}<span class="visually-hidden"> ${word}</span></td>`;
     $('#medal-table tbody').innerHTML = rows
       .map((s) => {
         const r = olympicRank.get(s.participant.id);
         const g = (s.gold / maxTotal) * 100;
         const sv = (s.silver / maxTotal) * 100;
         const b = (s.bronze / maxTotal) * 100;
+        const { name, id } = s.participant;
         return `
-        <tr>
-          <td class="rank-col"><span class="rank-badge ${r <= 3 ? `r${r}` : ''}">${r}</span></td>
-          <td><div class="person-cell">${avatarHTML(s.participant.name)}${personLink(s.participant.name, s.participant.id)}</div></td>
-          <td class="num-col${s.gold ? '' : ' zero'}">${s.gold}</td>
-          <td class="num-col${s.silver ? '' : ' zero'}">${s.silver}</td>
-          <td class="num-col${s.bronze ? '' : ' zero'}">${s.bronze}</td>
-          <td class="num-col total${s.total ? '' : ' zero'}">${s.total}</td>
-          <td class="bar-col"><div class="medal-bar"><span class="g" style="width:${g}%"></span><span class="s" style="width:${sv}%"></span><span class="b" style="width:${b}%"></span></div></td>
+        <tr role="row">
+          <td class="rank-col" role="cell"><span class="rank-badge ${r <= 3 ? `r${r}` : ''}">${r}</span></td>
+          <td class="name-col" role="cell"><div class="person-cell">${avatarHTML(name)}<span class="pc-full">${personLink(name, id)}</span><span class="pc-short">${personLink(shortName(name), id)}</span></div></td>
+          ${medalCell(s.gold, 'gold', 'guld')}
+          ${medalCell(s.silver, 'silver', 'silver')}
+          ${medalCell(s.bronze, 'bronze', 'brons')}
+          <td class="num-col total${s.total ? '' : ' zero'}" role="cell">${formatNumber(s.total)}</td>
+          <td class="bar-col" role="cell"><div class="medal-bar" role="img" aria-label="${s.gold} guld, ${s.silver} silver, ${s.bronze} brons"><span class="g" style="width:${g}%"></span><span class="s" style="width:${sv}%"></span><span class="b" style="width:${b}%"></span></div></td>
         </tr>`;
       })
       .join('');
 
     $$('#medal-table thead th[data-sort]').forEach((th) => {
-      const active = th.getAttribute('data-sort') === key;
+      const k = th.getAttribute('data-sort');
+      const active = k === key;
       th.classList.toggle('sorted', active);
-      th.setAttribute('aria-sort', active ? (dir === 1 ? 'descending' : 'ascending') : 'none');
+      // Placering och namn läses stigande (1 först, A först), medaljerna fallande
+      const naturalAsc = k === 'rank' || k === 'name';
+      const asc = naturalAsc ? dir === 1 : dir === -1;
+      th.setAttribute('aria-sort', active ? (asc ? 'ascending' : 'descending') : 'none');
       const arrow = th.querySelector('.sort-arrow');
       if (arrow) arrow.textContent = active ? (dir === 1 ? '↓' : '↑') : '';
     });
   }
 
   function initMedalSort() {
+    const table = $('#medal-table');
+    if (table && !table.dataset.roles) {
+      table.dataset.roles = '1';
+      table.setAttribute('role', 'table');
+      $$('thead, tbody', table).forEach((g) => g.setAttribute('role', 'rowgroup'));
+      $$('thead tr', table).forEach((tr) => tr.setAttribute('role', 'row'));
+      $$('thead th', table).forEach((th) => {
+        th.setAttribute('role', 'columnheader');
+        // Rubriktexten i ett eget element: telefonen visar bara medaljen,
+        // skärmläsaren hör fortfarande "Guld"
+        const label = Array.from(th.childNodes).find((n) => n.nodeType === 3 && n.textContent.trim());
+        if (label) {
+          const span = document.createElement('span');
+          span.className = 'th-label';
+          span.textContent = label.textContent.trim();
+          th.replaceChild(span, label);
+        }
+      });
+      const rankLabel = $('th[data-sort="rank"] .th-label', table);
+      if (rankLabel) {
+        rankLabel.setAttribute('aria-hidden', 'true');
+        rankLabel.insertAdjacentHTML('afterend', '<span class="visually-hidden">Placering</span>');
+      }
+      const coarse = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+      const card = table.closest('.card');
+      const sub = card && card.querySelector('.card-sub');
+      if (sub) sub.textContent = `${coarse ? 'Tryck' : 'Klicka'} på en kolumnrubrik för att sortera, en gång till för att vända ordningen.`;
+    }
     $$('#medal-table thead th[data-sort]').forEach((th) => {
       if (th.dataset.bound) return;
       th.dataset.bound = '1';
@@ -1559,7 +1941,7 @@
         return `
         <article class="tl-item ${comp.year === latestYear ? 'latest' : ''} stagger" style="--stagger-i:${delay}">
           <div class="tl-year-col">
-            <button class="tl-year" type="button" data-year="${comp.year}" aria-label="Alla resultat från ${comp.year}">${comp.year}</button>
+            <a class="tl-year" href="${yearHash(comp.year)}" aria-label="${comp.year}: alla resultat">${comp.year}</a>
           </div>
           <div class="tl-card">
             <img class="tl-photo" data-photo-year="${comp.year}" alt="Foto från ${comp.year}" loading="lazy" hidden />
@@ -1573,7 +1955,7 @@
               </p>
             </div>
             <ol class="tl-podium" aria-label="Pallen ${comp.year}">${podium}</ol>
-            <button class="tl-more" type="button" data-year="${comp.year}">Alla resultat ${arrow}</button>
+            <a class="tl-more" href="${yearHash(comp.year)}">Alla resultat <span class="visually-hidden">${comp.year}</span>${arrow}</a>
           </div>
         </article>`;
       })
@@ -1628,9 +2010,14 @@
     if (card) card.classList.add('has-photo');
   }
 
-  function photoFor(year) {
-    if (App.photos && App.photos[year]) return App.photos[year];
-    return null;
+  /** Årets foto, om det finns: manifestet svarar direkt, annars provar vi
+   *  filen. onFound får en absolut adress; saknas bilden händer ingenting. */
+  function photoFor(year, onFound) {
+    if (!App.photos) {
+      probePhoto(year, onFound);
+      return;
+    }
+    if (App.photos[year]) onFound(new URL(App.photos[year], document.baseURI).toString());
   }
 
   /* ======================================================================
@@ -1890,8 +2277,8 @@
     });
   }
 
-  function sparklineSVG(points, maxPos) {
-    if (points.length < 2) return '<svg class="sparkline"></svg>';
+  function sparklineSVG(points, maxPos, title) {
+    if (points.length < 2) return '<svg class="sparkline" aria-hidden="true"></svg>';
     const w = 200;
     const h = 36;
     const pad = 4;
@@ -1902,7 +2289,9 @@
     const dots = points
       .map((p, i) => (p === 1 ? `<circle cx="${xs(i).toFixed(1)}" cy="${ys(p).toFixed(1)}" r="3"/>` : ''))
       .join('');
-    return `<svg class="sparkline" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><path class="area" d="${area}"/><path class="line" d="${line}"/>${dots}</svg>`;
+    // Siffrorna står i kortet under; titeln ger samma sak som verktygstips
+    const tip = title ? `<title>${esc(title)}</title>` : '';
+    return `<svg class="sparkline" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">${tip}<path class="area" d="${area}"/><path class="line" d="${line}"/>${dots}</svg>`;
   }
 
   function renderStatsView() {
@@ -1922,76 +2311,122 @@
         const golds = years.filter((y) => s.yearPositions[y] === 1).length;
         const maxPos = Math.max(...App.stats.real.map((c) => c.participantCount), 4);
         const seq = years.map((y) => s.yearPositions[y]).filter((v) => v != null);
+        const played = years.filter((y) => s.yearPositions[y] != null);
+        const tip = `${shortName(p.name)}: ${played.map((y) => `${y} ${ordinalShort(s.yearPositions[y])}`).join(', ')} · snitt ${formatNumber(avg, 1)}`;
         return `
         <div class="card ccard stagger" style="--stagger-i:${Math.min(i, 8)}">
           <div class="ccard-top">
             ${avatarHTML(p.name)}
             <div>
               <div class="ccard-name">${personLink(p.name, p.id)}</div>
-              <div class="ccard-medals">${golds} guld · ${positions.length} starter i urvalet</div>
+              <div class="ccard-medals">${formatNumber(golds)} guld · ${formatNumber(positions.length)} ${positions.length === 1 ? 'start' : 'starter'} i urvalet</div>
             </div>
           </div>
-          ${sparklineSVG(seq, maxPos)}
+          ${sparklineSVG(seq, maxPos, tip)}
           <div class="ccard-stats">
-            <div class="ccard-stat"><div class="val">${avg != null ? avg.toFixed(1) : '—'}</div><div class="lbl">Snitt</div></div>
-            <div class="ccard-stat"><div class="val">${best != null ? best : '—'}</div><div class="lbl">Bäst</div></div>
-            <div class="ccard-stat"><div class="val">${positions.length}</div><div class="lbl">Starter</div></div>
+            <div class="ccard-stat"><div class="val">${formatNumber(avg, 1)}</div><div class="lbl">Snitt&shy;placering</div></div>
+            <div class="ccard-stat"><div class="val">${best != null ? ordinalShort(best) : '—'}</div><div class="lbl">Bästa plats</div></div>
+            <div class="ccard-stat"><div class="val">${formatNumber(positions.length)}</div><div class="lbl">Starter</div></div>
           </div>
         </div>`;
       })
       .join('');
 
-    // Trend chart
-    registerChart('trend-chart', () => {
-      const maxPos = Math.max(
-        ...App.stats.real
-          .filter((c) => years.includes(c.year))
-          .map((c) => Math.max(...Object.values(c.scores), 0)),
-        4
-      );
+    // Vem är markerad i linjediagrammen? Den som senast lades till i
+    // deltagarfiltret, annars den som valts med chips eller tryck, annars ettan.
+    const filterIds = [...App.filters.participants];
+    const added = filterIds.filter((id) => !lastFilterIds.includes(id));
+    lastFilterIds = filterIds;
+    if (added.length) chartFocus.stats = added[added.length - 1];
+    const inParts = (id) => parts.some((p) => p.id === id);
+    if (!inParts(chartFocus.stats)) {
+      const leader = App.stats.medalRank.find((s) => inParts(s.participant.id));
+      chartFocus.stats = filterIds.find(inParts) || (leader ? leader.participant.id : parts[0] && parts[0].id) || null;
+    }
+    const describeTrend = () =>
+      `Linjediagram: placering per år, lägre är bättre. Markerad: ${personName(chartFocus.stats)}`;
+    const pickStats = (id) => {
+      chartFocus.stats = id;
+      refocusChart('trend-chart', id, describeTrend());
+      refocusChart('elo-chart', id, describeElo());
+      markEloRow(id);
+    };
+
+    // Placering per år: en markerad linje, övriga tunna i bakgrunden
+    const axisYears = yearAxis(years);
+    registerChart('trend-chart', (canvas) => {
+      const fieldSize = {};
+      App.stats.real.forEach((c) => {
+        fieldSize[c.year] = Math.max(...Object.values(c.scores), 0);
+      });
+      const maxPos = Math.max(...years.map((y) => fieldSize[y] || 0), 4);
+      const datasets = parts.map((p) => {
+        const s = App.stats.per[p.id];
+        return {
+          label: shortName(p.name),
+          ppId: p.id,
+          data: axisYears.map((y) => (s.yearPositions[y] != null ? s.yearPositions[y] : null)),
+          // Raka linjer: en placering mellan två år finns inte
+          tension: 0,
+          spanGaps: true,
+          segment: { borderDash: gapDash }
+        };
+      });
+      styleFocusDatasets(datasets, chartFocus.stats);
+      canvas.setAttribute('aria-label', describeTrend());
       return {
         type: 'line',
-        data: {
-          labels: years,
-          datasets: parts.map((p, i) => {
-            const s = App.stats.per[p.id];
-            return {
-              label: shortName(p.name),
-              data: years.map((y) => (s.yearPositions[y] != null ? s.yearPositions[y] : null)),
-              borderColor: PALETTE[i % PALETTE.length],
-              backgroundColor: PALETTE[i % PALETTE.length],
-              tension: 0.3,
-              spanGaps: true,
-              pointRadius: 3,
-              pointHoverRadius: 6,
-              borderWidth: 2
-            };
-          })
-        },
+        data: { labels: axisYears, datasets },
+        plugins: [cancelledBandPlugin, endLabelsPlugin],
         options: {
           maintainAspectRatio: false,
+          layout: { padding: { right: 8, top: 4 } },
+          interaction: { mode: 'nearest', intersect: false, axis: 'xy' },
+          onClick: pickNearestLine(pickStats),
           plugins: {
-            legend: { position: 'bottom' },
+            legend: { display: false },
             tooltip: {
-              displayColors: true,
-              callbacks: { label: (c) => ` ${c.dataset.label}: plats ${c.parsed.y}` }
+              callbacks: {
+                title: (items) => `${items[0].dataset.label} · ${items[0].label}`,
+                label: (c) => {
+                  const year = c.label;
+                  const comp = App.stats.real.find((x) => String(x.year) === String(year));
+                  return ` ${ordinalShort(c.parsed.y)} av ${formatNumber(fieldSize[year])}${comp ? ` — ${comp.name.trim()}` : ''}`;
+                }
+              }
             }
           },
           scales: {
-            x: { grid: { display: false } },
+            x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkipPadding: 8 } },
             y: {
               reverse: true,
               min: 1,
               suggestedMax: maxPos,
-              grid: { color: cssVar('--chart-grid') },
-              ticks: { precision: 0 }
+              ticks: { precision: 0, callback: (v) => (Number.isInteger(v) ? ordinalShort(v) : '') },
+              title: { display: true, text: 'Placering', color: cssVar('--chart-tick') }
             }
           }
         }
       };
     });
+    renderFocusChips(
+      'trend-chart',
+      parts,
+      chartFocus.stats,
+      pickStats,
+      'Välj vem som markeras i placeringsdiagrammet'
+    );
+    refocusChart('elo-chart', chartFocus.stats, describeElo());
+    markEloRow(chartFocus.stats);
 
-    // Average chart
+    // Snittplacering: liggande staplar som växer mot "1:a". Längst stapel är
+    // bäst och står överst; ljusare staplar har färre än tre starter.
+    const avgCard = $('#avg-chart') && $('#avg-chart').closest('.card');
+    if (avgCard && !avgCard.dataset.relabelled) {
+      avgCard.dataset.relabelled = '1';
+      const sub = avgCard.querySelector('.card-sub');
+      if (sub) sub.textContent = 'Genomsnittlig placering över valda år. Längst stapel är bäst — 1:a betyder seger varje gång. Ljusare stapel: färre än tre starter.';
+    }
     registerChart('avg-chart', (canvas) => {
       const rowsData = parts
         .map((p) => {
@@ -1999,35 +2434,86 @@
           const positions = years.map((y) => s.yearPositions[y]).filter((v) => v != null);
           return {
             name: shortName(p.name),
+            starts: positions.length,
             avg: positions.length ? positions.reduce((a, b) => a + b, 0) / positions.length : null
           };
         })
         .filter((r) => r.avg != null)
-        .sort((a, b) => a.avg - b.avg);
+        .sort((a, b) => a.avg - b.avg || b.starts - a.starts);
+      if (!rowsData.length) return null;
 
+      // Stapelns fot är sista plats i det största startfältet bland valda år
+      const field = Math.max(
+        ...App.stats.real.filter((c) => years.includes(c.year)).map((c) => Math.max(...Object.values(c.scores), 0)),
+        Math.ceil(Math.max(...rowsData.map((r) => r.avg))) + 1,
+        4
+      );
+      const solid = goldGradient(canvas, true);
+      const faint = `${cssVar('--gold-deep')}66`;
+      canvas.setAttribute(
+        'aria-label',
+        `Stapeldiagram: snittplacering, bäst först. ${rowsData
+          .map((r) => `${r.name} ${formatNumber(r.avg, 1)}`)
+          .join(', ')}.`
+      );
+      const valueLabels = {
+        id: 'ppAvgLabels',
+        afterDatasetsDraw(chart) {
+          const { ctx } = chart;
+          const meta = chart.getDatasetMeta(0);
+          ctx.save();
+          ctx.font = "700 12px 'Schibsted Grotesk', system-ui, sans-serif";
+          ctx.textBaseline = 'middle';
+          // Talet står efter stapelns ände, i textfärg mot kortet
+          ctx.textAlign = 'left';
+          ctx.fillStyle = cssVar('--text-1');
+          meta.data.forEach((bar, i) => {
+            ctx.fillText(formatNumber(rowsData[i].avg, 1), Math.max(bar.x, bar.base) + 6, bar.y);
+          });
+          ctx.restore();
+        }
+      };
       return {
         type: 'bar',
         data: {
           labels: rowsData.map((r) => r.name),
           datasets: [
             {
-              data: rowsData.map((r) => +r.avg.toFixed(2)),
-              backgroundColor: goldGradient(canvas, false),
-              borderRadius: 7,
+              data: rowsData.map((r) => [field, r.avg]),
+              backgroundColor: rowsData.map((r) => (r.starts >= 3 ? solid : faint)),
+              borderRadius: 6,
               borderSkipped: false,
-              maxBarThickness: 34
+              barPercentage: 0.78,
+              categoryPercentage: 0.9,
+              maxBarThickness: 22
             }
           ]
         },
+        plugins: [valueLabels],
         options: {
+          indexAxis: 'y',
           maintainAspectRatio: false,
+          layout: { padding: { right: 34 } },
           plugins: {
             legend: { display: false },
-            tooltip: { callbacks: { label: (c) => ` Snittplacering: ${c.parsed.y}` } }
+            tooltip: {
+              callbacks: {
+                label: (c) => {
+                  const r = rowsData[c.dataIndex];
+                  return ` Snittplacering ${formatNumber(r.avg, 1)} · ${formatNumber(r.starts)} ${r.starts === 1 ? 'start' : 'starter'}`;
+                }
+              }
+            }
           },
           scales: {
-            x: { grid: { display: false } },
-            y: { beginAtZero: true, grid: { color: cssVar('--chart-grid') } }
+            x: {
+              reverse: true,
+              min: 1,
+              max: field,
+              ticks: { stepSize: 1, maxRotation: 0, autoSkipPadding: 6, callback: (v) => (Number.isInteger(v) ? ordinalShort(v) : '') },
+              title: { display: true, text: 'Snittplacering → 1:a', color: cssVar('--chart-tick') }
+            },
+            y: { grid: { display: false }, ticks: { autoSkip: false, color: cssVar('--text-2') } }
           }
         }
       };
@@ -2035,6 +2521,7 @@
 
     renderHeatmap(parts, years);
   }
+
 
   function renderHeatmap(parts, years) {
     const worstByYear = {};
@@ -2053,7 +2540,7 @@
 
     const head =
       `<tr><th class="hm-name">Deltagare</th>${
-        years.map((y) => `<th>${String(y).slice(2)}</th>`).join('')
+        years.map((y) => `<th scope="col"><abbr title="${y}" aria-label="${y}">’${String(y).slice(2)}</abbr></th>`).join('')
       }</tr>`;
 
     const body = parts
@@ -2192,53 +2679,116 @@
     $('#elo-standings').innerHTML = current
       .map((e, i) => {
         const dir = e.change > 0 ? 'up' : e.change < 0 ? 'down' : '';
-        const sign = e.change > 0 ? '+' : '';
+        const change = e.change
+          ? `${formatNumber(e.change, { sign: true })}<span class="visually-hidden"> sedan förra starten</span>`
+          : '<span aria-hidden="true">–</span><span class="visually-hidden">oförändrad</span>';
         return `
-        <div class="elo-row" title="${esc(e.participant.name)} · ${e.starts} starter · högsta ${e.peak}">
+        <div class="elo-row" data-elo="${esc(e.participant.id)}" title="${esc(e.participant.name)} · ${formatNumber(e.starts)} starter · högsta ${formatNumber(e.peak)}">
           <span class="elo-rank">${i + 1}</span>
           <span class="elo-name">${personLink(shortName(e.participant.name), e.participant.id)}</span>
-          <span class="elo-rating">${e.rating}</span>
-          <span class="elo-change ${dir}">${e.change ? `${sign}${e.change}` : '–'}</span>
+          <span class="elo-rating">${formatNumber(e.rating)}</span>
+          <span class="elo-change ${dir}">${change}</span>
         </div>`;
       })
       .join('');
 
-    registerChart('elo-chart', () => {
-      // Only chart the top ratings, otherwise the lines turn to spaghetti
-      const shown = current.slice(0, 8);
+    // Alla rankade som tunna linjer; den markerade (samma som i
+    // placeringsdiagrammet) i guld med namn vid linjens slut.
+    const axisYears = yearAxis(years);
+    const pick = (id) => {
+      chartFocus.stats = id;
+      refocusChart('elo-chart', id, describeElo());
+      refocusChart('trend-chart', id, `Linjediagram: placering per år, lägre är bättre. Markerad: ${personName(id)}`);
+      markEloRow(id);
+    };
+    const startLine = {
+      id: 'ppEloStart',
+      beforeDatasetsDraw(chart) {
+        const { y } = chart.scales;
+        if (!y || y.min > 1500 || y.max < 1500) return;
+        const { ctx, chartArea } = chart;
+        const py = y.getPixelForValue(1500);
+        ctx.save();
+        ctx.strokeStyle = cssVar('--border-strong');
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(chartArea.left, py);
+        ctx.lineTo(chartArea.right, py);
+        ctx.stroke();
+        ctx.restore();
+      },
+      // Etiketten ritas ovanpå linjerna, med en kant i kortets färg
+      afterDatasetsDraw(chart) {
+        const { y } = chart.scales;
+        if (!y || y.min > 1500 || y.max < 1500) return;
+        const { ctx, chartArea } = chart;
+        const py = y.getPixelForValue(1500);
+        ctx.save();
+        ctx.fillStyle = cssVar('--chart-tick');
+        ctx.font = "500 12px 'Schibsted Grotesk', system-ui, sans-serif";
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'bottom';
+        ctx.strokeStyle = cssVar('--surface');
+        ctx.lineWidth = 4;
+        ctx.lineJoin = 'round';
+        ctx.strokeText(`Start ${formatNumber(1500)}`, chartArea.left + 4, py - 3);
+        ctx.fillText(`Start ${formatNumber(1500)}`, chartArea.left + 4, py - 3);
+        ctx.restore();
+      }
+    };
+
+    registerChart('elo-chart', (canvas) => {
+      const datasets = current.map((e) => ({
+        label: shortName(e.participant.name),
+        ppId: e.participant.id,
+        data: axisYears.map((y) => history[e.participant.id][y] ?? null),
+        // Monoton kurva: går aldrig förbi årens faktiska värden
+        cubicInterpolationMode: 'monotone',
+        spanGaps: true,
+        segment: { borderDash: gapDash }
+      }));
+      if (!chartFocus.stats && current[0]) chartFocus.stats = current[0].participant.id;
+      styleFocusDatasets(datasets, chartFocus.stats);
+      canvas.setAttribute('aria-label', describeElo());
       return {
         type: 'line',
-        data: {
-          labels: years,
-          datasets: shown.map((e, i) => ({
-            label: shortName(e.participant.name),
-            data: years.map((y) => history[e.participant.id][y] ?? null),
-            borderColor: PALETTE[i % PALETTE.length],
-            backgroundColor: PALETTE[i % PALETTE.length],
-            tension: 0.32,
-            spanGaps: true,
-            borderWidth: 2,
-            pointRadius: 2.5,
-            pointHoverRadius: 6
-          }))
-        },
+        data: { labels: axisYears, datasets },
+        plugins: [cancelledBandPlugin, startLine, endLabelsPlugin],
         options: {
           maintainAspectRatio: false,
-          interaction: { mode: 'nearest', intersect: false },
+          layout: { padding: { right: 8, top: 4 } },
+          interaction: { mode: 'nearest', intersect: false, axis: 'xy' },
+          onClick: pickNearestLine(pick),
           plugins: {
-            legend: { position: 'bottom' },
+            legend: { display: false },
             tooltip: {
-              displayColors: true,
-              callbacks: { label: (c) => ` ${c.dataset.label}: ${c.parsed.y}` }
+              callbacks: {
+                title: (items) => `${items[0].dataset.label} · ${items[0].label}`,
+                label: (c) => ` Elo ${formatNumber(c.parsed.y)}`
+              }
             }
           },
           scales: {
-            x: { grid: { display: false } },
-            y: { grid: { color: cssVar('--chart-grid') } }
+            x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkipPadding: 8 } },
+            y: { title: { display: true, text: 'Elo', color: cssVar('--chart-tick') } }
           }
         }
       };
     });
+
+    renderFocusChips(
+      'elo-chart',
+      current.map((e) => e.participant),
+      chartFocus.stats,
+      pick,
+      'Välj vem som markeras i Elo-diagrammet'
+    );
+    markEloRow(chartFocus.stats);
+  }
+
+  /** Den markerade i Elo-diagrammet lyfts fram i tabellen under. */
+  function markEloRow(id) {
+    $$('#elo-standings .elo-row').forEach((row) => row.classList.toggle('is-focus', row.getAttribute('data-elo') === id));
   }
 
   /* ======================================================================
@@ -2324,10 +2874,14 @@
       .map((comp, i) => {
         const g = byYear[comp.year];
         const cover = g.cover ? new URL(g.cover, document.baseURI).href : '';
+        // Den suddiga miniatyren och bildens fokuspunkt följer med som CSS-variabler
+        const coverVars = [g.coverBlur && `--blur:url('${g.coverBlur}')`, g.coverFocus && `--focus:${g.coverFocus}`]
+          .filter(Boolean)
+          .join(';');
         return `
         <a class="game-card playable${i === 0 ? ' featured' : ''}" href="${gameRoute(comp.year)}" data-game="${comp.year}"
            style="--g1:${g.colors[0]};--g2:${g.colors[1]}" aria-label="Spela ${esc(g.title)}, ${comp.year}">
-          ${cover ? `<span class="game-cover"><img src="${esc(cover)}" alt="" loading="lazy" decoding="async" /></span>` : ''}
+          ${cover ? `<span class="game-cover"${coverVars ? ` style="${esc(coverVars)}"` : ''}><img src="${esc(cover)}" alt="" width="1100" height="773" loading="lazy" decoding="async" /></span>` : ''}
           <span class="game-emblem" aria-hidden="true">${g.icon}</span>
           <span class="game-shade" aria-hidden="true"></span>
           <span class="game-year-big" aria-hidden="true">${comp.year}</span>
@@ -2342,10 +2896,15 @@
       })
       .join('');
 
-    // En affisch utan stillbild faller tillbaka på emblemet
-    $$('#game-grid .game-cover img').forEach((img) =>
-      img.addEventListener('error', () => img.closest('.game-cover').remove(), { once: true })
-    );
+    // Stillbilden tonar in över miniatyren när den laddat; en affisch utan
+    // stillbild faller tillbaka på emblemet
+    $$('#game-grid .game-cover img').forEach((img) => {
+      const box = img.closest('.game-cover');
+      const shown = () => box.classList.add('is-loaded');
+      if (img.complete && img.naturalWidth) shown();
+      img.addEventListener('load', shown, { once: true });
+      img.addEventListener('error', () => box.remove(), { once: true });
+    });
 
     $('#game-soon-grid').innerHTML = soon
       .map(
@@ -2471,282 +3030,821 @@
   }
 
   /* ======================================================================
-     Modal — participant profiles & year details
+     Sidor — en sida per år (#/ar/<år>) och per deltagare (#/deltagare/<namn>)
+     ----------------------------------------------------------------------
+     De var modaler förut. Nu är de vyer som alla andra: de ligger i
+     historiken, tillbakaknappen landar där man var och varje sida har en
+     delningsbar adress med förhandsvisning (scripts/share-pages.mjs).
      ====================================================================== */
 
+  /** Länk till en deltagares profilsida. */
   function personLink(name, id) {
-    return `<button class="person-link" data-person="${esc(id)}" title="Visa profil för ${esc(name)}">${esc(name)}</button>`;
+    return `<a class="person-link" href="${esc(personHash(id))}">${esc(name)}</a>`;
   }
 
-  function openModal(html, onMount) {
-    const modal = $('#modal');
-    // Byter man från en modal till en annan (år → profil) ska fokus ändå
-    // tillbaka dit man var innan den första öppnades.
-    if (modal.hidden) App.lastFocus = document.activeElement;
-    if (App.modalChart) {
-      App.modalChart.destroy();
-      App.modalChart = null;
-    }
-    clearTimeout(App.modalCloseTimer);
-    $('#modal-body').innerHTML = html;
-    modal.hidden = false;
-    document.body.style.overflow = 'hidden';
-    $('.modal-panel').scrollTop = 0;
-    requestAnimationFrame(() => {
-      modal.classList.add('open');
-      $('.modal-panel').focus({ preventScroll: true });
-      if (onMount) onMount();
-    });
-  }
+  /** Sidorna och menyvalet de hör till (det som lyser i menyn). */
+  const PAGE_PARENTS = { year: 'history', person: 'medals' };
 
-  function closeModalNow() {
-    const modal = $('#modal');
-    if (modal.hidden) return;
-    modal.classList.remove('open');
-    if (App.modalChart) {
-      App.modalChart.destroy();
-      App.modalChart = null;
-    }
-    document.body.style.overflow = '';
-    App.modalCloseTimer = setTimeout(() => {
-      modal.hidden = true;
-      $('#modal-body').innerHTML = '';
-      if (App.lastFocus && App.lastFocus.focus && document.contains(App.lastFocus)) {
-        App.lastFocus.focus({ preventScroll: true });
-      }
-    }, 220);
-  }
+  /** Vad som räknas som "en annan sida" för scrollen: ett nytt år eller en ny
+   *  profil är det, ett spel ovanpå arkaden eller en annan sång är det inte. */
+  const pageKey = (route) =>
+    route.view === 'year' ? `year/${route.year}` : route.view === 'person' ? `person/${route.slug}` : route.view;
 
   function medalClassFor(pos) {
     return pos === 1 ? 'gold' : pos === 2 ? 'silver' : pos === 3 ? 'bronze' : '';
   }
 
-  function renderProfile(id) {
-    const p = App.data.participants.find((x) => x.id === id);
-    if (!p) return;
-    const s = App.stats.per[id];
-    if (!s || s.starts === 0) return;
+  const participantByName = (name) => App.data.participants.find((p) => p.name === (name || '').trim());
 
-    const elo = App.elo.current.find((e) => e.participant.id === id);
-    const achIds = (App.achievements.byName[p.name] || []).filter(Boolean);
-    const points = achIds.reduce((sum, aid) => sum + (App.achievements.defById[aid].points || 0), 0);
-
-    const years = Object.keys(s.yearPositions).map(Number).sort((a, b) => a - b);
-    const rivals = rivalRecords(id);
-    const best = rivals.filter((r) => r.winsA > r.winsB).slice(0, 3);
-    const worst = rivals
-      .filter((r) => r.winsB > r.winsA)
-      .slice(-3)
-      .reverse();
-
-    const stat = (val, label) =>
-      `<div class="pf-stat"><div class="val">${esc(String(val))}</div><div class="lbl">${esc(label)}</div></div>`;
-
-    const rivalRow = (r) => `
-      <li>
-        <span class="pf-rival-name">${personLink(shortName(r.opponent.name), r.opponent.id)}</span>
-        <span class="pf-rival-score ${r.winsA > r.winsB ? 'up' : r.winsA < r.winsB ? 'down' : ''}">
-          ${r.winsA}–${r.winsB}
-        </span>
-      </li>`;
-
-    const yearRows = years
-      .slice()
-      .reverse()
-      .map((y) => {
-        const pos = s.yearPositions[y];
-        const comp = App.stats.real.find((c) => c.year === y);
-        const cls = medalClassFor(pos);
-        return `
-          <li>
-            <button class="pf-year-row" data-year="${y}">
-              <span class="pf-year">${y}</span>
-              <span class="pf-comp">${esc(comp ? comp.name.trim() : '')}</span>
-              <span class="pf-pos ${cls}">${pos}</span>
-            </button>
-          </li>`;
-      })
-      .join('');
-
-    const badges = achIds
-      .map((aid) => {
-        const d = App.achievements.defById[aid];
-        return `<span class="badge rarity-${esc(d.rarity)}" title="${esc(d.name)} — ${esc(d.desc)}">${d.icon}</span>`;
-      })
-      .join('');
-
-    const html = `
-      <div class="pf-head">
-        ${avatarHTML(p.name, 'pf-avatar')}
-        <div>
-          <h2 id="modal-title" class="pf-name">${esc(p.name)}</h2>
-          <p class="pf-sub">${s.starts} starter · ${s.gold} guld · ${s.silver} silver · ${s.bronze} brons</p>
-        </div>
-      </div>
-
-      <div class="pf-stats">
-        ${stat(elo ? elo.rating : '—', 'Elo')}
-        ${stat(s.avg != null ? s.avg.toFixed(1) : '—', 'Snitt')}
-        ${stat(s.best != null ? s.best : '—', 'Bästa')}
-        ${stat(s.total, 'Medaljer')}
-        ${stat(points, 'Poäng')}
-        ${stat(s.hostCount, 'Värdskap')}
-      </div>
-
-      <div class="pf-section">
-        <h3>Placering per år</h3>
-        <div class="chart-wrap pf-chart"><canvas id="pf-chart"></canvas></div>
-      </div>
-
-      ${
-  badges
-    ? `<div class="pf-section">
-              <h3>Utmärkelser <span class="pf-count">${achIds.length}</span></h3>
-              <div class="pcard-badges">${badges}</div>
-            </div>`
-    : ''
+  /** ["A"] → "A", ["A", "B", "C"] → "A, B och C" */
+  function listJoin(items) {
+    if (items.length < 2) return items.join('');
+    return `${items.slice(0, -1).join(', ')} och ${items[items.length - 1]}`;
   }
 
-      ${
-  best.length || worst.length
-    ? `<div class="pf-section pf-rivals">
-              ${best.length ? `<div><h3>Äger</h3><ul class="pf-rival-list">${best.map(rivalRow).join('')}</ul></div>` : ''}
-              ${worst.length ? `<div><h3>Ägd av</h3><ul class="pf-rival-list">${worst.map(rivalRow).join('')}</ul></div>` : ''}
-            </div>`
-    : ''
+  const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+  /** "Viktor" → "Viktors", "Lars" → "Lars" */
+  const genitive = (name) => (/[sxz]$/i.test(name) ? name : `${name}s`);
+
+  const PAGE_ICONS = {
+    back: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>',
+    next: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+    share: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3M7 8l5-5 5 5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>',
+    calendar: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
+    pin: '<div class="map-pin"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4Z"/></svg></div>'
+  };
+
+  /**
+   * Elo före och efter ett år, per deltagare: (id) → { before, after, delta }
+   * eller null om deltagaren inte var med (eller året inte räknades).
+   */
+  function eloForYear(year) {
+    const { years, history } = App.elo;
+    const i = years.indexOf(year);
+    if (i < 0) return () => null;
+    const prevYear = years[i - 1];
+    return (id) => {
+      const h = history[id] || {};
+      if (h[year] == null) return null;
+      // Alla startar på 1500 (se computeElo)
+      const before = prevYear != null && h[prevYear] != null ? h[prevYear] : 1500;
+      return { before, after: h[year], delta: h[year] - before };
+    };
   }
 
-      <div class="pf-section">
-        <h3>Alla resultat</h3>
-        <ul class="pf-years">${yearRows}</ul>
+  function eloDeltaHTML(e) {
+    if (!e) return '<span class="elo-delta">–</span>';
+    const dir = e.delta > 0 ? 'up' : e.delta < 0 ? 'down' : '';
+    return `<span class="elo-delta ${dir}"><span class="visually-hidden">Elo </span>${
+      e.delta ? formatNumber(e.delta, { sign: true }) : '±0'
+    }</span>`;
+  }
+
+  const posDiscHTML = (pos) =>
+    `<span class="page-pos ${medalClassFor(pos)}"><span class="visually-hidden">Plats </span>${pos}</span>`;
+
+  /** Överst på varje sida: tillbaka till listan och en delningsknapp. */
+  function pageBarHTML(share) {
+    return `
+      <div class="page-bar">
+        <a class="page-back" href="#/" data-back>${PAGE_ICONS.back}<span class="page-back-label">Tillbaka</span></a>
+        ${
+  share
+    ? `<div class="page-share">
+          <span class="page-share-status" role="status"></span>
+          <button class="btn ghost small page-share-btn" type="button" data-share-path="${esc(share.path)}"
+            data-share-title="${esc(share.title)}" data-share-text="${esc(share.text)}">${PAGE_ICONS.share}<span>Dela</span></button>
+        </div>`
+    : ''
+  }
       </div>`;
-
-    openModal(html, () => {
-      const canvas = document.getElementById('pf-chart');
-      if (!canvas || typeof Chart === 'undefined') return;
-      const maxPos = Math.max(...Object.values(s.yearPositions), 4);
-      const fill = canvas.getContext('2d').createLinearGradient(0, 0, 0, canvas.clientHeight || 200);
-      fill.addColorStop(0, `${cssVar('--gold')}38`);
-      fill.addColorStop(1, `${cssVar('--gold')}00`);
-      App.modalChart = new Chart(canvas, {
-        type: 'line',
-        data: {
-          labels: years,
-          datasets: [
-            {
-              data: years.map((y) => s.yearPositions[y]),
-              borderColor: cssVar('--gold'),
-              backgroundColor: fill,
-              fill: true,
-              tension: 0.32,
-              borderWidth: 2,
-              pointRadius: years.map((y) => (s.yearPositions[y] <= 3 ? 5 : 3)),
-              pointHoverRadius: 7,
-              pointBackgroundColor: years.map((y) =>
-                s.yearPositions[y] <= 3 ? cssVar('--gold-hi') : cssVar('--chart-tick')
-              ),
-              pointBorderColor: 'transparent'
-            }
-          ]
-        },
-        options: {
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            tooltip: { callbacks: { label: (c) => ` Plats ${c.parsed.y}` } }
-          },
-          scales: {
-            x: { grid: { display: false } },
-            y: {
-              reverse: true,
-              min: 1,
-              suggestedMax: maxPos,
-              grid: { color: cssVar('--chart-grid') },
-              ticks: { precision: 0 }
-            }
-          }
-        }
-      });
-    });
   }
 
-  function renderYearDetail(year) {
-    const comp = App.data.competitions.find((c) => c.year === Number(year));
-    if (!comp) return;
+  const BACK_LABELS = {
+    overview: 'Översikten',
+    medals: 'Medaljligan',
+    history: 'Krönikan',
+    achievements: 'Utmärkelserna',
+    stats: 'Statistiken',
+    songs: 'Sångboken',
+    games: 'Arkaden'
+  };
 
+  /**
+   * Årssidan leder alltid tillbaka till Krönikan, profilen till listan man
+   * kom ifrån (Medaljligan om man kom via en direktlänk). Är det just den
+   * listan man kom från går länken bakåt i historiken i stället, så att
+   * man hamnar på samma ställe i listan.
+   */
+  function syncBackLink(view) {
+    const link = $(`#view-${view} [data-back]`);
+    if (!link) return;
+    const ret = history.state && history.state.ret;
+    const retRoute = ret ? parseHash(ret) : null;
+    let href = view === 'year' ? '#/historik' : '#/medaljliga';
+    if (view === 'person' && retRoute && BACK_LABELS[retRoute.view]) href = ret;
+    link.setAttribute('href', href);
+    link.querySelector('.page-back-label').textContent = BACK_LABELS[(parseHash(href) || {}).view] || 'Tillbaka';
+  }
+
+  async function copyText(text) {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (e) {
+      /* prova den gamla vägen */
+    }
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try {
+      ok = document.execCommand('copy');
+    } catch (e) {
+      ok = false;
+    }
+    ta.remove();
+    return ok;
+  }
+
+  /**
+   * "Dela": delningsmenyn där den finns (telefoner), annars kopieras
+   * länken. Länken går till den statiska delningssidan, som bär titel och
+   * bild för förhandsvisningen och skickar besökaren vidare hit.
+   */
+  async function sharePage(btn) {
+    const url = new URL(btn.dataset.sharePath, document.baseURI).toString();
+    const status = btn.parentElement.querySelector('.page-share-status');
+    const say = (msg, sticky) => {
+      status.textContent = msg;
+      status.classList.toggle('is-url', !!sticky);
+      clearTimeout(App.shareTimer);
+      if (!sticky) App.shareTimer = setTimeout(() => (status.textContent = ''), 2600);
+    };
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: btn.dataset.shareTitle, text: btn.dataset.shareText, url });
+        return;
+      } catch (err) {
+        if (err && err.name === 'AbortError') return;
+        /* delningen misslyckades — kopiera i stället */
+      }
+    }
+    const copied = await copyText(url);
+    btn.focus({ preventScroll: true });
+    if (copied) say('Länken är kopierad');
+    else say(url, true);
+  }
+
+  /* ---------- Årssidan ---------- */
+
+  /** Det som är värt att veta om ett år — räknat ur resultaten, inget handskrivet. */
+  function yearFacts(comp, results, elo) {
+    const facts = [];
+    const real = App.stats.byYearAsc;
+    const idx = real.indexOf(comp);
+    const earlier = real.slice(0, idx);
+    const link = (p) => personLink(p.name, p.id);
+    const winners = results.filter((r) => r.pos === 1);
+    const winner = winners.length === 1 ? winners[0].participant : null;
+
+    if (winner) {
+      const n = earlier.filter((c) => c.winner === winner.name).length + 1;
+      facts.push([
+        'Segern',
+        n === 1
+          ? `Första segern någonsin för ${link(winner)}.`
+          : `${capitalize(ORDINALS[n] || ordinalShort(n))} segern för ${link(winner)}.`
+      ]);
+    }
+
+    const prevComp = earlier[earlier.length - 1];
+    const champ = prevComp && prevComp.winner ? participantByName(prevComp.winner) : null;
+    if (champ) {
+      const pos = comp.scores[champ.id];
+      facts.push([
+        'Titelförsvaret',
+        pos === 1
+          ? `${link(champ)} försvarade titeln från ${prevComp.year}.`
+          : pos != null
+            ? `Regerande mästaren ${link(champ)} slutade ${ordinalShort(pos)}.`
+            : `Regerande mästaren ${link(champ)} stod över.`
+      ]);
+    }
+
+    // Elo inför tävlingen: vem var favorit, vem skrällde, vem rörde sig mest
+    const rated = results
+      .map((r) => ({ p: r.participant, pos: r.pos, e: elo(r.participant.id) }))
+      .filter((x) => x.e);
+    if (rated.length >= 4 && new Set(rated.map((x) => x.e.before)).size > 1) {
+      const byBefore = [...rated].sort((a, b) => b.e.before - a.e.before);
+      const fav = byBefore[0];
+      const w = winner ? byBefore.findIndex((x) => x.p === winner) : -1;
+      const half = Math.ceil(byBefore.length / 2);
+      if (w >= half) {
+        facts.push(['Skrällen', `${link(winner)} gick in som nummer ${w + 1} av ${byBefore.length} på Elo — och vann.`]);
+      } else if (fav.p !== winner && fav.pos > half) {
+        facts.push(['Favoriten', `${link(fav.p)} hade högst Elo inför tävlingen men slutade ${ordinalShort(fav.pos)}.`]);
+      }
+      const byDelta = [...rated].sort((a, b) => b.e.delta - a.e.delta);
+      const up = byDelta[0];
+      const down = byDelta[byDelta.length - 1];
+      if (up.e.delta > 0) {
+        facts.push(['Elo-lyftet', `${link(up.p)} tog ${formatNumber(up.e.delta, { sign: true })} och landade på ${formatNumber(up.e.after)}.`]);
+      }
+      if (down.e.delta < 0) {
+        facts.push(['Elo-raset', `${link(down.p)} tappade ${formatNumber(-down.e.delta)}, ner till ${formatNumber(down.e.after)}.`]);
+      }
+    }
+
+    let climb = null;
+    results.forEach((r) => {
+      const ys = App.stats.per[r.participant.id].yearPositions;
+      const last = earlier.filter((c) => ys[c.year] != null).pop();
+      if (!last) return;
+      const diff = ys[last.year] - r.pos;
+      if (!climb || diff > climb.diff) climb = { p: r.participant, diff, from: ys[last.year], year: last.year, to: r.pos };
+    });
+    if (climb && climb.diff >= 3) {
+      facts.push(['Klättringen', `${link(climb.p)} gick från ${ordinalShort(climb.from)} (${climb.year}) till ${ordinalShort(climb.to)}.`]);
+    }
+
+    if (idx > 0) {
+      const debut = results.filter((r) => !earlier.some((c) => c.scores[r.participant.id] != null));
+      if (debut.length) facts.push(['Debut', `${listJoin(debut.map((r) => link(r.participant)))} debuterade.`]);
+
+      const maxField = Math.max(...real.map((c) => c.participantCount));
+      if (comp.participantCount === maxField) {
+        const first = real.find((c) => c.participantCount === maxField);
+        facts.push([
+          'Startfältet',
+          first === comp
+            ? `Rekordmånga: ${comp.participantCount} deltagare.`
+            : `${comp.participantCount} deltagare — lika många som rekordåret ${first.year}.`
+        ]);
+      }
+    }
+    return facts;
+  }
+
+  /** Föregående och nästa år. Inställda år hoppas över men nämns. */
+  function yearPagerHTML(year, prev, next) {
+    const skipped = App.data.competitions
+      .filter(
+        (c) =>
+          c.isCovid &&
+          ((prev && c.year > prev.year && c.year < year) || (next && c.year > year && c.year < next.year))
+      )
+      .map((c) => c.year)
+      .sort((a, b) => a - b);
+    const link = (c, dir) =>
+      c
+        ? `<a class="pager-link ${dir}" href="${yearHash(c.year)}" rel="${dir}">
+            <span class="pager-dir">${dir === 'prev' ? `${PAGE_ICONS.back} Föregående` : `Nästa ${PAGE_ICONS.next}`}</span>
+            <span class="pager-year">${c.year}</span>
+            <span class="pager-name">${esc(c.name.trim())}</span>
+          </a>`
+        : `<span class="pager-link ${dir} is-empty" aria-hidden="true"></span>`;
+    return `
+      <nav class="page-pager" aria-label="Andra år">
+        ${link(prev, 'prev')}
+        <p class="pager-gap">${skipped.length ? `${skipped.join(', ')} · Inställt — pandemi` : ''}</p>
+        ${link(next, 'next')}
+      </nav>`;
+  }
+
+  /** En liten, stillastående karta med årets nål. */
+  function mountYearMap(comp) {
+    const el = document.getElementById('year-map');
+    if (App.yearMap && el && App.yearMap.getContainer() === el) {
+      App.yearMap.invalidateSize();
+      return;
+    }
+    if (App.yearMap) {
+      App.yearMap.remove();
+      App.yearMap = null;
+    }
+    const coords = LOCATION_COORDS[comp.location];
+    if (!el || !coords || typeof L === 'undefined') return;
+    const provider = TILE_PROVIDERS[App.mapProvider] || TILE_PROVIDERS[0];
+    const map = L.map(el, {
+      center: coords,
+      zoom: 7,
+      zoomControl: false,
+      attributionControl: false, // står under kartan i stället
+      dragging: false,
+      touchZoom: false,
+      scrollWheelZoom: false,
+      doubleClickZoom: false,
+      boxZoom: false,
+      keyboard: false
+    });
+    L.tileLayer(provider.url, provider.options).addTo(map);
+    L.marker(coords, {
+      icon: L.divIcon({ className: '', html: PAGE_ICONS.pin, iconSize: [30, 30], iconAnchor: [15, 28] }),
+      interactive: false,
+      keyboard: false
+    }).addTo(map);
+    App.yearMap = map;
+  }
+
+  function renderYearPage(year) {
+    const comp = App.data.competitions.find((c) => c.year === year);
+    if (!comp) return null;
+    const view = $('#view-year');
+    const real = App.stats.byYearAsc;
+    const prev = [...real].reverse().find((c) => c.year < year) || null;
+    const next = real.find((c) => c.year > year) || null;
+    const pager = yearPagerHTML(year, prev, next);
+
+    if (comp.isCovid || comp.participantCount === 0) {
+      view.innerHTML = `
+        ${pageBarHTML(null)}
+        <header class="yp-hero is-off">
+          <p class="eyebrow yp-eyebrow">Ingen upplaga</p>
+          <h1 class="yp-title" id="year-title"><span class="yp-year">${year}</span> <span class="yp-name">Inställt — pandemi</span></h1>
+          <p class="yp-lede">Pokalen tog en paus, men traditionen överlevde.</p>
+        </header>
+        ${pager}`;
+      return { title: `${year}: inställt — Pekkas Pokal` };
+    }
+
+    const name = comp.name.trim();
+    const edition = real.indexOf(comp) + 1;
+    const earlier = real.slice(0, edition - 1);
+    const elo = eloForYear(year);
     const results = Object.entries(comp.scores)
-      .map(([pid, pos]) => ({
-        participant: App.data.participants.find((x) => x.id === pid),
-        pos
-      }))
+      .map(([pid, pos]) => ({ participant: App.data.participants.find((x) => x.id === pid), pos }))
       .filter((r) => r.participant)
-      .sort((a, b) => a.pos - b.pos);
+      .sort((a, b) => a.pos - b.pos || a.participant.name.localeCompare(b.participant.name, 'sv'));
+    const winners = results.filter((r) => r.pos === 1).map((r) => r.participant);
+    const hostNames = [comp.arranger3rd, comp.arrangerSecondLast].map((h) => (h || '').trim()).filter(Boolean);
+    const hostLinks = hostNames.map((h) => {
+      const p = participantByName(h);
+      return p ? personLink(p.name, p.id) : esc(h);
+    });
+    const game = GAMES.find((g) => g.year === year);
+    const songs = (typeof PEKKAS_SONGS === 'undefined' ? [] : PEKKAS_SONGS.filter((s) => s.year === year))
+      // Vinnarlåten först
+      .sort((a, b) => /vinnare/i.test(b.subtitle || '') - /vinnare/i.test(a.subtitle || ''));
+    const coords = LOCATION_COORDS[comp.location];
 
-    const hosts = [comp.arranger3rd, comp.arrangerSecondLast].filter(Boolean).join(' & ');
-    const photo = photoFor(comp.year);
+    const meta = [
+      comp.location && `<li><span class="yp-ico" aria-hidden="true">${ICONS.pin}</span>${esc(comp.location)}</li>`,
+      comp.date &&
+        `<li><span class="yp-ico" aria-hidden="true">${PAGE_ICONS.calendar}</span><time datetime="${comp.date.toISOString().slice(0, 10)}">${comp.date.toLocaleDateString('sv-SE', { day: 'numeric', month: 'long', year: 'numeric' })}</time></li>`,
+      `<li><span class="yp-ico" aria-hidden="true">${ICONS.users}</span>${comp.participantCount} deltagare</li>`
+    ]
+      .filter(Boolean)
+      .join('');
 
-    const rows = results
+    const podium = [1, 2, 3]
+      .map((pos) => ({ pos, people: results.filter((r) => r.pos === pos).map((r) => r.participant) }))
+      .filter((pl) => pl.people.length)
       .map(
-        (r) => `
-        <li class="yd-row">
-          <span class="yd-pos ${medalClassFor(r.pos)}">${r.pos}</span>
-          ${avatarHTML(r.participant.name, 'yd-avatar')}
-          <span class="yd-name">${personLink(r.participant.name, r.participant.id)}</span>
+        (pl) => `
+        <li class="yp-place p${pl.pos}">
+          <a class="yp-podium-avatar" href="${esc(personHash(pl.people[0].id))}" tabindex="-1" aria-hidden="true">${esc(initials(pl.people[0].name))}</a>
+          <span class="yp-podium-names">${pl.people.map((p) => personLink(p.name, p.id)).join('<br />')}</span>
+          <span class="yp-podium-block">${posDiscHTML(pl.pos).replace('page-pos', 'yp-podium-num')}</span>
         </li>`
       )
       .join('');
 
-    const html = `
-      <div class="yd-head">
-        <span class="yd-year">${comp.year}</span>
-        <h2 id="modal-title" class="yd-title">${esc(comp.name.trim())}</h2>
-        <p class="yd-meta">
-          ${comp.location ? `${ICONS.pin} ${esc(comp.location)} · ` : ''}${comp.participantCount} deltagare${
-    hosts ? ` · Arrangörer: ${esc(hosts)}` : ''
+    const rows = results
+      .map((r) => {
+        const { id } = r.participant;
+        const tags = [
+          hostNames.includes(r.participant.name) ? '<span class="page-tag">arrangör</span>' : '',
+          edition > 1 && !earlier.some((c) => c.scores[id] != null) ? '<span class="page-tag new">debut</span>' : ''
+        ].join('');
+        return `
+        <li class="yp-row${r.pos <= 3 ? ' top' : ''}">
+          ${posDiscHTML(r.pos)}
+          ${avatarHTML(r.participant.name, 'yp-avatar')}
+          <span class="yp-person">${personLink(r.participant.name, id)}${tags}</span>
+          ${eloDeltaHTML(elo(id))}
+        </li>`;
+      })
+      .join('');
+
+    const facts = yearFacts(comp, results, elo);
+    const SONGS_SHOWN = 4;
+    const coordText = coords ? `${coords[0].toFixed(4)}°N · ${coords[1].toFixed(4)}°E` : '';
+    const gameArt = game && game.cover
+      ? `<img src="${esc(new URL(game.cover, document.baseURI).href)}" alt="" width="1100" height="773" loading="lazy" decoding="async" />`
+      : `<span class="yp-game-emblem" aria-hidden="true">${game ? game.icon : ''}</span>`;
+
+    const aside = [
+      `<figure class="card page-card yp-photo" hidden><img alt="Foto från ${year}" decoding="async" /></figure>`,
+      game
+        ? `<a class="card page-card yp-game" href="${gameRoute(year)}" style="--g1:${game.colors[0]};--g2:${game.colors[1]}">
+            <span class="yp-game-cover" data-icon="${esc(game.icon)}">${gameArt}</span>
+            <span class="yp-game-body">
+              <span class="page-kicker">Årets spel</span>
+              <span class="yp-game-title">${esc(game.title)}</span>
+              <span class="yp-game-tagline">${esc(game.tagline)}</span>
+              <span class="btn small yp-game-play">Spela årets spel ${PAGE_ICONS.next}</span>
+            </span>
+          </a>`
+        : '',
+      facts.length
+        ? `<section class="card page-card yp-facts" aria-labelledby="yp-facts-h">
+            <h2 class="page-h2" id="yp-facts-h">Värt att veta</h2>
+            <dl class="yp-fact-list">${facts.map(([k, v]) => `<div class="yp-fact"><dt>${esc(k)}</dt><dd>${v}</dd></div>`).join('')}</dl>
+          </section>`
+        : '',
+      songs.length
+        ? `<section class="card page-card yp-songs" aria-labelledby="yp-songs-h">
+            <h2 class="page-h2" id="yp-songs-h">Ur sångboken <span class="page-count">${songs.length}</span></h2>
+            <ul class="yp-song-list">${songs
+    .slice(0, SONGS_SHOWN)
+    .map(
+      (s) => `<li><a class="yp-song" href="#/sangbok/${esc(s.id)}"><span class="yp-song-title">${esc(s.title)}</span>${
+        s.subtitle ? `<span class="yp-song-sub">${esc(s.subtitle)}</span>` : ''
+      }</a></li>`
+    )
+    .join('')}</ul>
+            ${songs.length > SONGS_SHOWN ? `<a class="page-more" href="#/sangbok/${esc(songs[SONGS_SHOWN].id)}">${songs.length - SONGS_SHOWN} till i sångboken ${PAGE_ICONS.next}</a>` : ''}
+          </section>`
+        : '',
+      coords
+        ? `<section class="card page-card yp-map-card" aria-labelledby="yp-map-h">
+            <h2 class="page-h2" id="yp-map-h">Platsen</h2>
+            <div class="yp-map" id="year-map" aria-hidden="true"></div>
+            <p class="yp-coords"><span class="mono">${esc(comp.location)} · ${coordText}</span>
+              <span class="yp-attrib">Karta © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> ·
+              <a href="https://www.openstreetmap.org/?mlat=${coords[0]}&amp;mlon=${coords[1]}#map=11/${coords[0]}/${coords[1]}" target="_blank" rel="noopener">Öppna kartan<span class="visually-hidden"> (ny flik)</span></a></span></p>
+          </section>`
+        : ''
+    ].join('');
+
+    const share = {
+      path: `ar/${year}/`,
+      title: `Pekkas Pokal ${year} — ${name}`,
+      text: winners.length
+        ? `${listJoin(winners.map((p) => p.name))} vann ${name}${comp.location ? ` i ${comp.location}` : ''} ${year}.`
+        : `${name} ${year}`
+    };
+
+    view.innerHTML = `
+      ${pageBarHTML(share)}
+      <header class="yp-hero">
+        <p class="eyebrow yp-eyebrow">Upplaga ${edition} av ${real.length}</p>
+        <h1 class="yp-title" id="year-title"><span class="yp-year">${year}</span> <span class="yp-name">${esc(name)}</span></h1>
+        <ul class="yp-meta">${meta}</ul>
+        ${hostLinks.length ? `<p class="yp-hosts"><span class="page-kicker">Arrangörer</span> ${listJoin(hostLinks)}</p>` : ''}
+      </header>
+      <div class="page-grid">
+        <div class="page-col page-main">
+          <section class="card page-card yp-podium-card" aria-labelledby="yp-podium-h">
+            <h2 class="page-h2" id="yp-podium-h">Pallen</h2>
+            <ol class="yp-podium">${podium}</ol>
+          </section>
+          <section class="card page-card yp-results-card" aria-labelledby="yp-results-h">
+            <div class="page-card-head">
+              <h2 class="page-h2" id="yp-results-h">Alla resultat</h2>
+              <span class="page-col-label" aria-hidden="true">Elo ±</span>
+            </div>
+            <ol class="yp-results">${rows}</ol>
+          </section>
+        </div>
+        <div class="page-col page-aside">${aside}</div>
+      </div>
+      ${pager}`;
+
+    // En affisch som inte laddar ersätts av spelets emblem
+    const cover = $('.yp-game-cover img', view);
+    if (cover) {
+      const box = cover.parentElement;
+      const toEmblem = () => {
+        box.innerHTML = `<span class="yp-game-emblem" aria-hidden="true">${esc(box.dataset.icon)}</span>`;
+      };
+      cover.addEventListener('error', toEmblem, { once: true });
+    }
+    const figure = $('.yp-photo', view);
+    photoFor(year, (src) => {
+      if (!figure.isConnected) return;
+      figure.querySelector('img').src = src;
+      figure.hidden = false;
+    });
+
+    return { title: `${name} ${year} — Pekkas Pokal`, mount: () => mountYearMap(comp) };
   }
-        </p>
-        ${
-  GAMES.some((g) => g.year === comp.year)
-    ? `<div class="yd-actions"><a class="btn small" href="${gameRoute(comp.year)}">Spela årets spel</a></div>`
+
+  /* ---------- Profilsidan ---------- */
+
+  function renderProfile(id) {
+    const p = App.data.participants.find((x) => x.id === id);
+    const s = p && App.stats.per[id];
+    if (!s || s.starts === 0) return null;
+    const view = $('#view-person');
+
+    const eloRank = App.elo.current.findIndex((e) => e.participant.id === id);
+    const elo = App.elo.current[eloRank];
+    const { defById } = App.achievements;
+    const RARITY = { mythic: 0, legendary: 1, epic: 2, rare: 3, common: 4 };
+    const achIds = (App.achievements.byName[p.name] || [])
+      .filter((aid) => defById[aid])
+      .sort((a, b) => RARITY[defById[a].rarity] - RARITY[defById[b].rarity]);
+    const points = achIds.reduce((sum, aid) => sum + (defById[aid].points || 0), 0);
+
+    const years = Object.keys(s.yearPositions).map(Number).sort((a, b) => a - b);
+    const compOf = (y) => App.stats.real.find((c) => c.year === y);
+    const hosted = App.stats.byYearAsc
+      .filter((c) => [c.arranger3rd, c.arrangerSecondLast].some((h) => (h || '').trim() === p.name))
+      .map((c) => c.year);
+    const bestYears = years.filter((y) => s.yearPositions[y] === s.best);
+    const isChampion = App.stats.champion === p.name;
+    const parts = p.name.trim().split(/\s+/);
+    const last = parts.length > 1 ? parts.pop() : '';
+    const first = parts.join(' ');
+    const dot = (cls, n, label) =>
+      `<span class="page-medal"><span class="medal-dot ${cls}" aria-hidden="true"></span>${n}<span class="visually-hidden"> ${label}</span></span>`;
+    const kpi = (label, value, sub) => `
+      <div class="page-kpi" role="listitem">
+        <span class="page-kpi-label">${label}</span>
+        <span class="page-kpi-value">${value}</span>
+        ${sub ? `<span class="page-kpi-sub">${sub}</span>` : ''}
+      </div>`;
+
+    const ledger = [
+      kpi('Elo', elo ? formatNumber(elo.rating) : '—', elo ? `${ordinalShort(eloRank + 1)} av ${App.elo.current.length} · topp ${formatNumber(elo.peak)}` : ''),
+      kpi('Snittplacering', formatNumber(s.avg, 1), `på ${s.starts} ${s.starts === 1 ? 'start' : 'starter'}`),
+      kpi('Bästa placering', ordinalShort(s.best), bestYears.length > 1 ? `${bestYears.length} gånger` : `år ${bestYears[0]}`),
+      kpi('Medaljer', s.total, `${dot('gold', s.gold, 'guld')}${dot('silver', s.silver, 'silver')}${dot('bronze', s.bronze, 'brons')}`),
+      kpi('Poäng', formatNumber(points), `${achIds.length} ${achIds.length === 1 ? 'utmärkelse' : 'utmärkelser'}`),
+      kpi('Värdskap', s.hostCount, hosted.length ? `senast ${hosted[hosted.length - 1]}` : 'inte än')
+    ].join('');
+
+    const yearRows = [...years]
+      .reverse()
+      .map((y) => {
+        const c = compOf(y);
+        const pos = s.yearPositions[y];
+        return `
+        <li>
+          <a class="prof-year" href="${yearHash(y)}">
+            <span class="prof-year-num">${y}</span>
+            <span class="prof-year-body">
+              <span class="prof-year-comp">${esc(c ? c.name.trim() : '')}${hosted.includes(y) ? '<span class="page-tag">värd</span>' : ''}</span>
+              <span class="prof-year-meta">${c && c.location ? `${esc(c.location)} · ` : ''}${ordinalShort(pos)} av ${c ? c.participantCount : '?'}</span>
+            </span>
+            ${eloDeltaHTML(eloForYear(y)(id))}
+            ${posDiscHTML(pos)}
+          </a>
+        </li>`;
+      })
+      .join('');
+
+    const coin = (cls, n, label) =>
+      `<div class="prof-coin"><span class="medal-disc ${cls}" aria-hidden="true"></span><span class="prof-coin-num">${n}</span><span class="prof-coin-label">${label}</span></div>`;
+    const achList = achIds
+      .map((aid) => {
+        const d = defById[aid];
+        return `
+        <li class="prof-ach">
+          <span class="badge rarity-${esc(d.rarity)}" aria-hidden="true">${d.icon}</span>
+          <span class="prof-ach-text"><span class="prof-ach-name">${esc(d.name)}</span><span class="prof-ach-desc">${esc(d.desc)}</span></span>
+          <span class="prof-ach-pts">${formatNumber(d.points || 0)}<span class="visually-hidden"> poäng</span></span>
+        </li>`;
+      })
+      .join('');
+
+    // Inbördes möten: vem placerade sig högst de år båda var med
+    const rivals = rivalRecords(id);
+    const h2hRow = (r) => {
+      const total = r.winsA + r.winsB;
+      const dir = r.winsA > r.winsB ? 'up' : r.winsA < r.winsB ? 'down' : '';
+      return `
+        <li class="prof-h2h-row">
+          ${avatarHTML(r.opponent.name, 'prof-h2h-avatar')}
+          <span class="prof-h2h-name">${personLink(r.opponent.name, r.opponent.id)}</span>
+          <span class="prof-h2h-bar" aria-hidden="true"><span style="width:${total ? Math.round((r.winsA / total) * 100) : 50}%"></span></span>
+          <span class="prof-h2h-score ${dir}"><span aria-hidden="true">${r.winsA}–${r.winsB}</span><span class="visually-hidden">${r.winsA} mot ${r.winsB}</span></span>
+        </li>`;
+    };
+    const h2hGroups = [
+      ['Äger', rivals.filter((r) => r.winsA > r.winsB)],
+      ['Jämnt', rivals.filter((r) => r.winsA === r.winsB)],
+      ['Ägd av', rivals.filter((r) => r.winsA < r.winsB).reverse()]
+    ]
+      .filter(([, list]) => list.length)
+      .map(([label, list]) => `<h3 class="prof-h2h-label">${label}</h3><ul class="prof-h2h-list">${list.map(h2hRow).join('')}</ul>`)
+      .join('');
+
+    const gameRows = GAMES.filter((g) => s.yearPositions[g.year] != null)
+      .sort((a, b) => b.year - a.year)
+      .map((g) => {
+        const art = g.cover
+          ? `<img src="${esc(new URL(g.cover, document.baseURI).href)}" alt="" width="1100" height="773" loading="lazy" decoding="async" />`
+          : `<span aria-hidden="true">${g.icon}</span>`;
+        return `
+        <li><a class="prof-game" href="${gameRoute(g.year)}">
+          <span class="prof-game-thumb" style="--g1:${g.colors[0]};--g2:${g.colors[1]}">${art}</span>
+          <span class="prof-game-text"><span class="prof-game-title">${esc(g.title)}</span><span class="prof-game-meta">${g.year} · ${ordinalShort(s.yearPositions[g.year])} i verkligheten</span></span>
+          ${PAGE_ICONS.next}
+        </a></li>`;
+      })
+      .join('');
+
+    const share = {
+      path: `deltagare/${slugify(p.name)}/`,
+      title: `${p.name} — Pekkas Pokal`,
+      text: `${p.name}: ${s.starts} ${s.starts === 1 ? 'start' : 'starter'}, ${s.gold} guld, ${s.silver} silver och ${s.bronze} brons i Pekkas Pokal.`
+    };
+
+    view.innerHTML = `
+      ${pageBarHTML(share)}
+      <header class="prof-hero">
+        ${avatarHTML(p.name, `prof-avatar${isChampion ? ' is-champion' : ''}`)}
+        <div class="prof-hero-text">
+          <p class="eyebrow prof-eyebrow">Deltagare sedan ${years[0]}${isChampion ? ' <span class="tag">regerande mästare</span>' : ''}</p>
+          <h1 class="prof-name" id="person-title"><span class="first">${esc(first)}</span>${last ? ` <span class="last">${esc(last)}</span>` : ''}</h1>
+        </div>
+      </header>
+      <div class="page-ledger" role="list" aria-label="Nyckeltal">${ledger}</div>
+      <div class="page-grid">
+        <div class="page-col page-main">
+          <section class="card page-card prof-chart-card" aria-labelledby="prof-chart-h">
+            <div class="page-card-head">
+              <h2 class="page-h2" id="prof-chart-h">Placering per år</h2>
+              <p class="page-card-sub">1:a överst · varje punkt leder till året</p>
+            </div>
+            <div class="prof-chart"><canvas id="person-chart" role="img" aria-label="Linjediagram: ${esc(genitive(first))} placering per år"></canvas></div>
+          </section>
+          <section class="card page-card prof-years-card" aria-labelledby="prof-years-h">
+            <div class="page-card-head">
+              <h2 class="page-h2" id="prof-years-h">År för år <span class="page-count">${s.starts}</span></h2>
+              <span class="page-col-label" aria-hidden="true">Elo ±</span>
+            </div>
+            <ol class="prof-years">${yearRows}</ol>
+          </section>
+          ${
+  gameRows
+    ? `<section class="card page-card prof-games" aria-labelledby="prof-games-h">
+            <h2 class="page-h2" id="prof-games-h">Spelen från ${esc(genitive(first))} år</h2>
+            <ul class="prof-game-list">${gameRows}</ul>
+          </section>`
     : ''
   }
-      </div>
-      ${photo ? `<img class="yd-photo" src="${esc(photo)}" alt="Foto från ${comp.year}" />` : ''}
-      <ol class="yd-results">${rows}</ol>`;
+        </div>
+        <div class="page-col page-aside">
+          <section class="card page-card prof-honours" aria-labelledby="prof-honours-h">
+            <h2 class="page-h2" id="prof-honours-h">Medaljer och utmärkelser</h2>
+            <div class="prof-coins">${coin('gold', s.gold, 'Guld')}${coin('silver', s.silver, 'Silver')}${coin('bronze', s.bronze, 'Brons')}</div>
+            ${achList ? `<ul class="prof-ach-list">${achList}</ul>` : '<p class="page-empty">Inga utmärkelser ännu — men året är ungt.</p>'}
+          </section>
+          ${
+  h2hGroups
+    ? `<section class="card page-card prof-h2h" aria-labelledby="prof-h2h-h">
+            <div class="page-card-head">
+              <h2 class="page-h2" id="prof-h2h-h">Inbördes möten</h2>
+              <p class="page-card-sub">Vem placerade sig högst de år ni båda var med</p>
+            </div>
+            ${h2hGroups}
+          </section>`
+    : ''
+  }
+        </div>
+      </div>`;
 
-    openModal(html);
+    $$('.prof-game-thumb img', view).forEach((img) =>
+      img.addEventListener('error', () => img.remove(), { once: true })
+    );
+
+    return {
+      title: `${p.name} — Pekkas Pokal`,
+      mount: () => {
+        if (App.charts['person-chart'] && App.charts['person-chart'].canvas === $('#person-chart')) return;
+        registerChart('person-chart', (canvas) => personChart(canvas, s, years));
+      }
+    };
   }
 
-  function initModal() {
-    $('#modal-close').addEventListener('click', closeOverlay);
-    $('#modal').addEventListener('click', (e) => {
-      if (e.target === $('#modal')) closeOverlay();
-    });
-    $('#game-close').addEventListener('click', closeOverlay);
-
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        if (!$('#game-stage').hidden || !$('#modal').hidden) {
-          e.preventDefault();
-          closeOverlay();
+  /**
+   * Placering per år: 1:a överst och en kurva som aldrig skjuter förbi
+   * punkterna (monoton interpolering), så den inte ritar en placering som
+   * inte fanns.
+   */
+  function personChart(canvas, s, years) {
+    const positions = years.map((y) => s.yearPositions[y]);
+    const comps = years.map((y) => App.stats.real.find((c) => c.year === y));
+    const maxField = Math.max(...comps.map((c) => (c ? c.participantCount : 0)), ...positions, 4);
+    const gold = cssVar('--gold');
+    const fill = canvas.getContext('2d').createLinearGradient(0, 0, 0, canvas.clientHeight || 260);
+    fill.addColorStop(0, `${gold}40`);
+    fill.addColorStop(1, `${gold}00`);
+    const metal = { 1: gold, 2: cssVar('--silver'), 3: cssVar('--bronze') };
+    return {
+      type: 'line',
+      data: {
+        labels: years,
+        datasets: [
+          {
+            data: positions,
+            borderColor: gold,
+            backgroundColor: fill,
+            fill: 'end', // y-axeln är omvänd: 'end' fyller ner mot sista plats
+            cubicInterpolationMode: 'monotone',
+            borderWidth: 2,
+            clip: false,
+            pointRadius: positions.map((v) => (v <= 3 ? 5.5 : 3.5)),
+            pointHoverRadius: 7,
+            pointBackgroundColor: positions.map((v) => metal[v] || cssVar('--surface-solid')),
+            pointBorderColor: positions.map((v) => (v <= 3 ? 'transparent' : cssVar('--chart-tick'))),
+            pointBorderWidth: 1.5
+          }
+        ]
+      },
+      options: {
+        maintainAspectRatio: false,
+        layout: { padding: { top: 8, right: 6 } },
+        interaction: { mode: 'nearest', axis: 'x', intersect: false },
+        onClick: (_e, els) => {
+          if (els.length) navigate(yearHash(years[els[0].index]));
+        },
+        onHover: (e, els) => {
+          if (e.native && e.native.target) e.native.target.style.cursor = els.length ? 'pointer' : '';
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: (items) => {
+                const c = comps[items[0].dataIndex];
+                return `${years[items[0].dataIndex]}${c ? ` · ${c.name.trim()}` : ''}`;
+              },
+              label: (c) => {
+                const comp = comps[c.dataIndex];
+                return ` ${ordinalShort(c.parsed.y)}${comp ? ` av ${comp.participantCount}` : ''}`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: {
+              maxRotation: 0,
+              // Smalt diagram: '19 i stället för 2019, så årtalen inte lutar
+              callback(value) {
+                const y = String(this.getLabelForValue(value));
+                return this.chart.width < 560 ? `’${y.slice(2)}` : y;
+              }
+            }
+          },
+          y: {
+            reverse: true,
+            min: 1,
+            max: maxField,
+            grid: { color: cssVar('--chart-grid') },
+            ticks: { precision: 0, stepSize: maxField > 8 ? 2 : 1 }
+          }
         }
-        return;
       }
-      // Håll tabbningen inne i den öppna dialogen
-      if (e.key === 'Tab' && !$('#modal').hidden) {
-        const focusables = $$(
-          '.modal-panel button, .modal-panel a[href], .modal-panel select, .modal-panel [tabindex]:not([tabindex="-1"])'
-        ).filter((el) => el.offsetParent !== null);
-        if (!focusables.length) return;
-        const first = focusables[0];
-        const last = focusables[focusables.length - 1];
-        if (e.shiftKey && (document.activeElement === first || document.activeElement === $('.modal-panel'))) {
-          e.preventDefault();
-          last.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault();
-          first.focus();
+    };
+  }
+
+  /** Bygger års- eller profilsidan för en route — eller återanvänder den
+   *  om det är samma sida som senast (bakåt från ett spel, till exempel). */
+  function renderPage(route) {
+    const key = pageKey(route);
+    let page = App.pages[route.view];
+    if (!page || page.key !== key) {
+      page = null;
+      if (route.view === 'year') {
+        page = renderYearPage(route.year);
+      } else {
+        const p = personFromSlug(route.slug);
+        page = p ? renderProfile(p.id) : null;
+        // Äldre länkar med id (#/deltagare/p3) får den läsbara adressen
+        if (page && slugify(p.name) !== route.slug) {
+          history.replaceState(history.state, '', personHash(p.id));
+          App.appliedHash = location.hash;
         }
+      }
+      if (!page) return null;
+      page.key = key;
+      App.pages[route.view] = page;
+    }
+    syncBackLink(route.view);
+    return page;
+  }
+
+  /** Spelscenen är det enda som fortfarande läggs ovanpå: krysset och Esc stänger den. */
+  function initOverlays() {
+    $('#game-close').addEventListener('click', closeOverlay);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !$('#game-stage').hidden) {
+        e.preventDefault();
+        closeOverlay();
       }
     });
   }
@@ -2778,20 +3876,20 @@
 
   const viewHash = (view) => `#/${VIEW_ROUTES[view] || ''}`;
 
-  function showView(id, { focus = false } = {}) {
-    if (!VIEW_IDS.includes(id)) id = 'overview';
-    const changed = App.currentView !== id;
+  function showView(id, { focus = false, title = '', scrollY = null } = {}) {
+    if (!VIEW_IDS.includes(id) && !PAGE_PARENTS[id]) id = 'overview';
     App.currentView = id;
+    const section = PAGE_PARENTS[id] || id;
     $$('.view').forEach((v) => v.classList.toggle('active', v.id === `view-${id}`));
     $$('.nav-link[data-view], .tab-item[data-view]').forEach((b) => {
-      const on = b.dataset.view === id;
+      const on = b.dataset.view === section;
       b.classList.toggle('active', on);
-      if (on) b.setAttribute('aria-current', 'page');
+      if (on) b.setAttribute('aria-current', PAGE_PARENTS[id] ? 'true' : 'page');
       else b.removeAttribute('aria-current');
     });
     positionNavIndicator();
-    document.title = VIEW_TITLES[id];
-    if (changed) window.scrollTo({ top: 0, behavior: 'instant' });
+    document.title = title || VIEW_TITLES[id];
+    if (scrollY != null) window.scrollTo({ top: scrollY, behavior: 'instant' });
 
     // Leaflet needs a size refresh when its container becomes visible
     if (id === 'overview' && App.map) setTimeout(() => App.map.invalidateSize(), 60);
@@ -2816,8 +3914,8 @@
    * #/medaljliga …         vyer
    * #/sangbok/<id>         en sång
    * #/spel/<år>            ett spel, ovanpå arkaden
-   * #/deltagare/<namn>     profil, ovanpå aktuell vy
-   * #/ar/<år>              årets resultat, ovanpå aktuell vy
+   * #/deltagare/<namn>     en deltagares profilsida
+   * #/ar/<år>              årets sida: resultat, pall, plats, spel
    * Äldre länkar (#medals, #stats …) leder fortfarande rätt.
    */
   function parseHash(hash) {
@@ -2830,8 +3928,8 @@
     if (!raw || raw === '/') return { view: 'overview' };
     if (!raw.startsWith('/')) return VIEW_IDS.includes(raw) ? { view: raw, legacy: true } : null;
     const [head, arg] = raw.slice(1).split('/');
-    if (head === 'deltagare' && arg) return { modal: 'person', id: arg };
-    if (head === 'ar' && arg) return { modal: 'year', year: Number(arg) };
+    if (head === 'deltagare' && arg) return { view: 'person', slug: arg };
+    if (head === 'ar' && arg) return { view: 'year', year: Number(arg) };
     const view = ROUTE_VIEWS[head];
     if (!view) return null;
     const route = { view };
@@ -2840,32 +3938,44 @@
     return route;
   }
 
-  const personHash = (id) => {
-    const p = App.data.participants.find((x) => x.id === id);
-    return `#/deltagare/${p ? slugify(p.name) : id}`;
-  };
 
   function personFromSlug(slug) {
     return App.data.participants.find((p) => slugify(p.name) === slug || p.id === slug);
   }
 
-  /** Hur många lager (profil, år, spel) vi själva lagt ovanpå vyn. */
+  /** Hur många spel vi själva lagt ovanpå vyn (history.state.pp). */
   const overlayDepth = () => (history.state && history.state.pp) || 0;
 
-  /** Navigera inom appen. Vyer ersätter varandra; profiler, årsdetaljer och
-   *  spel läggs ovanpå i historiken så att bakåt stänger dem. */
+  /**
+   * Navigera inom appen. Vyer och sidor ersätter varandra i historiken;
+   * spel läggs ovanpå så att bakåt stänger dem.
+   *
+   * history.state bär också:
+   *   y        var man var på sidan när man lämnade den — bakåt landar där
+   *   ret      listan man kom från till en års- eller profilsida, och
+   *   retDepth hur många steg bakåt den ligger (sida → sida → sida …)
+   */
   function navigate(hash, { replace = false } = {}) {
     const route = parseHash(hash);
     if (!route) return;
-    const overlay = !!(route.modal || route.game);
-    const depth = overlay ? overlayDepth() + 1 : 0;
-    if (replace) history.replaceState({ pp: overlay ? Math.max(overlayDepth(), 1) : 0 }, '', hash);
-    else history.pushState({ pp: depth }, '', hash);
+    const overlay = !!route.game;
+    const here = history.state || {};
+    const state = { pp: overlay ? overlayDepth() + 1 : 0 };
+    if (PAGE_PARENTS[route.view]) {
+      if (!PAGE_PARENTS[App.currentView]) Object.assign(state, { ret: location.hash || '#/', retDepth: 1 });
+      else if (here.ret) Object.assign(state, { ret: here.ret, retDepth: (here.retDepth || 0) + 1 });
+    }
+    if (replace) {
+      history.replaceState({ ...state, pp: overlay ? Math.max(overlayDepth(), 1) : 0 }, '', hash);
+    } else {
+      history.replaceState({ ...here, y: window.scrollY }, '');
+      history.pushState(state, '', hash);
+    }
     applyRoute(route, { user: true });
   }
 
-  /** Stäng profil/år/spel: gå tillbaka förbi allt vi lagt ovanpå — eller,
-   *  om sidan öppnades direkt på en sådan länk, ersätt med vyn under. */
+  /** Stäng spelet: gå tillbaka förbi allt vi lagt ovanpå — eller, om sidan
+   *  öppnades direkt på en spellänk, ersätt med vyn under. */
   function closeOverlay() {
     const d = overlayDepth();
     if (d > 0) history.go(-d);
@@ -2877,32 +3987,66 @@
     if (!route) return;
     if (route.legacy) history.replaceState({ pp: 0 }, '', viewHash(route.view));
 
-    if (route.view) showView(route.view, { focus: user && !route.game && !route.song });
-    else if (!App.currentView) showView('overview');
+    let page = null;
+    if (PAGE_PARENTS[route.view]) {
+      page = renderPage(route);
+      if (!page) {
+        // Okänt år eller namn: visa listan sidan hör till i stället
+        route = { view: PAGE_PARENTS[route.view] };
+        history.replaceState(history.state, '', viewHash(route.view));
+        App.appliedHash = location.hash;
+      }
+    }
+
+    // Ny sida börjar överst; bakåt och framåt landar där man var
+    const key = pageKey(route);
+    const changed = key !== App.pageKey;
+    App.pageKey = key;
+    const saved = !user && history.state && typeof history.state.y === 'number' ? history.state.y : null;
+    const scrollY = saved != null ? saved : changed ? 0 : null;
+
+    showView(route.view, {
+      focus: user && !route.game && !route.song,
+      title: page ? page.title : '',
+      scrollY
+    });
+    if (page && page.mount) page.mount();
+    // Från ett år till nästa byts innehållet i samma vy — låt det tona in igen
+    if (page && changed && user && !prefersReducedMotion()) {
+      const v = $(`#view-${route.view}`);
+      v.style.animation = 'none';
+      v.getBoundingClientRect(); // tvinga fram en layout så animationen startar om
+      v.style.animation = '';
+    }
 
     if (route.game) launchGame(route.game);
     else closeGameNow();
-
-    if (route.modal === 'person') {
-      const p = personFromSlug(route.id);
-      if (p) renderProfile(p.id);
-    } else if (route.modal === 'year') {
-      renderYearDetail(route.year);
-    } else {
-      closeModalNow();
-    }
 
     if (route.song && App.showSong) App.showSong(route.song);
   }
 
   function initRouter() {
+    // Scrollen sköter vi själva (history.state.y): vyerna byts utan omladdning,
+    // så webbläsarens egen återställning gissar fel
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+
     // Alla interna länkar går genom routern; profil- och årsknappar likaså
     document.addEventListener('click', (e) => {
       if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const share = e.target.closest('.page-share-btn');
+      if (share) {
+        sharePage(share);
+        return;
+      }
       const link = e.target.closest('a[href^="#/"]');
       if (link) {
         e.preventDefault();
         const href = link.getAttribute('href');
+        const st = history.state || {};
+        if (link.hasAttribute('data-back') && st.ret === href && st.retDepth > 0) {
+          history.go(-st.retDepth);
+          return;
+        }
         const current = location.hash || '#/';
         if (href === current) {
           window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
@@ -2956,27 +4100,61 @@
      Scroll reveal
      ====================================================================== */
 
+  /*
+   * Progressiv förbättring: allt syns från början. Först när observatören
+   * finns och besökaren själv börjat skrolla sätts .reveal-armed på <html>,
+   * och då döljs bara det som ännu ligger under skärmkanten. Det som redan
+   * syns göms aldrig, så en helsidesbild, en utskrift eller en observatör
+   * som aldrig svarar lämnar inget osynligt kvar.
+   */
   let revealObserver = null;
+  let revealArmed = false;
+
+  const inViewport = (el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.bottom > 0 && r.top < (window.innerHeight || 0);
+  };
 
   function observeReveals() {
-    if (!('IntersectionObserver' in window)) {
-      $$('.reveal').forEach((el) => el.classList.add('in'));
+    const pending = $$('.reveal:not(.in)');
+    if (!('IntersectionObserver' in window) || prefersReducedMotion()) {
+      pending.forEach((el) => el.classList.add('in'));
       return;
     }
     if (!revealObserver) {
-      revealObserver = new IntersectionObserver(
-        (entries) => {
-          entries.forEach((entry) => {
-            if (entry.isIntersecting) {
-              entry.target.classList.add('in');
-              revealObserver.unobserve(entry.target);
-            }
-          });
-        },
-        { threshold: 0.08 }
-      );
+      try {
+        revealObserver = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (entry.isIntersecting) {
+                entry.target.classList.add('in');
+                revealObserver.unobserve(entry.target);
+              }
+            });
+          },
+          { threshold: 0.08 }
+        );
+      } catch (e) {
+        pending.forEach((el) => el.classList.add('in'));
+        return;
+      }
+      const arm = () => {
+        if (revealArmed) return;
+        // Det som syns nu får stå kvar — bara det under kanten tonar in
+        $$('.reveal:not(.in)').forEach((el) => {
+          if (inViewport(el)) el.classList.add('in');
+        });
+        revealArmed = true;
+        document.documentElement.classList.add('reveal-armed');
+      };
+      window.addEventListener('scroll', arm, { once: true, passive: true });
+      window.addEventListener('beforeprint', () => $$('.reveal').forEach((el) => el.classList.add('in')));
     }
-    $$('.reveal:not(.in)').forEach((el) => revealObserver.observe(el));
+    pending.forEach((el) => {
+      // Vid vybyte: det som hamnar i bild direkt visas direkt
+      if (revealArmed && inViewport(el)) el.classList.add('in');
+      else revealObserver.observe(el);
+    });
   }
 
   /* ======================================================================
@@ -3005,7 +4183,7 @@
       applyChartTheme();
       syncThemeChrome();
       initRouter();
-      initModal();
+      initOverlays();
 
       renderHero();
       renderHeroContours();

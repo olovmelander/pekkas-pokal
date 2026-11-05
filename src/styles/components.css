@@ -171,8 +171,7 @@
 
 .chip .count {
   font-family: var(--ff-mono);
-  font-size: 0.65rem;
-  opacity: 0.7;
+  font-size: 0.75rem;
 }
 
 /* ---------- Avatarer & medaljmynt ---------- */
@@ -364,6 +363,11 @@
   font-size: 1rem;
 }
 
+/* Den tomma brickan framför snittplaceringen: tecknet ⌀ i textfärg */
+.cm-avg .medal-disc {
+  color: var(--text-2);
+}
+
 .cm-num {
   font-family: var(--ff-serif);
   font-size: var(--text-xl);
@@ -379,6 +383,15 @@
   text-transform: uppercase;
   color: var(--text-3);
   margin-top: 4px;
+}
+
+/* "lägre är bättre" visas bara där snittplaceringen har en egen rad (telefon) */
+.cm-hint {
+  display: none;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  font-size: var(--text-xs);
 }
 
 .hero-actions {
@@ -694,6 +707,29 @@
   height: 340px;
 }
 
+/* Namnchips under linjediagram med en markerad deltagare */
+.focus-chips {
+  align-items: center;
+  margin-top: var(--sp-4);
+}
+
+.focus-chips-label {
+  margin-right: var(--sp-1);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+@media (pointer: coarse) {
+  .focus-chips .chip,
+  .filter-card .chip,
+  .ach-filter-bar .chip {
+    min-height: 44px;
+  }
+}
+
 /* ---------- Karta ---------- */
 .map-card {
   margin-top: var(--sp-5);
@@ -861,7 +897,7 @@
   font-family: var(--ff-serif);
   font-size: clamp(1.2rem, 0.9rem + 1vw, 1.7rem);
   font-weight: 600;
-  color: rgba(40, 26, 4, 0.85);
+  color: var(--medal-ink-gold);
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 -2px 0 rgba(0, 0, 0, 0.2) inset, 0 16px 34px -10px rgba(0, 0, 0, 0.6);
   transition: transform var(--t-med) var(--ease-spring);
 }
@@ -877,13 +913,13 @@
 }
 
 .podium-2 .podium-avatar {
-  background: var(--metal-silver);
-  color: rgba(30, 34, 42, 0.85);
+  background: var(--metal-silver-soft);
+  color: var(--medal-ink-silver);
 }
 
 .podium-3 .podium-avatar {
-  background: var(--metal-bronze);
-  color: rgba(50, 22, 6, 0.85);
+  background: var(--metal-bronze-soft);
+  color: var(--medal-ink-bronze);
 }
 
 .podium-name {
@@ -925,7 +961,7 @@
   font-size: clamp(2.6rem, 2rem + 3vw, 4.6rem);
   font-weight: 300;
   line-height: 1;
-  color: rgba(0, 0, 0, 0.55);
+  color: rgba(0, 0, 0, 0.72);
   transform-origin: bottom;
   animation: podium-rise 0.9s var(--ease-out) both;
   overflow: hidden;
@@ -995,6 +1031,16 @@
   color: var(--text-1);
 }
 
+.medal-table th.sortable:focus-visible {
+  outline-offset: -2px;
+}
+
+/* Medaljprickarna i cellerna och kortnamnen behövs bara i telefonlayouten */
+.medal-table .pip,
+.medal-table .pc-short {
+  display: none;
+}
+
 .medal-table th .medal-dot {
   margin-right: 6px;
   vertical-align: 0;
@@ -1062,18 +1108,18 @@
 }
 
 .rank-badge.r1 {
-  background: var(--metal-gold);
-  color: rgba(40, 26, 4, 0.85);
+  background: var(--metal-gold-soft);
+  color: var(--medal-ink-gold);
 }
 
 .rank-badge.r2 {
-  background: var(--metal-silver);
-  color: rgba(30, 34, 42, 0.85);
+  background: var(--metal-silver-soft);
+  color: var(--medal-ink-silver);
 }
 
 .rank-badge.r3 {
-  background: var(--metal-bronze);
-  color: rgba(50, 22, 6, 0.85);
+  background: var(--metal-bronze-soft);
+  color: var(--medal-ink-bronze);
 }
 
 .person-cell {
@@ -1403,7 +1449,7 @@
   top: var(--sp-3);
   left: var(--sp-3);
   font-family: var(--ff-mono);
-  font-size: 0.6rem;
+  font-size: var(--text-xs);
   color: var(--text-3);
 }
 
@@ -1594,7 +1640,7 @@
   right: var(--sp-3);
   padding: 1px 8px;
   border-radius: var(--r-pill);
-  font-size: 0.58rem;
+  font-size: 0.6875rem;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -1793,7 +1839,11 @@
   color: var(--text-3);
   padding: 4px;
   font-family: var(--ff-mono);
-  font-size: 0.66rem;
+  font-size: var(--text-xs);
+}
+
+.heatmap-table th abbr {
+  text-decoration: none;
 }
 
 .heatmap-table th.hm-name {
@@ -1832,20 +1882,20 @@
 }
 
 .hm-cell.pos-1 {
-  background: var(--metal-gold);
-  color: rgba(40, 26, 4, 0.9);
+  background: var(--metal-gold-soft);
+  color: var(--medal-ink-gold);
   font-weight: 700;
 }
 
 .hm-cell.pos-2 {
-  background: var(--metal-silver);
-  color: rgba(30, 34, 42, 0.9);
+  background: var(--metal-silver-soft);
+  color: var(--medal-ink-silver);
   font-weight: 700;
 }
 
 .hm-cell.pos-3 {
-  background: var(--metal-bronze);
-  color: rgba(50, 22, 6, 0.9);
+  background: var(--metal-bronze-soft);
+  color: var(--medal-ink-bronze);
   font-weight: 700;
 }
 
@@ -2057,8 +2107,19 @@
 
 .elo-rank {
   font-family: var(--ff-mono);
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: var(--text-3);
+}
+
+/* Den som är markerad i Elo-diagrammet */
+.elo-row.is-focus {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--gold) 12%, transparent), transparent 80%);
+  box-shadow: inset 2px 0 0 var(--chart-focus);
+}
+
+.elo-row.is-focus .elo-rank {
+  padding-left: 6px;
+  color: var(--text-gold);
 }
 
 .elo-name {
@@ -2079,7 +2140,7 @@
   min-width: 42px;
   text-align: right;
   font-family: var(--ff-mono);
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: var(--text-3);
 }
 
@@ -2138,7 +2199,7 @@
 
 .song-chip-year {
   font-family: var(--ff-mono);
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: var(--text-3);
 }
 
@@ -2205,7 +2266,7 @@
 .song-year-badge {
   display: inline-block;
   font-family: var(--ff-mono);
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   letter-spacing: 0.2em;
   color: #8d6214;
   margin-bottom: var(--sp-3);
@@ -2250,9 +2311,9 @@
   display: block;
   margin-bottom: 4px;
   font-family: var(--ff-sans);
-  font-size: 0.78rem;
+  font-size: 0.8125rem;
   font-style: italic;
-  color: #857659;
+  color: #6e6047;
 }
 
 .song-break {

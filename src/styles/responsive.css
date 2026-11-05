@@ -134,8 +134,31 @@
 
   .champion-medals {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: var(--sp-2);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--sp-3) var(--sp-2);
+  }
+
+  /* Snittplaceringen får en egen rad under medaljerna, med etiketten i
+     klartext bredvid talet i stället för en avhuggen förkortning */
+  .cm-item.cm-avg {
+    grid-column: 1 / -1;
+    padding-top: var(--sp-3);
+    border-top: 1px solid var(--border);
+  }
+
+  .cm-avg .cm-text {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0 var(--sp-3);
+  }
+
+  .cm-avg .cm-label {
+    margin-top: 0;
+  }
+
+  .cm-avg .cm-hint {
+    display: inline;
   }
 
   .cm-item {
@@ -232,28 +255,14 @@
     align-items: center;
   }
 
-  .medal-table .bar-col,
-  .medal-table .person-cell .avatar {
+  /* Medaljtabellen: fördelningsstapeln får ge plats åt siffrorna */
+  .medal-table .bar-col {
     display: none;
   }
 
   .medal-table th,
   .medal-table td {
     padding: var(--sp-3) 6px;
-  }
-
-  .rank-col {
-    width: 36px;
-  }
-
-  .num-col {
-    width: 44px;
-    font-size: 0.98rem;
-  }
-
-  .medal-table th.num-col .medal-dot {
-    display: block;
-    margin: 0 auto 4px;
   }
 
   /* Deltagarkorten blir en karusell i stället för en lång stapel */
@@ -333,6 +342,20 @@
   }
 
   .filter-card .chip {
+    flex-shrink: 0;
+  }
+
+  /* Namnchipsen under linjediagrammen: en rad att svepa i, som filtren */
+  .focus-chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin: var(--sp-4) calc(var(--sp-4) * -1) 0;
+    padding: 2px var(--sp-4) 6px;
+    scroll-padding: 0 var(--sp-4);
+  }
+
+  .focus-chips .chip,
+  .focus-chips-label {
     flex-shrink: 0;
   }
 
@@ -422,8 +445,169 @@
   }
 }
 
+/* ---------- Medaljtabellen på telefon ----------
+   En rad per deltagare utan sidledsskroll: placering, namn, tre
+   medaljprickar med antal och totalen. Rubrikraden är kvar som
+   sorteringsknappar, 44 px höga; den valda kolumnen får en guldton. */
+@media (max-width: 640px) {
+  .medal-table,
+  .medal-table thead,
+  .medal-table tbody {
+    display: block;
+  }
+
+  .medal-table tr {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr) repeat(3, 44px) 48px;
+    align-items: center;
+    column-gap: 2px;
+  }
+
+  .medal-table thead tr {
+    border-bottom: 1px solid var(--border-strong);
+  }
+
+  .medal-table tbody tr {
+    min-height: 52px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .medal-table tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  .medal-table th,
+  .medal-table td {
+    width: auto;
+    min-width: 0;
+    padding: 0;
+    border: none;
+  }
+
+  .medal-table th {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    height: 44px;
+    margin: 4px 0;
+    border-radius: var(--r-xs);
+    letter-spacing: 0.04em;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .medal-table th.name-col {
+    align-items: flex-start;
+    padding-left: 4px;
+  }
+
+  .medal-table th.bar-col {
+    display: none;
+  }
+
+  .medal-table th.sorted {
+    background: color-mix(in srgb, var(--gold) 12%, transparent);
+  }
+
+  .medal-table th.num-col:not(.sortable[data-sort='total']) .th-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .medal-table th .medal-dot {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+  }
+
+  .medal-table .sort-arrow {
+    width: auto;
+    height: 1em;
+    margin: 0;
+    line-height: 1;
+  }
+
+  .medal-table th.rank-col {
+    align-items: center;
+  }
+
+  .medal-table td.num-col {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    font-size: 1.02rem;
+  }
+
+  .medal-table .pip {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset;
+  }
+
+  .medal-table .pip.gold {
+    background: var(--metal-gold);
+  }
+
+  .medal-table .pip.silver {
+    background: var(--metal-silver);
+  }
+
+  .medal-table .pip.bronze {
+    background: var(--metal-bronze);
+  }
+
+  .medal-table td.zero .pip {
+    opacity: 0.35;
+  }
+
+  .medal-table td.total {
+    font-weight: 600;
+  }
+
+  .medal-table .rank-badge {
+    width: 26px;
+    height: 26px;
+    font-size: 0.8rem;
+  }
+
+  .medal-table .person-cell {
+    gap: var(--sp-2);
+    min-width: 0;
+  }
+
+  .medal-table .person-cell .avatar {
+    width: 28px;
+    height: 28px;
+    font-size: 0.75rem;
+  }
+
+  .medal-table .pc-full {
+    display: none;
+  }
+
+  .medal-table .pc-short {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
 /* ---------- Små telefoner ---------- */
 @media (max-width: 380px) {
+  .medal-table .person-cell .avatar {
+    display: none;
+  }
+
   .brand-sub {
     display: none;
   }

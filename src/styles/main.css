@@ -20,8 +20,10 @@
   --font-body: var(--ff-sans);
 
   /* ---- Flytande typskala (1.25-steg, klampad) ---- */
+  /* --text-2xs är bara till för små versala etiketter (med spärrning);
+     löptext börjar på --text-xs, som aldrig går under 12 px. */
   --text-2xs: 0.6875rem;
-  --text-xs: clamp(0.72rem, 0.7rem + 0.1vw, 0.78rem);
+  --text-xs: clamp(0.75rem, 0.73rem + 0.1vw, 0.8125rem);
   --text-sm: clamp(0.84rem, 0.81rem + 0.15vw, 0.9rem);
   --text-md: clamp(0.97rem, 0.93rem + 0.2vw, 1.05rem);
   --text-lg: clamp(1.15rem, 1.06rem + 0.45vw, 1.38rem);
@@ -73,6 +75,14 @@
   --metal-gold: linear-gradient(160deg, var(--gold-hi) 0%, var(--gold) 34%, #c99634 62%, var(--gold-hi) 78%, var(--gold-deep) 100%);
   --metal-silver: linear-gradient(160deg, var(--silver-hi) 0%, var(--silver) 38%, #a9b1bd 64%, var(--silver-hi) 80%, var(--silver-deep) 100%);
   --metal-bronze: linear-gradient(160deg, var(--bronze-hi) 0%, var(--bronze) 38%, #b0724a 64%, var(--bronze-hi) 80%, var(--bronze-deep) 100%);
+  /* Mjukare metall för små brickor med siffror på: utan den mörkaste
+     kanten, så att mörk text håller AA-kontrast över hela ytan. */
+  --metal-gold-soft: linear-gradient(160deg, var(--gold-hi) 0%, var(--gold) 45%, #cf9d3c 100%);
+  --metal-silver-soft: linear-gradient(160deg, var(--silver-hi) 0%, var(--silver) 45%, #b3bac5 100%);
+  --metal-bronze-soft: linear-gradient(160deg, var(--bronze-hi) 0%, var(--bronze) 45%, #c4855a 100%);
+  --medal-ink-gold: #281a04;
+  --medal-ink-silver: #1e222a;
+  --medal-ink-bronze: #321606;
 
   /* ---- Sällsynthet ---- */
   --rarity-common: #a59e92;
@@ -104,7 +114,8 @@
 
   --text-1: #f4efe6;
   --text-2: #b6ae9f;
-  --text-3: #7f786c;
+  /* Minst 5:1 mot alla ytor, även --surface-strong (mätt i webbläsaren) */
+  --text-3: #9a9285;
   --text-gold: #ecc66b;
 
   --accent: var(--gold);
@@ -119,8 +130,10 @@
   --shadow-pop: 0 30px 80px -20px rgba(0, 0, 0, 0.8), 0 0 0 1px var(--border-strong);
   --glow-gold: 0 0 0 1px rgba(233, 191, 92, 0.22), 0 18px 50px -18px rgba(233, 191, 92, 0.35);
 
-  --chart-grid: rgba(255, 236, 200, 0.06);
-  --chart-tick: #8a8377;
+  --chart-grid: rgba(255, 236, 200, 0.1);
+  --chart-tick: #a39b8c;
+  --chart-muted: rgba(196, 186, 168, 0.32);
+  --chart-focus: #e9bf5c;
 
   --header-bg: rgba(11, 12, 15, 0.72);
   --card-blur: blur(18px) saturate(140%);
@@ -145,24 +158,36 @@
   --hairline-hi: rgba(255, 255, 255, 0.9);
 
   --text-1: #1f1b14;
-  --text-2: #5d5545;
-  --text-3: #8d846f;
-  --text-gold: #8d6214;
+  --text-2: #4d463a;
+  --text-3: #6b6250;
+  --text-gold: #7f5810;
 
-  --accent: #b4832a;
-  --accent-contrast: #fffaf0;
+  --accent: #a8761c;
+  /* Text på metallguld (knappar, valda chips): mörkt bläck även i ljust
+     tema — metallen är lika ljus i båda. */
+  --accent-contrast: #1d1404;
   --accent-2: #3f6f9f;
-  --accent-3: #2f8a6d;
-  --danger: #c2405a;
-  --success: #2f8a6d;
+  --accent-3: #246f57;
+  --danger: #b03550;
+  --success: #246f57;
 
   --shadow-1: 0 1px 0 var(--hairline-hi) inset, 0 1px 2px rgba(60, 44, 18, 0.06), 0 10px 24px -14px rgba(60, 44, 18, 0.18);
   --shadow-2: 0 1px 0 var(--hairline-hi) inset, 0 2px 6px rgba(60, 44, 18, 0.06), 0 30px 60px -28px rgba(60, 44, 18, 0.3);
   --shadow-pop: 0 30px 80px -24px rgba(60, 44, 18, 0.35), 0 0 0 1px var(--border-strong);
   --glow-gold: 0 0 0 1px rgba(180, 131, 42, 0.25), 0 18px 44px -18px rgba(180, 131, 42, 0.35);
 
-  --chart-grid: rgba(60, 44, 18, 0.08);
-  --chart-tick: #7d745f;
+  /* Sällsynthetsfärgerna är text på utmärkelsekorten — i ljust tema mörkare
+     toner av samma kulörer, så att etiketterna klarar 4,5:1 */
+  --rarity-common: #6b6250;
+  --rarity-rare: #2f6aa3;
+  --rarity-epic: #7a4fc0;
+  --rarity-legendary: #7f5810;
+  --rarity-mythic: #b03550;
+
+  --chart-grid: rgba(60, 44, 18, 0.12);
+  --chart-tick: #645b4a;
+  --chart-muted: rgba(77, 70, 58, 0.3);
+  --chart-focus: #9a6b17;
 
   --header-bg: rgba(244, 239, 229, 0.78);
   --grain-opacity: 0.06;
@@ -431,7 +456,7 @@ table,
   border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--gold) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--gold) 30%, transparent);
-  font-size: 0.62rem;
+  font-size: 0.6875rem;
   letter-spacing: 0.1em;
   color: var(--text-gold);
 }
