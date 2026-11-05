@@ -74,11 +74,11 @@ export function roomPoint(rh, rd) {
   };
 }
 
-/** World-space top edge of the backbox face, for framing the camera */
-export function headTop() {
+/** World-space top edge of the backbox face (or a point h up it), for framing */
+export function headTop(h = CAB.backH) {
   return {
-    y: CAB.backH * Math.cos(CAB.headTilt),
-    z: CAB.z1 + 0.4 - CAB.backH * Math.sin(CAB.headTilt)
+    y: h * Math.cos(CAB.headTilt),
+    z: CAB.z1 + 0.4 - h * Math.sin(CAB.headTilt)
   };
 }
 
@@ -729,11 +729,11 @@ function drawFront(g, ox, oy, w, h, k) {
 /** Brushed steel for the legs: a lit edge, fine grain along the length */
 function drawSteel(g, ox, oy, w, h, k) {
   const grad = g.createLinearGradient(ox, 0, ox + w, 0);
-  grad.addColorStop(0, '#5d6478');
-  grad.addColorStop(0.3, '#c9cfdc');
-  grad.addColorStop(0.5, '#8e95a8');
-  grad.addColorStop(0.75, '#d9dee8');
-  grad.addColorStop(1, '#5d6478');
+  grad.addColorStop(0, '#2c313f');
+  grad.addColorStop(0.3, '#8a91a3');
+  grad.addColorStop(0.5, '#4f566a');
+  grad.addColorStop(0.75, '#9aa1b2');
+  grad.addColorStop(1, '#2c313f');
   g.fillStyle = grad;
   g.fillRect(ox, oy, w, h);
   for (let i = 0; i < 90; i++) {
@@ -1006,6 +1006,7 @@ export function buildCabinet(THREE, materials, logo, dmdMaterial, opts = {}) {
   const lite = !!opts.lite;
   const k = lite ? 0.5 : 1;
   const g = new THREE.Group();
+  g.name = 'cabinet';
   const refs = {};
   const { x0, x1, z1, hw, cx, topY, armourTop, dmd } = CAB;
   const xo0 = cx - hw;
@@ -1045,9 +1046,6 @@ export function buildCabinet(THREE, materials, logo, dmdMaterial, opts = {}) {
   const doorLit = new THREE.MeshBasicMaterial({ map: faceTex });
   refs.doorLit = doorLit;
   refs.face = face;
-  refs.printed = printed;
-  refs.textures = [art, faceTex];
-  refs.materials = [printed, powder, face, doorLit];
 
   /* ---- Profiles (world z, y) ---- */
   const fb = roomPoint(CAB.legH, 0);
@@ -1131,9 +1129,10 @@ export function buildCabinet(THREE, materials, logo, dmdMaterial, opts = {}) {
   add(profilePrism(THREE, sideProf, xo0, x0, { caps: false }), materials.cabinet);
   add(profilePrism(THREE, sideProf, x1, xo1, { caps: false }), materials.cabinet);
   const sideArtProf = insetPolygon(sideProf.map(([z, y]) => [-z, y]), 0.3).map(([s, y]) => [-s, y]);
-  add(profilePanel(THREE, sideArtProf, xo0 + 0.0, -1, sideUV(1)), printed);
-  add(profilePanel(THREE, sideArtProf, xo1 - 0.0, 1, sideUV(-1)), printed);
-  // Inner caps in paint (seen only inside the backbox well)
+  add(profilePanel(THREE, sideArtProf, xo0, -1, sideUV(1)), printed);
+  add(profilePanel(THREE, sideArtProf, xo1, 1, sideUV(-1)), printed);
+  // (The slabs' inner caps are dropped too: the blades and the playfield
+  // cover them everywhere a camera can reach.)
   // Core: the box under the playfield, between the slabs
   const coreFrontZ = (y) => CAB.frontZ + (topY - y) * TAN - 0.9;
   const coreProf = [
@@ -1184,7 +1183,7 @@ export function buildCabinet(THREE, materials, logo, dmdMaterial, opts = {}) {
       FT.plate.u0 + u * (FT.plate.u1 - FT.plate.u0),
       FT.plate.v0 + v * (FT.plate.v1 - FT.plate.v0)
     ]);
-    plate.translate(0, -1.55, 0.4);
+    plate.translate(0, -1.55, 0.47);
     door.add(new THREE.Mesh(plate, doorLit));
     const plateRim = new THREE.Mesh(new THREE.BoxGeometry(6.8, 2.0, 0.08), materials.armour);
     plateRim.position.set(0, -1.55, 0.36);
@@ -1197,7 +1196,7 @@ export function buildCabinet(THREE, materials, logo, dmdMaterial, opts = {}) {
         FT.insert.u0 + u * (FT.insert.u1 - FT.insert.u0),
         FT.insert.v0 + v * (FT.insert.v1 - FT.insert.v0)
       ]);
-      ins.translate(mx, -4.9, 0.57);
+      ins.translate(mx, -4.9, 0.62);
       door.add(new THREE.Mesh(ins, doorLit));
       const ret = buttonGeo(THREE, 0.42, 0.25, FT.swatch(SW.red), null, 10);
       ret.rotateX(Math.PI / 2);
@@ -1631,6 +1630,7 @@ export function buildGlass(THREE) {
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   const group = new THREE.Group();
+  group.name = 'glass';
   const { cx } = CAB;
   const cz = (CAB.z0 + CAB.z1) / 2;
 

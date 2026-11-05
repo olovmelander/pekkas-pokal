@@ -129,7 +129,7 @@ L.lockSlots = [
  * Wireform ramps. A ball crossing the capture sensor fast enough is lifted
  * out of the 2D simulation and carried along `path` ([x, y, height] in
  * playfield coordinates), then dropped back in at the far end. Left ramp
- * feeds the right inlane and vice versa, Medieval Madness style.
+ * feeds the right inlane and vice versa, so a ramp combo crosses the table.
  */
 L.ramps = {
   left: {
@@ -194,7 +194,7 @@ L.rightWall = [
  * Left lane divider: separates the left ORBIT (outside, hugging the wall)
  * from the open playfield inside. There is deliberately no second wall — the
  * left ramp is entered through a wide open mouth in front of the pop nest,
- * the way Medieval Madness' left ramp is. The old caged ramp lane left only
+ * like a classic open ramp entrance. The old caged ramp lane left only
  * 0.13 units of clearance around the ball and jammed.
  */
 L.leftDivider = [
@@ -270,15 +270,15 @@ L.posts = [
 
 /**
  * Spinner in the left orbit. A ball passing through spins the blade; each
- * revolution scores. Iconic on Williams tables and the most satisfying
+ * revolution scores. A classic orbit toy and the most satisfying
  * sound on any playfield.
  */
 L.spinner = { x: -8.95, y: 21.0, half: 0.82 };
 
 /**
- * Trolls: two pop-up beasts that rise out of the castle corridor. While up
- * they block the castle shot and can be bashed down for points — the signature
- * Medieval Madness toy.
+ * Knektar (castle guards, `trolls` in code): two pop-up guards that rise out
+ * of the castle corridor. While up they block the castle shot and can be
+ * bashed down for points.
  */
 L.trolls = [
   { x: -3.15, y: 21.4, r: 0.62 },
@@ -632,8 +632,8 @@ export function createPlayfieldCanvas(_participants = [], logo = null) {
   g.fillStyle = 'rgba(140,220,120,.7)';
   g.font = '700 17px Inter, sans-serif';
   g.letterSpacing = '4px';
-  g.fillText('TROLL', toU(L.trolls[0].x), toV(L.trolls[0].y - 1.35));
-  g.fillText('TROLL', toU(L.trolls[1].x), toV(L.trolls[1].y - 1.35));
+  g.fillText('KNEKT', toU(L.trolls[0].x), toV(L.trolls[0].y - 1.35));
+  g.fillText('KNEKT', toU(L.trolls[1].x), toV(L.trolls[1].y - 1.35));
   g.letterSpacing = '0px';
 
   /* ---- Ramp mouth: a quiet gold funnel, no text — the insert lights it ---- */
@@ -641,10 +641,12 @@ export function createPlayfieldCanvas(_participants = [], logo = null) {
   g.strokeStyle = 'rgba(255,214,120,.62)';
   g.lineWidth = 5;
   g.beginPath();
-  g.moveTo(toU(-7.55), toV(13.4));
-  g.lineTo(toU(-7.2), toV(18.4));
-  g.moveTo(toU(-5.4), toV(13.8));
-  g.lineTo(toU(-6.15), toV(18.4));
+  // Framing the mouth (capture −7.25…−5.0 at y 18), the inner line
+  // stopping short of the raised P end of the bank
+  g.moveTo(toU(-7.7), toV(13.6));
+  g.lineTo(toU(-7.45), toV(18.2));
+  g.moveTo(toU(-5.55), toV(13.5));
+  g.lineTo(toU(-6.2), toV(15.3));
   g.stroke();
   g.restore();
 

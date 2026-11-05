@@ -1975,18 +1975,20 @@ export function buildTable(THREE, mergeGeometries, materials) {
     ring.position.y = 0.66;
     g.add(ring);
 
+    // Off-white plastic cap body, so the steel ring and the lit insert read
+    // against it instead of everything melting into one gold blob
     const cap = new THREE.Mesh(
       new THREE.CylinderGeometry(L.bumperR * 0.72, L.bumperR * 0.84, 0.3, 24),
-      materials.gold
+      materials.rubberWhite
     );
     cap.position.y = 1.05;
     cap.castShadow = true;
     g.add(cap);
 
     // The printed insert on the cap top, lit from the bulb below
-    const insert = new THREE.Mesh(new THREE.CircleGeometry(L.bumperR * 0.6, 24), materials.goldGlow);
+    const insert = new THREE.Mesh(new THREE.CircleGeometry(L.bumperR * 0.66, 24), materials.goldGlow);
     insert.rotation.x = -Math.PI / 2;
-    insert.position.y = 1.215;
+    insert.position.y = 1.235; // 0.035 proud of the cap top: no depth fight
     g.add(insert);
 
     // The lamp bead that lives inside the cap. Small, very bright, and read
@@ -1999,7 +2001,7 @@ export function buildTable(THREE, mergeGeometries, materials) {
     g.add(bead);
 
     const dome = new THREE.Mesh(
-      new THREE.SphereGeometry(L.bumperR * 0.6, 22, 14, 0, Math.PI * 2, 0, Math.PI / 2),
+      new THREE.SphereGeometry(L.bumperR * 0.44, 22, 12, 0, Math.PI * 2, 0, Math.PI / 2),
       // Standard, not physical: a transparent clearcoat shader is the most
       // expensive thing on the table and, at this size, indistinguishable.
       new THREE.MeshStandardMaterial({
@@ -2007,13 +2009,13 @@ export function buildTable(THREE, mergeGeometries, materials) {
         roughness: 0.16,
         metalness: 0.15,
         transparent: true,
-        opacity: 0.66,
+        opacity: 0.5,
         emissive: 0xf2c14e,
         emissiveIntensity: 0.5,
         envMapIntensity: 1.4
       })
     );
-    dome.position.y = 1.2;
+    dome.position.y = 1.22;
     dome.renderOrder = 3;
     g.add(dome);
 

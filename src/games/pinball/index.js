@@ -2308,14 +2308,23 @@ export async function createPinball(container, opts = {}) {
   // Frame the machine, not just the playfield: the side armour and the front
   // of the lockdown bar are the composition's border, and the backbox has to
   // clear the top of the frame or it reads as a bug rather than a head.
-  const top = headTop();
-  const corners = [];
-  for (const x of [CAB.x0, CAB.x1]) {
-    corners.push(new THREE.Vector3(x, 0, CAB.z0));
-    corners.push(new THREE.Vector3(x, CAB.railY + 1.3, CAB.z0));
-    corners.push(new THREE.Vector3(x, 0, CAB.z1));
-    corners.push(new THREE.Vector3(x, top.y, top.z));
-  }
+  // On a short landscape screen (a phone on its side) the whole translite
+  // would cost the playfield a sixth of its size: frame to the speaker
+  // panel and the lower part of the translite there, and let its top run
+  // off the screen.
+  const cornerSet = (top) => {
+    const out = [];
+    for (const x of [CAB.x0, CAB.x1]) {
+      out.push(new THREE.Vector3(x, 0, CAB.z0));
+      out.push(new THREE.Vector3(x, CAB.railY + 1.3, CAB.z0));
+      out.push(new THREE.Vector3(x, 0, CAB.z1));
+      out.push(new THREE.Vector3(x, top.y, top.z));
+    }
+    return out;
+  };
+  const cornersFull = cornerSet(headTop());
+  const cornersShort = cornerSet(headTop(5 + (CAB.backH - 5) * 0.4));
+  let corners = cornersFull;
   const pv = new THREE.Vector3();
   // The play camera's framing, kept for the showcase to fly back into
   const playView = {};
@@ -2344,6 +2353,7 @@ export async function createPinball(container, opts = {}) {
    * middle of the free space, without changing the perspective.
    */
   function frameInto(W, H, ins) {
+    corners = W > H && H < 520 ? cornersShort : cornersFull;
     const RW = Math.max(40, W - ins.l - ins.r);
     const RH = Math.max(40, H - ins.t - ins.b);
     camera.aspect = W / H;
@@ -2410,7 +2420,7 @@ export async function createPinball(container, opts = {}) {
       showcase.cut(0);
       camera.up.set(0, 1, 0);
     } else {
-      const grow = 0.22;
+      const grow = 0.15;
       const l = fit.l * (1 - grow);
       const r = fit.r * (1 - grow);
       const ins = land ? LANDSCAPE_INSETS : PORTRAIT_INSETS;
@@ -3267,7 +3277,8 @@ export async function createPinball(container, opts = {}) {
     const sk = showcase.k;
     // The glass sheet only shows at a low angle; on phones it is a full-table
     // blend for nothing while playing, so it is drawn only in the showcase
-    glassSheet.visible = !small || sk > 0;
+    glassSheet.visible = !small || sk > 0 || !!peek;
+    if (small) room.decor.forEach((o) => (o.visible = sk > 0 || !!peek));
     room.fill.intensity = 0.1 + 1.25 * (peek ? 1 : sk);
     // The coin door's lights sit under the portrait HUD's bottom row: dim
     // while playing, full in the showcase

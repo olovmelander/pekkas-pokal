@@ -131,6 +131,7 @@ export function createShowcase(THREE, { CAB, ROOM, reduceMotion }) {
     },
     /** Jump straight to a state without flying (reduced motion, peek) */
     cut(goal, t) {
+      if (goal && !s.rect) return;
       s.goal = goal;
       s.k = goal;
       if (t !== undefined) s.t = t;
@@ -143,6 +144,8 @@ export function createShowcase(THREE, { CAB, ROOM, reduceMotion }) {
     apply(camera, fog, playLook, dt, want) {
       const { play } = s;
       if (!play) return false;
+      if (!s.rect) want = false; // never fitted: a portrait screen
+
       s.goal = want ? 1 : 0;
       if (reduceMotion) s.k = s.goal;
       else if (s.k < s.goal) s.k = Math.min(1, s.k + dt / FLY_OUT);

@@ -394,6 +394,7 @@ function floorQuads(THREE, quads, lift) {
 
 export function buildRoom(THREE, { mergeGeometries, materials }) {
   const group = new THREE.Group();
+  group.name = 'room';
   const disposables = [];
 
   // Everything that stands on the floor lives in the floor's frame, pitched
@@ -491,6 +492,8 @@ export function buildRoom(THREE, { mergeGeometries, materials }) {
   return {
     group,
     fill,
+    /** Set dressing only the showcase sees (phones hide it while playing) */
+    decor: [shadows, glow, wall],
     /** Floor height under the front of our machine (world) */
     floorFront: front.y,
     /** Attract-mode breathing on the neighbours' translites */

@@ -763,7 +763,7 @@ och skjut vänster orbit inom tre sekunder för en **super skill shot** (15 000)
 Fyra nudgar för snabbt ger TILT: flipprarna dör för den bollen och dess bonus
 går förlorad.
 
-**Bordet (à la Medieval Madness)**
+**Bordet**
 
 Högst upp står **BORGEN** med torn, port och pokalen på borggården. Två
 flippervägar korsar bordet som äkta wireform-ramper: **Kungsvägen** (vänster
