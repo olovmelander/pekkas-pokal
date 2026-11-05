@@ -2586,11 +2586,16 @@ export async function createPinball(container, opts = {}) {
     }
 
     // Drop target animation
+    // A drop target falls straight into its slot in a blink and rises back
+    // a little slower; once it is all the way down it is not drawn at all
+    const nextSkytte = state.mode && state.mode.def.id === 'skytte' ? state.mode.progress : -1;
     refs.targets.forEach((tg, i) => {
-      const want = tg.down ? -1.05 : 0;
-      tg.group.position.y += (want - tg.group.position.y) * Math.min(1, dtRaw * 14);
-      tg.face.material.emissiveIntensity = tg.down ? 0 : 0.9;
-      tg.face.material.color.set(state.pokal[i] ? 0x3a4265 : 0xf26d8d);
+      const want = tg.down ? -1.26 : 0;
+      const rate = tg.down ? 30 : 12;
+      tg.group.position.y += (want - tg.group.position.y) * Math.min(1, dtRaw * rate);
+      tg.group.visible = !tg.down || tg.group.position.y > -1.2;
+      const hot = i === nextSkytte && !tg.down;
+      tg.mat.emissiveIntensity = tg.down ? 0 : hot ? 0.3 + (Math.floor(now / 140) % 2) * 0.6 : 0.3;
     });
 
     // Idle shimmer + flash decay

@@ -297,29 +297,12 @@ export async function createShooting(container) {
   gun.group.add(shooter.root);
   const shooterPose = POSES.stand(0);
   const shooterReach = { L: 0, R: 0 }; // metres short of each grip (0 = holding)
-  // The power grip shapes the fingers once; the arms are placed every frame
-  const anchors = {
-    L: shooter.setGrip('L', 'power', { diameter: 0.105, blend: 0 }),
-    R: shooter.setGrip('R', 'power', { diameter: 0.075, blend: 0 })
-  };
-  const gq = new THREE.Quaternion();
-  const gqInv = new THREE.Quaternion();
-  const gp = new THREE.Vector3();
-  const gs = new THREE.Vector3();
-  /**
-   * holdWith() for a hand inside a SCALED parent: the grip anchor's offset
-   * from the wrist is in the person's own units, so it is scaled by the
-   * gun group's world scale before it is taken off the target.
-   */
-  function gripAt(side, frame, pole) {
-    const anchor = anchors[side];
-    frame.getWorldQuaternion(gq);
-    gq.multiply(gqInv.copy(anchor.quaternion).invert());
-    frame.getWorldPosition(gp);
-    const k = frame.getWorldScale(gs).x;
-    gp.sub(gs.copy(anchor.position).multiplyScalar(k).applyQuaternion(gq));
-    return shooter.ikArm(side, gp, pole, gq);
-  }
+  // The power grips are solved once here, while loading; holdWith() then
+  // places the arms every frame (it respects the gun group's scale)
+  const GRIP_L = { diameter: 0.105, blend: 0 };
+  const GRIP_R = { diameter: 0.075, blend: 0 };
+  shooter.setGrip('L', 'power', GRIP_L);
+  shooter.setGrip('R', 'power', GRIP_R);
   const poleL = new THREE.Vector3();
   const poleR = new THREE.Vector3();
   function poseShooter(dt, t) {
@@ -329,8 +312,8 @@ export async function createShooting(container) {
     shooter.bones.neck.scale.setScalar(0.001);
     gun.group.localToWorld(poleL.set(-0.75, -0.9, -0.15));
     gun.group.localToWorld(poleR.set(0.8, -0.35, 0.3));
-    shooterReach.R = gripAt('R', gun.pistolGrip, poleR);
-    shooterReach.L = gripAt('L', gun.forendGrip, poleL);
+    shooterReach.R = shooter.holdWith('R', gun.pistolGrip, { at: [0, 0, 0], grip: 'power', ...GRIP_R, pole: poleR });
+    shooterReach.L = shooter.holdWith('L', gun.forendGrip, { at: [0, 0, 0], grip: 'power', ...GRIP_L, pole: poleL });
     shooter.update(dt, t);
   }
   let flashK = 0;

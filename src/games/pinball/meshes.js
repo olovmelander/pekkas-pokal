@@ -500,19 +500,16 @@ export function createMaterials(THREE, playfieldTexture) {
       metalness: 0.1,
       envMapIntensity: 0.25
     }),
-    targetUp: new THREE.MeshStandardMaterial({
-      color: 0xf26d8d,
-      roughness: 0.4,
-      metalness: 0.35,
-      envMapIntensity: 0.35,
-      emissive: 0xf26d8d,
-      emissiveIntensity: 0.6
-    }),
-    targetDown: new THREE.MeshStandardMaterial({
-      color: 0x3a4265,
-      roughness: 0.6,
-      metalness: 0.3,
-      emissive: 0x000000
+    // The steel lip round each drop-target slot. Raised a hair off the wood
+    // and polygon-offset as well, like the inserts.
+    slotRim: new THREE.MeshStandardMaterial({
+      color: 0xc9d1ec,
+      roughness: 0.3,
+      metalness: 0.9,
+      envMapIntensity: 0.9,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1
     }),
     // Cabinet: painted plywood, deliberately darker than anything on the
     // playfield so the lit surface stays the brightest thing in frame.
@@ -542,7 +539,7 @@ export function createMaterials(THREE, playfieldTexture) {
       polygonOffsetUnits: -1
     })
   };
-  [m.chrome, m.rail, m.armour].forEach((mat) => tameGlints(mat));
+  [m.chrome, m.rail, m.armour, m.slotRim].forEach((mat) => tameGlints(mat));
   // The GI lamps mirrored in the clearcoat were blowing out to white discs
   // with a bloom halo. Capped (hue kept), they still read as bulbs in a
   // glossy coat but no longer bleach the print under them.
@@ -1961,43 +1958,161 @@ export function buildTable(THREE, mergeGeometries, materials) {
     refs.bumpers.push({ group: g, ring, trophy: dome, bead, light, base: 0, isTrophy: false });
   });
 
-  /* ---- Drop targets (angled banks) ---- */
+  /* ---- Drop targets (angled banks) ----
+     Real drop targets: a thin upright plate (≈5 mm), its printed face in
+     the table's crimson and gold, a rounded top edge, standing in a steel-
+     lipped slot it drops straight down into. The plate's front face sits on
+     the collider's front (radius 0.26), so the ball meets the print, not air. */
+  const PLATE_W = L.targets[0].half * 2;
+  const PLATE_TOP = 1.12;
+  const PLATE_LOW = -0.3; // hidden in the slot while up
+  const PLATE_D = 0.14; // + 2 × 0.025 bevel ≈ 0.19 ≈ 4.75 mm
+  const PLATE_Z = 0.25 - (PLATE_D + 0.025); // front face at +0.25
+  const plateShape = new THREE.Shape();
+  {
+    const hw = PLATE_W / 2;
+    const r = 0.13;
+    plateShape.moveTo(-hw, PLATE_LOW);
+    plateShape.lineTo(hw, PLATE_LOW);
+    plateShape.lineTo(hw, PLATE_TOP - r);
+    plateShape.quadraticCurveTo(hw, PLATE_TOP, hw - r, PLATE_TOP);
+    plateShape.lineTo(-hw + r, PLATE_TOP);
+    plateShape.quadraticCurveTo(-hw, PLATE_TOP, -hw, PLATE_TOP - r);
+    plateShape.closePath();
+  }
+  const plateGeo = new THREE.ExtrudeGeometry(plateShape, {
+    depth: PLATE_D,
+    curveSegments: 4,
+    bevelEnabled: true,
+    bevelThickness: 0.025,
+    bevelSize: 0.025,
+    bevelOffset: -0.025,
+    bevelSegments: 2
+  });
+  plateGeo.translate(0, 0, PLATE_Z);
+  {
+    // The edges (group 1) sample the plain crimson strip at the bottom of
+    // the print, so one material (one draw) covers the whole plate
+    const { uv } = plateGeo.attributes;
+    plateGeo.groups.filter((gr) => gr.materialIndex === 1).forEach((gr) => {
+      for (let k = gr.start; k < gr.start + gr.count; k++) uv.setXY(k, 0, -0.25);
+    });
+    plateGeo.clearGroups();
+  }
+  // The slot: a dark well with a steel lip, fixed to the playfield
+  const slotDark = flatten(new THREE.PlaneGeometry(PLATE_W + 0.12, 0.34));
+  const slotRim = (() => {
+    const ow = (PLATE_W + 0.36) / 2;
+    const oh = 0.29;
+    const iw = (PLATE_W + 0.1) / 2;
+    const ih = 0.16;
+    const sh = new THREE.Shape();
+    sh.moveTo(-ow, -oh);
+    sh.lineTo(ow, -oh);
+    sh.lineTo(ow, oh);
+    sh.lineTo(-ow, oh);
+    sh.closePath();
+    const hole = new THREE.Path();
+    hole.moveTo(-iw, -ih);
+    hole.lineTo(-iw, ih);
+    hole.lineTo(iw, ih);
+    hole.lineTo(iw, -ih);
+    hole.closePath();
+    sh.holes.push(hole);
+    return flatten(new THREE.ExtrudeGeometry(sh, { depth: 0.05, bevelEnabled: false }));
+  })();
+  const slotZ = PLATE_Z + (PLATE_D + 0.05) / 2 - 0.025;
+  const faceArt = (letter) => {
+    const W = 128;
+    const H = 165;
+    const vis = Math.round(H * (PLATE_TOP / (PLATE_TOP - PLATE_LOW)));
+    const cv = document.createElement('canvas');
+    cv.width = W;
+    cv.height = H;
+    const g = cv.getContext('2d');
+    g.fillStyle = '#5a0a1c';
+    g.fillRect(0, 0, W, H);
+    const bg = g.createLinearGradient(0, 0, 0, vis);
+    bg.addColorStop(0, '#c21d40');
+    bg.addColorStop(0.6, '#8f1029');
+    bg.addColorStop(1, '#650b1e');
+    g.fillStyle = bg;
+    g.fillRect(0, 0, W, vis);
+    // Gold frame with a fine inner line
+    g.strokeStyle = '#f2c14e';
+    g.lineWidth = 5;
+    g.strokeRect(8, 8, W - 16, vis - 14);
+    g.strokeStyle = 'rgba(242,193,78,.55)';
+    g.lineWidth = 1.5;
+    g.strokeRect(14, 14, W - 28, vis - 26);
+    // Diamond studs in the corners
+    g.fillStyle = '#f2c14e';
+    [[18, 18], [W - 18, 18], [18, vis - 13], [W - 18, vis - 13]].forEach(([x, y]) => {
+      g.beginPath();
+      g.moveTo(x, y - 5);
+      g.lineTo(x + 5, y);
+      g.lineTo(x, y + 5);
+      g.lineTo(x - 5, y);
+      g.closePath();
+      g.fill();
+    });
+    // The letter, a heavy old-style serif in gold with a cut shadow
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.font = '800 82px Fraunces, "Iowan Old Style", Georgia, serif';
+    g.fillStyle = 'rgba(30,4,10,.75)';
+    g.fillText(letter, W / 2 + 2.5, vis / 2 + 5.5);
+    const gold = g.createLinearGradient(0, vis * 0.2, 0, vis * 0.85);
+    gold.addColorStop(0, '#ffe7a3');
+    gold.addColorStop(0.5, '#f2c14e');
+    gold.addColorStop(1, '#b8861f');
+    g.fillStyle = gold;
+    g.fillText(letter, W / 2, vis / 2 + 3);
+    // Gloss rolling over the rounded top edge
+    const gl = g.createLinearGradient(0, 0, 0, 34);
+    gl.addColorStop(0, 'rgba(255,240,230,.4)');
+    gl.addColorStop(1, 'rgba(255,240,230,0)');
+    g.fillStyle = gl;
+    g.fillRect(0, 0, W, 34);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    // Cap UVs are the shape's own coordinates
+    tex.repeat.set(1 / PLATE_W, 1 / (PLATE_TOP - PLATE_LOW));
+    tex.offset.set(0.5, -PLATE_LOW / (PLATE_TOP - PLATE_LOW));
+    return tex;
+  };
   L.targets.forEach((t) => {
     const g = new THREE.Group();
     g.position.set(t.x, 0, -t.y);
     g.rotation.y = t.a;
-    // The decal: each target wears its letter, printed dark on a light
-    // face so the game's colour (lit pink, dropped slate) tints the plastic
-    // and the letter stays legible either way
-    const cv = document.createElement('canvas');
-    cv.width = 128;
-    cv.height = 128;
-    const dg = cv.getContext('2d');
-    dg.fillStyle = '#ffffff';
-    dg.fillRect(0, 0, 128, 128);
-    dg.fillStyle = '#cfcfcf';
-    dg.fillRect(0, 0, 128, 12);
-    dg.fillRect(0, 116, 128, 12);
-    dg.fillStyle = '#2a0b16';
-    dg.font = '900 84px "Schibsted Grotesk", Inter, Arial, sans-serif';
-    dg.textAlign = 'center';
-    dg.textBaseline = 'middle';
-    dg.fillText(t.letter, 64, 70);
-    const decal = new THREE.CanvasTexture(cv);
-    decal.colorSpace = THREE.SRGBColorSpace;
-    const tmat = materials.targetUp.clone();
-    tmat.map = decal;
-    tmat.emissiveMap = decal;
-    const face = new THREE.Mesh(
-      new THREE.BoxGeometry(t.half * 2, 1.15, 0.42),
-      tmat
-    );
-    face.position.y = 0.58;
+    const art = faceArt(t.letter);
+    const mat = new THREE.MeshStandardMaterial({
+      map: art,
+      roughness: 0.3,
+      metalness: 0.05,
+      envMapIntensity: 0.6,
+      emissive: 0xffffff,
+      emissiveMap: art,
+      emissiveIntensity: 0.3
+    });
+    const face = new THREE.Mesh(plateGeo, mat);
     face.castShadow = true;
     g.add(face);
     g.userData.keep = true;
     group.add(g);
-    refs.targets.push({ group: g, face, down: false });
+    // The slot stays put on the playfield (static, so it is batched)
+    const slot = new THREE.Group();
+    slot.position.copy(g.position);
+    slot.rotation.y = t.a;
+    const well = new THREE.Mesh(slotDark, materials.bezel);
+    well.position.set(0, 0.016, slotZ);
+    slot.add(well);
+    const rim = new THREE.Mesh(slotRim, materials.slotRim);
+    rim.position.set(0, 0, slotZ);
+    slot.add(rim);
+    group.add(slot);
+    refs.targets.push({ group: g, face, mat, down: false });
   });
 
   /* ---- Castle ---- */

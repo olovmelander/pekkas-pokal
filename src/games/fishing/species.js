@@ -97,34 +97,34 @@ const M = (x, y, z, rz = 0, sx = 1, sy = 1, sz = 1) =>
     .multiply(new THREE.Matrix4().makeScale(sx, sy, sz));
 
 /**
- * The body: an elliptical tube swept along the spine profile, with
- * analytic normals so it shades smooth instead of faceted. For a surface
- * P(x, a) = (x, R·h·cos a, R·w·sin a) the outward normal is
- * (−R′·h·w, w·cos a, h·sin a), where R′ = dR/dx.
- * `paint(u, y, ry, x)` returns the vertex colour.
+ * The body: an elliptical tube swept along the spine profile. Its height
+ * and width each follow their own envelope (profile.hK / profile.wK), so
+ * the caudal peduncle is pinched thin from side to side and a pike's snout
+ * is a flat duck-bill. Rings crowd toward the nose and the tail root,
+ * where the outline bends hardest; normals are averaged over the smooth
+ * indexed surface, so it shades without facets.
+ * `paint(u, y, ry, x, side)` returns the vertex colour.
  */
 function bodyGeometry(profile, rings, radial, paint) {
   const { height: h, width: w } = profile;
   const pos = [];
-  const nor = [];
   const col = [];
   const idx = [];
-  const n = new THREE.Vector3();
   for (let i = 0; i <= rings; i++) {
-    // Rings crowd towards the nose, where the profile bends hardest
-    const u = (i / rings) ** 1.15;
+    const f = i / rings;
+    // Denser at both ends: the head's curve and the pinch of the peduncle
+    const u = f < 0.5 ? 0.5 * (2 * f) ** 1.25 : 1 - 0.5 * (2 - 2 * f) ** 1.15;
     const x = profile.x(u);
     const R = profile.radius(u);
-    const e = 0.01;
-    const dR = (profile.radius(u + e) - profile.radius(u - e)) / (profile.x(u + e) - profile.x(u - e));
+    const hh = R * h * profile.hK(u);
+    const ww = R * w * profile.wK(u);
     for (let k = 0; k < radial; k++) {
       const a = (k / radial) * Math.PI * 2;
-      const y = Math.cos(a) * R * h;
-      const z = Math.sin(a) * R * w;
+      const y = Math.cos(a) * hh;
+      // A slightly fuller belly than back: a fish is not an ellipse
+      const z = Math.sin(a) * ww * (1 + Math.max(0, -Math.cos(a)) * 0.08);
       pos.push(x, y, z);
-      n.set(-dR * h * w, w * Math.cos(a), h * Math.sin(a)).normalize();
-      nor.push(n.x, n.y, n.z);
-      const c = paint(u, y, R * h, x);
+      const c = paint(u, y, hh, x, Math.sin(a));
       col.push(c.r, c.g, c.b);
     }
   }
@@ -137,12 +137,11 @@ function bodyGeometry(profile, rings, radial, paint) {
       idx.push(a, c, b, b, c, d);
     }
   }
-  // Nose and peduncle caps
-  const cap = (ring, tipX, nx, flip) => {
+  // Nose and tail-root caps
+  const cap = (ring, tipX, flip) => {
     const center = pos.length / 3;
-    const c = paint(ring === 0 ? 0 : 1, 0, 1, tipX);
+    const c = paint(ring === 0 ? 0 : 1, 0, 1, tipX, 0);
     pos.push(tipX, 0, 0);
-    nor.push(nx, 0, 0);
     col.push(c.r, c.g, c.b);
     for (let k = 0; k < radial; k++) {
       const a = ring * radial + k;
@@ -150,15 +149,105 @@ function bodyGeometry(profile, rings, radial, paint) {
       if (flip) idx.push(center, b, a); else idx.push(center, a, b);
     }
   };
-  cap(0, profile.x(0) + 0.04, 1, false);
-  cap(rings, profile.x(1) - 0.01, -1, true);
+  cap(0, profile.x(0) + 0.035, false);
+  cap(rings, profile.x(1) - 0.01, true);
 
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
-  g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(nor), 3));
   g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(col), 3));
   g.setIndex(idx);
+  g.computeVertexNormals();
   return g;
+}
+
+/**
+ * A fin membrane: `rays` rays fanned between a root line and an outline,
+ * root(t) and tip(t) giving [x, y] for t from 0 to 1 along the fin. Each
+ * ray is a darker, nearly opaque line; the membrane between two rays is
+ * paler and thins to almost nothing at the trailing edge, and on a spiny
+ * fin (`notch`) it is cut back between the spines. `spot(t, r)` may paint
+ * a mark (the perch's black spot). One layer, drawn from both sides.
+ * Returns an indexed geometry with RGBA vertex colours.
+ */
+function finMembrane(rays, root, tip, look, matrix) {
+  const cols = rays * 2 + 1;
+  const rows = [0, 0.45, 0.8, 1];
+  const ray = new THREE.Color(look.color).multiplyScalar(look.rayDark ?? 0.72);
+  const mem = new THREE.Color(look.color).lerp(new THREE.Color(0xffffff), look.pale ?? 0.18);
+  const aRay = look.aRay || [0.95, 0.88, 0.78, 0.55];
+  const aMem = look.aMem || [0.8, 0.55, 0.32, 0.06];
+  const pos = [];
+  const col = [];
+  const idx = [];
+  const c = new THREE.Color();
+  for (let ci = 0; ci < cols; ci++) {
+    const t = ci / (cols - 1);
+    const isRay = ci % 2 === 0;
+    const r0 = root(t);
+    const r1 = tip(t);
+    const reach = isRay ? 1 : (look.notch ?? 0.94);
+    for (let ri = 0; ri < rows.length; ri++) {
+      const k = rows[ri] * reach;
+      pos.push(r0[0] + (r1[0] - r0[0]) * k, r0[1] + (r1[1] - r0[1]) * k, 0);
+      c.copy(isRay ? ray : mem);
+      let a = isRay ? aRay[ri] : aMem[ri];
+      if (look.spot) {
+        const s = look.spot(t, rows[ri]);
+        if (s > 0) {
+          c.lerp(new THREE.Color(0x0a0a0c), s);
+          a = Math.max(a, 0.92 * s);
+        }
+      }
+      col.push(c.r, c.g, c.b, a);
+    }
+  }
+  const R = rows.length;
+  for (let ci = 0; ci < cols - 1; ci++) {
+    for (let ri = 0; ri < R - 1; ri++) {
+      const a = ci * R + ri;
+      const b = (ci + 1) * R + ri;
+      idx.push(a, b, a + 1, a + 1, b, b + 1);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+  g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(col), 4));
+  g.setIndex(idx);
+  if (matrix) g.applyMatrix4(matrix);
+  g.computeVertexNormals();
+  return g;
+}
+
+/** Merge indexed RGBA fin geometries into one. */
+function mergeFins(list) {
+  let vc = 0;
+  let ic = 0;
+  list.forEach((g) => {
+    vc += g.attributes.position.count;
+    ic += g.index.count;
+  });
+  const pos = new Float32Array(vc * 3);
+  const nor = new Float32Array(vc * 3);
+  const col = new Float32Array(vc * 4);
+  const idx = new Uint16Array(ic);
+  let vo = 0;
+  let io = 0;
+  list.forEach((g) => {
+    pos.set(g.attributes.position.array, vo * 3);
+    nor.set(g.attributes.normal.array, vo * 3);
+    col.set(g.attributes.color.array, vo * 4);
+    const src = g.index.array;
+    for (let i = 0; i < src.length; i++) idx[io + i] = src[i] + vo;
+    vo += g.attributes.position.count;
+    io += src.length;
+    g.dispose();
+  });
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  out.setAttribute('color', new THREE.BufferAttribute(col, 4));
+  out.setIndex(new THREE.BufferAttribute(idx, 1));
+  return out;
 }
 
 /* ------------------------------------------------------------------ species */
@@ -179,10 +268,19 @@ function makeProfile(points, opts) {
     }
     return points[points.length - 1][1];
   };
+  const sm = (e0, e1, x) => {
+    const k = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)));
+    return k * k * (3 - 2 * k);
+  };
+  // Height and width envelopes: the peduncle is pinched thin from side to
+  // side before the tail; a pike's snout is flattened into a duck-bill
+  const flat = opts.snoutFlat || 0;
   return {
     radius,
     height: opts.height,
     width: opts.width,
+    hK: (u) => 1 - flat * (1 - sm(0, 0.2, u)),
+    wK: (u) => (1 - 0.48 * sm(0.55, 0.97, u)) * (1 + flat * 0.25 * (1 - sm(0, 0.2, u))),
     x: (u) => opts.nose - u * (opts.nose - opts.tail)
   };
 }
@@ -194,16 +292,26 @@ function makeProfile(points, opts) {
 function painter(sp) {
   const back = C(sp.back);
   const belly = C(sp.belly);
+  const flankC = C(sp.flank || sp.belly);
   const gill = C(sp.back).multiplyScalar(0.55);
-  const gillX = sp.profile.x(sp.snout ? 0.26 : 0.2);
+  const gillX = sp.profile.x(sp.snout ? 0.27 : 0.22);
+  const white = C(0xffffff);
+  const dark = C(0x0b0f14);
   return (u, y, ry, x) => {
     const k = Math.min(1, Math.max(0, (y / (ry || 1)) * 0.5 + 0.5));
-    const s = k * k * (3 - 2 * k);
-    const c = belly.clone().lerp(back, s);
-    // A bright sheen band just above the midline — where the light catches
-    if (k > 0.5 && k < 0.68) c.lerp(C(0xffffff), 0.12);
+    // Counter-shading in three bands: pale belly, the flank's own colour,
+    // and a dark back that deepens along the spine
+    const c = belly.clone().lerp(flankC, Math.min(1, k * 1.8));
+    c.lerp(back, Math.min(1, Math.max(0, (k - 0.55) / 0.33)) ** 1.3);
+    if (k > 0.92) c.multiplyScalar(0.85);
+    // The lateral line, a thin pale stroke, and the sheen above it
+    if (Math.abs(k - 0.6) < 0.02 && u > 0.2 && u < 0.95) c.lerp(white, 0.35);
+    else if (k > 0.5 && k < 0.68) c.lerp(white, 0.1);
     if (sp.mark) sp.mark(c, u, y, ry, x);
-    if (Math.abs(x - gillX) < 0.025 && k < 0.9) c.lerp(gill, 0.6);
+    // Gill cover: an arc, and a touch of darkness under it
+    if (Math.abs(x - gillX) < 0.022 && k < 0.92 && k > 0.12) c.lerp(gill, 0.6);
+    // The mouth line on the nose
+    if (u < 0.06 && Math.abs(k - 0.42) < 0.05) c.lerp(dark, 0.55);
     return c;
   };
 }

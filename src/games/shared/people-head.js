@@ -968,11 +968,11 @@ export const HAIR_STYLES = {
   bun: { h: 0.0068, side: 0.0052, ramp: 0.05, crown: [0, 0.82, -0.57], groove: 0.0016, bun: true },
   balding: { h: 0.0048, side: 0.0045, ramp: 0.08, crown: [0, 0.9, -0.43], groove: 0.0006, balding: true },
   // Short, a little unruly on top
-  messy: { h: 0.0135, side: 0.005, ramp: 0.05, fringeLocks: 3.5, lockDepth: 6, crown: [0.05, 0.92, -0.38], groove: 0.002, noise: 0.0042, clumps: 0.0048, front: 0.0045, tufts: 3.2, jag: 3.4 },
+  messy: { h: 0.0135, side: 0.005, ramp: 0.05, fringeLocks: 2.2, lockDepth: 6, crown: [0.05, 0.92, -0.38], groove: 0.002, noise: 0.0042, clumps: 0.0048, front: 0.0045, tufts: 3.2, jag: 3.4 },
   // Medium length, wavy, tucked behind the ears and over the collar at the back
   wavy: {
     h: 0.0165, side: 0.0105, ramp: 0.045, crown: [0.12, 0.85, -0.5], groove: 0.002, noise: 0.003, clumps: 0.004, front: 0.006,
-    part: 24, waves: 0.0035, lower: 9, lowerBack: 15, fringe: 0.0035, lockDepth: 8, fringeLocks: 3
+    part: 24, waves: 0.0035, lower: 9, lowerBack: 15, fringe: 0.0035, lockDepth: 8
   },
   // A neat short cut with the temples receding
   receding: { h: 0.0086, side: 0.0042, ramp: 0.065, crown: [0, 0.9, -0.43], groove: 0.0014, front: 0.0028, recede: 9 }
