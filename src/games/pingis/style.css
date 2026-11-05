@@ -1272,3 +1272,11 @@
     font-size: 1.45rem;
   }
 }
+
+@media (max-height: 400px) {
+  /* A phone on its side: the result, the medal and the button; the stats wait */
+  .pg-ui .pg-card.pg-result .pg-statrow,
+  .pg-ui .pg-card.pg-result .pg-medal-drop small {
+    display: none;
+  }
+}
