@@ -750,6 +750,25 @@ hål i fogarna, flipprarna har fått riktiga rundade ändar, och förklädet öv
 avloppet har fått ett tryckt märke.
 
 
+**Personerna i spelen**
+
+Alla figurer i spelen kommer från ett gemensamt personsystem i
+`src/games/shared/people*.js`, helt byggt i kod utan modellfiler. Varje
+deltagares utseende utgår från ett gruppfoto: Ludvig har rakat huvud och långt
+kopparrött skägg, Niklas och Viktor bär keps, och bara Henrik och Viktor har
+glasögon – ingen av deltagarna har solglasögon. Var och en har ett eget ansikte
+(Olov runt med brett leende, Mikael och Per Vikman långa och smala, Rickard med
+fyrkantig käke), ögon med regnbågshinna och glans, skulpterat hår och öron med
+riktig form. Kläderna har knappslåar, sömmar och skor med sula.
+
+Händerna har fem fingrar med tre leder var och en tumme som kan föras mot
+fingrarna. Med `person.hold(föremål, sida, grepp)` lägger spelen ett racket, en
+florett, en pensel, en mugg, ett block, en palett, ett spö eller en boll i
+handen, och fingrarna sluter sig kring föremålet i rätt storlek. Gången har
+hälisättning och frånskjut utan att fötterna glider, i vila skiftar var och en
+vikten på sitt eget sätt, ögonen hinner före huvudet när någon tittar sig om,
+och publiken kan luta sig fram, ta sig för huvudet eller applådera artigt.
+
 ---
 
 ## Utveckling
@@ -809,7 +828,7 @@ stänger dem.
 | `src/scripts/achievement-engine.js` | Beräknar vilka utmärkelser varje deltagare låst upp |
 | `src/data/achievements.js` | Definitioner av alla utmärkelser |
 | `src/styles/` | `main` (tokens/teman), `layout`, `components`, `animations`, `games` (arkaden och spelscenen), `game-hud` (spelens delade HUD), `responsive` |
-| `src/games/shared/` | Delat av alla spel: `gfx` (grafikvakten: tålig efterbehandling, NaN-skydd, svart-bild-vakt, förkompilering, `?gfx=safe`), `people` med `people-*` (personsystemet: skelett, ansikten, utseenden, poser, publik) |
+| `src/games/shared/` | Delat av alla spel: `gfx` (grafikvakten: tålig efterbehandling, NaN-skydd, svart-bild-vakt, förkompilering, `?gfx=safe`), `people` med `people-*` (personsystemet: skelett, händer och grepp, ansikten, utseenden, poser, gång, publik) |
 | `src/games/pinball/` | Flipperspelet: `physics` (2D-kollision), `table` (layout + banans grafik), `meshes` (3D), `room` (arkadhallen), `dmd` (punktmatrisen), `fx` (gnistor, bollspår), `audio` (syntetiskt ljud), `hud` (paneler), `scores` (topplistan), `index` (spelloop) |
 | `src/games/fishing/` | Fiskespelet: `species` (procedurella fiskar), `world` (sjö, vattenshader), `boat` (klinkbyggda ekan), `angler` (Erik i ekan, IK mot spöet), `fx` (stänk, bubblor, glimtar), `hud` (paneler, fångstdagbok), `progress` (uppdrag och rekord), `audio` (syntetiskt ljud), `index` (spelloop) |
 | `src/games/clay/` | Drejspelet: `studio` (ateljé, ugn, drejskiva), `clay` (krukans nät och material), `keramiker` (keramikern och domen), `guide` (målets guider i 3D), `fx` (stänk, glöd, värmedaller), `hud` (paneler, dom, kvällens utställning), `audio` (syntetiskt ljud), `index` (lerfysik + spelloop) |
