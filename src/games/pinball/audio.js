@@ -95,8 +95,32 @@ export class Sfx {
   }
 
   /** Routes a voice to the dry bus and, optionally, the room. */
+  /**
+   * Places the next sound on the playfield: `sfx.at(x).bumper()` pans the
+   * whole recipe by the table x it happened at (−10 … 9), so a sling on the
+   * left is heard on the left. It lasts for the synchronous recipe only.
+   */
+  at(x) {
+    this.pan = Math.max(-0.75, Math.min(0.75, ((x || 0) + 0.6) / 11));
+    if (!this.panReset) {
+      this.panReset = true;
+      queueMicrotask(() => {
+        this.pan = 0;
+        this.panReset = false;
+      });
+    }
+    return this;
+  }
+
   out(node, wet) {
-    node.connect(this.master);
+    let dry = node;
+    if (this.pan && this.ctx.createStereoPanner) {
+      const p = this.ctx.createStereoPanner();
+      p.pan.value = this.pan;
+      node.connect(p);
+      dry = p;
+    }
+    dry.connect(this.master);
     if (wet > 0) {
       const g = this.ctx.createGain();
       g.gain.value = wet;
@@ -172,7 +196,28 @@ export class Sfx {
     if (k > 0.5) this.thump(200, 120, 0.05, 0.12 * k);
   }
 
+  /** A coil pulse with nothing much to hit: ball search, a soft clack */
+  coil(k = 1) {
+    this.thump(150, 70, 0.08, 0.4 * k);
+    this.noise(0.03, { gain: 0.25 * k, freq: 1800, q: 1.1, wet: 0.05 });
+  }
+
+  /** The ramp's entry flap slapping as a ball rolls over it onto the wire */
+  flap() {
+    this.noise(0.025, { gain: 0.3, freq: 2400, q: 1.6, wet: 0.08 });
+    this.tone(880, 0.05, { type: 'square', gain: 0.05, sweep: -300, wet: 0.05, at: 0.012 });
+  }
+
+  /** The cabinet shoved on its legs: a deep wooden knock and the bob ringing */
+  nudge() {
+    this.thump(70, 38, 0.22, 0.75);
+    this.noise(0.08, { gain: 0.32, freq: 220, type: 'lowpass', wet: 0.25 });
+    this.tone(2100, 0.25, { type: 'sine', gain: 0.025, wet: 0.2, at: 0.03 });
+  }
+
   bumper() {
+    // The solenoid's body, the ring's steel clack, and the lit-cap ding
+    this.noise(0.012, { gain: 0.5, freq: 4200, q: 0.9, wet: 0.04 });
     this.thump(175, 68, 0.15, 0.7);
     this.noise(0.06, { gain: 0.42, freq: 1300, q: 1.2, wet: 0.15 });
     this.tone(1046, 0.18, { type: 'square', gain: 0.045, wet: 0.35 });
@@ -180,6 +225,8 @@ export class Sfx {
   }
 
   sling() {
+    // The arm's sharp snap on the rubber first, then the body below
+    this.noise(0.018, { gain: 0.42, freq: 3000, q: 1.3, wet: 0.04 });
     this.thump(240, 105, 0.08, 0.5);
     this.noise(0.05, { gain: 0.3, freq: 760, wet: 0.1 });
   }
@@ -238,15 +285,18 @@ export class Sfx {
     this.tone(660, 0.2, { type: 'triangle', gain: 0.3, sweep: 220, at: 0.18, wet: 0.4 });
   }
 
+  /** The castle guards rise: a short call on a guard's horn */
   trollUp() {
-    this.tone(70, 0.42, { type: 'sawtooth', gain: 0.4, sweep: 40, wet: 0.35 });
-    this.tone(150, 0.3, { type: 'square', gain: 0.24, sweep: -60, at: 0.16, wet: 0.35 });
+    this.tone(196, 0.16, { type: 'square', gain: 0.2, wet: 0.4 });
+    this.tone(294, 0.34, { type: 'square', gain: 0.22, sweep: 6, at: 0.15, wet: 0.45 });
+    this.thump(110, 60, 0.3, 0.35);
   }
 
+  /** A guard knocked down: a clang off the helm and a thud */
   trollHit() {
     this.noise(0.12, { gain: 0.5, freq: 420, wet: 0.2 });
     this.thump(190, 70, 0.26, 0.6);
-    this.tone(120, 0.3, { type: 'sawtooth', gain: 0.2, sweep: -60, at: 0.05, wet: 0.3 });
+    this.tone(1180, 0.22, { type: 'triangle', gain: 0.16, sweep: -240, wet: 0.35 });
   }
 
   lock() {
@@ -322,17 +372,123 @@ export class Sfx {
     this.arp([523, 466, 392, 311, 262], 0.16, { type: 'triangle', gain: 0.26, dur: 0.32, wet: 0.6 });
   }
 
+  /* ---- Game layer: castle, rules and per-gren music (pin-play) ---- */
+
+  /** A ram on the castle door: a heavy wooden boom, more splinter each hit */
+  castleHit(n = 1) {
+    const k = clamp01(n / 3);
+    this.thump(120 - n * 12, 38, 0.32, 0.85);
+    this.noise(0.16, { gain: 0.42, freq: 520 - n * 60, q: 0.9, wet: 0.35 });
+    // The splintering crack, sharper as the door weakens
+    this.noise(0.06 + k * 0.08, { gain: 0.18 + k * 0.22, freq: 2400 + n * 500, q: 2.5, at: 0.02, wet: 0.2 });
+    // The portcullis chain rattling in its slot
+    for (let i = 0; i < 4; i++) this.tone(1900 + i * 160, 0.025, { type: 'square', gain: 0.035, at: 0.05 + i * 0.045, wet: 0.2 });
+  }
+
+  /** The third hit: the door gives way and the bridge falls */
+  gateCrash() {
+    this.thump(90, 30, 0.6, 1);
+    this.noise(0.9, { gain: 0.55, freq: 1800, to: 160, q: 0.7, type: 'lowpass', wet: 0.6 });
+    for (let i = 0; i < 7; i++) this.noise(0.04, { gain: 0.16, freq: 1500 + i * 420, q: 3, at: 0.08 + i * 0.07, wet: 0.3 });
+    this.arp([147, 220, 294], 0.14, { type: 'sawtooth', gain: 0.2, dur: 0.3, wet: 0.5, at: 0.3 });
+  }
+
+  /** The drawbridge landing flat on the forecourt */
+  bridgeSlam() {
+    this.thump(70, 28, 0.42, 0.9);
+    this.noise(0.3, { gain: 0.32, freq: 260, type: 'lowpass', wet: 0.5 });
+  }
+
+  /** The winch hauling the repaired door back up: a ratchet of clicks */
+  winch() {
+    for (let i = 0; i < 10; i++) {
+      this.tone(620 + (i % 2) * 90, 0.03, { type: 'square', gain: 0.07, at: i * 0.075, wet: 0.25 });
+      this.noise(0.02, { gain: 0.08, freq: 3200, q: 2, at: i * 0.075, wet: 0.1 });
+    }
+    this.thump(110, 60, 0.18, 0.4, 0.78);
+  }
+
+  /** Storming the castle: a herald's fanfare over the courtyard */
+  castleStorm() {
+    this.knocker();
+    this.arp([392, 523, 659, 784], 0.11, { type: 'sawtooth', gain: 0.2, dur: 0.22, wet: 0.5, at: 0.06 });
+    this.arp([784, 988, 1175], 0.16, { type: 'square', gain: 0.16, dur: 0.5, wet: 0.7, at: 0.55 });
+    this.noise(1.1, { gain: 0.12, freq: 900, to: 2400, q: 0.6, at: 0.3, wet: 0.8 });
+  }
+
+  superJackpot() {
+    this.jackpot();
+    this.arp([523, 659, 784, 1047, 1319, 1568, 2093], 0.07, { type: 'sawtooth', gain: 0.16, dur: 0.26, wet: 0.6, at: 0.5 });
+    this.thump(60, 30, 0.8, 0.9, 0.5);
+  }
+
+  addBall() {
+    this.arp([330, 440, 554, 659, 880], 0.07, { type: 'triangle', gain: 0.28, dur: 0.2, wet: 0.5 });
+    this.launch();
+  }
+
+  /** Mission select: a tick per change, a chord on the pick */
+  selectTick() {
+    this.tone(880, 0.05, { type: 'square', gain: 0.12, wet: 0.2 });
+  }
+
+  selectOpen() {
+    this.arp([294, 392, 494], 0.08, { type: 'triangle', gain: 0.24, dur: 0.22, wet: 0.5 });
+  }
+
+  /**
+   * Each gren opens with its own motif, so the ear knows which one started:
+   * an engine rev for Gokart, a brass call for Femkamp, a rally of ticks
+   * for Pingis, a shot and its echo for Skytte, a splash for Fiske, and a
+   * full fanfare for Finalen.
+   */
+  modeStinger(id) {
+    if (id === 'gokart') {
+      this.tone(70, 0.7, { type: 'sawtooth', gain: 0.22, sweep: 260, wet: 0.2 });
+      this.tone(105, 0.5, { type: 'square', gain: 0.1, sweep: 300, at: 0.15, wet: 0.2 });
+      this.arp([392, 494, 587, 784], 0.09, { type: 'square', gain: 0.16, dur: 0.16, wet: 0.4, at: 0.55 });
+    } else if (id === 'femkamp') {
+      this.arp([392, 523, 659, 523, 784], 0.12, { type: 'sawtooth', gain: 0.2, dur: 0.22, wet: 0.5 });
+    } else if (id === 'pingis') {
+      for (let i = 0; i < 6; i++) this.tone(i % 2 ? 1320 : 990, 0.04, { type: 'triangle', gain: 0.24, at: i * (0.16 - i * 0.012), wet: 0.3 });
+      this.arp([659, 784, 988], 0.08, { type: 'triangle', gain: 0.2, dur: 0.2, wet: 0.4, at: 0.75 });
+    } else if (id === 'skytte') {
+      this.noise(0.18, { gain: 0.6, freq: 900, to: 200, q: 0.8, type: 'lowpass', wet: 0.9 });
+      this.thump(160, 40, 0.2, 0.7);
+      this.arp([220, 277, 330], 0.14, { type: 'square', gain: 0.18, dur: 0.3, wet: 0.5, at: 0.4 });
+    } else if (id === 'fiske') {
+      this.tone(300, 0.22, { type: 'sine', gain: 0.32, sweep: -200, wet: 0.5 });
+      this.noise(0.35, { gain: 0.22, freq: 1400, to: 400, q: 1.2, at: 0.05, wet: 0.6 });
+      this.arp([440, 554, 659, 880], 0.1, { type: 'triangle', gain: 0.22, dur: 0.24, wet: 0.5, at: 0.35 });
+    } else {
+      this.arp([262, 330, 392, 523], 0.12, { type: 'sawtooth', gain: 0.2, dur: 0.3, wet: 0.6 });
+      this.arp([523, 659, 784, 1047], 0.12, { type: 'square', gain: 0.18, dur: 0.5, wet: 0.7, at: 0.5 });
+      this.thump(65, 32, 0.7, 0.8, 0.5);
+    }
+  }
+
+  /** A gren's progress: a short rising blip whose pitch climbs with it */
+  modeTick(frac) {
+    const f = 440 * 2 ** (clamp01(frac) * 1.2);
+    this.tone(f, 0.1, { type: 'square', gain: 0.14, sweep: f * 0.25, wet: 0.35 });
+    this.tone(f * 1.5, 0.12, { type: 'triangle', gain: 0.1, at: 0.06, wet: 0.4 });
+  }
+
   /**
    * Called every frame with the fastest ball on the wood and whether a ball
    * is riding a wireform (a brighter, rattling roll).
    */
-  roll(speed, onWire) {
+  roll(speed, onWire, wireSpeed = 0) {
     if (!this.ctx || !this.rollGain) return;
     const t = this.ctx.currentTime;
-    const k = clamp01(speed / 55);
-    const g = this.muted ? 0 : (onWire ? 0.12 : 0.17) * Math.sqrt(k);
+    // On a wireform the bright rattle follows the RIDER's pace, which
+    // slows on the climb and picks up on the way down
+    const sp = onWire ? Math.max(speed, wireSpeed) : speed;
+    const k = clamp01(sp / 55);
+    const g = this.muted ? 0 : (onWire ? 0.14 : 0.17) * Math.sqrt(k);
     this.rollGain.gain.setTargetAtTime(g, t, 0.06);
-    this.rollFilter.frequency.setTargetAtTime(onWire ? 2600 + k * 1800 : 170 + k * 560, t, 0.06);
+    this.rollFilter.frequency.setTargetAtTime(onWire ? 1900 + k * 2600 : 170 + k * 560, t, 0.06);
+    this.rollFilter.Q.setTargetAtTime(onWire ? 2.2 + k * 2 : 0.8, t, 0.08);
   }
 
   close() {

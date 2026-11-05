@@ -87,15 +87,16 @@ export function buildHud(root, { touch }) {
           <p class="pbf-help-sub">Pekkas Pokal Flipper</p>
           <ul class="pbf-help-list">
             <li><i style="--c:#f2c14e"></i><b>Ramper</b> Kungsvägen (vänster mynning) och Vallgraven (hårt skott i höger orbit) — kedjar kombos och räknas som varv.</li>
-            <li><i style="--c:#7c8cf8"></i><b>Vänster orbit</b> Snurran ger poäng per varv. Lyser pilen: starta nästa GREN här.</li>
-            <li><i style="--c:#f26d8d"></i><b>P-O-K-A-L</b> Fäll alla fem målen så tänds grenstart i vänster orbit.</li>
-            <li><i style="--c:#8b93ad"></i><b>Borgen</b> Tre smällar på porten fäller vindbryggan. Bumprarna laddar låset — lås två bollar i borgen för MULTIBALL med jackpot på pokalen.</li>
-            <li><i style="--c:#6f9b5a"></i><b>Trollen</b> Vaktar borgen under grenar och multiball. Slå ner dem — 3 000 styck.</li>
+            <li><i style="--c:#7c8cf8"></i><b>Vänster orbit</b> Snurran ger poäng per varv. Skjut den inom tre sekunder efter avfyrningen för SUPER skill shot.</li>
+            <li><i style="--c:#f26d8d"></i><b>P-O-K-A-L</b> Fäll alla fem målen så tänds grenstart: porten öppnas, och när bollen når pokalen (eller vänster orbit) väntar den i borgen medan du väljer gren med flipprarna.</li>
+            <li><i style="--c:#8b93ad"></i><b>Borgen</b> Tre smällar spräcker porten och fäller vindbryggan. Skjut pokalen medan den ligger nere: BORGEN STORMAD (10 000 och mer för varje gång). Två stormningar tänder EXTRA BOLL på Kungsvägen.</li>
+            <li><i style="--c:#7c8cf8"></i><b>Multiball</b> Bumprarna laddar låset — lås två bollar i borgen. Varje jackpot är värd 10 000 mer än den förra, två jackpottar tänder SUPER JACKPOT (100 000), och den första tänder ADD-A-BALL på Vallgraven.</li>
+            <li><i style="--c:#e8643c"></i><b>Knektarna</b> Vaktar borgen under grenar och multiball. Slå ner dem — 3 000 styck.</li>
             <li><i style="--c:#3ddc7b"></i><b>Ny boll &amp; kickback</b> Lampan vid avloppet lyser de första sekunderna: dräneras bollen då serveras den om, en gång per boll. Vänster utbana har kickback — tänds om via båda inbanorna.</li>
             <li><i style="--c:#ffb347"></i><b>Lamporna över flipprarna</b> Översta raden är grenarna — fast sken när en är klar, blink när den pågår. Under den: bonus ×, som tänds via båda inbanorna.</li>
-            <li><i style="--c:#ffd166"></i><b>Finalen</b> Klara alla fem grenar → 60 sekunder multiball där allt räknas ×5.</li>
+            <li><i style="--c:#ffd166"></i><b>Grenar &amp; Finalen</b> Varje gren har eget mål, egen klocka och lyser sina skott i grenens färg. Varje steg ger mer än det förra, och tid kvar på klockan blir tidsbonus. Klara alla fem → Finalen: 60 sekunder multiball där allt räknas ×5.</li>
           </ul>
-          <p class="pbf-help-tip">Skill shot: släpp avfyraren i det turkosa fältet — och skjut vänster orbit inom tre sekunder för SUPER (15 000).</p>
+          <p class="pbf-help-tip">Skill shot: det turkosa fältet flyttar sig för varje boll — lågt 5 000, mitten 7 500, högt 10 000. Skjut sedan vänster orbit inom tre sekunder för SUPER (15 000).</p>
           <div class="pbf-help-keys">Flippers: skärmhalvorna, ←/→ eller Shift · Avfyrare: håll &amp; släpp / mellanslag · Nudge: N (knuffar den lägsta bollen mot mitten) · Fyra nudgar för snabbt ger TILT · Esc stänger kortet</div>
           <button class="pbf-btn" id="pbf-help-close">Tillbaka till spelet</button>
         </div>
@@ -119,6 +120,7 @@ export function buildHud(root, { touch }) {
     board: $('pbf-board'),
     plunger: $('pbf-plunger'),
     powerFill: $('pbf-power-fill'),
+    skill: root.querySelector('.pbf-skill'),
     nudge: $('pbf-nudge'),
     zones: $('pbf-zones'),
     pops: $('pbf-pops'),
@@ -167,7 +169,7 @@ export function startSheet({ touch, board }) {
     <h2 class="pbf-land-only">Lägg i en krona</h2>
     <ol class="pbf-steps">
       <li><b>1</b><span>${touch ? 'Håll fingret och släpp' : 'Håll och släpp mellanslag'} — skjut ut bollen</span></li>
-      <li><b>2</b><span>Fäll P-O-K-A-L, starta en gren i vänster orbit</span></li>
+      <li><b>2</b><span>Fäll P-O-K-A-L, skjut in i borgen och välj gren</span></li>
       <li><b>3</b><span>Bumprarna tänder låset — två bollar i borgen ger multiball</span></li>
     </ol>
     <button class="pbf-btn" data-act="start">Starta spelet</button>

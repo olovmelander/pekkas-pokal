@@ -47,7 +47,9 @@ export const L = {
   // must stay far enough apart that a ball falls cleanly between them
   // instead of perching on both: 2.44 apart, 1.52 clear, ball is 1.08.
   flipperSpread: 3.95,
-  flipperLength: 3.15,
+  // Long enough that the tapered tip (radius 0.33) leaves the same centre
+  // gap the old fat capsule did
+  flipperLength: 3.25,
   flipperRest: -30 * D,
   flipperSwing: 62 * D,
 
@@ -77,11 +79,15 @@ L.bumpers = [
  */
 const bankA = Math.atan2(3.6, 3.2); // ~48°
 L.targets = [
-  { letter: 'P', x: -5.37, y: 14.8, half: 0.55, a: bankA },
-  { letter: 'O', x: -4.3, y: 16.0, half: 0.55, a: bankA },
-  { letter: 'K', x: -3.23, y: 17.2, half: 0.55, a: bankA },
-  { letter: 'A', x: 1.8, y: 17.13, half: 0.55, a: -bankA },
-  { letter: 'L', x: 3.0, y: 15.78, half: 0.55, a: -bankA }
+  // Both banks sit 1.8 higher than they first did: lower down, the P end
+  // stood square in the path of every shot to the left orbit and left ramp,
+  // and L in front of the right ramp, so with the banks up only the castle
+  // was makeable (headless rig sweeps, see the pin-feel report)
+  { letter: 'P', x: -5.37, y: 16.6, half: 0.55, a: bankA },
+  { letter: 'O', x: -4.3, y: 17.8, half: 0.55, a: bankA },
+  { letter: 'K', x: -3.23, y: 19.0, half: 0.55, a: bankA },
+  { letter: 'A', x: 1.8, y: 18.93, half: 0.55, a: -bankA },
+  { letter: 'L', x: 3.0, y: 17.58, half: 0.55, a: -bankA }
 ];
 
 /* ------------------------------------------------------------------- castle */
@@ -123,16 +129,16 @@ L.lockSlots = [
  * Wireform ramps. A ball crossing the capture sensor fast enough is lifted
  * out of the 2D simulation and carried along `path` ([x, y, height] in
  * playfield coordinates), then dropped back in at the far end. Left ramp
- * feeds the right inlane and vice versa, Medieval Madness style.
+ * feeds the right inlane and vice versa, so a ramp combo crosses the table.
  */
 L.ramps = {
   left: {
-    capture: [-7.6, 18.0, -5.95, 18.0],
+    capture: [-7.25, 18.0, -5.0, 18.0],
     minVy: 5.0,
     exit: { x: 3.73, y: 12.2, vx: -1.2, vy: -7 },
     path: [
-      [-6.75, 18.0, 0.4],
-      [-7.15, 22.2, 1.5],
+      [-6.2, 18.0, 0.4],
+      [-6.75, 22.2, 1.5],
       [-6.5, 26.6, 2.6],
       [-4.5, 30.4, 3.4],
       [-1.5, 32.5, 3.9],
@@ -188,11 +194,11 @@ L.rightWall = [
  * Left lane divider: separates the left ORBIT (outside, hugging the wall)
  * from the open playfield inside. There is deliberately no second wall — the
  * left ramp is entered through a wide open mouth in front of the pop nest,
- * the way Medieval Madness' left ramp is. The old caged ramp lane left only
+ * like a classic open ramp entrance. The old caged ramp lane left only
  * 0.13 units of clearance around the ball and jammed.
  */
 L.leftDivider = [
-  [-7.9, 15.2],
+  [-7.9, 20.0],
   [-7.9, 23.5]
 ];
 
@@ -238,11 +244,16 @@ L.rightRail = L.leftRail.map(([x, y]) => [mirrorX(x), y]);
  * Slingshot triangles: T top, BO bottom-outer, BI bottom-inner.
  * T→BI is the kicker face; the other two edges are plain walls.
  */
-L.leftSlingPts = { T: [-4.95, 11.7], BO: [-4.72, 9.45], BI: [-3.75, 9.0] };
+// The lower inner corner sits over the first third of the flipper, as on a
+// real machine, and clear of the raised bat; the top is low enough that a
+// late cross shot off the far flipper's tip skims over it to the orbit. It
+// used to hang over the flipper's middle, so every shot off the inner half
+// clipped the sling's underside and was kicked up-left into the P target.
+L.leftSlingPts = { T: [-5.1, 11.4], BO: [-5.0, 9.85], BI: [-4.25, 9.5] };
 L.rightSlingPts = {
-  T: [mirrorX(-4.95), 11.7],
-  BO: [mirrorX(-4.72), 9.45],
-  BI: [mirrorX(-3.75), 9.0]
+  T: [mirrorX(-5.1), 11.4],
+  BO: [mirrorX(-5.0), 9.85],
+  BI: [mirrorX(-4.25), 9.5]
 };
 // Kept as simple 2-point faces for the mesh flash lookup
 L.leftSling = [L.leftSlingPts.T, L.leftSlingPts.BI];
@@ -250,24 +261,24 @@ L.rightSling = [L.rightSlingPts.T, L.rightSlingPts.BI];
 
 // Rubber posts protecting bank ends and the ramp-lane mouth
 L.posts = [
-  { x: -5.85, y: 14.2, r: 0.28 },
-  { x: -2.75, y: 17.9, r: 0.28 },
-  { x: 1.25, y: 17.9, r: 0.28 },
-  { x: 3.45, y: 14.6, r: 0.28 },
+  { x: -5.85, y: 16.0, r: 0.28 },
+  { x: -2.75, y: 19.7, r: 0.28 },
+  { x: 1.25, y: 19.7, r: 0.28 },
+  { x: 3.45, y: 16.4, r: 0.28 },
   { x: -5.4, y: 19.6, r: 0.28 }
 ];
 
 /**
  * Spinner in the left orbit. A ball passing through spins the blade; each
- * revolution scores. Iconic on Williams tables and the most satisfying
+ * revolution scores. A classic orbit toy and the most satisfying
  * sound on any playfield.
  */
 L.spinner = { x: -8.95, y: 21.0, half: 0.82 };
 
 /**
- * Trolls: two pop-up beasts that rise out of the castle corridor. While up
- * they block the castle shot and can be bashed down for points — the signature
- * Medieval Madness toy.
+ * Knektar (castle guards, `trolls` in code): two pop-up guards that rise out
+ * of the castle corridor. While up they block the castle shot and can be
+ * bashed down for points.
  */
 L.trolls = [
   { x: -3.15, y: 21.4, r: 0.62 },
@@ -276,7 +287,7 @@ L.trolls = [
 
 // Scoring switches: invisible sensors the ball rolls through.
 L.sensors = {
-  leftOrbit: [-9.85, 18, -8.05, 18],
+  leftOrbit: [-9.85, 20.5, -8.1, 20.5],
   spinner: [L.spinner.x - L.spinner.half, L.spinner.y, L.spinner.x + L.spinner.half, L.spinner.y],
   rightOrbit: [4.6, 27.2, 6.5, 27.2],
   leftRamp: L.ramps.left.capture,
@@ -342,12 +353,18 @@ export function buildColliders(world, hooks = {}) {
   world.add(chain(L.rightReturnGate, downOnly));
 
   // Slingshots: kicker face plus two plain edges
+  // The kicker fires when the ball compresses the rubber hard enough to
+  // close the leaf switch (kickMin), throwing it at a near-constant speed
+  // with a few degrees of scatter (physics.js, active kickers).
   const slingOpts = (side) => ({
     radius: 0.28,
-    restitution: 0.62,
-    kick: 15,
+    restitution: 0.55,
+    kick: 17,
     kickMin: 2.5,
-    onHit: (v, ball) => hooks.onSling && hooks.onSling(side, v, ball)
+    active: true,
+    jitter: 0.07,
+    cooldown: 0.09,
+    onHit: (v, ball, fired) => hooks.onSling && hooks.onSling(side, v, ball, fired)
   });
   [['left', L.leftSlingPts], ['right', L.rightSlingPts]].forEach(([side, P]) => {
     world.add(segment(P.T[0], P.T[1], P.BI[0], P.BI[1], slingOpts(side)));
@@ -359,10 +376,13 @@ export function buildColliders(world, hooks = {}) {
   // throws the ball hard enough to ricochet around the nest
   L.bumpers.forEach((b, i) => {
     const c = circle(b.x, b.y, L.bumperR, {
-      restitution: 0.6,
-      kick: 22,
+      restitution: 0.5,
+      kick: 23,
+      active: true,
+      jitter: 0.14,
+      cooldown: 0.07,
       id: `bumper${i}`,
-      onHit: (v, ball) => hooks.onBumper && hooks.onBumper(i, v, ball)
+      onHit: (v, ball, fired) => hooks.onBumper && hooks.onBumper(i, v, ball, fired)
     });
     world.add(c);
     refs.bumpers.push(c);
@@ -443,7 +463,8 @@ export function buildColliders(world, hooks = {}) {
   const rp = L.centerX + L.flipperSpread;
   refs.flippers.left = world.addFlipper(
     new Flipper(lp, L.flipperY, L.flipperLength, L.flipperRest, L.flipperRest + L.flipperSwing, {
-      radius: 0.46,
+      radius: 0.49,
+      tipRadius: 0.33,
       onHit: (v, b) => hooks.onFlipper && hooks.onFlipper('left', v, b)
     })
   );
@@ -455,7 +476,8 @@ export function buildColliders(world, hooks = {}) {
       Math.PI - L.flipperRest,
       Math.PI - L.flipperRest - L.flipperSwing,
       {
-        radius: 0.46,
+        radius: 0.49,
+        tipRadius: 0.33,
         onHit: (v, b) => hooks.onFlipper && hooks.onFlipper('right', v, b)
       }
     )
@@ -610,8 +632,8 @@ export function createPlayfieldCanvas(_participants = [], logo = null) {
   g.fillStyle = 'rgba(140,220,120,.7)';
   g.font = '700 17px Inter, sans-serif';
   g.letterSpacing = '4px';
-  g.fillText('TROLL', toU(L.trolls[0].x), toV(L.trolls[0].y - 1.35));
-  g.fillText('TROLL', toU(L.trolls[1].x), toV(L.trolls[1].y - 1.35));
+  g.fillText('KNEKT', toU(L.trolls[0].x), toV(L.trolls[0].y - 1.35));
+  g.fillText('KNEKT', toU(L.trolls[1].x), toV(L.trolls[1].y - 1.35));
   g.letterSpacing = '0px';
 
   /* ---- Ramp mouth: a quiet gold funnel, no text — the insert lights it ---- */
@@ -619,10 +641,12 @@ export function createPlayfieldCanvas(_participants = [], logo = null) {
   g.strokeStyle = 'rgba(255,214,120,.62)';
   g.lineWidth = 5;
   g.beginPath();
-  g.moveTo(toU(-7.55), toV(13.4));
-  g.lineTo(toU(-7.2), toV(18.4));
-  g.moveTo(toU(-5.4), toV(13.8));
-  g.lineTo(toU(-6.15), toV(18.4));
+  // Framing the mouth (capture −7.25…−5.0 at y 18), the inner line
+  // stopping short of the raised P end of the bank
+  g.moveTo(toU(-7.7), toV(13.6));
+  g.lineTo(toU(-7.45), toV(18.2));
+  g.moveTo(toU(-5.55), toV(13.5));
+  g.lineTo(toU(-6.2), toV(15.3));
   g.stroke();
   g.restore();
 

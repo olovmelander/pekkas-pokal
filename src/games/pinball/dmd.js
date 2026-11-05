@@ -268,6 +268,106 @@ export class Dmd {
     }
   }
 
+  /** Sets a dot to exactly `v` (px only ever brightens): windows, cracks */
+  put(x, y, v) {
+    x |= 0;
+    y |= 0;
+    if (x < 0 || y < 0 || x >= W || y >= H) return;
+    this.data[y * W + x] = v;
+  }
+
+  medal(cx, cy, v = 255) {
+    for (let r = 0; r <= 6; r++) this.circle(cx, cy, r, r >= 5 ? v : v * 0.55);
+    this.text('1', cx + 1, cy - 3, { v: 40 });
+  }
+
+  /**
+   * The castle in pixels, 40×30 from (x0, y0): two towers with cone roofs,
+   * a crenellated curtain wall and the gate. `dmg` 0…3 cracks the door,
+   * `open` 0…1 lowers it as a bridge, `flag` raises the banner on the keep.
+   */
+  castleArt(x0, y0, { dmg = 0, open = 0, flag = 0, t = 0, v = 200 } = {}) {
+    x0 = Math.round(x0);
+    y0 = Math.round(y0);
+    [0, 31].forEach((tx) => {
+      const x = x0 + tx;
+      this.rect(x, y0 + 9, 9, 21, v);
+      // Cone roof
+      for (let r = 0; r < 7; r++) this.rect(x + 4 - Math.floor(r * 0.7), y0 + 2 + r, 1 + Math.floor(r * 0.7) * 2, 1, v * 0.8);
+      this.px(x + 4, y0 + 1, v);
+      // Lit window slits
+      this.put(x + 4, y0 + 14, 255);
+      this.put(x + 4, y0 + 15, 255);
+      this.put(x + 4, y0 + 21, 255);
+      this.put(x + 4, y0 + 22, 255);
+    });
+    // Curtain wall with merlons
+    this.rect(x0 + 9, y0 + 13, 22, 17, v * 0.85);
+    for (let i = 0; i < 22; i += 4) this.rect(x0 + 9 + i, y0 + 11, 2, 2, v * 0.85);
+    // Stone courses
+    for (let y = y0 + 16; y < y0 + 30; y += 4) for (let x = x0 + 9; x < x0 + 31; x++) if ((x + y) % 7) this.put(x, y, v * 0.6);
+    // The gate: an arch cut into the wall
+    const gx = x0 + 14;
+    const gy = y0 + 18;
+    const gw = 12;
+    const gh = 12;
+    for (let y = gy; y < gy + gh; y++) for (let x = gx; x < gx + gw; x++) this.put(x, y, 0);
+    for (let x = gx + 1; x < gx + gw - 1; x++) this.put(x, gy - 1, 0);
+    // The courtyard glows through an open gate
+    if (open > 0.05) for (let y = gy; y < gy + gh; y++) for (let x = gx; x < gx + gw; x++) if ((x + y) % 2) this.put(x, y, 70 * open);
+    // The door: planks, shrinking toward the hinge as it falls
+    const top = gy + Math.round(gh * open);
+    for (let y = top; y < gy + gh; y++) {
+      for (let x = gx; x < gx + gw; x++) this.put(x, y, (x - gx) % 3 === 0 ? 90 : 190);
+    }
+    // ...and the bridge it becomes, widening toward the viewer
+    if (open > 0.5) {
+      const k = (open - 0.5) * 2;
+      const len = Math.round(k * 3);
+      for (let j = 0; j < len; j++) for (let x = gx - j; x < gx + gw + j; x++) this.put(x, gy + gh + j, (x + j) % 3 ? 160 : 80);
+    }
+    // Cracks, more with every hit; light spills through the worst
+    if (open < 0.5 && dmg > 0) {
+      const cracks = [
+        [[gx + 3, top + 1], [gx + 5, top + 4], [gx + 4, top + 7], [gx + 6, top + 10]],
+        [[gx + 8, top + 2], [gx + 7, top + 5], [gx + 9, top + 8]],
+        [[gx + 1, top + 6], [gx + 4, top + 7], [gx + 6, top + 6], [gx + 10, top + 7]]
+      ];
+      for (let c = 0; c < Math.min(3, dmg); c++) {
+        const pts = cracks[c];
+        for (let i = 0; i < pts.length - 1; i++) {
+          const [ax, ay] = pts[i];
+          const [bx, by] = pts[i + 1];
+          const n = Math.max(Math.abs(bx - ax), Math.abs(by - ay), 1);
+          for (let k = 0; k <= n; k++) this.put(ax + ((bx - ax) * k) / n, ay + ((by - ay) * k) / n, dmg >= 2 && c === 1 ? 255 : 0);
+        }
+      }
+    }
+    // Banner on the wall
+    if (flag > 0) {
+      const px = x0 + 20;
+      const h = Math.round(flag * 9);
+      for (let y = 0; y < 10; y++) this.px(px, y0 + 10 - y, v);
+      for (let j = 0; j < 4; j++) {
+        for (let i = 0; i < 7; i++) {
+          const wave = Math.round(Math.sin(t * 9 + i * 0.9) * 0.8);
+          this.px(px + 1 + i, y0 + 10 - h + j + wave, 255);
+        }
+      }
+    }
+  }
+
+  /** Dust and splinters flying out from (cx, cy), `t` seconds after impact */
+  debris(cx, cy, t, n = 14, v = 220) {
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + i * 0.37;
+      const sp = 18 + (i % 5) * 9;
+      const x = cx + Math.cos(a) * sp * t * 1.4;
+      const y = cy + Math.sin(a) * sp * t * 0.8 + 40 * t * t;
+      this.px(x, y, v * Math.max(0, 1 - t * 1.4));
+    }
+  }
+
   /**
    * A one-second picture for each gren, played before its title card:
    * the kart tearing across, the five rings, a rally over the net, a clay
@@ -290,9 +390,19 @@ export class Dmd {
       for (let i = 0; i < 4; i++) this.line(x - 6 - i * 7, 14 + i * 2, x - 18 - i * 7, 14 + i * 2, 150);
       this.line(0, 29, 127, 29, 90);
     } else if (id === 'femkamp') {
+      // Five medals dropping onto their ribbons, one per event
       const n = Math.min(5, Math.floor(k * 6.5));
-      const pos = [[44, 11], [64, 11], [84, 11], [54, 19], [74, 19]];
-      for (let i = 0; i < n; i++) this.circle(pos[i][0], pos[i][1], 8, i === n - 1 ? 255 : 190);
+      for (let i = 0; i < 5; i++) {
+        const cx = 24 + i * 20;
+        this.line(cx - 4, 2, cx, 12, 110);
+        this.line(cx + 4, 2, cx, 12, 110);
+        if (i < n) {
+          const drop = i === n - 1 ? Math.max(0, 1 - (k * 6.5 - i)) * 8 : 0;
+          this.medal(cx, 19 - drop, i === n - 1 ? 255 : 190);
+        } else {
+          this.circle(cx, 19, 6, 50);
+        }
+      }
     } else if (id === 'pingis') {
       this.icon('paddle', 6, 12, 220, 2);
       this.icon('paddle', 110, 12, 220, 2);
@@ -350,7 +460,7 @@ export class Dmd {
   }
 
   /** Draws text; returns its width. align: 'left' | 'center' | 'right' */
-  text(str, x, y, { s = 1, align = 'left', v = 255 } = {}) {
+  text(str, x, y, { s = 1, align = 'left', v = 255, cut = false } = {}) {
     const txt = String(str).toUpperCase();
     const w = this.measure(txt, s);
     let cx = Math.round(align === 'center' ? x - w / 2 : align === 'right' ? x - w : x);
@@ -367,7 +477,10 @@ export class Dmd {
       for (let r = 0; r < 7; r++) {
         const row = g.rows[r];
         for (let c = 0; c < g.w; c++) {
-          if (row & (16 >> (c + g.off))) this.rect(cx + c * s, y + r * s, s, s, v);
+          if (!(row & (16 >> (c + g.off)))) continue;
+          // `cut`: dark letters punched out of a lit panel
+          if (cut) for (let j = 0; j < s * s; j++) this.put(cx + c * s + (j % s), y + r * s + Math.floor(j / s), 0);
+          else this.rect(cx + c * s, y + r * s, s, s, v);
         }
       }
       cx += (g.w + 1) * s;
@@ -597,9 +710,13 @@ export class Dmd {
     }, 3 + intro, 3);
   }
 
-  modeWin(name, pts, id = '') {
+  modeWin(name, pts, id = '', timeBonus = 0) {
     this.show((d, t) => {
-      d.stack([name, 'KLAR!', `+${fmtScore(pts)}`], { maxS: 2 });
+      if (timeBonus && t > 1.4) {
+        d.stack([`${name} KLAR!`, 'TIDSBONUS', `+${fmtScore(timeBonus)}`], { maxS: 2 });
+      } else {
+        d.stack([name, 'KLAR!', `+${fmtScore(pts)}`], { maxS: 2 });
+      }
       // The gren's own icon hops at either side
       const icon = { gokart: 'kart', fiske: 'fish', pingis: 'paddle', skytte: 'clay' }[id];
       if (icon) {
@@ -610,7 +727,7 @@ export class Dmd {
       d.sparkle(10);
       d.border(t, 200, 70);
       if (t < 0.4 && Math.floor(t * 14) % 2) d.invert();
-    }, 2.6, 3);
+    }, timeBonus ? 3 : 2.6, 3);
   }
 
   ballSave() {
@@ -634,10 +751,19 @@ export class Dmd {
 
   combo(n, pts) {
     this.show((d, t) => {
-      d.text(`KOMBO ×${n}`, 64, 3, { s: 2, align: 'center' });
-      d.text(`+${fmtScore(pts)}`, 64, 22, { align: 'center', v: 200 });
+      if (n >= 4 && t < 0.4) d.burst(t, 110);
+      const pop = t < 0.15 ? 1 : 0;
+      d.text(`KOMBO ×${n}`, 64, 2 - pop, { s: 2, align: 'center' });
+      // One ball per link in the chain, the newest dropping in
+      const shown = Math.min(n, 8);
+      const x0 = 64 - shown * 5;
+      for (let i = 0; i < shown; i++) {
+        const drop = i === shown - 1 ? Math.max(0, 6 - t * 40) : 0;
+        d.icon('ball', x0 + i * 10 + 1, 18 - drop, i === shown - 1 ? 255 : 170);
+      }
+      d.text(`+${fmtScore(pts)}`, 127, 25, { align: 'right', v: 200 });
       if (n >= 3) d.border(t, 160, 80);
-    }, 1.1, n >= 3 ? 2 : 1);
+    }, 1.2, n >= 3 ? 2 : 1);
   }
 
   /** The P-O-K-A-L bank with the dropped letters lit */
@@ -693,6 +819,173 @@ export class Dmd {
     }, 2.2, 3);
   }
 
+  /** A hit on the castle gate: the castle shakes, splinters fly, the count */
+  castleHit(n, of = 3) {
+    this.show((d, t) => {
+      const shake = t < 0.35 ? Math.round(Math.sin(t * 90) * 2 * (1 - t / 0.35)) : 0;
+      d.castleArt(4 + shake, 1, { dmg: n, t });
+      if (t < 0.9) d.debris(24 + shake, 26, t, 16);
+      d.text('PORTEN', 88, 2, { s: 2, align: 'center' });
+      d.text(`${n}/${of}`, 88, 18, { s: 2, align: 'center', v: t < 0.3 && Math.floor(t * 20) % 2 ? 90 : 255 });
+      // The hits still to go, as dots
+      for (let i = 0; i < of; i++) d.text(i < n ? '●' : '○', 113 + i * 5, 24, { v: 200 });
+    }, 1.5, 2);
+  }
+
+  /** The third hit: the door falls as a bridge and the dust rolls out */
+  gateFalls() {
+    this.show((d, t) => {
+      const fall = Math.min(1, (t / 0.55) ** 2);
+      const land = t > 0.55;
+      const shake = land && t < 0.9 ? Math.round(Math.sin(t * 80) * 2) : 0;
+      d.castleArt(44 + shake, 1, { dmg: 3, open: fall, t });
+      if (land) d.debris(64, 30, t - 0.55, 22, 255);
+      if (t < 0.55) return;
+      if (t < 0.75 && Math.floor(t * 18) % 2) d.invert();
+      if (t > 0.9) {
+        d.text('PORTEN', 21, 4, { s: 1, align: 'center' });
+        d.text('NERE!', 21, 14, { s: 1, align: 'center' });
+        d.text('STORMA', 107, 4, { align: 'center', v: Math.floor(t * 3) % 2 ? 255 : 150 });
+        d.text('BORGEN!', 107, 14, { align: 'center', v: Math.floor(t * 3) % 2 ? 255 : 150 });
+      }
+    }, 2.8, 3);
+  }
+
+  /** The ball got into the courtyard through the broken gate */
+  castleStorm(n, pts) {
+    this.show((d, t) => {
+      if (t < 0.5) {
+        d.castleArt(44, 1, { open: 1, t });
+        d.burst(t, 150);
+        if (Math.floor(t * 16) % 2) d.invert();
+        return;
+      }
+      d.castleArt(2, 1, { open: 1, flag: Math.min(1, (t - 0.5) * 2), t });
+      d.text('BORGEN', 86, 0, { s: 2, align: 'center' });
+      d.text(n > 1 ? `STORMAD ×${n}` : 'STORMAD!', 86, 15, { align: 'center' });
+      const k = Math.min(1, (t - 0.5) / 0.7);
+      d.text(`+${fmtScore(Math.round((pts * k) / 10) * 10)}`, 86, 24, { align: 'center', v: 210 });
+      d.sparkle(10);
+    }, 2.8, 3);
+  }
+
+  superJackpot(pts) {
+    this.show((d, t) => {
+      if (t < 0.7) {
+        d.burst(t, 200);
+        d.text('SUPER', 64, 3, { s: 3, align: 'center' });
+        if (Math.floor(t * 18) % 2) d.invert();
+        return;
+      }
+      d.icon('trophy', 4, 10 + Math.round(Math.sin(t * 8) * 2));
+      d.icon('trophy', 113, 10 + Math.round(Math.cos(t * 8) * 2));
+      d.text('SUPER JACKPOT', 64, 1, { s: 1, align: 'center', v: 200 });
+      const k = Math.min(1, (t - 0.7) / 0.9);
+      // Sized for the final figure, so the count-up never jumps a size
+      const sc = d.measure(fmtScore(pts), 3) <= 96 ? 3 : 2;
+      d.text(fmtScore(Math.round((pts * k) / 10) * 10), 64, sc === 3 ? 9 : 11, { s: sc, align: 'center' });
+      d.sparkle(24);
+      d.border(t, 230, 90);
+    }, 3.4, 3);
+  }
+
+  addBall() {
+    this.show((d, t) => {
+      d.stack(['ADD-A-BALL', 'EN BOLL TILL!'], { maxS: 2 });
+      d.border(t, 200, 80);
+      if (t < 0.4 && Math.floor(t * 14) % 2) d.invert();
+    }, 2.2, 3);
+  }
+
+  /** Progress in a running gren, drawn as the gren's own little scene */
+  modeProgress(id, p, goal, label) {
+    this.show((d, t) => {
+      const frac = goal ? p / goal : 0;
+      if (id === 'gokart') {
+        // The kart drives the lap bar up to the new count
+        d.frame(2, 22, 124, 8, 120);
+        const x = 4 + (120 - 16) * Math.min(frac, ((p - 1) / goal) + Math.min(1, t * 2) / goal);
+        d.icon('kart', x, 22);
+        for (let i = 1; i < goal; i++) d.line(2 + (124 * i) / goal, 22, 2 + (124 * i) / goal, 29, 90);
+        d.text(`VARV ${p}/${goal}`, 64, 3, { s: 2, align: 'center' });
+      } else if (id === 'femkamp') {
+        for (let i = 0; i < goal; i++) {
+          const cx = 14 + i * 25;
+          if (i < p) d.medal(cx, 22, i === p - 1 && Math.floor(t * 10) % 2 ? 120 : 255);
+          else d.circle(cx, 22, 6, 60);
+        }
+        d.text(`GREN ${p}/${goal}`, 64, 2, { s: 2, align: 'center' });
+      } else if (id === 'pingis') {
+        d.icon('paddle', 4, 22, 220);
+        d.icon('paddle', 118, 22, 220);
+        const ph = (t * 2.2) % 1;
+        const dir = Math.floor(t * 2.2) % 2 ? -1 : 1;
+        d.rect(64 + dir * (ph * 2 - 1) * 48 - 1, 28 - Math.sin(ph * Math.PI) * 9, 3, 3);
+        d.text(`RALLY ${p}/${goal}`, 64, 2, { s: 2, align: 'center' });
+      } else if (id === 'skytte') {
+        const letters = 'POKAL';
+        for (let i = 0; i < 5; i++) {
+          const on = i < p;
+          d.text(letters[i], 18 + i * 23, 16, { s: 2, align: 'center', v: on ? 255 : 60 });
+          if (i === p - 1 && t < 0.5) d.circle(18 + i * 23, 22, 9 + t * 8, 200);
+        }
+        d.text('TRÄFF!', 64, 1, { align: 'center', v: 200 });
+      } else if (id === 'fiske') {
+        for (let x = 0; x < 128; x++) d.px(x, 29 + Math.sin(x * 0.3 + t * 7), 120);
+        const k = Math.min(1, t * 1.4);
+        d.icon('fish', 2 + k * 12, 20 - Math.sin(k * Math.PI) * 14);
+        d.text(`NAPP ${p}/${goal}`, 86, 4, { s: 2, align: 'center' });
+        d.text(label || '', 86, 21, { align: 'center', v: 160 });
+      } else {
+        d.stack([label || '', `${p}/${goal}`], { maxS: 2 });
+      }
+    }, 1.4, 2);
+  }
+
+  /**
+   * The road to Finalen: a badge per gren (filled when won, the newest one
+   * stamping in), the crown at the end, and how many are left.
+   */
+  ladder(items, fresh = -1) {
+    this.show((d, t) => {
+      const left = items.filter((it) => !it.done).length;
+      d.text(left ? `${left} KVAR TILL FINALEN` : 'FINALEN TÄND!', 64, 0, { align: 'center', v: 200 });
+      items.forEach((it, i) => {
+        const x = 2 + i * 21;
+        const stamp = i === fresh && t < 0.5;
+        if (it.done && !(stamp && Math.floor(t * 12) % 2)) {
+          d.rect(x, 11, 19, 13, 230);
+          d.text(it.label, x + 10, 14, { align: 'center', cut: true });
+        } else {
+          d.frame(x, 11, 19, 13, 120);
+          d.text(it.label, x + 10, 14, { align: 'center', v: 120 });
+        }
+      });
+      d.icon('crown', 110, 13, left ? 90 : (Math.floor(t * 5) % 2 ? 255 : 160));
+      if (!left) d.sparkle(10);
+    }, 2.2, 2);
+  }
+
+  /** Mission select, the base screen while the ball waits in the castle */
+  select(s, t) {
+    this.text('VÄLJ GREN', 64, 0, { align: 'center', v: 150 });
+    const blink = Math.floor(t * 3) % 2 === 0;
+    if (s.n > 1) {
+      this.text('<', 3, 10, { s: 2, v: blink ? 255 : 120 });
+      this.text('>', 125, 10, { s: 2, align: 'right', v: blink ? 255 : 120 });
+    }
+    const title = `${s.name} '${String(s.year).slice(2)}`;
+    this.text(title, 64, 9, { s: this.measure(title, 2) <= 104 ? 2 : 1, align: 'center' });
+    this.text(s.task, 64, 24, { align: 'center', v: 190 });
+    // Which of the remaining grenar this is, and the time left to choose
+    for (let i = 0; i < s.n; i++) this.px(64 - s.n * 2 + i * 4, 31, i === s.idx ? 255 : 80);
+    const len = Math.round(36 * s.frac);
+    for (let x = 0; x < len; x++) {
+      this.px(x, 31, 110);
+      this.px(127 - x, 31, 110);
+    }
+  }
+
   warning() {
     this.show((d, t) => {
       d.stack(['VARNING', 'LUGNT NU!'], { maxS: 2 });
@@ -707,17 +1000,36 @@ export class Dmd {
     }, 3, 4);
   }
 
-  /** End-of-ball bonus: the classic count, row by row */
+  /**
+   * End-of-ball bonus: the classic count, row by row. A row is
+   * [label, count, each]: its count ticks up while the running total
+   * underneath climbs with it. (Plain [label, text] rows still work.)
+   */
   bonus(rows, mult, total) {
-    const step = 0.5;
+    const step = 0.6;
     const pages = rows.length + (mult > 1 ? 1 : 0) + 1;
+    const sums = [];
+    rows.reduce((acc, r) => {
+      const v = typeof r[1] === 'number' ? r[1] * r[2] : 0;
+      sums.push(acc);
+      return acc + v;
+    }, 0);
     this.show((d, t) => {
       const i = Math.floor(t / step);
       if (i < rows.length) {
-        const [label, value] = rows[i];
-        d.text('BONUS', 64, 1, { align: 'center', v: 150 });
-        d.text(label, 64, 10, { s: label.length > 10 ? 1 : 2, align: 'center' });
-        d.text(value, 64, 25, { align: 'center', v: 200 });
+        const [label, count, each] = rows[i];
+        const k = Math.min(1, (t - i * step) / (step * 0.7));
+        d.text('BONUS', 2, 1, { v: 150 });
+        d.text(label, 64, 9, { s: d.measure(label, 2) <= 120 ? 2 : 1, align: 'center' });
+        if (typeof count === 'number') {
+          const shown = Math.round(count * k);
+          d.text(`${shown} × ${fmtScore(each)}`, 2, 25, { v: 200 });
+          d.text(fmtScore(sums[i] + shown * each), 126, 25, { align: 'right' });
+        } else {
+          d.text(count, 64, 25, { align: 'center', v: 200 });
+        }
+        // A tick per counted row
+        for (let r = 0; r <= i; r++) d.px(126 - (rows.length - 1 - r) * 3, 2, r === i ? 255 : 120);
       } else if (mult > 1 && i === rows.length) {
         d.text('BONUS', 64, 1, { align: 'center', v: 150 });
         d.text(`×${mult}`, 64, 10, { s: 3, align: 'center' });

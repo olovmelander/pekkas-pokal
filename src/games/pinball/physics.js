@@ -8,6 +8,17 @@
  *
  * Everything is a capsule (segment + radius) or a circle. That covers walls,
  * rails, flippers, posts and bumpers with one pair of collision routines.
+ *
+ * Feel notes (measured with the headless rig in the pin-feel report):
+ * - Substeps are sized from ball speed PLUS flipper sweep speed, so nothing
+ *   ever moves more than ~0.19 units relative to anything it can hit.
+ * - Friction is Coulomb and impact-only. The ball rolls, so a resting
+ *   contact neither drags it nor holds it balanced on a round cap.
+ * - Flippers are solenoid-driven with a compliant end-of-stroke hold and
+ *   rubber that deadens with impact speed: cradles, catches and passes.
+ * - Pop bumpers and slingshots are active coils: they fire on contact,
+ *   throw at a near-constant speed with a few degrees of scatter, and then
+ *   need a moment to recharge.
  */
 
 /* ------------------------------------------------------------------ vectors */
@@ -48,6 +59,11 @@ export function segment(ax, ay, bx, by, opts = {}) {
     friction: opts.friction ?? 0.04,
     kick: opts.kick ?? 0,
     kickMin: opts.kickMin ?? 0,
+    // Active kickers (slingshots) fire a coil: see World.resolve
+    active: opts.active ?? false,
+    jitter: opts.jitter ?? 0,
+    cooldown: opts.cooldown ?? 0.08,
+    firedAt: -1,
     // A sensor detects the ball passing through without touching it —
     // used for orbit shots, inlane rollovers and other scoring switches.
     sensor: opts.sensor ?? false,
@@ -71,6 +87,11 @@ export function circle(cx, cy, radius, opts = {}) {
     friction: opts.friction ?? 0.02,
     kick: opts.kick ?? 0,
     kickMin: opts.kickMin ?? 0,
+    // Active kickers (pop bumpers) fire a coil: see World.resolve
+    active: opts.active ?? false,
+    jitter: opts.jitter ?? 0,
+    cooldown: opts.cooldown ?? 0.08,
+    firedAt: -1,
     sensor: opts.sensor ?? false,
     filter: opts.filter || null,
     id: opts.id || null,
@@ -110,6 +131,14 @@ export function arc(cx, cy, radius, from, to, steps, opts = {}) {
  * A flipper is a capsule that rotates about its pivot. The ball is launched by
  * the *contact point's* velocity, not the flipper's angle, which is what makes
  * tip shots faster than base shots — the detail that makes flippers feel real.
+ *
+ * The stroke is driven like a solenoid, not a servo: the bat accelerates
+ * hard from rest (full speed in under 10 ms), slams into its end-of-stroke
+ * stop and is held there by a weaker hold winding. That hold is compliant:
+ * a ball arriving at a raised flipper pushes it back a few degrees and the
+ * coil pulls it home, soaking up the hit. That give, plus rubber that goes
+ * deader the harder it is struck, is what makes a live catch and a cradle
+ * possible. A flipper at rest sits on its stop and does not give.
  */
 export class Flipper {
   /**
@@ -125,14 +154,28 @@ export class Flipper {
     this.length = length;
     this.restAngle = restAngle;
     this.activeAngle = activeAngle;
+    // +1 when the stroke turns counter-clockwise (left flipper), -1 otherwise
+    this.dir = Math.sign(activeAngle - restAngle) || 1;
     this.angle = restAngle;
     this.omega = 0;
     this.pressed = false;
+    this.eos = false;
+    // Tapered like the real bat: thick rubber over the pivot, slim at the
+    // tip. The taper tilts the face normal a few degrees toward the tip,
+    // which is part of what lets a late flip send the ball cross-table.
     this.radius = opts.radius ?? 0.42;
+    this.tipRadius = opts.tipRadius ?? this.radius;
     this.restitution = opts.restitution ?? 0.42;
-    // Up-swing is much faster than the return, like a real solenoid
-    this.upSpeed = opts.upSpeed ?? 40;
-    this.downSpeed = opts.downSpeed ?? 20;
+    this.hitRestitution = opts.hitRestitution ?? 0.75;
+    // Stroke profile, rad/s and rad/s². Full stroke ≈ 28 ms up, ≈ 55 ms back.
+    this.upSpeed = opts.upSpeed ?? 30;
+    this.upAccel = opts.upAccel ?? 6000;
+    this.downSpeed = opts.downSpeed ?? 21;
+    this.downAccel = opts.downAccel ?? 1500;
+    // Hold winding: how hard the raised bat is pulled back to its stop, and
+    // how much a hit moves it (inverse moment of inertia, per unit impulse)
+    this.holdAccel = opts.holdAccel ?? 400;
+    this.invInertia = opts.invInertia ?? 0.12;
     this.onHit = opts.onHit || null;
     this.enabled = true;
   }
@@ -145,17 +188,40 @@ export class Flipper {
     return this.py + Math.sin(this.angle) * this.length;
   }
 
+  /** Fastest surface speed this flipper can reach during the next step */
+  sweepSpeed() {
+    if (this.pressed && !this.eos) return this.upSpeed * this.length;
+    if (!this.pressed && this.angle !== this.restAngle) return this.downSpeed * this.length;
+    return Math.abs(this.omega) * this.length;
+  }
+
   update(dt) {
-    const target = this.pressed ? this.activeAngle : this.restAngle;
-    const speed = this.pressed ? this.upSpeed : this.downSpeed;
-    const prev = this.angle;
-    const diff = target - this.angle;
-    const step = speed * dt;
-
-    if (Math.abs(diff) <= step) this.angle = target;
-    else this.angle += Math.sign(diff) * step;
-
-    this.omega = dt > 0 ? (this.angle - prev) / dt : 0;
+    const s = this.dir;
+    // w: angular speed along the stroke, + is up
+    let w = this.omega * s;
+    if (this.pressed) {
+      // Power stroke from below; once on the stop, the weaker hold winding
+      // pulls a knocked-back bat home — that difference is the catch's cushion
+      const accel = this.eos ? this.holdAccel : this.upAccel;
+      w = Math.min(this.upSpeed, w + accel * dt);
+      this.angle += w * s * dt;
+      if ((this.angle - this.activeAngle) * s >= 0) {
+        this.angle = this.activeAngle;
+        w = 0;
+        this.eos = true;
+      }
+      // Knocked well clear of the stop, it is a power stroke again
+      if (this.eos && (this.activeAngle - this.angle) * s > 0.35) this.eos = false;
+    } else {
+      w = Math.max(-this.downSpeed, w - this.downAccel * dt);
+      this.angle += w * s * dt;
+      if ((this.angle - this.restAngle) * s <= 0) {
+        this.angle = this.restAngle;
+        w = 0;
+      }
+      this.eos = false;
+    }
+    this.omega = w * s;
   }
 
   /**
@@ -165,20 +231,30 @@ export class Flipper {
   collide(ball) {
     if (!this.enabled) return false;
 
-    const bx = this.tipX;
-    const by = this.tipY;
-    const [qx, qy] = closestOnSegment(ball.x, ball.y, this.px, this.py, bx, by);
+    // Closest point on a tapered capsule: the touching sphere along the axis
+    // sits h·tan(α) behind the ball's projection, sin(α) = taper / length
+    const ux = Math.cos(this.angle);
+    const uy = Math.sin(this.angle);
+    const ox = ball.x - this.px;
+    const oy = ball.y - this.py;
+    const s = ox * ux + oy * uy;
+    const h = Math.abs(-ox * uy + oy * ux);
+    const k = (this.radius - this.tipRadius) / this.length;
+    const sa = clamp(s - (h * k) / Math.sqrt(1 - k * k), 0, this.length);
+    const along = sa / this.length;
+    const qx = this.px + ux * sa;
+    const qy = this.py + uy * sa;
 
     let dx = ball.x - qx;
     let dy = ball.y - qy;
     let dist = len(dx, dy);
-    const minDist = ball.radius + this.radius;
+    const minDist = ball.radius + this.radius - k * sa;
     if (dist >= minDist) return false;
 
     if (dist < 1e-6) {
-      // Degenerate: push straight out from the flipper's axis
-      dx = -Math.sin(this.angle);
-      dy = Math.cos(this.angle);
+      // Degenerate: push straight out from the flipper's up face
+      dx = -Math.sin(this.angle) * this.dir;
+      dy = Math.cos(this.angle) * this.dir;
       dist = 1;
     }
 
@@ -191,8 +267,8 @@ export class Flipper {
     ball.y += ny * pen;
 
     // Velocity of the flipper surface at the contact point: ω × r
-    const rx = qx - this.px;
-    const ry = qy - this.py;
+    const rx = ball.x - nx * ball.radius - this.px;
+    const ry = ball.y - ny * ball.radius - this.py;
     const contactVx = -this.omega * ry;
     const contactVy = this.omega * rx;
 
@@ -201,16 +277,42 @@ export class Flipper {
     const vn = relVx * nx + relVy * ny;
 
     if (vn < 0) {
-      const j = -(1 + this.restitution) * vn;
+      const swinging = this.pressed && !this.eos && this.omega * this.dir > 1;
+      // Rubber goes deader the harder it is hit, and the thick rubber over
+      // the pivot is softer than the tip — a strong tip, a soft base
+      // A bat swinging into the ball springs off much harder than a still
+      // one: the rubber is struck at speed and the coil is still driving.
+      // That clean separation is what lets timing aim the shot instead of
+      // the ball sliding out to the tip and leaving at the end-of-stroke angle.
+      let e = (swinging ? this.hitRestitution : this.restitution) * (0.82 + 0.18 * along);
+      if (!swinging) e *= clamp(1.08 - (-vn - 4) * 0.022, 0.5, 1);
+
+      // A raised flipper yields against its hold winding: effective mass
+      // coupling, and the bat is knocked back toward rest
+      let k = 1;
+      const torqueArm = rx * ny - ry * nx; // r × n
+      // Only a real hit moves it: a ball resting on the raised bat (a cradle,
+      // or one balanced on the tip) gets a rigid, ordinary contact
+      const yields = this.pressed && this.eos && torqueArm * this.dir > 0 && -vn > 3;
+      if (yields) k = 1 / (1 + torqueArm * torqueArm * this.invInertia);
+      const j = -(1 + e) * vn * k;
       ball.vx += nx * j;
       ball.vy += ny * j;
+      if (yields) this.omega -= j * torqueArm * this.invInertia;
 
-      // A little tangential drag so the ball doesn't slide frictionlessly
+      // Coulomb friction: the rubber grips in proportion to how hard it was
+      // struck. (Applied as a per-substep drag it used to pin a ball rolling
+      // down the bat to ~2.5 u/s, which made every cradle release crawl.)
       const tx = -ny;
       const ty = nx;
       const vt = (ball.vx - contactVx) * tx + (ball.vy - contactVy) * ty;
-      ball.vx -= tx * vt * 0.05;
-      ball.vy -= ty * vt * 0.05;
+      // Only on a real impact: the ball rolls, so a resting contact has no
+      // sliding to resist (as static friction it would hold a ball balanced
+      // on the tip, or stop it rolling down the bat)
+      const mu = -vn > 2 ? 0.18 * j : 0;
+      const dvt = clamp(vt, -mu, mu);
+      ball.vx -= tx * dvt;
+      ball.vy -= ty * dvt;
 
       if (this.onHit) this.onHit(Math.abs(vn), ball);
     }
@@ -252,8 +354,15 @@ export class World {
     this.gravity = opts.gravity ?? 26;
     this.damping = opts.damping ?? 0.16;
     this.maxSpeed = opts.maxSpeed ?? 62;
+    // Steady table acceleration (kept for callers that set it directly)
     this.nudgeX = 0;
     this.nudgeY = 0;
+    // A nudge: the cabinet is shoved and springs back, so the ball feels a
+    // short, decaying acceleration in simulation time (not wall-clock time)
+    this.sway = { x: 0, y: 0, t: 0, dur: 0 };
+    this.time = 0;
+    // Injectable for deterministic tests
+    this.random = opts.random || Math.random;
   }
 
   add(collider) {
@@ -268,10 +377,28 @@ export class World {
   }
 
   /**
+   * Shoves the cabinet: every live ball gets an instant velocity change
+   * (the table moves under it) plus a short acceleration as the legs spring
+   * back. Units are playfield units per second.
+   */
+  nudge(balls, vx, vy, dur = 0.09) {
+    const list = Array.isArray(balls) ? balls : [balls];
+    for (const b of list) {
+      if (!b.live) continue;
+      b.vx += vx;
+      b.vy += vy;
+    }
+    // The spring-back pushes the same way for a few hundredths of a second
+    this.sway = { x: vx * 9, y: vy * 9, t: 0, dur };
+  }
+
+  /**
    * Advances the simulation for one or more balls (multiball). Splits dt into
-   * substeps sized so the fastest ball can never move more than a fraction of
-   * its radius per step — without this a hard shot passes straight through a
-   * wall.
+   * substeps sized so that nothing moves more than a fraction of the ball's
+   * radius RELATIVE to anything it could hit per step. That includes the
+   * flipper tips: a flip swings the tip at ~140 u/s, and sized from the ball
+   * alone a resting ball near the tip used to be jumped clean over and
+   * drained.
    */
   step(balls, dt) {
     const list = Array.isArray(balls) ? balls : [balls];
@@ -281,15 +408,22 @@ export class World {
       if (b.live && b.speed > top) top = b.speed;
       ({ radius } = b);
     }
-    const steps = clamp(Math.ceil((top * dt) / (radius * 0.35)), 1, 24);
+    let sweep = 0;
+    for (const f of this.flippers) sweep = Math.max(sweep, f.sweepSpeed());
+    const steps = clamp(Math.ceil(((top + sweep) * dt) / (radius * 0.35)), 1, 32);
     const sdt = dt / steps;
 
     for (let i = 0; i < steps; i++) {
-      this.flippers.forEach((f) => f.update(sdt));
+      this.time += sdt;
+      for (let k = 0; k < this.flippers.length; k++) this.flippers[k].update(sdt);
       for (const b of list) {
         if (b.live) this.integrate(b, sdt);
       }
       if (list.length > 1) this.collideBalls(list);
+    }
+    if (this.sway.dur > 0) {
+      this.sway.t += dt;
+      if (this.sway.t >= this.sway.dur) this.sway.dur = 0;
     }
   }
 
@@ -346,6 +480,11 @@ export class World {
     ball.vy -= this.gravity * dt;
     ball.vx += this.nudgeX * dt;
     ball.vy += this.nudgeY * dt;
+    if (this.sway.dur > 0) {
+      const k = 1 - this.sway.t / this.sway.dur;
+      ball.vx += this.sway.x * k * dt;
+      ball.vy += this.sway.y * k * dt;
+    }
 
     // Mild rolling resistance
     const d = Math.max(0, 1 - this.damping * dt);
@@ -356,6 +495,17 @@ export class World {
     if (sp > this.maxSpeed) {
       ball.vx = (ball.vx / sp) * this.maxSpeed;
       ball.vy = (ball.vy / sp) * this.maxSpeed;
+    }
+
+    // A nearly stopped ball gets a breath of noise. A real ball can never
+    // balance on the very top of a post, a rail end or a raised flipper tip;
+    // a simulated one, perfectly still on a perfectly round cap, can — and
+    // then sits there forever. In a pocket (a cradle, the shooter lane) the
+    // noise just settles back out.
+    if (ball.vx * ball.vx + ball.vy * ball.vy < 0.04) {
+      const a = this.random() * Math.PI * 2;
+      ball.vx += Math.cos(a) * 0.35;
+      ball.vy += Math.sin(a) * 0.35;
     }
 
     ball.x += ball.vx * dt;
@@ -420,24 +570,49 @@ export class World {
     ball.y += ny * (minDist - dist);
 
     const vn = ball.vx * nx + ball.vy * ny;
-    if (vn < 0) {
-      const j = -(1 + c.restitution) * vn;
+    // Active kickers fire on contact — even a ball merely leaning on a pop
+    // bumper's skirt trips its switch — then need a moment to recharge
+    const fire = c.active && c.kick > 0 && -vn > (c.kickMin ?? 0) - 1e-9 &&
+      this.time - c.firedAt >= c.cooldown;
+    if (vn < 0 || fire) {
+      const j = vn < 0 ? -(1 + c.restitution) * vn : 0;
       ball.vx += nx * j;
       ball.vy += ny * j;
 
+      // Coulomb friction, bounded by the normal impulse: a glancing hit
+      // scrubs a little speed, a ball rolling along a rail keeps its pace
       const tx = -ny;
       const ty = nx;
       const vt = ball.vx * tx + ball.vy * ty;
-      ball.vx -= tx * vt * c.friction;
-      ball.vy -= ty * vt * c.friction;
+      const mu = -vn > 2 ? c.friction * 2.5 * j : 0;
+      const dvt = clamp(vt, -mu, mu);
+      ball.vx -= tx * dvt;
+      ball.vy -= ty * dvt;
 
-      // Kickers only fire above their trigger speed — a real slingshot
-      // ignores a ball dribbling against its rubber.
-      if (c.kick && -vn > (c.kickMin ?? 0)) {
+      let out = Math.abs(vn);
+      if (fire) {
+        // A coil throws the ball at a near-constant speed whatever brought
+        // it in, along the normal turned by a few degrees of randomness:
+        // real rings and sling arms never throw the same way twice
+        c.firedAt = this.time;
+        const a = (this.random() - 0.5) * 2 * c.jitter;
+        const ca = Math.cos(a);
+        const sa = Math.sin(a);
+        const kx = nx * ca - ny * sa;
+        const ky = nx * sa + ny * ca;
+        const now = ball.vx * kx + ball.vy * ky;
+        const want = c.kick * (0.94 + this.random() * 0.12) + Math.max(0, -vn) * 0.3;
+        if (now < want) {
+          ball.vx += kx * (want - now);
+          ball.vy += ky * (want - now);
+        }
+        out = Math.max(out, 1.5);
+      } else if (!c.active && c.kick && -vn > (c.kickMin ?? 0)) {
+        // Passive "lively rubber": a fixed extra push on a real impact
         ball.vx += nx * c.kick;
         ball.vy += ny * c.kick;
       }
-      if (c.onHit) c.onHit(Math.abs(vn), ball);
+      if (c.onHit) c.onHit(out, ball, fire);
     }
     return true;
   }

@@ -693,6 +693,42 @@
   border-color: rgba(242, 193, 78, 0.6);
 }
 
+/* The tilt bob made visible: the button warms with every recent nudge —
+   amber after two, red and pulsing on the last one before TILT */
+.pbf-nudge {
+  transition: border-color 0.2s, color 0.2s, box-shadow 0.2s;
+}
+
+.pbf-nudge[data-heat='2'] {
+  color: #ffd27a;
+  border-color: rgba(242, 193, 78, 0.75);
+  box-shadow: 0 0 14px rgba(242, 193, 78, 0.35);
+}
+
+.pbf-nudge[data-heat='3'] {
+  color: #ff8a8a;
+  border-color: rgba(255, 90, 90, 0.9);
+  box-shadow: 0 0 18px rgba(255, 70, 70, 0.55);
+  animation: pbf-breathe 0.5s ease-in-out infinite;
+}
+
+/* The lit skill-shot lane moves from ball to ball, and says which it is */
+.pbf-skill {
+  transition: left 0.35s ease, width 0.35s ease;
+}
+
+.pbf-skill::after {
+  content: attr(data-name);
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 0.5rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: rgba(4, 30, 28, 0.85);
+}
+
 /* Touch onboarding: the two halves of the screen ARE the flipper buttons,
    so show them for the first moments of a game and on every new ball.
    While playing, the half under a thumb glows faintly — a button press. */
@@ -1270,8 +1306,23 @@
     font-size: 0.74rem;
   }
 
+  /* A phone on its side still always shows the next objective: a small
+     two-line card in the free corner under the panel, off the table */
   .pbf[data-orient='land'] .pbf-goal {
-    display: none;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    padding: 7px 10px;
+    border-radius: 10px;
+    font-size: 0.72rem;
+    line-height: 1.3;
+    gap: 7px;
+    background: rgba(10, 13, 28, 0.66);
+  }
+
+  .pbf[data-orient='land'] .pbf-goal span {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 }
 
@@ -1452,6 +1503,10 @@
   }
 
   .pbf-coach.go {
+    animation: none;
+  }
+
+  .pbf-nudge[data-heat='3'] {
     animation: none;
   }
 
