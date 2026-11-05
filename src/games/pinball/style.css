@@ -442,6 +442,40 @@
   color: rgba(226, 218, 204, 0.8);
 }
 
+/* How to play, in three steps */
+.pbf-steps {
+  list-style: none;
+  margin: 12px auto 0;
+  padding: 0;
+  max-width: 340px;
+  display: grid;
+  gap: 6px;
+  text-align: left;
+}
+
+.pbf-steps li {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.84rem;
+  line-height: 1.35;
+  color: rgba(226, 218, 204, 0.88);
+}
+
+.pbf-steps b {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-family: var(--display);
+  font-size: 0.85rem;
+  color: #1d1404;
+  background: var(--pbf-metal);
+  box-shadow: 0 0 10px rgba(242, 193, 78, 0.35);
+}
+
 .pbf-sheet .pbf-sheet-hint {
   margin-top: 10px;
   font-size: 0.74rem;
@@ -660,31 +694,69 @@
 }
 
 /* Touch onboarding: the two halves of the screen ARE the flipper buttons,
-   so show them for the first moments of a game and on every new ball. */
+   so show them for the first moments of a game and on every new ball.
+   While playing, the half under a thumb glows faintly — a button press. */
 .pbf-zones {
   position: absolute;
   inset: 0;
   display: flex;
   pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.5s;
-}
-
-.pbf-zones.show {
-  opacity: 1;
 }
 
 .pbf-zones div {
+  position: relative;
   flex: 1;
   display: flex;
   align-items: flex-end;
   justify-content: center;
   padding-bottom: calc(118px + env(safe-area-inset-bottom));
+}
+
+.pbf-zones div::before {
+  content: '';
+  position: absolute;
+  inset: 0;
   background: linear-gradient(0deg, rgba(124, 140, 248, 0.16), transparent 45%);
+  opacity: 0;
+  transition: opacity 0.5s;
+}
+
+.pbf-zones div::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(70% 34% at 50% 100%, rgba(242, 193, 78, 0.2), transparent 70%);
+  opacity: 0;
+  transition: opacity 0.22s ease-out;
+}
+
+.pbf-zones div.press::after {
+  opacity: 1;
+  transition-duration: 0.04s;
+}
+
+.pbf-zones.show div::before {
+  opacity: 1;
 }
 
 .pbf-zones div + div {
-  border-left: 1px dashed rgba(255, 255, 255, 0.28);
+  border-left: 1px dashed transparent;
+  transition: border-color 0.5s;
+}
+
+.pbf-zones.show div + div {
+  border-left-color: rgba(255, 255, 255, 0.28);
+}
+
+.pbf-zones span {
+  position: relative;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 0.5s;
+}
+
+.pbf-zones.show span {
+  opacity: 1;
 }
 
 .pbf-zones span {
@@ -737,6 +809,67 @@
 .pbf-pop.big {
   font-size: 1.5rem;
   color: #fff3d0;
+}
+
+/* Rescues and skill shots get a headline of their own over the table */
+.pbf-pop.save {
+  font-family: var(--display);
+  font-size: 1.35rem;
+  font-style: italic;
+  color: #c8ffd9;
+  text-shadow: 0 0 14px rgba(61, 220, 123, 0.95), 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+.pbf-pop.save.go,
+.pbf-pop.big.go {
+  animation-duration: 1.4s;
+}
+
+.pbf-pop.combo {
+  font-size: 1.05rem;
+  color: #d6dcff;
+  text-shadow: 0 0 12px rgba(124, 140, 248, 0.95), 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+/* Onboarding bubble, pinned to the shot it is about */
+.pbf-coach {
+  position: absolute;
+  z-index: 30;
+  max-width: min(240px, 62vw);
+  padding: 8px 12px;
+  border-radius: 12px;
+  transform: translate(-50%, calc(-100% - 14px));
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: center;
+  color: #1d1404;
+  background: var(--pbf-metal);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.55), 0 0 22px rgba(242, 193, 78, 0.45);
+  pointer-events: none;
+}
+
+.pbf-coach[hidden] {
+  display: none;
+}
+
+.pbf-coach::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  width: 14px;
+  height: 14px;
+  background: #e9bf5c;
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.pbf-coach.go {
+  animation: pbf-coach-in 0.5s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
+}
+
+@keyframes pbf-coach-in {
+  from { opacity: 0; transform: translate(-50%, calc(-100% - 4px)) scale(0.7); }
 }
 
 @keyframes pbf-pop {
@@ -1032,6 +1165,20 @@
   display: none;
 }
 
+/* The plunger meter steps off the glass too: beside the machine, in the
+   same corner as the nudge button that replaces it once the ball is out */
+.pbf[data-orient='land'] .pbf-bottom {
+  left: auto;
+  right: calc(28px + env(safe-area-inset-right));
+  bottom: calc(22px + env(safe-area-inset-bottom));
+  transform: none;
+  width: min(var(--side-w), 300px);
+}
+
+.pbf[data-orient='land'] .pbf-plunger-label {
+  white-space: normal;
+}
+
 /* Off the table, where a thumb rests when the phone is on its side */
 .pbf[data-orient='land'] .pbf-nudge {
   left: auto;
@@ -1112,6 +1259,15 @@
 
   .pbf[data-orient='land'] .pbf-btn {
     margin-top: 10px;
+  }
+
+  .pbf[data-orient='land'] .pbf-steps {
+    margin-top: 8px;
+    gap: 4px;
+  }
+
+  .pbf[data-orient='land'] .pbf-steps li {
+    font-size: 0.74rem;
   }
 
   .pbf[data-orient='land'] .pbf-goal {
@@ -1251,6 +1407,20 @@
   letter-spacing: 0;
 }
 
+.pbf[data-orient='port'] .pbf-steps {
+  margin-top: 10px;
+  gap: 4px;
+}
+
+.pbf[data-orient='port'] .pbf-steps li {
+  font-size: 0.8rem;
+}
+
+.pbf[data-orient='port'] .pbf-steps b {
+  width: 22px;
+  height: 22px;
+}
+
 .pbf[data-orient='port'] .pbf-sheet-board li {
   padding: 4px 8px;
   font-size: 0.82rem;
@@ -1275,8 +1445,14 @@
     animation: none;
   }
 
-  .pbf-pop.go {
+  .pbf-pop.go,
+  .pbf-pop.save.go,
+  .pbf-pop.big.go {
     animation: pbf-pop-still 0.9s linear forwards;
+  }
+
+  .pbf-coach.go {
+    animation: none;
   }
 
   @keyframes pbf-pop-still {

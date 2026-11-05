@@ -8,7 +8,9 @@
  *   1. The keramikern shows a form — its ghost silhouette hangs over the
  *      wheel, and a coloured band shows the live difference to your wall.
  *   2. You THROW: the wheel spins, and dragging against the clay pushes
- *      it in or pulls it out at that height, like a palm and a rib tool.
+ *      it in or pulls it out at that height — your hand (hand.js) presses
+ *      the outside wall, or reaches in over the rim to pull from inside,
+ *      and the clay gives under the fingers as they work.
  *      Yank too hard and the clay goes off-centre. A likeness meter with
  *      star marks answers the only question that matters — "is this
  *      starting to look like it?"
@@ -33,8 +35,9 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { guardRenderer, postTarget, addSanitize, RenderWatchdog, gfxNotice, precompile } from '../shared/gfx.js';
 import { Sfx } from './audio.js';
-import { N, H, R_MIN, R_MAX, ClayBody, ringMaps, clayMaterial, glazeMaterial } from './clay.js';
-import { mulberry, buildStudio, buildWheel, buildHand, buildSponge, buildEnvScene, disposeScene } from './studio.js';
+import { N, H, R_MIN, R_MAX, WALL, ClayBody, ringMaps, glazeMaps, clayMaterial, glazeMaterial } from './clay.js';
+import { mulberry, buildStudio, buildWheel, buildSponge, buildEnvScene, disposeScene } from './studio.js';
+import { buildPotterHand } from './hand.js';
 import { buildFx, HeatHazeShader } from './fx.js';
 import { buildGuide } from './guide.js';
 import { buildHud, drawDiff, silhouetteSvg, starsHtml } from './hud.js';
@@ -72,7 +75,7 @@ const PIECES = [
     id: 'skal',
     name: 'Skålen',
     brief: 'En öppen skål — bred mun, mjuk buk, stadig fot.',
-    glaze: { color: 0xd89a2c, rim: 0x6e3414, metal: false },
+    glaze: { color: 0xd89a2c, rim: 0x6e3414, metal: false, tex: 'speckle' },
     css: '#d4952f',
     glazeName: 'honungsglasyr',
     profile: profileOf([[0, 0.62], [0.14, 0.5], [0.35, 0.62], [0.7, 0.95], [1, 1.18]])
@@ -81,7 +84,7 @@ const PIECES = [
     id: 'vas',
     name: 'Vasen',
     brief: 'En klassisk vas — fyllig buk, smal hals, liten läpp.',
-    glaze: { color: 0x163f8e, rim: 0x8a6a52, metal: false },
+    glaze: { color: 0x163f8e, rim: 0x8a6a52, metal: false, tex: 'mottle' },
     css: '#3d6fc0',
     glazeName: 'koboltglasyr',
     profile: profileOf([[0, 0.58], [0.16, 0.82], [0.38, 1.02], [0.62, 0.62], [0.82, 0.34], [0.93, 0.36], [1, 0.5]])
@@ -90,7 +93,7 @@ const PIECES = [
     id: 'amfora',
     name: 'Amforan',
     brief: 'En amfora som på museet — hög buk, lång smal hals, utsvängd mynning.',
-    glaze: { color: 0x86b496, rim: 0xd9e4cf, metal: false },
+    glaze: { color: 0x86b496, rim: 0xd9e4cf, metal: false, tex: 'crackle' },
     css: '#8fc4a0',
     glazeName: 'seladonglasyr',
     profile: profileOf([[0, 0.4], [0.1, 0.62], [0.3, 1.08], [0.52, 0.92], [0.74, 0.3], [0.9, 0.26], [1, 0.56]])
@@ -294,6 +297,9 @@ export async function createClay(container) {
   const view = { aspect: 1, portrait: false, tan: Math.tan(THREE.MathUtils.degToRad(19)) };
   // Free screen region (fractions: x0, x1, y0 from the top, y1) beside the summary card
   const summaryFree = new THREE.Vector4(0, 0.6, 0, 1);
+  // ...and the one the verdict card leaves (on a phone held upright: above it)
+  const verdictFree = new THREE.Vector4(0, 1, 0.1, 0.5);
+  let verdictBelow = true;
 
   /* ---- World ------------------------------------------------------------ */
 
@@ -352,6 +358,7 @@ export async function createClay(container) {
   /* ---- The clay ---------------------------------------------------------- */
 
   const maps = ringMaps();
+  const glazeTex = glazeMaps(maps);
   const body = new ClayBody();
   const clayMat = clayMaterial(maps, lowTier);
 
@@ -403,12 +410,20 @@ export async function createClay(container) {
   guide.group.position.y = wheel.headY;
   scene.add(guide.group);
   clayGroup.add(guide.ring);
-  const hand = buildHand();
+  const potter = buildPotterHand();
+  const hand = potter.group;
   hand.visible = false;
   guide.group.add(hand);
   const sponge = buildSponge();
   sponge.visible = false;
   guide.group.add(sponge);
+  // The guide draws without depth test, over everything; the hand and the
+  // sponge are IN FRONT of it, so they join the transparent pass (fully
+  // opaque, still depth-tested against the clay) and draw after it
+  [potter.mesh, sponge].forEach((m) => {
+    m.material.transparent = true;
+    m.renderOrder = 40;
+  });
 
   /* ---- Keramikern -------------------------------------------------------- */
 
@@ -425,7 +440,14 @@ export async function createClay(container) {
     wheel: new THREE.Vector3(0, wheel.headY + 1, 0),
     banding: studio.reveal.clone().setY(studio.banding.position.y + 0.02),
     bandingRadius: 0.36,
-    kilnDoor: studio.kiln.group.localToWorld(new THREE.Vector3(0, 1.2, 0.8))
+    kilnDoor: studio.kiln.group.localToWorld(new THREE.Vector3(0, 1.2, 0.8)),
+    // Beside the door on its free (left) side, clear of its swing, within reach of the handle
+    kilnSpot: studio.kiln.group.localToWorld(new THREE.Vector3(-0.7, 0, 1.1)).setY(0),
+    kilnHinge: studio.kiln.hinge,
+    kilnHandle: studio.kiln.handle,
+    kilnBack: studio.kiln.group.localToWorld(new THREE.Vector3(-1.25, 0, 0.95)).setY(0),
+    // On the start screen he waits by the wheel, right of the lump, to welcome you
+    greet: new THREE.Vector3(1.45, 0, -1.55)
   });
   scene.add(keramiker.root);
   const attention = new THREE.Vector3();
@@ -550,6 +572,7 @@ export async function createClay(container) {
   }
 
   const piece = () => state.pieces[state.slot];
+  let ghostFlash = 0; // the target's ghost flares when a star is earned
 
   /* Fired pieces: the one in the kiln / on the stand, and the gallery */
   let fired = null; // { mesh, def }
@@ -592,6 +615,7 @@ export async function createClay(container) {
         if (stars === 3) toast('Keramikern höjer ögonbrynen!', true);
         else if (stars === 2) toast('Nu liknar det något!');
         keramiker.cue('star', stars);
+        ghostFlash = reduceMotion ? 0.3 : 1;
       }
       state.stars = stars;
     }
@@ -763,7 +787,7 @@ export async function createClay(container) {
     // The fired twin, waiting in the kiln
     body.open = 1;
     const geo = body.firedGeometry(r, p.glaze);
-    const mat = glazeMaterial(maps, p.glaze.metal);
+    const mat = glazeMaterial(maps, p.glaze.metal, glazeTex[p.glaze.tex] || null);
     const mesh = new THREE.Mesh(geo, mat);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
@@ -799,17 +823,39 @@ export async function createClay(container) {
     hud.verdict.classList.remove('grade-hi', 'grade-mid', 'grade-lo');
     hud.verdict.classList.add(res.grade >= 9 ? 'grade-hi' : res.grade <= 3 ? 'grade-lo' : 'grade-mid');
     hud.verdict.classList.add('show');
+    measureVerdict();
     // Stars land one at a time
     const stars = hud.vStars.querySelectorAll('.lr-star');
     for (let i = 0; i < res.stars; i++) {
       later(() => {
         stars[i].classList.add('on', 'pop');
         sfx.star(i);
+        // Fresh glaze winks with every star the piece earns
+        for (let g = 0; g <= i; g++) emitGlint();
       }, 420 + i * 340);
     }
     if (res.grade >= 9) later(() => sfx.fanfare(), 420 + res.stars * 340);
     keramiker.cue('verdict', res.grade);
     renderChips();
+  }
+
+  /** Where on screen the judging scene has room: above the card (portrait), beside it (wide). */
+  function measureVerdict() {
+    const host = canvasHost.getBoundingClientRect();
+    if (!host.height) return;
+    const card = hud.verdict.getBoundingClientRect();
+    const chips = hud.chips.getBoundingClientRect();
+    // A card across the bottom (phones upright, squarish windows) leaves the
+    // space above it; a card on the left (wide screens) the space beside it
+    verdictBelow = card.width > host.width * 0.6;
+    if (verdictBelow) {
+      const y0 = clamp01((chips.bottom - host.top + 6) / host.height);
+      const y1 = Math.max(y0 + 0.25, (card.top - host.top - 8) / host.height);
+      verdictFree.set(0, 1, Math.min(0.2, y0), Math.min(1, y1));
+    } else {
+      const x0 = Math.min(0.5, Math.max(0, (card.right - host.left + 12) / host.width));
+      verdictFree.set(x0, 1, 0.06, 1);
+    }
   }
 
   /** From the verdict: the piece goes to the window, the next lump lands. */
@@ -818,6 +864,9 @@ export async function createClay(container) {
     hud.verdict.classList.remove('show');
     if (fired) {
       gallery.push({ mesh: fired.mesh, from: fired.mesh.position.clone(), to: studio.sill[gallery.length], t: 0, s0: fired.mesh.scale.x });
+      // On a phone the small pieces on the sill skip the shadow pass: four of
+      // them doubled the evening's last frame (~14k triangles each)
+      if (lowTier) fired.mesh.castShadow = false;
       fired = null;
       sfx.whoosh();
     }
@@ -1046,6 +1095,16 @@ export async function createClay(container) {
     lookGoal.y -= shift[1] * d * view.tan;
   }
 
+  /**
+   * frame() into part of the screen: f = (x0, x1, y0 from the top, y1) as
+   * fractions. The box fills that region and is centred in it.
+   */
+  function frameIn(look, dir, hw, hh, fill, f) {
+    const wX = Math.max(0.3, f.y - f.x);
+    const wY = Math.max(0.15, f.w - f.z);
+    frame(look, dir, hw / wX, hh / wY, fill, [f.x + f.y - 1, 1 - (f.z + f.w)]);
+  }
+
   const DIR_THROW = new THREE.Vector3(0, 0.2, 1);
   const DIR_KILN = new THREE.Vector3(-0.35, 0.5, 1); // a little from above, so the glowing seam reads
   const DIR_SHOW = new THREE.Vector3(0.05, 0.12, 1);
@@ -1058,6 +1117,7 @@ export async function createClay(container) {
   const kilnFlue = new THREE.Vector3();
   studio.group.updateMatrixWorld(true);
   studio.kiln.group.localToWorld(kilnLook.set(0, 1.75, 0.4));
+  const kilnLookP = studio.kiln.group.localToWorld(new THREE.Vector3(-0.38, 1.7, 0.55));
   studio.kiln.group.localToWorld(kilnMouth.set(0, 0.63, 0.05));
   studio.kiln.group.localToWorld(kilnFlue.copy(studio.kiln.flue));
   const kilnFront = new THREE.Vector3();
@@ -1067,7 +1127,15 @@ export async function createClay(container) {
   const kilnSeam = new THREE.Vector3();
   studio.kiln.group.localToWorld(kilnSeam.set(0, 1.76, 0.78));
 
+  // Test hook: a fixed camera for close-ups (window.__ppLera.debugCam)
+  let camOverride = null;
+
   function updateCamera(t, dt) {
+    if (camOverride) {
+      camera.position.copy(camOverride.pos);
+      camera.lookAt(camOverride.look);
+      return;
+    }
     const P = view.portrait;
     const ph = state.phase;
     if (ph === 'idle') {
@@ -1076,21 +1144,28 @@ export async function createClay(container) {
     } else if (ph === 'intro' || ph === 'throw' || (ph === 'fire' && state.t < FIRE.lift)) {
       frame(THROW_LOOK, DIR_THROW, 1.72, 1.3, P ? 0.94 : 0.6, P ? [0, 0.04] : [0.04, 0]);
     } else if (ph === 'fire' && state.t < FIRE.open) {
-      frame(kilnLook, DIR_KILN, P ? 1.25 : 2.2, 1.9, P ? 0.92 : 0.85);
+      // On a phone held upright, a little to the left: keramikern tends the door from there
+      frame(P ? kilnLookP : kilnLook, DIR_KILN, P ? 1.32 : 2.2, 1.9, P ? 0.92 : 0.85);
     } else if (ph === 'fire' || ph === 'judge') {
       REVEAL_LOOK.copy(studio.reveal);
       REVEAL_LOOK.x += 0.15;
       REVEAL_LOOK.y += 0.45;
-      frame(REVEAL_LOOK, DIR_REVEAL, P ? 0.75 : 1.3, 0.7, P ? 0.9 : 0.75,
-        ph === 'judge' ? (P ? [0, 0.42] : [0.3, 0]) : [0, P ? 0.1 : 0]);
+      if (ph === 'judge' && verdictBelow) {
+        // Above the verdict card: the piece AND keramikern, beret and all
+        REVEAL_LOOK.y += 0.17;
+        frameIn(REVEAL_LOOK, DIR_REVEAL, 0.66, 0.68, 0.94, verdictFree);
+      } else if (ph === 'judge') {
+        // Beside the card, centred between the piece and keramikern (he stands
+        // on its left), so the card never covers him on a narrower window
+        REVEAL_LOOK.x -= 0.25;
+        REVEAL_LOOK.y += 0.06;
+        frameIn(REVEAL_LOOK, DIR_REVEAL, 0.86, 0.8, 0.9, verdictFree);
+      } else {
+        frame(REVEAL_LOOK, DIR_REVEAL, P ? 0.75 : 1.3, 0.7, P ? 0.9 : 0.75, [0, P ? 0.1 : 0]);
+      }
     } else if (ph === 'over') {
       // The sill (half-width ~1.3 with its pieces, plus margin) fills the free region
-      const f = summaryFree;
-      const halfX = f.y - f.x;
-      const halfY = f.w - f.z;
-      const cx = f.x + f.y - 1;
-      const cy = 1 - (f.z + f.w);
-      frame(SHOW_LOOK, DIR_SHOW, 1.5 / Math.max(0.3, halfX), 0.42 / Math.max(0.15, halfY), 0.92, [cx, cy]);
+      frameIn(SHOW_LOOK, DIR_SHOW, 1.5, 0.42, 0.92, summaryFree);
     }
     const k = 1 - Math.exp(-dt * (ph === 'fire' ? 2.4 : 2.0));
     camera.position.lerp(camGoal, k);
@@ -1128,6 +1203,7 @@ export async function createClay(container) {
     hudHost.classList.toggle('lr-wide', view.aspect >= 1.15);
     hudHost.classList.toggle('lr-tall', view.portrait);
     if (state.phase === 'throw' || state.phase === 'intro') renderMatch();
+    if (state.phase === 'judge') measureVerdict();
   }
   const ro = new ResizeObserver(resize);
   ro.observe(canvasHost);
@@ -1159,6 +1235,11 @@ export async function createClay(container) {
         // Fingers leave crisp, wet rings where they work
         body.ring[j] += (1.15 - body.ring[j]) * Math.min(1, w * dt * 3);
         body.wet[j] += (1 - body.wet[j]) * Math.min(1, w * dt * 2.5);
+      }
+      // ...and a fresh film of slip right where the fingers ride: the band
+      // they have just passed over shines wettest
+      for (let j = Math.max(0, brush.j - 2); j <= Math.min(N - 1, brush.j + 2); j++) {
+        body.wet[j] += (1 - body.wet[j]) * Math.min(1, dt * 7);
       }
       // Yanking far from the wall throws the clay off-centre
       const pressure = Math.abs(brush.targetR - r[brush.j]);
@@ -1196,6 +1277,42 @@ export async function createClay(container) {
     // Clay slowly dries between touches
     for (let j = 0; j < N; j++) body.wet[j] = Math.max(0.3, body.wet[j] - dt * 0.012);
     return moved;
+  }
+
+  /*
+   * The clay gives under the hand. The simulation's profile r is the
+   * clay's settled shape; what is drawn adds the live deformation at the
+   * fingers: pressing in, a dent at the pads and the displaced clay rising
+   * as a ridge just above them (a little below too); pulling out from
+   * inside, a bulge travelling up with the fingertips. It eases in and out
+   * and rides along with the hand.
+   */
+  const rShow = new Float32Array(N);
+  const touch = { k: 0, j: 0, sign: 1, amp: 0 };
+  function shownProfile(dt) {
+    const b = brush && dragging ? brush : null;
+    const goal = b ? 1 : 0;
+    touch.k += (goal - touch.k) * Math.min(1, dt * (goal ? 10 : 5));
+    if (b) {
+      touch.j += (b.j - touch.j) * Math.min(1, dt * 16);
+      touch.sign = b.targetR < r[b.j] ? 1 : -1;
+      touch.amp = 0.016 + Math.min(0.03, Math.abs(b.targetR - r[b.j]) * 0.08);
+    }
+    if (touch.k < 0.003) return r;
+    const a = touch.amp * touch.k;
+    for (let j = 0; j < N; j++) {
+      const d = j - touch.j;
+      let off;
+      if (touch.sign > 0) {
+        // pressed in: dent under the pads, the ridge pushed up ahead of them
+        off = -a * Math.exp(-(d * d) / 3) + a * 0.75 * Math.exp(-((d - 3.2) ** 2) / 2.2) + a * 0.25 * Math.exp(-((d + 3) ** 2) / 2.5);
+      } else {
+        // pushed out from inside: a bulge, the wall above drawn a touch thinner
+        off = a * Math.exp(-(d * d) / 3.5) - a * 0.3 * Math.exp(-((d - 3.5) ** 2) / 3);
+      }
+      rShow[j] = Math.max(R_MIN, r[j] + off * (j > 2 ? 1 : 0));
+    }
+    return rShow;
   }
 
   function updateIntro(dt) {
@@ -1257,8 +1374,9 @@ export async function createClay(container) {
     }
     shapingEnergy += (Math.min(1, moved * 26) - shapingEnergy) * Math.min(1, dt * 9);
     sfx.setShaping(working || smoothing || keySmooth ? 0.15 + shapingEnergy : 0, state.wobble);
-    // Rings and wetness change continuously, so the mesh is rebuilt every frame
-    body.update(r);
+    // Rings and wetness change continuously, so the mesh is rebuilt every
+    // frame — from the profile as the hand deforms it right now
+    body.update(shownProfile(dt));
     matchThrottle -= dt;
     if (matchThrottle <= 0 && (moved > 0.0005 || smoothing || keySmooth)) {
       matchThrottle = 0.12;
@@ -1288,6 +1406,74 @@ export async function createClay(container) {
     guide.updateHints(r, t, show);
   }
 
+  /** The wall's slope dr/dy and profile curvature at row j (for the hand to follow it). */
+  function wallShape(j) {
+    const h = H / (N - 1);
+    const j0 = Math.max(0, j - 2);
+    const j1 = Math.min(N - 1, j + 2);
+    const slope = (r[j1] - r[j0]) / ((j1 - j0) * h || 1);
+    const k0 = Math.max(0, j - 3);
+    const k1 = Math.min(N - 1, j + 3);
+    const curv = (r[k1] + r[k0] - 2 * r[j]) / ((3 * h) ** 2);
+    return { slope: Math.max(-2, Math.min(2, slope)), curv: Math.max(-3, Math.min(3, curv)) };
+  }
+
+  /** The wall as drawn this frame (the hand's live dent included). */
+  const shownR = (j) => (touch.k >= 0.003 ? rShow[j] : r[j]);
+  /** Inner radius of the wall at row j (as clay.js builds it). */
+  const innerR = (j) => shownR(j) - Math.min(WALL, r[N - 1] * 0.7);
+
+  /**
+   * Put the hand at a point (in the guide plane) and pose it. It eases to
+   * its mark (and grows in the first moment it appears) so it never pops.
+   */
+  function placeHand(pos, side, o, dt) {
+    if (!hand.visible) {
+      hand.position.copy(pos);
+      hand.visible = true;
+      hand.userData.k = 0;
+    }
+    hand.position.lerp(pos, Math.min(1, dt * 22));
+    hand.userData.k = Math.min(1, (hand.userData.k || 0) + dt * 8);
+    // (a narrow neck only takes a smaller reach: the hand gathers in)
+    const fit = o.fit || 1;
+    const s = (0.86 + 0.14 * hand.userData.k) * fit;
+    hand.scale.set(side * s, s, s);
+    potter.pose(o);
+  }
+
+  /*
+   * Where the hand touches, round the pot. Outside it sits a little toward
+   * the viewer (OUT_YAW), so you see the back of the hand pressing the wall.
+   * Inside it works the NEAR wall (IN_YAW), as a potter sitting at the wheel
+   * does: fingers down inside, palm to the clay, the wrist just over the
+   * near rim and the forearm coming up from the foreground. The hand itself
+   * is behind the near wall from the camera — as it would be — so it never
+   * needs to reach deeper than IN_DIP below the rim; the contact ring and
+   * the bulge show where the fingers work.
+   */
+  const OUT_YAW = 1.0;
+  const IN_YAW = 1.05;
+  const IN_DIP = 0.2;
+  function contactAt(out, side, rad, y, yaw) {
+    return out.set(side * rad * Math.cos(yaw), y, rad * Math.sin(yaw));
+  }
+
+  /**
+   * Inside the pot the hand rises from the fingers' contact toward the
+   * mouth; where the wall narrows above (a vase's shoulder and neck) it
+   * leans in to stay inside the clay instead of following the wall.
+   */
+  function insideSlope(j, slope) {
+    const h = H / (N - 1);
+    const rc = innerR(j) - 0.012;
+    let s = slope;
+    for (let k = 1; k <= 16 && j + k < N; k++) {
+      s = Math.min(s, (innerR(j + k) - 0.04 - rc) / (k * h));
+    }
+    return Math.max(-2, s);
+  }
+
   /** Hand at the contact point, sponge while smoothing, slip thrown off. */
   function updateHands(dt, t) {
     const b = brush && dragging ? brush : null;
@@ -1301,36 +1487,73 @@ export async function createClay(container) {
     if (b) {
       const wall = r[b.j];
       const shake = state.wobble * 0.03 * Math.sin(t * 40);
-      handPos.set(b.side * (wall + 0.015) + shake, b.y, 0.08);
-      if (!hand.visible) {
-        hand.position.copy(handPos);
-        hand.visible = true;
-        hand.userData.k = 0;
+      const pull = b.targetR > wall;
+      const press = Math.min(1, Math.abs(b.targetR - wall) * 3);
+      const ws = wallShape(b.j);
+      if (pull) {
+        // Pulling out works from INSIDE the pot: fingers down the inner
+        // wall, pads pressing outward, the forearm over the rim
+        const yc = Math.max(b.y, H - IN_DIP);
+        const jc = Math.round((yc / H) * (N - 1));
+        const wc = wallShape(jc);
+        contactAt(handPos, b.side, Math.max(0.05, innerR(jc) - 0.012), yc, IN_YAW).x += shake;
+        const fit = Math.max(0.6, Math.min(1, innerR(jc) / 0.5));
+        placeHand(handPos, b.side, { inside: true, slope: insideSlope(jc, wc.slope), curv: -wc.curv, press, t, yaw: IN_YAW, fit }, dt);
+      } else {
+        // Pushing in: palm and finger pads on the outer wall
+        contactAt(handPos, b.side, shownR(b.j) + 0.01, b.y, OUT_YAW).x += shake;
+        placeHand(handPos, b.side, { inside: false, slope: ws.slope, curv: ws.curv, press, t, yaw: OUT_YAW, low: smooth(0.95, 0.2, b.y) }, dt);
       }
-      hand.position.lerp(handPos, Math.min(1, dt * 22));
-      hand.userData.k = Math.min(1, (hand.userData.k || 0) + dt * 8);
-      const press = b.targetR < wall ? 1 : -1;
-      hand.rotation.z = press * 0.08 * b.side;
-      const s = 0.85 + 0.15 * hand.userData.k;
-      hand.scale.set(b.side * s, s, s);
-      // Slip flies off the spinning wall, tangent to the rotation
-      if (shapingEnergy > 0.12 && rand() < dt * 34 * shapingEnergy) {
+      // Slip flies off the spinning wall, tangent to the rotation — always a
+      // few at full speed, more the harder the clay is worked
+      const rate = (shapingEnergy > 0.12 ? 34 * shapingEnergy : 0) + (state.wheelSpeed > 0.8 ? 5 : 0);
+      if (rand() < dt * rate) {
         guide.group.localToWorld(work.set(b.side * wall, b.y, 0));
         const w = 3.1 * state.wheelSpeed;
         const vx = work.z * w * 0.45 + work.x * 0.9;
         const vz = -work.x * w * 0.45 + work.z * 0.9;
         fx.drops.emit(work.x, work.y, work.z, vx + (rand() - 0.5), 1.4 + rand() * 1.8, vz + (rand() - 0.5), 1.4, 0.035 + rand() * 0.05);
       }
-    } else {
-      hand.visible = false;
     }
     const sm = smoothing || keySmooth;
     sponge.visible = sm;
     if (sm) {
       const u = 0.55 + Math.sin(t * 3.2) * 0.38;
       const j = Math.round(u * (N - 1));
-      sponge.position.set(r[j] + 0.1, u * H, 0.1);
-      sponge.scale.set(0.8 + Math.sin(t * 9) * 0.06, 1, 1);
+      // Squeezed a little against the wall as it rides up and down
+      const squeeze = 0.86 + Math.sin(t * 9) * 0.05;
+      sponge.position.set(r[j] + 0.1 * squeeze, u * H, 0.1);
+      sponge.scale.set(squeeze, 1, 1);
+      // ...and held there by the hand, fingers closed round its back
+      if (!b) {
+        const ws = wallShape(j);
+        handPos.set(r[j] + 0.19 * squeeze, u * H - 0.05, 0.05);
+        placeHand(handPos, 1, { inside: false, slope: ws.slope, curv: ws.curv, press: 0.3, grip: 1, t, yaw: 0.25, low: smooth(0.95, 0.2, u * H) }, dt);
+      }
+    } else if (!b && state.coached < 1.2 && state.phase === 'throw' && guide.worst.d > 0.11) {
+      // First time at the wheel: until you have worked the clay for a moment,
+      // a hand shows the move at the spot that needs it most — in to push,
+      // out (from inside) to pull — and lifts away between goes
+      const { j } = guide.worst;
+      const cyc = (t * 0.7) % 1;
+      const reach = Math.sin(Math.min(1, cyc / 0.7) * Math.PI);
+      const pull = guide.worst.sign < 0;
+      const ws = wallShape(j);
+      const y = (j / (N - 1)) * H;
+      const yc = pull ? Math.max(y, H - IN_DIP) : y;
+      const jc = Math.round((yc / H) * (N - 1));
+      if (pull) contactAt(handPos, 1, Math.max(0.05, innerR(jc) - 0.03 + reach * 0.018), yc, IN_YAW);
+      else contactAt(handPos, 1, r[j] + 0.01 + (1 - reach) * 0.35, y, OUT_YAW);
+      hand.position.copy(handPos);
+      const s = pull ? Math.max(0.6, Math.min(1, innerR(jc) / 0.5)) : 0.6 + 0.4 * reach;
+      hand.scale.set(s, s, s);
+      potter.pose({
+        inside: pull, slope: pull ? insideSlope(jc, wallShape(jc).slope) : ws.slope, curv: pull ? -ws.curv : ws.curv, press: reach * 0.6, t,
+        yaw: pull ? IN_YAW : OUT_YAW, low: smooth(0.95, 0.2, y)
+      });
+      hand.visible = pull || reach > 0.05;
+    } else if (!b) {
+      hand.visible = false;
     }
   }
 
@@ -1356,7 +1579,8 @@ export async function createClay(container) {
     state.heat = h;
     const { kiln } = studio;
     kiln.chamberMat.emissiveIntensity = 0.06 + h * 3.2;
-    heatCol.setRGB(1.0, 0.32 + h * 0.5, 0.08 + h * 0.3).multiplyScalar(h * 6);
+    // Cherry red → orange → the yellow of 1 240 °C, never a flat white
+    heatCol.setRGB(1.0, 0.24 + h * 0.34, 0.04 + h * 0.1).multiplyScalar(h * (0.5 + h * 1.6));
     kiln.glowMat.color.copy(heatCol);
     sfx.setKiln(h);
   }
@@ -1443,9 +1667,9 @@ export async function createClay(container) {
       fired.mesh.material.emissiveIntensity = 1.4 * Math.exp(-k * 4.5);
       setHeat(0.35 * (1 - k));
       if (rand() < dt * 7) sfx.ping();
-      if (rand() < dt * 18 * (1 - k)) {
+      if (rand() < dt * 14 * (1 - k) ** 2) {
         const a = rand() * Math.PI * 2;
-        fx.steam.emit(studio.reveal.x + Math.cos(a) * 0.2, studio.reveal.y + 0.3 + rand() * 0.6, studio.reveal.z + Math.sin(a) * 0.2, 0, 0.3, 0, 1.6, 0.25);
+        fx.steam.emit(studio.reveal.x + Math.cos(a) * 0.2, studio.reveal.y + 0.3 + rand() * 0.5, studio.reveal.z + Math.sin(a) * 0.2, 0, 0.3, 0, 1.3, 0.17);
       }
       if (k > 0.35 && rand() < dt * 9) emitGlint();
       if (ft >= FIRE.cool) {
@@ -1460,7 +1684,7 @@ export async function createClay(container) {
     // Closed, the glow leaks round the door; open, it pours out of the chamber
     accent.position.copy(ft < FIRE.heat ? kilnFront : kilnOpen);
     accent.color.setRGB(1, 0.45 + state.heat * 0.2, 0.15);
-    accent.intensity = state.heat * (ft < FIRE.heat ? 3.5 : 2.4) + flash * 3;
+    accent.intensity = state.heat * (ft < FIRE.heat ? 4.5 : 3.5) + flash * 1.4;
     haze.enabled = state.heat > 0.15;
     if (haze.enabled) {
       tmpV.copy(kilnFlue).add(kilnLook).multiplyScalar(0.5).project(camera);
@@ -1469,7 +1693,7 @@ export async function createClay(container) {
       haze.uniforms.uStrength.value = state.heat;
       haze.uniforms.uTime.value = t % 600;
     }
-    bloom.strength = 0.3 + state.heat * 0.45 + flash * 0.25;
+    bloom.strength = 0.3 + state.heat * 0.4 + flash * 0.12;
   }
 
   function emitGlint() {
@@ -1528,6 +1752,8 @@ export async function createClay(container) {
     keramiker.update(ph === 'fire' && state.fast ? dt * 2.5 : dt, t, {
       phase: ph,
       opened: ph === 'fire' && state.t >= FIRE.open,
+      fireT: ph === 'fire' ? state.t : undefined,
+      doorOpening: ph === 'fire' && state.t >= FIRE.heat + 0.1,
       attention,
       piece: fired ? pieceMid : null,
       camera: camera.position,
@@ -1625,7 +1851,9 @@ export async function createClay(container) {
 
     // The guide plane turns to face the camera
     guide.group.rotation.y = Math.atan2(camera.position.x, camera.position.z);
-    guide.setGhostTime(tw, state.phase === 'intro' ? smooth(0.5, 1.4, state.t) : 0.9);
+    // A new star makes the ghost flare for a moment: "yes, that's the shape"
+    ghostFlash = Math.max(0, ghostFlash - dt * 1.8);
+    guide.setGhostTime(tw, state.phase === 'intro' ? smooth(0.5, 1.4, state.t) : 0.9 + ghostFlash * 0.9);
 
     // The finished piece turns on the banding wheel while it is judged
     if (fired && (state.phase === 'judge' || (state.phase === 'fire' && state.t > FIRE.slide))) {
@@ -1702,6 +1930,8 @@ export async function createClay(container) {
   // lämna en svart duk. Laddkortet ligger kvar medan det kompilerar.
   // The composer draws the scene into its own (linear, untonemapped) target,
   // which needs different program variants from the screen — warm those
+  // The glaze patterns are uploaded now too, not when the first piece comes out
+  glazeTex.list.forEach((tx) => renderer.initTexture(tx));
   await precompile(renderer, scene, camera, { target: usePost ? composer.renderTarget1 : null });
   hidden.forEach((o) => {
     o.visible = false;
@@ -1750,8 +1980,12 @@ export async function createClay(container) {
       return { x: rect.left + (work.x * 0.5 + 0.5) * rect.width, y: rect.top + (-work.y * 0.5 + 0.5) * rect.height };
     },
     computeMatch,
+    /** Freeze the camera at pos looking at look (arrays); null releases it. */
+    debugCam(pos, look) {
+      camOverride = pos ? { pos: new THREE.Vector3(...pos), look: new THREE.Vector3(...look) } : null;
+    },
     /** Live three.js handles for test scripts (screenshots from other angles). */
-    three: { scene, camera, sun, renderer },
+    three: { scene, camera, sun, renderer, keramiker: keramiker.root },
     info() {
       return {
         drawCalls: renderer.info.render.calls,
@@ -1788,6 +2022,7 @@ export async function createClay(container) {
     guide.dispose();
     fx.dispose();
     keramiker.dispose();
+    potter.mesh.skeleton.dispose();
     scene.traverse((o) => {
       if (o.geometry) o.geometry.dispose();
       if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(disposeMaterial);
@@ -1795,6 +2030,7 @@ export async function createClay(container) {
     body.dispose();
     maps.normal.dispose();
     maps.albedo.dispose();
+    glazeTex.list.forEach((tx) => tx.dispose());
     if (envRT) envRT.dispose();
     composer.passes.forEach((pass) => pass.dispose?.());
     composer.dispose(); // frigör även renderingsmålen

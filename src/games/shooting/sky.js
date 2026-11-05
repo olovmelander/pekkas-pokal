@@ -336,3 +336,121 @@ export function buildHills() {
   });
   return group;
 }
+
+/* ------------------------------------------------------------ light shafts */
+
+/**
+ * Crepuscular rays: the low sun shining through gaps in the spruce edge.
+ * Each shaft is a strip that starts in the treeline under the sun and runs
+ * PARALLEL to the sun's direction toward the field — perspective alone
+ * then fans them out from the sun's disk on screen, from any camera. The
+ * strips turn to face the camera about their own axis (in the vertex
+ * shader), fade in from the trees and out over the meadow, breathe
+ * slowly, and only show while you look toward the sun. One draw call,
+ * additive, no depth writes, nothing that can go NaN: the facing vector is
+ * guarded for the one case where the view runs straight down a shaft.
+ */
+export function buildShafts(rand) {
+  const uniforms = {
+    uSunDir: { value: SUN_DIR.clone() },
+    uSunColor: { value: new THREE.Color(SUN_COLOR) },
+    uTime: { value: 0 },
+    uStrength: { value: 1 }
+  };
+  const pos = [];
+  const side = [];
+  const along = [];
+  const width = [];
+  const seed = [];
+  const index = [];
+  const axis = SUN_DIR.clone().negate();
+  const count = 13;
+  for (let i = 0; i < count; i++) {
+    // Start points in the treeline around the sun's azimuth
+    const zs = -98 - rand() * 10;
+    const xs = (SUN_DIR.x / SUN_DIR.z) * zs + (rand() - 0.5) * 46;
+    const ys = 6 + rand() * 10;
+    const len = 45 + rand() * 40;
+    const w0 = 1.2 + rand() * 2.2;
+    const w1 = w0 * (2.2 + rand() * 1.6);
+    const s = rand() * 100;
+    const base = pos.length / 3;
+    [[0, w0], [1, w1]].forEach(([a, w]) => {
+      const px = xs + axis.x * len * a;
+      const py = ys + axis.y * len * a;
+      const pz = zs + axis.z * len * a;
+      [-1, 1].forEach((sd) => {
+        pos.push(px, py, pz);
+        side.push(sd);
+        along.push(a);
+        width.push(w);
+        seed.push(s);
+      });
+    });
+    index.push(base, base + 1, base + 3, base, base + 3, base + 2);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('aSide', new THREE.Float32BufferAttribute(side, 1));
+  geo.setAttribute('aAlong', new THREE.Float32BufferAttribute(along, 1));
+  geo.setAttribute('aWidth', new THREE.Float32BufferAttribute(width, 1));
+  geo.setAttribute('aSeed', new THREE.Float32BufferAttribute(seed, 1));
+  geo.setIndex(index);
+  const material = new THREE.ShaderMaterial({
+    uniforms: { ...uniforms, uAxis: { value: axis } },
+    transparent: true,
+    depthWrite: false,
+    fog: false,
+    // The strip turns to face the camera, so its winding flips with the view
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    vertexShader: /* glsl */`
+      uniform vec3 uAxis;
+      attribute float aSide;
+      attribute float aAlong;
+      attribute float aWidth;
+      attribute float aSeed;
+      varying float vSide;
+      varying float vAlong;
+      varying float vSeed;
+      varying vec3 vView;
+      void main() {
+        vec3 w = (modelMatrix * vec4(position, 1.0)).xyz;
+        vec3 v = w - cameraPosition;
+        vec3 s = cross(uAxis, v);
+        float sl = length(s);
+        s = sl > 1e-4 ? s / sl : vec3(1.0, 0.0, 0.0);
+        w += s * aSide * aWidth;
+        vSide = aSide;
+        vAlong = aAlong;
+        vSeed = aSeed;
+        vView = w - cameraPosition;
+        gl_Position = projectionMatrix * viewMatrix * vec4(w, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */`
+      uniform vec3 uSunDir, uSunColor;
+      uniform float uTime, uStrength;
+      varying float vSide;
+      varying float vAlong;
+      varying float vSeed;
+      varying vec3 vView;
+      void main() {
+        float across = 1.0 - vSide * vSide;
+        float fade = smoothstep(0.0, 0.18, vAlong) * (1.0 - smoothstep(0.45, 1.0, vAlong));
+        float breathe = 0.55 + 0.45 * sin(uTime * 0.23 + vSeed) * sin(uTime * 0.11 + vSeed * 1.7);
+        float streak = 0.75 + 0.25 * sin(vAlong * 9.0 + vSeed * 3.0);
+        float vl = max(length(vView), 1e-3);
+        float toward = max(dot(vView / vl, uSunDir), 0.0);
+        float a = across * across * fade * breathe * streak * toward * toward * 0.6 * uStrength;
+        gl_FragColor = vec4(uSunColor, a);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }
+    `
+  });
+  const mesh = new THREE.Mesh(geo, material);
+  mesh.frustumCulled = false;
+  mesh.renderOrder = 1;
+  return { mesh, uniforms };
+}

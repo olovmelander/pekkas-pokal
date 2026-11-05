@@ -117,6 +117,22 @@ const smoothstep = (a, b, x) => {
   return k * k * (3 - 2 * k);
 };
 
+function urlFlag(name) {
+  try {
+    return new URLSearchParams(location.search).get(name) || '';
+  } catch (e) {
+    return '';
+  }
+}
+
+function storedGfx() {
+  try {
+    return localStorage.getItem('pp-gfx') || '';
+  } catch (e) {
+    return '';
+  }
+}
+
 function load(key, fallback) {
   try {
     const v = localStorage.getItem(key);
@@ -151,12 +167,19 @@ export async function createFencing(container) {
   const coarse = matchMedia('(pointer: coarse)').matches;
   const hiQ = !(coarse && Math.min(screen.width, screen.height) < 700);
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const adaptive = !navigator.webdriver; // stable output under automated tests
+  // Frame-time adaptive quality is off under automated tests (stable
+  // output); ?perf=adapt forces it on so the path can be exercised there
+  let adaptive = !navigator.webdriver || urlFlag('perf') === 'adapt';
 
   const sfx = new Sfx();
   const rand = mulberry(77);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+  // Safe mode (?gfx=safe, or the stored pp-gfx flag) draws straight to the
+  // screen without the composer, so it would have no antialiasing at all:
+  // ask the canvas for MSAA instead. Everywhere else the composer's own
+  // multisampled target does the job and the canvas stays cheap.
+  const safeAsked = urlFlag('gfx') === 'safe' || storedGfx() === 'safe';
+  const renderer = new THREE.WebGLRenderer({ antialias: safeAsked, powerPreference: 'high-performance' });
   let pixelRatio = Math.min(window.devicePixelRatio || 1, hiQ ? 2 : 1.75);
   renderer.setPixelRatio(pixelRatio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -207,6 +230,63 @@ export async function createFencing(container) {
   [me, foe].forEach((f) => f.group.traverse((o) => {
     if (o.isMesh) o.receiveShadow = true;
   }));
+  /* ---- Body cords: electric foil, wired from each fencer's back to the
+     reel at his end of the piste (one line each) ---- */
+  const CORD_N = 28;
+  const cordMat = new THREE.LineBasicMaterial({ color: 0x1b1c21 });
+  const cords = [me, foe].map((f, i) => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(CORD_N * 3), 3));
+    const line = new THREE.Line(geo, cordMat);
+    line.frustumCulled = false;
+    scene.add(line);
+    return { f, line, reel: new THREE.Vector3(i ? 7.25 : -7.25, 0.24, -1.05) };
+  });
+  const cordA = new THREE.Vector3();
+  const cordB = new THREE.Vector3();
+  const cordC = new THREE.Vector3();
+  /** The cord hangs from the back of the jacket to the piste, then runs along it to the reel. */
+  function updateCords() {
+    cords.forEach(({ f, line, reel }) => {
+      const on = f.pose[P.relax] < 0.5;
+      line.visible = on;
+      if (!on) return;
+      const hip = f.person.bones.hips.getWorldPosition(cordA);
+      hip.x -= f.mx * 0.11;
+      hip.y += 0.12;
+      hip.z -= 0.05;
+      // Where it meets the piste, behind the fencer; a little slack swing
+      const land = cordB.set(hip.x - f.mx * 0.85, PISTE_TOP + 0.012, -0.32);
+      const ctrl = cordC.set(hip.x - f.mx * 0.32, hip.y * 0.3, hip.z - 0.12);
+      const arr = line.geometry.attributes.position.array;
+      for (let i = 0; i < CORD_N; i++) {
+        const u = i / (CORD_N - 1);
+        let x;
+        let y;
+        let z;
+        if (u < 0.4) {
+          const k = u / 0.4;
+          const a = (1 - k) * (1 - k);
+          const b = 2 * k * (1 - k);
+          const c = k * k;
+          x = a * hip.x + b * ctrl.x + c * land.x;
+          y = a * hip.y + b * ctrl.y + c * land.y;
+          z = a * hip.z + b * ctrl.z + c * land.z;
+        } else {
+          const k = (u - 0.4) / 0.6;
+          x = land.x + (reel.x - land.x) * k;
+          z = land.z + (reel.z - land.z) * k;
+          // Flat on the piste, rising off the floor only into the reel
+          y = land.y + Math.max(0, (k - 0.93) / 0.07) * (reel.y - land.y);
+        }
+        arr[i * 3] = x;
+        arr[i * 3 + 1] = y;
+        arr[i * 3 + 2] = z;
+      }
+      line.geometry.attributes.position.needsUpdate = true;
+    });
+  }
+
   const animMe = new Animator(me, 0);
   const animAi = new Animator(foe, 1.7);
   me.setFlashColor(0xff4d3c); // your lamé flashes red: their lamp
@@ -397,7 +477,15 @@ export async function createFencing(container) {
 
   /* ---- Screens and flow ----------------------------------------------- */
 
+  /** The champion hands Pekkas Pokal back to its table. */
+  function putTrophyBack() {
+    if (!me.trophy) return;
+    me.dropTrophy();
+    salle.returnTrophy();
+  }
+
   function showTitle() {
+    putTrophyBack();
     state.phase = 'title';
     state.phaseT = 0;
     hud.setMode('title');
@@ -443,7 +531,8 @@ export async function createFencing(container) {
   function startBout() {
     sfx.resume();
     hud.screen('');
-    hud.setMode('duel');
+    // The salute is ceremony: the board shows, the controls wait for »En garde«
+    hud.setMode('intro');
     state.myTouches = 0;
     state.foeTouches = 0;
     state.streak = 0;
@@ -458,10 +547,12 @@ export async function createFencing(container) {
     // Intro: the salute, while the camera comes round from the opponent's mask
     state.phase = 'intro';
     state.phaseT = 0;
-    animMe.play('salute', 1.6);
-    animAi.play('salute', 1.6);
-    animAi.ox = 0;
-    animMe.ox = 0;
+    animMe.play('salute', 2.2);
+    animAi.play('salute', 2.2);
+    [animAi, animMe].forEach((a) => {
+      a.ox = 0;
+      a.step = null;
+    });
     hud.call(opp().name.toUpperCase(), 'name');
     hud.sub(`${ROUNDS[state.round]} · ${opp().title}`);
     me.setBaseExpression('focus');
@@ -474,6 +565,7 @@ export async function createFencing(container) {
   function startReady() {
     state.phase = 'ready';
     state.phaseT = 0;
+    hud.setMode('duel');
     state.readyStep = 0;
     meS.pose = 'guard';
     meS.t = 0;
@@ -483,6 +575,13 @@ export async function createFencing(container) {
     ai.pendingRiposte = false;
     ai.timer = opp().attackEvery[0] + rand() * (opp().attackEvery[1] - opp().attackEvery[0]);
     if (state.tutorial && state.round === 0 && state.firstAttack) ai.timer = 1.4;
+    // Back to the en-garde lines for the next phrase, a step at a time
+    [animAi, animMe].forEach((a) => {
+      if (Math.abs(a.ox) > 0.01) {
+        a.step = null;
+        a.stepBy(-a.ox, 0.45);
+      }
+    });
     hud.call('EN GARDE');
     sfx.ready(0);
     salle.referee.signal('engarde');
@@ -504,7 +603,8 @@ export async function createFencing(container) {
       : '<b>↑ ↓</b> byter gard · <b>mellanslag</b> stöter · <b>F</b> fintar.', 3600);
   }
 
-  function scoreTouch(mine, points, label, at) {
+  /** `via`: how the referee explains it — 'point', 'parry' (riposte) or 'attack' (right of way). */
+  function scoreTouch(mine, points, label, at, via = 'point') {
     state.phase = 'touch';
     state.phaseT = 0;
     const hitAt = at || (mine ? foe : me).j.torso.getWorldPosition(new THREE.Vector3()).setY(1.2);
@@ -514,7 +614,8 @@ export async function createFencing(container) {
     sfx.buzzer();
     kick(mine ? 1.3 : 1.6, 130);
     salle.score.flash(mine ? 0 : 1);
-    salle.referee.signal('point', mine ? -1 : 1);
+    // The attacker who had right of way is also the scorer: one side for both arms
+    salle.referee.signal(via, mine ? -1 : 1);
     flashes.fire(hitAt, mine ? new THREE.Color(1.2, 2.6, 1.5) : new THREE.Color(2.6, 1.1, 0.8), 0.7, 0.4);
     sparks.burst(hitAt, { n: 26, speed: 3.2, color: new THREE.Color(3, 2.6, 1.8), life: 0.55 });
     (mine ? animAi : animMe).flash = 1;
@@ -662,8 +763,9 @@ export async function createFencing(container) {
     animAi.play(won ? 'lose' : 'win', 1);
     me.setBaseExpression(won ? 'grin' : 'frown');
     foe.setBaseExpression(won ? 'frown' : 'smile');
-    salle.referee.signal('point', won ? -1 : 1);
-    salle.crowd.react(won ? 'clap' : 'groan');
+    salle.referee.signal('award', won ? -1 : 1);
+    // A won bout gets the applause; a lost one the sporting, polite kind for the winner
+    salle.crowd.react(won ? 'clap' : 'polite');
     if (won) {
       sfx.verdictWin();
       sfx.applause(2.4);
@@ -708,10 +810,12 @@ export async function createFencing(container) {
     hud.sub(`${fencerName} · Stockholm 2023`, 'gold');
     animMe.play('champion', 1);
     animAi.play('lose', 1);
+    // Pekkas Pokal comes off its table and goes up in the champion's hand
+    me.holdTrophy(salle.lendTrophy());
     me.setBaseExpression('grin');
     foe.setBaseExpression('smile');
     salle.crowd.react('stand');
-    salle.referee.signal('point', -1);
+    salle.referee.signal('award', -1);
     confetti.start(-HOME, 0);
     sfx.fanfare();
     camCut = 'ceremony';
@@ -736,11 +840,11 @@ export async function createFencing(container) {
     state.phase = 'final';
     state.phaseT = 0;
     hud.setMode('final');
-    animMe.play('ease');
+    animMe.play(medal === 1 ? 'champion' : 'ease');
     animAi.play('ease');
     me.setBaseExpression(medal ? 'smile' : 'neutral');
     foe.setBaseExpression('smile');
-    salle.crowd.react(medal === 1 ? 'clap' : 'idle');
+    salle.crowd.react(medal === 1 ? 'clap' : medal ? 'polite' : 'idle');
     hud.screen(finalScreen({
       medal, score: state.score, best, isBest, fencer: fencerName, results: state.results
     }));
@@ -787,7 +891,7 @@ export async function createFencing(container) {
       if (feintHit) state.stats.feints++;
       if (riposte) hud.sub('PARAD — RIPOST!', 'gold');
       scoreTouch(true, riposte ? 175 : feintHit ? 150 : 100,
-        riposte ? 'RIPOST +175' : feintHit ? 'FINT-TUSCH +150' : '+100', tipMe.clone());
+        riposte ? 'RIPOST +175' : feintHit ? 'FINT-TUSCH +150' : '+100', tipMe.clone(), riposte ? 'parry' : 'point');
       return;
     }
     if (ai.pose === 'telegraph' || ai.pose === 'attack') {
@@ -795,7 +899,7 @@ export async function createFencing(container) {
       sparks.burst(tipMe, { n: 8, speed: 1.6, color: new THREE.Color(2.4, 2, 1.6), life: 0.3 });
       hud.sub('VÄGRÄTT TILL MOTSTÅNDAREN', 'red');
       coach('row', '<b>Rätten till anfall:</b> stöt inte in i deras anfall — parera först.', 3600);
-      scoreTouch(false, 0, '', me.j.torso.getWorldPosition(new THREE.Vector3()).setY(1.25));
+      scoreTouch(false, 0, '', me.j.torso.getWorldPosition(new THREE.Vector3()).setY(1.25), 'attack');
       return;
     }
     // Opponent on guard: they may read it and parry
@@ -824,6 +928,12 @@ export async function createFencing(container) {
     flashes.fire(at, new THREE.Color(2.4, 2.2, 1.8), 0.55, 0.22);
     logEvent('clink', at);
     salle.crowd.react('ooh');
+    // The benches gasp with the steel (not on every beat: a second one
+    // straight after would sound canned)
+    if (clock - (state.oohAt || -9) > 1.6) {
+      state.oohAt = clock;
+      sfx.ooh();
+    }
   }
 
   function resolveAiAttack() {
@@ -844,7 +954,7 @@ export async function createFencing(container) {
       hud.sub('RIPOSTERA — STÖT!', 'gold');
       coach('parried', '<b>Nu!</b> Motståndaren vacklar — tryck <b>STÖT</b> för ripost.', 2600);
     } else {
-      scoreTouch(false, 0, '', tipAi.clone());
+      scoreTouch(false, 0, '', tipAi.clone(), ai.riposting ? 'parry' : 'point');
     }
   }
 
@@ -859,7 +969,9 @@ export async function createFencing(container) {
         // Drift the guard line around so the player has something to read
         if (rand() < dt * 0.7) ai.line = Math.floor(rand() * 3);
         // Footwork: small advances and retreats, keeping the distance alive
-        if (rand() < dt * 0.6) animAi.stepBy(animAi.ox > 0.05 ? -0.12 : animAi.ox < -0.05 ? 0.12 : (rand() < 0.5 ? -0.1 : 0.1));
+        if (rand() < dt * 0.6 && animAi.stepBy(animAi.ox > 0.05 ? -0.12 : animAi.ox < -0.05 ? 0.12 : (rand() < 0.5 ? -0.1 : 0.1))) {
+          sfx.footfall(0.7);
+        }
         if (ai.timer <= 0 && state.phase === 'live') {
           ai.pose = 'telegraph';
           ai.t = 0;
@@ -871,6 +983,7 @@ export async function createFencing(container) {
           if (state.firstAttack && state.tutorial) ai.willFeint = false;
           state.firstAttack = false;
           foe.express('frown', 0.6, ai.tele);
+          sfx.coil();
           salle.crowd.react('tense');
           coach('read', `<b>Anfall i ${LINE_NAME[ai.line]}!</b> Välj samma linje för att parera.`, 2200);
         }
@@ -893,6 +1006,7 @@ export async function createFencing(container) {
           ai.pose = 'attack';
           ai.t = 0;
           ai.resolved = false;
+          ai.riposting = false;
           sfx.swish();
         }
         break;
@@ -921,6 +1035,7 @@ export async function createFencing(container) {
           ai.pose = 'attack';
           ai.t = 0;
           ai.resolved = false;
+          ai.riposting = true;
           ai.line = Math.floor(rand() * 3);
           ai.shownLine = ai.line;
           sfx.swish();
@@ -951,8 +1066,30 @@ export async function createFencing(container) {
     }
   }
 
+  /**
+   * The distance game, played for you: when the opponent steps in you
+   * give ground, when he drifts back you follow — a beat late, one foot
+   * then the other, like a fencer keeping measure.
+   */
+  function keepMeasure(dt) {
+    if (meS.pose !== 'guard' || animMe.step) return;
+    meS.measureT = (meS.measureT || 0) - dt;
+    if (meS.measureT > 0) return;
+    const want = Math.max(-0.16, Math.min(0.12, -animAi.ox * 0.8));
+    const d = want - animMe.ox;
+    if (Math.abs(d) > 0.06) {
+      if (animMe.stepBy(Math.max(-0.12, Math.min(0.12, d)))) sfx.footfall(1);
+      meS.measureT = 0.25 + rand() * 0.3;
+    } else if (rand() < dt * 0.35) {
+      // A small step of your own now and then: the piste is never still
+      if (animMe.stepBy(animMe.ox > 0.02 ? -0.08 : 0.08)) sfx.footfall(0.8);
+      meS.measureT = 0.6 + rand() * 0.6;
+    }
+  }
+
   function updatePlayer(dt) {
     meS.t += dt;
+    keepMeasure(dt);
     if (meS.pose === 'lunge' && meS.t >= 0.24 && !meS.resolved) {
       meS.resolved = true;
       resolvePlayerAttack();
@@ -1139,8 +1276,17 @@ export async function createFencing(container) {
   /* ---- Camera --------------------------------------------------------- */
 
   let aspect = 1.6;
-  const cam = { pos: new THREE.Vector3(0, 2.4, 10), look: new THREE.Vector3(0, 2, 0), fov: 36, roll: 0 };
-  const goal = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 36, roll: 0, rate: 3 };
+  let viewW = 1;
+  let viewH = 1;
+  // `shift`: where on screen the look point lands (0..1, 0.5 = centre) — an
+  // off-axis projection, so a subject can stand beside or above a panel
+  // without the camera turning away from it
+  const cam = {
+    pos: new THREE.Vector3(0, 2.4, 10), look: new THREE.Vector3(0, 2, 0), fov: 36, roll: 0, shift: new THREE.Vector2(0.5, 0.5)
+  };
+  const goal = {
+    pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 36, roll: 0, rate: 3, shift: new THREE.Vector2(0.5, 0.5)
+  };
 
   /**
    * The duel framing by aspect. Landscape is the hero: side-on, a little
@@ -1152,39 +1298,69 @@ export async function createFencing(container) {
   function duelFrame(out) {
     const k = smoothstep(0.62, 1.25, aspect);
     out.pos.set(lerp(-5.0, 0, k), lerp(2.1, 1.4, k), lerp(4.7, 7.1, k));
-    out.look.set(lerp(0.2, 0, k), lerp(1.08, 1.62, k), lerp(-0.1, 0, k));
+    out.look.set(lerp(0.02, 0, k), lerp(1.08, 1.62, k), lerp(-0.1, 0, k));
     out.fov = lerp(44, 36, k);
     // Phone landscape is short: come closer, the duel fits the width anyway
     out.pos.z -= smoothstep(1.7, 2.2, aspect) * 0.9;
     out.roll = 0;
   }
 
+  /**
+   * The screens around the duel put a panel over the salle; frame the
+   * person the screen is about beside it. Portrait: the panel sits at the
+   * bottom, the person stands whole in the top half. Landscape: the panel
+   * sits on the right, the person on the left third.
+   */
+  function screenSubject() {
+    const ph = state.phase;
+    const portrait = aspect < 0.9;
+    if (ph === 'bracket') return foe;
+    if (ph === 'result') return state.results.length && state.results[state.results.length - 1].won ? me : foe;
+    if (ph === 'title' && portrait) return me;
+    if (ph === 'final') return me;
+    return null;
+  }
+
   function cameraGoal(t) {
     duelFrame(goal);
     goal.rate = 3;
+    goal.shift.set(0.5, 0.5);
     const ph = state.phase;
-    if (ph === 'title' || ph === 'bracket' || ph === 'final' || ph === 'result') {
+    const subject = screenSubject();
+    if (subject) {
+      subject.j.torso.getWorldPosition(v3);
+      const drift = Math.sin(t * 0.11) * 0.18;
+      if (aspect < 0.9) {
+        // (the champion holds the cup up high: stand further back)
+        const d = ph === 'title' ? 6.1 : ph === 'final' ? 7.9 : 7.1;
+        goal.look.set(v3.x, ph === 'final' ? 1.1 : 0.92, 0);
+        goal.pos.set(v3.x + 0.5 + drift, 1.3, d);
+        goal.fov = 40;
+        goal.shift.set(0.5, ph === 'title' ? 0.27 : ph === 'final' ? 0.2 : 0.24);
+      } else {
+        // Closer on short landscape phones: the person fills the height
+        // (the champion holds the cup up high: frame a little taller)
+        const tall = ph === 'final' ? 1 : 0;
+        const d = lerp(4.6, 3.9, smoothstep(1.6, 2.1, aspect)) + tall * 0.7;
+        goal.look.set(v3.x, 1.02 + tall * 0.3, 0);
+        goal.pos.set(v3.x + 0.35 + drift, 1.32, d);
+        goal.fov = 34;
+        goal.shift.set(lerp(0.3, 0.26, smoothstep(1.6, 2.1, aspect)) - tall * 0.05, 0.5);
+      }
+      goal.rate = 1.6;
+    } else if (ph === 'title' || ph === 'bracket' || ph === 'final' || ph === 'result') {
       // Slow drift, pulled back, the salle as the backdrop for the panels
-      const k = smoothstep(0.62, 1.25, aspect);
-      goal.pos.x += Math.sin(t * 0.08) * 1.1 + (ph === 'title' ? lerp(0, 2.2, k) : 0);
+      goal.pos.x += Math.sin(t * 0.08) * 1.1;
       goal.pos.y += 0.35;
       goal.pos.z += 1.2;
       goal.look.y += 0.35;
-      goal.look.x += ph === 'title' ? lerp(0, 1.6, k) : 0;
       goal.rate = 1.2;
-      if (ph === 'bracket' && aspect > 1.2) {
-        // Wide screens: the panel sits in the middle, so frame the next
-        // opponent beside it — mask in hand, looking at you
-        foe.j.head.getWorldPosition(v3);
-        goal.look.set(v3.x - 1.75, 1.25, 0);
-        goal.pos.set(v3.x - 2.1, 1.55, 4.6);
-        goal.fov = 34;
-      }
-      if (ph === 'result') {
-        const winner = state.results.length && state.results[state.results.length - 1].won ? me : foe;
-        winner.j.torso.getWorldPosition(v3);
-        goal.look.lerp(v3, 0.35);
-        goal.fov *= 0.86;
+      if (ph === 'title' && aspect >= 0.9) {
+        // The title panel is on the left: the two of you, at ease, stand in
+        // the right half with the windows and the benches behind
+        goal.look.set(0, 1.28, 0);
+        goal.pos.set(0.7 + Math.sin(t * 0.08) * 0.7, 1.7, 7.4);
+        goal.shift.set(lerp(0.63, 0.78, smoothstep(1.4, 2.1, aspect)), 0.5);
       }
     } else if (ph === 'touch' && state.lastTouch) {
       // Punch in on the point of contact, a slight Dutch angle
@@ -1212,11 +1388,13 @@ export async function createFencing(container) {
       goal.rate = state.phaseT < 0.05 ? 60 : 4;
     } else if (ph === 'ceremony') {
       me.j.torso.getWorldPosition(v3);
-      const a = 0.75 + state.phaseT * 0.12;
-      goal.look.copy(v3).setY(1.45);
-      const d = aspect < 0.9 ? 4.2 : 3.4;
-      goal.pos.set(v3.x + Math.sin(a) * d, 1.2, v3.z + Math.cos(a) * d);
-      goal.fov = aspect < 0.9 ? 50 : 38;
+      // A slow orbit, low, looking up at the cup held high — from the
+      // champion's own side, so the beaten finalist stays in the background
+      const a = -0.55 - state.phaseT * 0.1;
+      goal.look.copy(v3).setY(1.62);
+      const d = aspect < 0.9 ? 4.8 : 3.9;
+      goal.pos.set(v3.x + Math.sin(a) * d, 1.15, v3.z + Math.cos(a) * d);
+      goal.fov = aspect < 0.9 ? 52 : 40;
       goal.rate = 2;
     } else {
       // Live: follow the centre of the action a little; lean in on telegraphs
@@ -1237,6 +1415,7 @@ export async function createFencing(container) {
       cam.pos.set(v3.x - 1.3, v3.y + 0.05, v3.z + (portrait ? 1.9 : 1.5));
       cam.look.copy(v3);
       cam.fov = portrait ? 44 : 30;
+      cam.shift.set(0.5, 0.5);
       camCut = '';
     } else if (camCut === 'ceremony') {
       camCut = '';
@@ -1247,6 +1426,7 @@ export async function createFencing(container) {
     cam.look.lerp(goal.look, k);
     cam.fov += (goal.fov - cam.fov) * k;
     cam.roll += (goal.roll - cam.roll) * k;
+    cam.shift.lerp(goal.shift, k);
     camera.position.copy(cam.pos);
     if (shake.power > 0.001) {
       shake.power = Math.max(0, shake.power - dt * 4);
@@ -1260,6 +1440,20 @@ export async function createFencing(container) {
       camera.fov = cam.fov;
       camera.updateProjectionMatrix();
     }
+    applyShift(cam.shift.x, cam.shift.y);
+  }
+
+  function applyShift(cx, cy) {
+    const sx = cx - 0.5;
+    const sy = cy - 0.5;
+    if (Math.abs(sx) > 1e-3 || Math.abs(sy) > 1e-3) {
+      const v = camera.view;
+      const ox = -sx * viewW;
+      const oy = -sy * viewH;
+      if (!v || !v.enabled || Math.abs(v.offsetX - ox) > 0.05 || Math.abs(v.offsetY - oy) > 0.05 || v.fullWidth !== viewW || v.fullHeight !== viewH) {
+        camera.setViewOffset(viewW, viewH, ox, oy, viewW, viewH);
+      }
+    } else if (camera.view && camera.view.enabled) camera.clearViewOffset();
   }
 
   /* ---- Sizing --------------------------------------------------------- */
@@ -1274,6 +1468,8 @@ export async function createFencing(container) {
     renderer.getDrawingBufferSize(rtSize);
     bloom.setSize(Math.round(rtSize.x / 2), Math.round(rtSize.y / 2));
     aspect = w / h;
+    viewW = w;
+    viewH = h;
     camera.aspect = aspect;
     camera.updateProjectionMatrix();
     salle.setMoteScale(rtSize.y * 0.05);
@@ -1283,25 +1479,51 @@ export async function createFencing(container) {
   ro.observe(canvasHost);
   resize();
 
-  /* ---- Frame-time watchdog: drop bloom, then resolution --------------- */
-  const perf = { acc: 0, n: 0, level: 0 };
-  function watchPerf(realDt) {
+  /* ---- Frame-time watchdog: drop bloom, then resolution, then shadows -- */
+  const perf = { acc: 0, n: 0, level: 0, slow: 0, age: 0 };
+  /** `frameDt`: the real time this frame took (not the simulation's clamped step). */
+  function watchPerf(frameDt) {
+    perf.age += frameDt;
     // Skip the first seconds: shader compiles and texture uploads stall frames
-    if (!adaptive || perf.level >= 2 || clock < 4) return;
-    perf.acc += realDt;
+    if (!adaptive || perf.level >= 3 || perf.age < 4) return;
+    perf.acc += frameDt;
     perf.n++;
     if (perf.acc < 2.5) return;
     const avg = perf.acc / perf.n;
     perf.acc = 0;
     perf.n = 0;
-    if (avg > 0.028) {
-      perf.level++;
-      if (perf.level === 1) bloom.enabled = false;
-      else {
-        pixelRatio = Math.max(1, pixelRatio * 0.7);
-        renderer.setPixelRatio(pixelRatio);
-        resize();
+    if (avg <= 0.028) {
+      perf.slow = 0;
+      return;
+    }
+    // Two slow windows in a row before stepping down: one hitch (a GC, a
+    // notification sliding in) does not make a slow device
+    perf.slow++;
+    if (perf.slow < 2) return;
+    perf.slow = 0;
+    perf.level++;
+    // Only ever down. A step with nothing to give (bloom already off on a
+    // GPU without float targets) passes straight on to the next one.
+    if (perf.level === 1) {
+      if (bloom.enabled) {
+        bloom.enabled = false;
+        return;
       }
+      perf.level = 2;
+    }
+    if (perf.level === 2 && pixelRatio > 1.01) {
+      pixelRatio = Math.max(1, pixelRatio * 0.75);
+      renderer.setPixelRatio(pixelRatio);
+      resize();
+      return;
+    }
+    perf.level = 3;
+    // Half the shadow map: a uniform change, no shader recompiles
+    const { key } = salle.lights;
+    key.shadow.mapSize.multiplyScalar(0.5);
+    if (key.shadow.map) {
+      key.shadow.map.dispose();
+      key.shadow.map = null;
     }
   }
 
@@ -1315,7 +1537,7 @@ export async function createFencing(container) {
     state.phaseT += dt;
     const ph = state.phase;
     if (ph === 'intro') {
-      if (state.phaseT >= 1.7) startReady();
+      if (state.phaseT >= 2.25) startReady();
     } else if (ph === 'ready') {
       const step = Math.floor(state.phaseT / 0.7);
       if (step > state.readyStep && step < 3) {
@@ -1449,6 +1671,7 @@ export async function createFencing(container) {
       foe.update(dt);
       if (state.phase === 'ready' || state.phase === 'live' || state.phase === 'touch') record();
     }
+    updateCords();
     // Trails only for strikes and beats — a salute should not leave a smear
     trailMe.gain = STRIKES.has(animMe.act) ? 1 : 0;
     trailAi.gain = STRIKES.has(animAi.act) ? 1 : 0;
@@ -1465,8 +1688,6 @@ export async function createFencing(container) {
     else if (ph === 'replay') focus.copy(replay.at);
     else focus.copy(tipMe).add(tipAi).multiplyScalar(0.5);
     salle.update(t, ph === 'replay' ? realDt * 0.3 : dt, ph === 'title' || ph === 'final' ? null : focus);
-    if (ph === 'ceremony' && Math.floor(state.phaseT * 3) % 2 === 0) salle.score.flash(0);
-    else if (ph === 'ceremony') salle.score.clear();
 
     updateCamera(realDt, t);
   }
@@ -1474,13 +1695,17 @@ export async function createFencing(container) {
   function tick(now) {
     raf = requestAnimationFrame(tick);
     const realDt = clampDt(now - last);
+    // Capped: one long hitch (a GC, a late compile) must not outvote a whole
+    // window of good frames; a hidden tab resets `last` (onVisibility)
+    const frameDt = Math.min(0.5, Math.max(0, (now - last) / 1000));
     last = now;
     if (!running) return;
-    watchPerf(realDt);
+    watchPerf(frameDt);
     if (!frozen) simulate(realDt);
     if (renderBudget <= 0) return;
     renderBudget--;
     if (camOverride) {
+      applyShift(0.5, 0.5);
       camera.position.copy(camOverride.pos);
       camera.lookAt(camOverride.look);
       camera.fov = camOverride.fov;
@@ -1506,6 +1731,9 @@ export async function createFencing(container) {
   };
   document.addEventListener('visibilitychange', onVisibility);
 
+  // Every grip the hands will take, solved now rather than mid-bout (the
+  // fencers solve theirs whenever they are dressed)
+  salle.referee.warmGrips();
   showTitle();
   // Open on the at-ease pose (no springing in from en garde) and pose
   // everyone once before the shaders compile
@@ -1607,6 +1835,35 @@ export async function createFencing(container) {
         people: { me: me.name, foe: foe.name, meTris: me.triangles, foeTris: foe.triangles, crowdCalls: salle.crowd.drawCalls }
       };
     },
+    /** Camera and where the fencers' feet and heads land on screen (framing checks). */
+    camInfo() {
+      const r = (v) => Math.round(v * 100) / 100;
+      const sc = (w) => project(w).slice(0, 2).map(r);
+      const out = { aspect: r(aspect), pos: camera.position.toArray().map(r), fov: r(camera.fov) };
+      [['me', me], ['foe', foe]].forEach(([n, f]) => {
+        out[n] = { feet: sc(f.group.localToWorld(new THREE.Vector3(0, 0, 0))), head: sc(f.j.head.getWorldPosition(new THREE.Vector3())) };
+      });
+      return out;
+    },
+    /** The animators (footwork, actions) for tests. */
+    anims() {
+      return { me: animMe, ai: animAi };
+    },
+    /** Both feet of a fencer: [x, y, pitch] in its own frame (no sliding checks). */
+    feet(mine = true) {
+      const p = (mine ? me : foe).pose;
+      const r = (v) => Math.round(v * 1000) / 1000;
+      return { front: [r(p[P.ffx]), r(p[P.ffy]), r(p[P.ffp])], back: [r(p[P.bfx]), r(p[P.bfy]), r(p[P.bfp])], px: r(p[P.px]) };
+    },
+    /** Make the referee give a signal now (tests). */
+    referee(kind, side = 0) {
+      salle.referee.signal(kind, side);
+    },
+    /** Force frame-time adaptation on (tests); returns its state. */
+    perf(on = true) {
+      adaptive = on;
+      return { ...perf, bloom: bloom.enabled, pixelRatio, shadowSize: salle.lights.key.shadow.mapSize.x };
+    },
     /** The two fencers (people, masks, foils) for close inspection in tests. */
     fencers() {
       return { me, foe };
@@ -1639,6 +1896,7 @@ export async function createFencing(container) {
     gfx.dispose();
     watchdog.dispose();
 
+    putTrophyBack();
     me.dispose();
     foe.dispose();
     sparks.dispose();

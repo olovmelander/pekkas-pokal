@@ -579,7 +579,7 @@ void main() {
     float n = texture2D(uNoise, vec2(b.x * 1.3 + uTime * 0.012, b.z * 0.9 - uTime * 0.02)).r;
     float n2 = texture2D(uNoise, vec2(b.x * 3.1 - uTime * 0.02, b.y * 2.0 + b.z * 2.2)).g;
     // Densest near the window, thinning out towards the floor
-    float fade = pow(max(1.0 - b.z, 1e-4), 1.6) * smoothstep(0.0, 0.9, wp.y);
+    float fade = pow(max(1.0 - b.z, 1e-4), 1.6) * smoothstep(0.1, 1.4, wp.y);
     acc += edge * fade * (0.55 + 0.55 * n + 0.25 * n2);
   }
   float glow = acc / float(SAMPLES) * min(len, 4.0);
@@ -810,17 +810,12 @@ function crowdSeats(high) {
   return seats;
 }
 
-const _cm = new THREE.Matrix4();
-const _cl = new THREE.Matrix4();
-const _cr = new THREE.Matrix4();
-
 /**
  * The spectators: a people.js crowd (one instanced draw call per pose
- * variant in use) with the salle's own reactions layered on top. The
- * crowd itself knows idle, clapping, cheering and the standing ovation;
- * leaning in on a telegraphed attack, the recoil of an »ooh« and the slump
- * of a groan are a lean of each instance about its hips, applied to the
- * instance matrices after the crowd has written them.
+ * variant in use). The crowd itself knows idle, clapping, cheering, the
+ * groan (hands to the head, then the slump) and the standing ovation, and
+ * leans in or sits back on request — each member with their own depth and
+ * lag, so a gasp ripples along the benches. The salle only says when.
  *
  * Named spectators are the rest of the 2023 field: whoever you are not
  * fencing as watches from the benches.
@@ -850,10 +845,11 @@ class Spectators {
     this.crowd = next;
     this.group.add(next.root);
     this.key = key;
+    this.lean = NaN; // set the lean again on the new crowd
     return true;
   }
 
-  /** idle | tense | ooh | cheer | groan | clap | stand */
+  /** idle | tense | ooh | cheer | groan | clap | polite | stand */
   react(mood) {
     const c = this.crowd;
     if (mood !== 'ooh' || this.mood !== 'groan') {
@@ -862,6 +858,8 @@ class Spectators {
     }
     if (mood === 'cheer') c.react('cheer', 1.9);
     else if (mood === 'clap') c.react('clap', 3.2);
+    else if (mood === 'polite') c.react('polite', 2.4);
+    else if (mood === 'groan') c.react('groan', 2.2);
     else if (mood === 'stand') {
       c.setMood('ovation');
       c.react('ovation', 99);
@@ -875,49 +873,28 @@ class Spectators {
     this.moodT += dt;
     const m = this.mood;
     const mt = this.moodT;
-    let lean = 0;
+    // 0 sits back … 1 elbows on the knees; negative leans back
+    let lean = 0.15;
     let look = focus;
-    if (m === 'tense') lean = 0.17;
+    if (m === 'tense') lean = 1;
     else if (m === 'ooh') {
-      lean = -0.09;
+      lean = -0.25;
       if (mt > 0.8) this.mood = 'idle';
     } else if (m === 'groan') {
-      // Thrown back in the seat, then the slump with heads down
-      lean = mt < 0.3 ? -0.1 : 0.2;
+      // The crowd's own groan does the hands and the slump; heads go down
+      lean = 0.3;
       if (mt > 0.3) look = this.floor;
-      if (mt > 2) this.mood = 'idle';
+      if (mt > 2.2) this.mood = 'idle';
     } else if (m === 'cheer') {
-      lean = -0.05;
+      lean = -0.15;
       if (mt > 2) this.mood = 'idle';
-    } else if (m === 'clap' && mt > 3.4) this.mood = 'idle';
-    this.lean += (lean - this.lean) * (1 - Math.exp(-dt * 7));
+    } else if ((m === 'clap' && mt > 3.4) || (m === 'polite' && mt > 2.6)) this.mood = 'idle';
+    if (lean !== this.lean) {
+      this.lean = lean;
+      if (this.crowd.setLean) this.crowd.setLean(lean);
+    }
     this.crowd.lookAt(look || null);
     this.crowd.update(dt, t);
-    if (Math.abs(this.lean) > 1e-3) this.applyLean();
-  }
-
-  /** Lean every instance about its hips (seated) or its waist (standing). */
-  applyLean() {
-    for (const e of this.crowd.meshes) {
-      const { mesh } = e;
-      if (!mesh.visible) continue;
-      const pivot = mesh.name.includes(':stand:') ? 0.98 : 0.56;
-      for (let i = 0; i < mesh.count; i++) {
-        mesh.getMatrixAt(i, _cm);
-        const el = _cm.elements;
-        // Per-spectator amount from where they sit: some lean further
-        const h = Math.abs(Math.sin(el[12] * 12.9898 + el[14] * 78.233) * 43758.5453) % 1;
-        const a = this.lean * (0.65 + 0.7 * h);
-        _cl.makeTranslation(0, pivot, 0);
-        _cr.makeRotationX(a);
-        _cl.multiply(_cr);
-        _cr.makeTranslation(0, -pivot, 0);
-        _cl.multiply(_cr);
-        _cm.multiply(_cl);
-        mesh.setMatrixAt(i, _cm);
-      }
-      mesh.instanceMatrix.needsUpdate = true;
-    }
   }
 
   get drawCalls() {
@@ -935,11 +912,33 @@ class Spectators {
 const v3p = (x = 0, y = 0, z = 0) => [x, y, z];
 
 /**
- * The referee (domaren) stands across the piste and runs every phrase:
- * arms out for »En garde«, a sweep together for »Kör!«, and a raised arm
- * towards whoever earned the touch — saying it out loud, jaw and all. He
- * faces the camera, so his right hand is your side.
+ * The referee (domaren) stands across the piste and runs every phrase
+ * with the real FIE hand signals, saying each call out loud (jaw and all):
+ *
+ *  - »En garde!«  both arms out to the sides, pointing at the two
+ *    en-garde lines; »Prêts?« a small lift of the hands;
+ *  - »Allez!«     the hands chop in and down together in front;
+ *  - »Halte!«     one hand raised high, palm to the fencers — every phrase
+ *    that ends in a light starts here;
+ *  - the analysis, when there is one: »Attaque de …« (forearm raised
+ *    towards the attacker, a beckoning push) or »parade — riposte« (one
+ *    hand taps the other forearm, then the hand turns towards the
+ *    scorer);
+ *  - »Touché!«    the arm raised high on the scorer's side.
+ *
+ * He faces the camera, so his right hand is your side.
  */
+const REF_SEQ = {
+  idle: [['idle', 0]],
+  engarde: [['engarde', 0.7], ['ready', 0]],
+  allez: [['allez', 0]],
+  halt: [['halt', 0]],
+  point: [['halt', 0.3], ['point', 0]],
+  award: [['point', 0]],
+  parry: [['halt', 0.26], ['parry', 0.46], ['point', 0]],
+  attack: [['halt', 0.26], ['attack', 0.44], ['point', 0]]
+};
+
 class Referee {
   constructor(high) {
     this.person = createPerson({
@@ -957,55 +956,102 @@ class Referee {
     this.group = this.person.root;
     this.cur = POSES.stand(0);
     this.target = emptyPose();
+    this.seq = REF_SEQ.idle.slice();
     this.kind = 'idle';
+    this.hands = { L: '', R: '' };
     this.side = 0;
     this.t = 0;
     this.talkT = 0;
     this.person.setExpression('focus', 0.4);
   }
 
-  /** idle | engarde | allez | point (side −1 your side / +1 theirs) | halt */
+  /**
+   * idle | engarde | allez | halt | point | parry | attack; `side` −1 for
+   * your side, +1 for theirs. point/parry/attack run »Halte!« first, then
+   * the analysis, then the arm for the touch.
+   */
   signal(kind, side = 0) {
-    this.kind = kind;
+    this.seq = (REF_SEQ[kind] || REF_SEQ.idle).slice();
+    this.kind = this.seq[0][0];
     this.side = side;
     this.t = 0;
-    if (kind !== 'idle') {
-      this.person.talk(1);
-      this.talkT = kind === 'engarde' ? 0.7 : 0.45;
-    }
+    this.say(kind === 'engarde' ? 0.7 : kind === 'idle' ? 0 : 0.42);
+  }
+
+  say(sec) {
+    if (sec <= 0) return;
+    this.person.talk(1);
+    this.talkT = sec;
   }
 
   /** Target pose for the current signal (he faces +z: his right is −x). */
   pose(t) {
-    const p = POSES.stand(0, this.target);
-    p.hips[2] += Math.sin(t * 0.6) * 0.02;
-    const arm = (S, x, y, z, fore = -0.15) => {
+    // His own seeded idle underneath (weight shifts, sway), the signal's
+    // arms on top
+    const p = POSES.idle(t, this.target, this.person.look.seed || 7);
+    const k = this.t;
+    const arm = (S, x, y, z, fore = -0.15, hand = [0, 0, 0]) => {
       p[`upperArm${S}`] = v3p(x, y, z);
       p[`forearm${S}`] = v3p(fore, 0, 0);
-      p[`hand${S}`] = v3p(0, 0, 0);
+      p[`hand${S}`] = v3p(hand[0], hand[1], hand[2]);
     };
-    if (this.kind === 'engarde') {
-      arm('L', 0.05, 0, 1.45);
-      arm('R', 0.05, 0, -1.45);
-      p.gripL = 0.1;
-      p.gripR = 0.1;
-    } else if (this.kind === 'allez') {
-      const s = Math.min(1, this.t / 0.22);
-      const drop = Math.min(1, Math.max(0, (this.t - 0.7) / 0.5));
-      arm('L', -1.1 * s * (1 - drop), 0, 1.45 - 1.2 * s - 0.15 * drop, -0.1);
-      arm('R', -1.1 * s * (1 - drop), 0, -1.45 + 1.2 * s + 0.15 * drop, -0.1);
-      p.gripL = 0.1;
-      p.gripR = 0.1;
-    } else if (this.kind === 'point' && this.side) {
-      const S = this.side < 0 ? 'R' : 'L';
-      const k = this.side < 0 ? -1 : 1;
-      arm(S, -0.25, 0, k * 2.25, -0.08);
-      p[`grip${S}`] = 0.1;
-      p.chest = v3p(-0.03, -k * 0.18, k * 0.04);
-      p.head = v3p(-0.06, -k * 0.2, 0);
-    } else if (this.kind === 'halt') {
-      arm('R', -0.1, 0, -2.85, -0.05);
+    const ease = (d) => Math.min(1, k / d) ** 0.6;
+    // Side of the touch: his right arm (R) points at you (−x)
+    const S = this.side < 0 ? 'R' : 'L';
+    const O = S === 'R' ? 'L' : 'R';
+    const sg = S === 'L' ? 1 : -1; // z sign that raises arm S sideways
+    const { kind } = this;
+    if (kind === 'engarde' || kind === 'ready') {
+      // Arms out to the sides, a touch forward, at the en-garde lines
+      const lift = kind === 'ready' ? 0.08 * Math.min(1, k / 0.25) : 0;
+      const e = ease(0.25);
+      arm('L', -0.3 * e, 0, (0.15 + 1.12 * e) + lift, -0.12);
+      arm('R', -0.3 * e, 0, -(0.15 + 1.12 * e) - lift, -0.12);
+      p.gripL = 0.05;
       p.gripR = 0.05;
+    } else if (kind === 'allez') {
+      // The chop: in and down together, fast, then the arms drop
+      const s = Math.min(1, k / 0.16);
+      const drop = Math.min(1, Math.max(0, (k - 0.55) / 0.5));
+      const zl = 1.27 - 1.05 * s;
+      arm('L', (-0.3 - 0.55 * s) * (1 - drop), 0, zl * (1 - drop) + 0.1 * drop, -0.35 * s * (1 - drop) - 0.1);
+      arm('R', (-0.3 - 0.55 * s) * (1 - drop), 0, -zl * (1 - drop) - 0.1 * drop, -0.35 * s * (1 - drop) - 0.1);
+      p.chest = v3p(0.05 * s * (1 - drop), 0, 0);
+      p.gripL = 0.1;
+      p.gripR = 0.1;
+    } else if (kind === 'halt') {
+      // »Halte!« — the right hand up high in front, palm out
+      const e = ease(0.14);
+      arm('R', -2.55 * e, -0.5 * e, -0.25 * e, -0.2, [0.25 * e, 0, 0]);
+      arm('L', 0, 0, 0.05, -0.1);
+      p.gripR = 0;
+      p.chest = v3p(-0.04 * e, 0, 0);
+    } else if (kind === 'parry') {
+      // »Parade«: the far forearm across the chest, the scorer-side hand
+      // taps it twice; then the hand turns towards the scorer (»riposte«)
+      // (an upper-arm twist about its own axis lays the forearm across the body)
+      const tap = Math.max(0, Math.sin(Math.min(k, 0.3) / 0.3 * Math.PI * 2)) * 0.3;
+      arm(O, -0.95, O === 'L' ? -1.4 : 1.4, 0, -1.55);
+      arm(S, -0.95 + tap * 0.35, 0, sg * 0.12, -1.0 - tap);
+      p.gripL = 0.15;
+      p.gripR = 0.15;
+      p.chest = v3p(0.04, 0, 0);
+    } else if (kind === 'attack') {
+      // »Attaque de …«: forearm up towards the attacker, a little push
+      const push = Math.sin(Math.min(1, k / 0.35) * Math.PI) * 0.25;
+      arm(S, -0.5 - push * 0.5, 0, sg * 1.3, -1.45 + push, [0, 0, 0]);
+      arm(O, 0, 0, -sg * 0.08, -0.1);
+      p[`grip${S}`] = 0.05;
+      p.head = v3p(0, sg * 0.25, 0);
+      p.chest = v3p(0, sg * 0.1, 0);
+    } else if (kind === 'point' && this.side) {
+      // »Touché!« — the arm raised high on the scorer's side
+      const e = ease(0.18);
+      arm(S, -0.25 * e, 0, sg * 2.3 * e, -0.08);
+      arm(O, 0, 0, -sg * 0.06, -0.12);
+      p[`grip${S}`] = 0.05;
+      p.chest = v3p(-0.03, sg * 0.18 * e, -sg * 0.04 * e);
+      p.head = v3p(-0.06, sg * 0.2 * e, 0);
     } else {
       // At rest: hands loosely clasped behind the back
       arm('L', 0.28, 0.25, 0.1, -0.55);
@@ -1014,15 +1060,72 @@ class Referee {
     return p;
   }
 
+  /** Solve the signal hand shapes once while the game loads (they are cached after). */
+  warmGrips() {
+    const p = this.person;
+    if (typeof p.setGrip !== 'function') return;
+    ['L', 'R'].forEach((side) => {
+      p.setGrip(side, 'open', { blend: 0 });
+      p.setGrip(side, 'point', { blend: 0 });
+      p.setGrip(side, null, { blend: 0 });
+    });
+    this.hands = { L: '', R: '' };
+  }
+
+  /**
+   * Hand shapes for the signals: flat open hands for »En garde«, »Allez«
+   * and »Halte«, the index pointing at the scorer for the touch, and the
+   * pose's own relaxed hands at rest.
+   */
+  shapeHands() {
+    const p = this.person;
+    if (typeof p.setGrip !== 'function') return;
+    const k = this.kind;
+    const S = this.side < 0 ? 'R' : 'L';
+    const want = { L: null, R: null };
+    if (k === 'engarde' || k === 'ready' || k === 'allez') {
+      want.L = 'open';
+      want.R = 'open';
+    } else if (k === 'halt') want.R = 'open';
+    else if (k === 'parry') {
+      want.L = 'open';
+      want.R = 'open';
+    } else if (k === 'attack') want[S] = 'open';
+    else if (k === 'point' && this.side) want[S] = 'point';
+    ['L', 'R'].forEach((side) => {
+      const g = want[side] || '';
+      if (g === this.hands[side]) return;
+      this.hands[side] = g;
+      p.setGrip(side, g || null, { blend: g ? 0.12 : 0.3 });
+    });
+  }
+
   update(dt, focus) {
     this.t += dt;
+    // Walk the signal sequence: »Halte!« → analysis → »Touché!«
+    while (this.seq.length > 1 && this.t >= this.seq[0][1]) {
+      this.t -= this.seq[0][1];
+      this.seq.shift();
+      this.kind = this.seq[0][0];
+      if (this.kind === 'point' || this.kind === 'parry' || this.kind === 'attack') this.say(0.4);
+    }
+    // A signal is held, then the arms come down: hands behind the back
+    // while the phrase runs, and after the touch has been given
+    const hold = { allez: 1.5, point: 2.6, halt: 2.2, attack: 2.6, parry: 2.6 }[this.kind];
+    if (hold && this.seq.length === 1 && this.t > hold) {
+      this.seq = REF_SEQ.idle.slice();
+      this.kind = 'idle';
+      this.t = 0;
+    }
     if (this.talkT > 0) {
       this.talkT -= dt;
       if (this.talkT <= 0) this.person.talk(0);
     }
+    this.shapeHands();
     // Ease our own copy of the pose (setPose(…, 1) each frame keeps the
-    // look-at layered cleanly on top)
-    mixPoses(this.cur, this.pose(this.t), 1 - Math.exp(-dt * 10), this.cur);
+    // look-at layered cleanly on top); signals are snappy, rest is slow
+    const rate = this.kind === 'idle' ? 6 : this.kind === 'allez' || this.kind === 'halt' ? 22 : 14;
+    mixPoses(this.cur, this.pose(this.t), 1 - Math.exp(-dt * rate), this.cur);
     this.person.setPose(this.cur, 1);
     this.person.lookAt(focus || null, 0.85);
     this.person.update(dt);
@@ -1091,7 +1194,7 @@ class ScoreBox {
     pole.position.y = -1.55;
     pole.castShadow = true;
     g.add(pole);
-    this.light = new THREE.PointLight(0x2bff74, 0, 9, 2);
+    this.light = new THREE.PointLight(0x2bff74, 0, 7.5, 2);
     this.light.position.set(0, -0.2, 0.8);
     g.add(this.light);
     this.on = [0, 0];
@@ -1115,9 +1218,10 @@ class ScoreBox {
     this.tex.needsUpdate = true;
   }
 
-  /** side 0 = you (green), 1 = opponent (red) */
-  flash(side) {
+  /** side 0 = you (green), 1 = opponent (red); `spill` = colour the room too */
+  flash(side, spill = true) {
     this.on[side] = 1;
+    this.spill = spill;
     this.light.color.set(side ? 0xff3b2c : 0x2bff74);
   }
 
@@ -1130,9 +1234,10 @@ class ScoreBox {
     this.lampMats.forEach((m, i) => {
       const on = this.on[i];
       // Lit lamps hum a little, as the real ones do through a camera
-      const target = on ? 7 + Math.sin(t * 50) * 0.4 : 0.05;
+      // (bright enough for bloom to take the lamp, not to blow it into a white orb)
+      const target = on ? 4.6 + Math.sin(t * 50) * 0.3 : 0.05;
       m.emissiveIntensity += (target - m.emissiveIntensity) * Math.min(1, dt * (on ? 30 : 8));
-      lightI += on ? 4 : 0;
+      lightI += on && this.spill !== false ? 2.1 : 0;
     });
     this.light.intensity += (lightI - this.light.intensity) * Math.min(1, dt * 14);
   }
@@ -1205,7 +1310,7 @@ export function buildSalle({ glow, high, crowdNames = [] }) {
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(32, 24),
     new THREE.MeshStandardMaterial({
-      map: parquet, roughness: 0.52, metalness: 0, bumpMap: parquet, bumpScale: 0.6, envMapIntensity: 0.9
+      map: parquet, roughness: 0.58, metalness: 0, bumpMap: parquet, bumpScale: 0.6, envMapIntensity: 0.9
     })
   );
   floor.rotation.x = -Math.PI / 2;
@@ -1216,7 +1321,9 @@ export function buildSalle({ glow, high, crowdNames = [] }) {
   /* ---- Piste ---- */
   const piste = new THREE.Mesh(
     new THREE.BoxGeometry(14, 0.035, 1.8),
-    new THREE.MeshStandardMaterial({ map: keep(pisteTexture()), roughness: 0.42, metalness: 0.55 })
+    // Brushed, not polished: the low sun behind the fencers would otherwise
+    // mirror straight into the camera and drown their footwork in glare
+    new THREE.MeshStandardMaterial({ map: keep(pisteTexture()), roughness: 0.6, metalness: 0.38 })
   );
   piste.position.y = 0.0175;
   piste.receiveShadow = true;
@@ -1349,6 +1456,20 @@ export function buildSalle({ glow, high, crowdNames = [] }) {
       metal.add(new THREE.CylinderGeometry(0.045, 0.03, 0.05, 8), brass, x + Math.cos(a) * 0.55, chY + 0.05, chZ + Math.sin(a) * 0.55);
     }
   });
+  // Two-armed candle sconces on the four pilasters between the windows: a
+  // warm rhythm along the back wall, merged into the brass and the candles
+  // (no extra draw calls; the flames join the chandeliers' points)
+  const SCONCE_Y = 3.15;
+  const SCONCE_Z = WALL_Z + 0.2;
+  const sconceX = PILASTERS.slice(0, 4);
+  sconceX.forEach((x) => {
+    metal.add(new THREE.CylinderGeometry(0.075, 0.075, 0.025, 14), brass, x, SCONCE_Y, SCONCE_Z + 0.012, Math.PI / 2, 0, 0);
+    metal.add(new THREE.SphereGeometry(0.035, 10, 6), brass, x, SCONCE_Y - 0.09, SCONCE_Z + 0.03);
+    [-1, 1].forEach((sd) => {
+      metal.box(0.024, 0.024, 0.2, brass, x + sd * 0.06, SCONCE_Y - 0.02, SCONCE_Z + 0.11, 0, sd * 0.5, 0);
+      metal.add(new THREE.CylinderGeometry(0.05, 0.03, 0.04, 10), brass, x + sd * 0.12, SCONCE_Y + 0.02, SCONCE_Z + 0.2);
+    });
+  });
   const metalMesh = metal.build(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.32, metalness: 0.85 }));
   metalMesh.castShadow = true;
   g.add(metalMesh);
@@ -1369,6 +1490,12 @@ export function buildSalle({ glow, high, crowdNames = [] }) {
       crystal.add(new THREE.OctahedronGeometry(0.028, 0), 0xffffff, x + Math.cos(b) * 0.28, chY + 0.16, chZ + Math.sin(b) * 0.28, 0, 0, 0, 0.7, 1.5, 0.7);
     }
   });
+  sconceX.forEach((x) => {
+    [-1, 1].forEach((sd) => {
+      candleB.add(new THREE.CylinderGeometry(0.018, 0.018, 0.15, 6), 0xfff2dc, x + sd * 0.12, SCONCE_Y + 0.115, SCONCE_Z + 0.2);
+      flamePos.push(x + sd * 0.12, SCONCE_Y + 0.23, SCONCE_Z + 0.2);
+    });
+  });
   const candleMesh = candleB.build(new THREE.MeshBasicMaterial({ vertexColors: true }));
   g.add(candleMesh);
   const crystalMesh = crystal.build(new THREE.MeshStandardMaterial({
@@ -1383,6 +1510,17 @@ export function buildSalle({ glow, high, crowdNames = [] }) {
   });
   const flames = new THREE.Points(flameGeo, flameMat);
   g.add(flames);
+  // The warm wash each sconce throws on the panelling: one soft point per
+  // sconce, one draw call for all of them
+  const washGeo = new THREE.BufferGeometry();
+  washGeo.setAttribute('position', new THREE.Float32BufferAttribute(sconceX.flatMap((x) => [x, SCONCE_Y + 0.25, WALL_Z + 0.26]), 3));
+  const washMat = new THREE.PointsMaterial({
+    map: glow, color: new THREE.Color(1.0, 0.62, 0.3), size: 1.7, transparent: true, opacity: 0.42,
+    depthWrite: false, blending: THREE.AdditiveBlending
+  });
+  const wash = new THREE.Points(washGeo, washMat);
+  wash.renderOrder = 3;
+  g.add(wash);
   const haloMat = new THREE.SpriteMaterial({
     map: glow, color: 0xffb46a, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending
   });
@@ -1467,6 +1605,19 @@ export function buildSalle({ glow, high, crowdNames = [] }) {
     score,
     trophy,
     trophyPos: new THREE.Vector3(tx, 1.4, tz),
+    /** Pekkas Pokal goes back on its table (after the champion has lifted it). */
+    returnTrophy() {
+      g.add(trophy);
+      trophy.position.set(tx, 0.94, tz);
+      trophy.quaternion.identity();
+      trophy.scale.setScalar(1.15);
+      trophyGlow.visible = true;
+    },
+    /** It leaves the table: the glow over the empty table goes out. */
+    lendTrophy() {
+      trophyGlow.visible = false;
+      return trophy;
+    },
     /** `focus`: where the action is (the blades), for heads to follow. */
     update(t, dt, focus) {
       // Wrapped clocks: the shaft's two noise scrolls (0.012 and 0.02 per
@@ -1483,7 +1634,8 @@ export function buildSalle({ glow, high, crowdNames = [] }) {
         l.intensity = 11 * (f + (i ? Math.sin(t * 13.3) * 0.03 : 0));
       });
       flameMat.size = 0.32 * f;
-      trophy.rotation.y = t * 0.25;
+      // It turns slowly on its table — not in the champion's hand
+      if (trophy.parent === g) trophy.rotation.y = t * 0.25;
     },
     setMoteScale(px) {
       motes.mat.uniforms.uScale.value = px;

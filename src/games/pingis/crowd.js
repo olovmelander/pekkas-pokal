@@ -4,8 +4,9 @@
  * A village hall final is not played to an empty room, and a crowd that
  * REACTS does more for the sense of occasion than any amount of geometry on
  * the table: heads follow the ball, everyone leans in as a rally gets long,
- * arms go up when you win a point, heads drop when you lose one, the room
- * holds its breath on match point — and stands up for the champion.
+ * arms go up when you win a point, hands go to heads when you lose one, a
+ * long rally he wins still gets polite applause, the room holds its breath
+ * on match point — and stands up for the champion.
  *
  * The people are the shared crowd (people.js createCrowd): instanced, a
  * handful of draw calls however many seats are filled, and the ten friends
@@ -45,19 +46,14 @@ export function buildCrowd(seats, { castShadow = true } = {}) {
     );
   });
 
-  const mood = { excite: 0, hush: 0, lean: 0, ooh: 0, drop: 0, cheering: 0, celebrating: false };
+  const mood = { excite: 0, hush: 0, ooh: 0, drop: 0, cheering: 0, celebrating: false };
   const tableEnd = new THREE.Vector3(0, 0, 1.6); // where heads go when the point is lost
   const tableMid = new THREE.Vector3(0, 0.9, 0);
-  const M = new THREE.Matrix4();
-  const L = new THREE.Matrix4();
-  const R = new THREE.Matrix4();
-  const SIT_PIVOT = new THREE.Vector3(0, SEAT_HEIGHT, -SEAT_BACK);
-  const STAND_PIVOT = new THREE.Vector3(0, 0.08, 0);
 
   /**
    * kind: 'cheer' (your point) | 'groan' (theirs) | 'ooh' (a smash, a rally
-   * milestone) | 'applause' (a long rally, whoever won it) | 'celebrate'
-   * (the champion) | 'idle'.
+   * milestone) | 'applause' (a long rally he won: polite, a friendly hall)
+   * | 'celebrate' (the champion) | 'idle'.
    */
   function react(kind, power = 1) {
     if (mood.celebrating && kind !== 'celebrate') {
@@ -68,8 +64,10 @@ export function buildCrowd(seats, { castShadow = true } = {}) {
       crowd.react('cheer', 0.9 + power * 1.2);
       mood.cheering = 0.9 + power;
     } else if (kind === 'applause') {
-      crowd.react('clap', 1.2 + power);
+      crowd.react('polite', 1.2 + power);
     } else if (kind === 'groan') {
+      // Hands to the head, a slump, back up — and every eye on the table end
+      crowd.react('groan', 1.2 + power * 0.6);
       mood.drop = 1.1;
     } else if (kind === 'ooh') {
       mood.ooh = Math.max(mood.ooh, Math.min(1, power));
@@ -82,30 +80,6 @@ export function buildCrowd(seats, { castShadow = true } = {}) {
     }
   }
 
-  /**
-   * Leaning in: the shared crowd has no lean of its own, so every seated or
-   * standing figure in a resting variant gets the same small tip forward
-   * about its hips (feet for the standing ones), composed onto the instance
-   * matrices it has just written. One matrix multiply per spectator.
-   */
-  function applyLean(angle) {
-    for (const e of crowd.meshes) {
-      const { mesh } = e;
-      if (!mesh.visible || !mesh.count) continue;
-      const [, base, variant] = mesh.name.split(':');
-      if (variant !== 'idle' && variant !== 'cup') continue;
-      const pv = base === 'sit' ? SIT_PIVOT : STAND_PIVOT;
-      const a = base === 'sit' ? angle : angle * 0.45;
-      L.makeTranslation(pv.x, pv.y, pv.z).multiply(R.makeRotationX(a)).multiply(M.makeTranslation(-pv.x, -pv.y, -pv.z));
-      for (let i = 0; i < mesh.count; i++) {
-        mesh.getMatrixAt(i, M);
-        M.multiply(L);
-        mesh.setMatrixAt(i, M);
-      }
-      mesh.instanceMatrix.needsUpdate = true;
-    }
-  }
-
   /** levels: { excite 0..1 (rally length), hush 0..1 (match point) }. */
   function update(t, dt, ball, levels) {
     const k = Math.min(1, dt * 2);
@@ -114,11 +88,12 @@ export function buildCrowd(seats, { castShadow = true } = {}) {
     mood.ooh = Math.max(0, mood.ooh - dt * 1.4);
     mood.drop = Math.max(0, mood.drop - dt);
     mood.cheering = Math.max(0, mood.cheering - dt);
-    // Everyone tips forward as the rally grows, more on match point, and
-    // jolts forward on a smash; nobody leans while they are on their feet
-    const leanTarget = mood.celebrating || mood.cheering > 0 ? 0
-      : mood.excite * 0.13 + mood.hush * 0.1 + mood.ooh * 0.12 - (mood.drop > 0 ? 0.05 : 0);
-    mood.lean += (leanTarget - mood.lean) * Math.min(1, dt * 6);
+    // Everyone leans in as the rally grows, more on match point, and jolts
+    // forward on a smash (the shared crowd eases it per person, each with
+    // their own depth and lag); nobody leans while on their feet
+    const lean = mood.celebrating || mood.cheering > 0 ? 0
+      : mood.excite * 0.55 + mood.hush * 0.45 + mood.ooh * 0.5;
+    crowd.setLean(Math.min(1, lean));
     // Heads: the ball while it is in play; on a lost point they drop to the
     // near end of the table; on match point, between rallies, every eye
     // stays on the table instead of wandering
@@ -127,7 +102,6 @@ export function buildCrowd(seats, { castShadow = true } = {}) {
     else if (mood.hush > 0.3) crowd.lookAt(tableMid);
     else crowd.lookAt(null);
     crowd.update(dt, t);
-    if (Math.abs(mood.lean) > 0.002) applyLean(mood.lean);
   }
 
   return {

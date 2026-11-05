@@ -38,6 +38,7 @@
 
 import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { buildForest } from './forest.js';
 
 export function mulberry(seed) {
   let a = seed;
@@ -72,7 +73,7 @@ function vertexColourMaterial() {
  * off their Lambert materials, so groups are still authored the readable
  * way — one Mesh per part — and only collapsed once they are assembled.
  */
-function bake(root, { skip = [], castShadow = true, receiveShadow = false } = {}) {
+function bake(root, { skip = [], castShadow = true, receiveShadow = false, grainUv = false } = {}) {
   root.updateMatrixWorld(true);
   const inv = root.matrixWorld.clone().invert();
   const rel = new THREE.Matrix4();
@@ -82,7 +83,9 @@ function bake(root, { skip = [], castShadow = true, receiveShadow = false } = {}
     if (skip.includes(o)) return;
     if (o.isMesh && !o.isInstancedMesh) {
       rel.multiplyMatrices(inv, o.matrixWorld);
-      const g = o.geometry.clone().applyMatrix4(rel);
+      const g = o.geometry.clone();
+      if (grainUv) grainUvs(g);
+      g.applyMatrix4(rel);
       // An already-baked part keeps its vertex colours (tinted by its
       // material), so baked groups can be baked again into a bigger one
       const own = o.material.vertexColors && g.attributes.color;
@@ -95,7 +98,7 @@ function bake(root, { skip = [], castShadow = true, receiveShadow = false } = {}
         cols[i + 2] = c.b * (src ? src.getZ(v) : 1);
       }
       Object.keys(g.attributes).forEach((n) => {
-        if (n !== 'position' && n !== 'normal') g.deleteAttribute(n);
+        if (n !== 'position' && n !== 'normal' && !(grainUv && n === 'uv')) g.deleteAttribute(n);
       });
       g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
       geos.push(g);
@@ -105,6 +108,16 @@ function bake(root, { skip = [], castShadow = true, receiveShadow = false } = {}
   };
   root.children.forEach(walk);
   if (!geos.length) return null;
+  // Mixed indexed and non-indexed parts (an extrusion among boxes) merge flat
+  if (geos.some((g) => !g.index) && geos.some((g) => g.index)) {
+    for (let i = 0; i < geos.length; i++) {
+      if (geos[i].index) {
+        const flat = geos[i].toNonIndexed();
+        geos[i].dispose();
+        geos[i] = flat;
+      }
+    }
+  }
   const merged = mergeGeometries(geos);
   geos.forEach((g) => g.dispose());
   sources.forEach((o) => {
@@ -120,9 +133,90 @@ function bake(root, { skip = [], castShadow = true, receiveShadow = false } = {}
   return mesh;
 }
 
+/**
+ * Wood-grain UVs for a part, in metres of its own shape: u runs along the
+ * part's longest side, so the grain follows a leg or a rail the way it
+ * would in a sawn plank, and v across whichever face the vertex is on.
+ */
+function grainUvs(g) {
+  g.computeBoundingBox();
+  const size = g.boundingBox.getSize(new THREE.Vector3()).toArray();
+  const long = size.indexOf(Math.max(...size));
+  const p = g.attributes.position;
+  const n = g.attributes.normal;
+  const uv = new Float32Array(p.count * 2);
+  const v = [0, 0, 0];
+  const nv = [0, 0, 0];
+  for (let i = 0; i < p.count; i++) {
+    v[0] = p.getX(i);
+    v[1] = p.getY(i);
+    v[2] = p.getZ(i);
+    nv[0] = Math.abs(n.getX(i));
+    nv[1] = Math.abs(n.getY(i));
+    nv[2] = Math.abs(n.getZ(i));
+    const d = nv.indexOf(Math.max(...nv));
+    const along = d === long ? (long + 1) % 3 : long;
+    const across = [0, 1, 2].find((k) => k !== along && k !== d);
+    uv[i * 2] = v[along] * 2.2;
+    uv[i * 2 + 1] = v[across] * 2.2 + d * 0.31;
+  }
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+}
+
+/** Pine: fine wavy grain, pores and the odd knot, as a light multiplier. */
+let grainTexture = null;
+function woodGrain() {
+  if (grainTexture && !grainTexture.userData.disposed) return grainTexture;
+  const N = 256;
+  const cv = document.createElement('canvas');
+  cv.width = N;
+  cv.height = N;
+  const ctx = cv.getContext('2d');
+  const r = mulberry(77);
+  ctx.fillStyle = '#f2f0ee';
+  ctx.fillRect(0, 0, N, N);
+  for (let i = 0; i < 64; i++) {
+    const y0 = r() * N;
+    const ph = r() * 6;
+    ctx.strokeStyle = `rgba(92,58,24,${0.06 + r() * 0.14})`;
+    ctx.lineWidth = 0.6 + r() * 1.8;
+    ctx.beginPath();
+    for (let x = -8; x <= N + 8; x += 8) {
+      const y = y0 + Math.sin(x * 0.0245 + ph) * 3.2 + Math.sin(x * 0.07 + ph * 2) * 1.1;
+      if (x < 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(70,40,14,0.1)';
+  for (let i = 0; i < 700; i++) ctx.fillRect(r() * N, r() * N, 2 + r() * 4, 1);
+  for (let i = 0; i < 2; i++) {
+    const x = r() * N;
+    const y = r() * N;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, 7);
+    g.addColorStop(0, 'rgba(80,46,16,0.55)');
+    g.addColorStop(1, 'rgba(80,46,16,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(x, y, 12, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  grainTexture = new THREE.CanvasTexture(cv);
+  grainTexture.colorSpace = THREE.SRGBColorSpace;
+  grainTexture.wrapS = THREE.RepeatWrapping;
+  grainTexture.wrapT = THREE.RepeatWrapping;
+  grainTexture.anisotropy = 4;
+  grainTexture.addEventListener('dispose', () => {
+    grainTexture.userData.disposed = true;
+  });
+  return grainTexture;
+}
+
 /* ------------------------------------------------------------------- wind */
 
 const TAU = Math.PI * 2;
+/** Toward the sun (index.js puts it at (−8, 13, 6) aimed at (0, 1, −2)). */
+const SUN_DIR = new THREE.Vector3(-8, 12, 8).normalize();
 
 /**
  * An oscillator whose phase is kept on the CPU: `rates` are radians per
@@ -202,6 +296,51 @@ function lumpy(radius, amount, seed) {
   return g;
 }
 
+/**
+ * A hedge bush: an icosphere pushed into leaf clumps at three scales, flat
+ * where it meets the ground, with soft out-from-the-centre normals and
+ * vertex colours that are dark inside and underneath and catch the light
+ * on the outer leaves.
+ */
+function hedgeBush(seed, rough = 0.12) {
+  const g = mergeVertices(new THREE.IcosahedronGeometry(1, 2));
+  const p = g.attributes.position;
+  const v = new THREE.Vector3();
+  const cols = new Float32Array(p.count * 3);
+  const nor = new Float32Array(p.count * 3);
+  const r = mulberry(seed * 977 + 13);
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i).normalize();
+    const big = Math.sin(v.x * 3.1 + seed) * Math.sin(v.y * 2.7 + seed * 1.7) * Math.sin(v.z * 3.6 + seed * 0.6);
+    const clump = Math.sin(v.x * 8.3 + v.z * 5.1 + seed * 2.1) * Math.sin(v.y * 7.7 - v.z * 6.3 + seed);
+    const leaf = r() - 0.5;
+    const k = 1 + rough * big + 0.13 * clump + 0.1 * leaf;
+    const y = Math.max(-0.62, v.y * k);
+    p.setXYZ(i, v.x * k, y, v.z * k);
+    // Light lives on the outer leaves; the inside and the underside are dark
+    const out = Math.max(0, k - 1) * 4;
+    const h = (y + 0.62) / 1.62;
+    const c = (0.34 + 0.72 * h * h * (3 - 2 * h)) * (0.92 + out * 0.35 + leaf * 0.12);
+    cols.set([c, c * 1.02, c * 0.94], i * 3);
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+  // Half the clumps' own shading, half one soft volume (normals out from a
+  // point below the centre): leafy up close, a single bush from afar
+  g.computeVertexNormals();
+  const gn = g.attributes.normal;
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    const ln = Math.hypot(v.x, v.y + 0.35, v.z) || 1;
+    const nx = gn.getX(i) * 0.55 + (v.x / ln) * 0.45;
+    const ny = gn.getY(i) * 0.55 + ((v.y + 0.35) / ln) * 0.45;
+    const nz = gn.getZ(i) * 0.55 + (v.z / ln) * 0.45;
+    const l = Math.hypot(nx, ny, nz) || 1;
+    nor.set([nx / l, ny / l, nz / l], i * 3);
+  }
+  g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  return g;
+}
+
 /* --------------------------------------------------------------- textures */
 
 /** Late-summer lawn: mown bands, clover patches, daisies, a few burnt spots. */
@@ -262,6 +401,101 @@ export function lawnTexture() {
   return tex;
 }
 
+/** The lawn's macro map covers this square of the garden (world metres). */
+const MACRO = { x0: -28, z0: -32, size: 56, px: 512 };
+
+/**
+ * The lawn at garden scale, as a multiplier over the tiled grass: broad
+ * mowing lanes, warmer and drier patches where the sun bakes it, lusher
+ * clover drifts, a dark band of shade under the hedge, darker ground under
+ * the birches, the trestle and the parasol, and a fade back to neutral at
+ * the edges. `shade(spots)` adds soft contact shadow under things placed
+ * later (the easels, the painters). Neutral is 85 % grey (×1.176 in the
+ * shader), so the map can brighten as well as darken.
+ */
+function lawnMacro() {
+  const N = MACRO.px;
+  const cv = document.createElement('canvas');
+  cv.width = N;
+  cv.height = N;
+  const ctx = cv.getContext('2d');
+  const k = N / MACRO.size;
+  const px = (x) => (x - MACRO.x0) * k;
+  const pz = (z) => (z - MACRO.z0) * k;
+  const blob = (x, z, r, rgba, inner = 0) => {
+    const g = ctx.createRadialGradient(px(x), pz(z), r * k * inner, px(x), pz(z), r * k);
+    g.addColorStop(0, rgba);
+    g.addColorStop(1, rgba.replace(/[\d.]+\)$/, '0)'));
+    ctx.fillStyle = g;
+    ctx.fillRect(px(x) - r * k, pz(z) - r * k, r * k * 2, r * k * 2);
+  };
+  // A touch warmer and less saturated than the tile: August, not April
+  ctx.fillStyle = 'rgb(222,217,204)';
+  ctx.fillRect(0, 0, N, N);
+  const r = mulberry(6061);
+  // Mowing lanes run toward the hedge, alternately lighter and darker
+  for (let i = 0; i < 12; i++) {
+    const x = -14 + i * 2.4;
+    const g = ctx.createLinearGradient(0, pz(-9), 0, pz(12));
+    const a = i % 2 ? 'rgba(240,242,222,' : 'rgba(188,198,182,';
+    g.addColorStop(0, `${a}0.65)`);
+    g.addColorStop(0.75, `${a}0.5)`);
+    g.addColorStop(1, `${a}0)`);
+    ctx.fillStyle = g;
+    ctx.fillRect(px(x), pz(-9.2), 2.4 * k, 21 * k);
+  }
+  // Sun-baked, drier patches, and lusher clover drifts
+  for (let i = 0; i < 34; i++) blob(-22 + r() * 44, -20 + r() * 34, 1.2 + r() * 3.4, 'rgba(252,230,160,0.6)');
+  for (let i = 0; i < 22; i++) blob(-22 + r() * 44, -20 + r() * 34, 0.8 + r() * 2.2, 'rgba(178,212,170,0.5)');
+  // Shade: the hedge's foot, the birches, the trestle, the parasol
+  const band = ctx.createLinearGradient(0, pz(-11.2), 0, pz(-7.6));
+  band.addColorStop(0, 'rgba(120,132,112,0)');
+  band.addColorStop(0.45, 'rgba(120,132,112,0.8)');
+  band.addColorStop(1, 'rgba(120,132,112,0)');
+  ctx.fillStyle = band;
+  ctx.fillRect(px(-15), pz(-11.2), 30 * k, 3.6 * k);
+  [[-8.6, -8.4, 2.6], [9.2, -8.8, 2.6], [-7.6, 4.4, 3]].forEach(([x, z, rr]) => blob(x, z, rr, 'rgba(130,140,118,0.75)'));
+  blob(-2.55, -3.5, 1.3, 'rgba(120,128,110,0.6)', 0.2);
+  blob(5.9, -8.6, 1.7, 'rgba(120,128,110,0.6)', 0.2);
+  // The forest's edge: longer, darker grass under the trees
+  const edge = ctx.createLinearGradient(0, pz(-29), 0, pz(-20));
+  edge.addColorStop(0, 'rgba(110,124,104,0.9)');
+  edge.addColorStop(1, 'rgba(110,124,104,0)');
+  ctx.fillStyle = edge;
+  ctx.fillRect(0, pz(-32), N, 12 * k);
+  const west = ctx.createLinearGradient(px(-28), 0, px(-20), 0);
+  west.addColorStop(0, 'rgba(110,124,104,0.9)');
+  west.addColorStop(1, 'rgba(110,124,104,0)');
+  ctx.fillStyle = west;
+  ctx.fillRect(0, 0, px(-20), N);
+  // Back to neutral at the map's edge, so the tiled lawn carries on beyond
+  const fade = (x0, y0, x1, y1) => {
+    const g = ctx.createLinearGradient(x0, y0, x1, y1);
+    g.addColorStop(0, 'rgba(217,217,217,1)');
+    g.addColorStop(1, 'rgba(217,217,217,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0) || N, Math.abs(y1 - y0) || N);
+  };
+  const m = N * 0.08;
+  fade(0, 0, m, 0);
+  fade(N, 0, N - m, 0);
+  fade(0, 0, 0, m);
+  fade(0, N, 0, N - m);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.anisotropy = 4;
+  return {
+    tex,
+    /** Soft contact shade under things on the lawn: [{ x, z, r, k }]. */
+    shade(spots) {
+      spots.forEach(({ x, z, r: rr, k: kk = 0.55 }) => blob(x, z, rr, `rgba(96,104,90,${kk})`, 0.15));
+      tex.needsUpdate = true;
+    }
+  };
+}
+
 /**
  * The sky, as a gradient on the inside of a dome.
  *
@@ -275,13 +509,18 @@ export function buildSky() {
   cv.width = 4;
   cv.height = 256;
   const ctx = cv.getContext('2d');
+  // The dome's equator is the canvas's middle row: everything below 0.5 is
+  // under the horizon and never seen, so the gradient's whole range — deep
+  // zenith blue to the warm haze the fog fades into — lives in the top half
   const g = ctx.createLinearGradient(0, 0, 0, 256);
-  g.addColorStop(0, '#2c67a6');
-  g.addColorStop(0.3, '#5e9bc9');
-  g.addColorStop(0.56, '#95c0dc');
-  g.addColorStop(0.76, '#c6d9de');
-  g.addColorStop(0.9, '#e6dfc9');
-  g.addColorStop(1, '#f0dcb4');
+  g.addColorStop(0, '#2a62a2');
+  g.addColorStop(0.16, '#4a88c0');
+  g.addColorStop(0.3, '#78acd4');
+  g.addColorStop(0.41, '#a7c9de');
+  g.addColorStop(0.47, '#cddcdc');
+  g.addColorStop(0.5, '#e4dfcc');
+  g.addColorStop(0.53, '#e8dcc0');
+  g.addColorStop(1, '#c9cfb4');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 4, 256);
   const tex = new THREE.CanvasTexture(cv);
@@ -315,8 +554,33 @@ function cloudTexture() {
     ctx.fillStyle = g;
     ctx.fillRect(x - r, y - r, r * 2, r * 2);
   }
-  const tex = new THREE.CanvasTexture(cv);
+  // A canvas stores fully transparent pixels as BLACK, and filtering drags
+  // that black into the cloud: at a distance, where a low mip is used, it
+  // became a grey veil the size of the billboard across the sky. So the
+  // invisible pixels get the cloud's own colour, and the pixels go up as
+  // data (a canvas upload would premultiply the colour away again). Rows are
+  // flipped by hand, so no driver has to flip a data upload.
+  const W = cv.width;
+  const H = cv.height;
+  const src = ctx.getImageData(0, 0, W, H).data;
+  const data = new Uint8Array(W * H * 4);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      const o = ((H - 1 - y) * W + x) * 4;
+      const a = src[i + 3];
+      data[o] = a ? src[i] : 226;
+      data[o + 1] = a ? src[i + 1] : 233;
+      data[o + 2] = a ? src[i + 2] : 241;
+      data[o + 3] = a;
+    }
+  }
+  const tex = new THREE.DataTexture(data, W, H);
   tex.colorSpace = THREE.SRGBColorSpace;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.generateMipmaps = true;
+  tex.needsUpdate = true;
   return tex;
 }
 
@@ -336,14 +600,23 @@ function canopyTexture() {
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, N, N);
   ctx.fillStyle = '#fff';
-  for (let i = 0; i < 520; i++) {
+  for (let i = 0; i < 460; i++) {
     const x = rand() * N;
     const y = rand() * N;
     // Dense on the left, broken toward the right-hand edge of the crown
-    if (rand() > 1.05 - x / N * 0.95) continue;
-    const r = 3 + rand() * 9;
+    if (rand() > 1.0 - (x / N) * 0.95) continue;
+    const r = 2.5 + rand() * 7.5;
     ctx.beginPath();
     ctx.ellipse(x, y, r, r * (0.5 + rand() * 0.5), rand() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Sunflecks: the gaps between leaves that make shade read as dappled
+  // light rather than as a dark patch on the lawn
+  ctx.fillStyle = '#000';
+  for (let i = 0; i < 300; i++) {
+    const r = 1 + rand() * 2.6;
+    ctx.beginPath();
+    ctx.ellipse(rand() * N, rand() * N, r, r * (0.6 + rand() * 0.4), rand() * Math.PI, 0, Math.PI * 2);
     ctx.fill();
   }
   const tex = new THREE.CanvasTexture(cv);
@@ -377,36 +650,6 @@ function instanced(geo, items, material, shadows = false) {
   mesh.instanceColor.needsUpdate = true;
   mesh.castShadow = shadows;
   return mesh;
-}
-
-/** A Norrland spruce. Five skirts, never the same green twice. */
-const SPRUCE_GREENS = [0x22401d, 0x1d3a1c, 0x2a4a22, 0x1a3319, 0x2e5026];
-
-/*
- * `tiers` is the level of detail. A tree twenty metres away is four pixels
- * of silhouette wide; giving it five skirts to describe something the eye
- * reads as a triangle is wasted geometry. The near rank gets the detail,
- * the ranks behind it get the silhouette.
- */
-function spruce(rand, h, colour, tiers, x, z, cones, trunks) {
-  const treeY = rand() * Math.PI;
-  const squash = 0.94 + rand() * 0.14;
-  if (trunks) {
-    trunks.push({
-      pos: [x, h * 0.15, z], rot: [0, treeY, 0],
-      scale: [h * 0.035, h * 0.3, h * 0.035], color: 0x3d2b1c
-    });
-  }
-  for (let i = 0; i < tiers; i++) {
-    const k = i / tiers;
-    const r = h * (0.26 - k * 0.048);
-    cones.push({
-      pos: [x, h * (0.26 + k * (0.85 / tiers)), z],
-      rot: [0, treeY + rand() * Math.PI, 0],
-      scale: [r * (1 + (rand() - 0.5) * 0.12), h * (0.32 - k * 0.03) * (5 / tiers), r * squash],
-      color: colour
-    });
-  }
 }
 
 /** A grass blade: a tapering, slightly bent strip, one unit tall. */
@@ -458,15 +701,32 @@ export function buildGarden({ lowTier = false } = {}) {
   refs.extras = [];
   refs.windy = [];
 
-  /* Lawn */
+  /* Lawn: the tiled grass, under a garden-sized map of where it is lush,
+     dry, mown or in shade (see lawnMacro) */
+  const macro = lawnMacro();
+  const lawnMat = new THREE.MeshLambertMaterial({ map: lawnTexture() });
+  lawnMat.onBeforeCompile = (shader) => {
+    shader.uniforms.uMacro = { value: macro.tex };
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vMacroUv;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vec4 lmW = modelMatrix * vec4(position, 1.0);
+        vMacroUv = vec2((lmW.x - ${MACRO.x0.toFixed(1)}) / ${MACRO.size.toFixed(1)}, 1.0 - (lmW.z - ${MACRO.z0.toFixed(1)}) / ${MACRO.size.toFixed(1)});`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform sampler2D uMacro;\nvarying vec2 vMacroUv;')
+      // The macro map is stored at 85 % so it can brighten as well as darken
+      .replace('#include <map_fragment>', '#include <map_fragment>\n  diffuseColor.rgb *= texture2D( uMacro, vMacroUv ).rgb * 1.176;');
+  };
+  lawnMat.customProgramCacheKey = () => 'pm-lawn';
   const lawn = new THREE.Mesh(
     // Wide enough that the spruces all round stand on grass; the fog has
     // swallowed it long before its edge
     new THREE.PlaneGeometry(160, 160),
-    new THREE.MeshLambertMaterial({ map: lawnTexture() })
+    lawnMat
   );
   lawn.rotation.x = -Math.PI / 2;
   lawn.receiveShadow = true;
+  refs.macro = macro;
   group.add(lawn);
 
   /* Clouds, high and far, drifting east */
@@ -496,26 +756,113 @@ export function buildGarden({ lowTier = false } = {}) {
       });
     }
     const hedgeMat = windify(lambert(0xffffff, { vertexColors: true }), wind, { amp: 0.035, base: 0, span: 1, freq: 0.8, key: 'hedge' });
-    // Lumpy and darker underneath: a clipped hedge, not a row of green balls
-    const hedge = instanced(shadeByHeight(lumpy(1, 0.12, 3), -1, 1, 0.5, 1.1), bushes, hedgeMat, true);
+    // Leafy and dark underneath: clumps of leaves on the silhouette, soft
+    // normals so each bush lights as one volume, not a row of green balls
+    const hedge = instanced(hedgeBush(3), bushes, hedgeMat, true);
     refs.windy.push(hedge);
     group.add(hedge);
+    // Sprigs and clumps standing proud of the clipped surface break the line
+    const rh = mulberry(909);
+    const sprigs = [];
+    bushes.forEach((b) => {
+      const [bx, by, bz] = b.pos;
+      const r = b.scale[0];
+      for (let k = 0; k < (lowTier ? 2 : 4); k++) {
+        const a = (rh() - 0.5) * Math.PI * 1.3;
+        const up = 0.35 + rh() * 0.55;
+        const s2 = 0.16 + rh() * 0.16;
+        sprigs.push({
+          pos: [bx + Math.sin(a) * r * 0.85 * (1 - up * 0.4), by + up * r * 0.85, bz + Math.cos(a) * r * 0.5 * (1 - up * 0.5)],
+          rot: [rh() * 3, rh() * 3, 0],
+          scale: [s2, s2 * 0.85, s2],
+          color: b.color + 0x040602 * Math.floor(rh() * 3)
+        });
+      }
+    });
+    const sprigMat = windify(lambert(0xffffff, { vertexColors: true }), wind, { amp: 0.5, base: -1, span: 2, freq: 0.8, key: 'sprig' });
+    const sprigMesh = instanced(hedgeBush(7, 0.2), sprigs, sprigMat);
+    refs.windy.push(sprigMesh);
+    group.add(sprigMesh);
 
-    // A bed of summer flowers along the foot of the hedge
-    const flowers = [];
+    // A bed of summer flowers along the foot of the hedge: stems, open
+    // five-petal heads turned to the light, lupin spikes, and a band of
+    // leaves to stand them in. The heads ride the same wind as their stems
+    // (same phase, same oscillators), so a gust bends each flower whole.
+    const stems = [];
+    const heads = [];
     const cols = [0xc8414f, 0xe8b84e, 0xece6d6, 0x9c5aa6, 0xd8743f, 0x6a84c8, 0xc8414f, 0xece6d6];
     for (let i = 0; i < (lowTier ? 160 : 320); i++) {
+      // (Five draws from the shared stream, as before, so nothing after moves)
       const s = 0.045 + rand() * 0.04;
-      flowers.push({
-        pos: [-13 + rand() * 26, 0.06 + rand() * 0.34, -8.75 + rand() * 0.4],
-        scale: [s, s * 0.8, s],
-        color: cols[Math.floor(rand() * cols.length)]
-      });
+      const x = -13 + rand() * 26;
+      const h = 0.12 + rand() * 0.34;
+      const z = -8.75 + rand() * 0.4;
+      const color = cols[Math.floor(rand() * cols.length)];
+      stems.push({ pos: [x, 0, z], scale: [s, h, s], color: 0x3f6a2a });
+      heads.push({ pos: [x, h, z], scale: [s * 0.95, s * 0.95, s * 0.95], color });
     }
-    const bedMat = windify(lambert(0xffffff), wind, { amp: 0.6, base: -1, span: 2, freq: 1.4, key: 'bed' });
-    const bed = instanced(new THREE.SphereGeometry(1, 6, 4), flowers, bedMat);
-    refs.windy.push(bed);
-    group.add(bed);
+    const rf = mulberry(8128);
+    const spikes = [];
+    const lupins = [0x7b5aa8, 0xd77aa8, 0xeee8e0, 0x6a72c0, 0x9a62b8];
+    for (let i = 0; i < (lowTier ? 30 : 64); i++) {
+      const x = -12.5 + rf() * 25;
+      const z = -8.95 + rf() * 0.35;
+      const h = 0.3 + rf() * 0.25;
+      stems.push({ pos: [x, 0, z], scale: [0.07, h, 0.07], color: 0x3a6428 });
+      spikes.push({ pos: [x, h, z], scale: [0.042, 0.045 + rf() * 0.02, 0.042], color: lupins[Math.floor(rf() * lupins.length)] });
+    }
+    const leaves = [];
+    for (let x = -13.2; x <= 13.2; x += 0.42) {
+      const r = 0.16 + rf() * 0.1;
+      leaves.push({ pos: [x + (rf() - 0.5) * 0.2, r * 0.35, -8.8 + (rf() - 0.5) * 0.3], rot: [0, rf() * 3, 0], scale: [r * 1.4, r * 0.7, r], color: 0x2f5a26 + Math.floor(rf() * 3) * 0x030502 });
+    }
+    const wcfg = { base: 0, span: 1, freq: 1.4 };
+    const stemGeo = new THREE.CylinderGeometry(0.05, 0.08, 1, 4, 1, true);
+    stemGeo.translate(0, 0.5, 0);
+    const stemMesh = instanced(stemGeo, stems, windify(lambert(0xffffff), wind, { ...wcfg, amp: 0.55, key: 'stem' }));
+    // A head: a five-pointed petal disc round a domed centre, built flat
+    const petals = new THREE.CircleGeometry(1, 10);
+    const pp = petals.attributes.position;
+    for (let k = 1; k < pp.count; k++) {
+      const f = k % 2 ? 1 : 0.5;
+      pp.setXYZ(k, pp.getX(k) * f, pp.getY(k) * f, 0.12 * (1 - f));
+    }
+    petals.rotateX(-Math.PI / 2);
+    const disc = shadeByHeight(petals, -0.1, 0.1, 1, 1, 0.04);
+    const eye = new THREE.SphereGeometry(0.32, 6, 3, 0, Math.PI * 2, 0, Math.PI / 2);
+    eye.scale(1, 0.55, 1);
+    const ec = new Float32Array(eye.attributes.position.count * 3);
+    for (let k = 0; k < ec.length; k += 3) ec.set([1, 0.78, 0.3], k);
+    eye.setAttribute('color', new THREE.BufferAttribute(ec, 3));
+    const headGeo = mergeGeometries([disc.toNonIndexed(), eye.toNonIndexed()].map((g) => {
+      g.deleteAttribute('uv');
+      return g;
+    }));
+    headGeo.computeVertexNormals();
+    // Turned up and a little toward the lawn, where the light and the eye are
+    headGeo.rotateX(0.4);
+    // The head swings exactly as its stem's top does (the sway is in each
+    // instance's own units, so the amplitude is divided by the size ratio;
+    // no instance is rotated, or the sway would point another way)
+    const headMat = windify(lambert(0xffffff, { vertexColors: true, side: THREE.DoubleSide }), wind, { ...wcfg, base: -1e3, span: 1e-3, amp: 0.55 / 0.95, key: 'head' });
+    const headMesh = instanced(headGeo, heads, headMat);
+    // Lupin spikes: a lumpy cone of florets, paler toward the tip
+    const spikeGeo = new THREE.ConeGeometry(1, 4, 7, 6);
+    spikeGeo.translate(0, 2, 0);
+    const sp = spikeGeo.attributes.position;
+    for (let k = 0; k < sp.count; k++) {
+      const bump = 1 + 0.18 * Math.sin(sp.getY(k) * 9 + Math.atan2(sp.getZ(k), sp.getX(k)) * 3);
+      sp.setXYZ(k, sp.getX(k) * bump, sp.getY(k), sp.getZ(k) * bump);
+    }
+    spikeGeo.computeVertexNormals();
+    shadeByHeight(spikeGeo, 0, 4, 0.72, 1.15, 0.05);
+    const spikeMesh = instanced(spikeGeo, spikes, windify(lambert(0xffffff, { vertexColors: true }), wind, { ...wcfg, base: -1e3, span: 1e-3, amp: (0.55 * 0.07) / 0.042, key: 'spike' }));
+    const leafMesh = instanced(shadeByHeight(lumpy(1, 0.22, 11), -1, 1, 0.55, 1.15), leaves, windify(lambert(0xffffff, { vertexColors: true }), wind, { amp: 0.05, base: 0, span: 1, freq: 1.1, key: 'leaves' }));
+    [stemMesh, headMesh, spikeMesh, leafMesh].forEach((m) => {
+      m.receiveShadow = true;
+      refs.windy.push(m);
+      group.add(m);
+    });
   }
 
   /* The house — Terrassvägen 47: falu red with white knots, as it should be */
@@ -526,16 +873,52 @@ export function buildGarden({ lowTier = false } = {}) {
     const body = new THREE.Mesh(new THREE.BoxGeometry(10, 3.6, 6.5), lambert(0x8c3126));
     body.position.y = 1.8;
     house.add(body);
-    const roof = new THREE.Mesh(new THREE.ConeGeometry(7.2, 2.3, 4), lambert(0x4a4348));
-    roof.position.y = 4.72;
-    roof.rotation.y = Math.PI / 4;
-    roof.scale.z = 0.66;
-    house.add(roof);
+    // A gable roof (sadeltak) with an overhang, falu-red gables and white
+    // barge boards — the shape every Norrland house has
+    const slope = Math.atan2(2.35, 3.65);
+    const slopeLen = Math.hypot(3.65, 2.35);
+    [1, -1].forEach((side) => {
+      const plane = new THREE.Mesh(new THREE.BoxGeometry(10.7, 0.12, slopeLen + 0.08), lambert(0x433e44));
+      plane.position.set(0, 4.625, side * 1.825);
+      plane.rotation.x = side * slope;
+      house.add(plane);
+      const fascia = new THREE.Mesh(new THREE.BoxGeometry(10.72, 0.16, 0.06), lambert(0xf2efe6));
+      fascia.position.set(0, 3.43, side * 3.7);
+      house.add(fascia);
+      [-5.37, 5.37].forEach((bx) => {
+        const barge = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.18, slopeLen + 0.1), lambert(0xf2efe6));
+        barge.position.set(bx, 4.6, side * 1.825);
+        barge.rotation.x = side * slope;
+        house.add(barge);
+      });
+    });
+    const ridge = new THREE.Mesh(new THREE.BoxGeometry(10.74, 0.14, 0.26), lambert(0x353136));
+    ridge.position.set(0, 5.83, 0);
+    house.add(ridge);
+    const gableShape = new THREE.Shape([new THREE.Vector2(-3.25, 3.6), new THREE.Vector2(3.25, 3.6), new THREE.Vector2(0, 5.66)]);
+    const gable = new THREE.ExtrudeGeometry(gableShape, { depth: 9.98, bevelEnabled: false });
+    gable.rotateY(Math.PI / 2);
+    gable.translate(-4.99, 0, 0);
+    house.add(new THREE.Mesh(gable, lambert(0x8c3126)));
     // White corner boards: the knots that make it a falu-red house
     [-4.98, 4.98].forEach((x) => {
-      const knot = new THREE.Mesh(new THREE.BoxGeometry(0.16, 3.6, 0.16), lambert(0xf2efe6));
-      knot.position.set(x, 1.8, 3.2);
-      house.add(knot);
+      [3.2, -3.2].forEach((z) => {
+        const knot = new THREE.Mesh(new THREE.BoxGeometry(0.16, 3.6, 0.16), lambert(0xf2efe6));
+        knot.position.set(x, 1.8, z);
+        house.add(knot);
+      });
+      // A window in each gable end, under the roof's peak (frame, then glass
+      // centimetres out from it, as on the front)
+      const sx = Math.sign(x);
+      const fr = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.1, 0.95), lambert(0xf2efe6));
+      fr.position.set(x + sx * 0.06, 2.3, 0);
+      house.add(fr);
+      const glass = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.88, 0.74), lambert(0x2a3a44));
+      glass.position.set(x + sx * 0.11, 2.3, 0);
+      house.add(glass);
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.05, 0.76), lambert(0xf2efe6));
+      bar.position.set(x + sx * 0.13, 2.3, 0);
+      house.add(bar);
     });
     // Windows: dark glass inside a white frame. A white pane on a white
     // frame is what turned these into blank patches the first time round.
@@ -565,91 +948,108 @@ export function buildGarden({ lowTier = false } = {}) {
     const step = new THREE.Mesh(new THREE.BoxGeometry(2, 0.16, 0.9), lambert(0xb8b0a0));
     step.position.set(0, 0.08, 3.7);
     house.add(step);
+    // A stone plinth, white sills, a porch roof on two posts over the door
+    // and a plastered chimney: the details that make a box a Norrland house
+    const plinth = new THREE.Mesh(new THREE.BoxGeometry(10.24, 0.42, 6.74), lambert(0x8d8a82));
+    plinth.position.y = 0.2;
+    house.add(plinth);
+    [-3.4, -1.15, 1.15, 3.4].forEach((wx) => {
+      const sill = new THREE.Mesh(new THREE.BoxGeometry(1.34, 0.08, 0.22), lambert(0xf2efe6));
+      sill.position.set(wx, 1.29, 3.33);
+      house.add(sill);
+      const head = new THREE.Mesh(new THREE.BoxGeometry(1.34, 0.1, 0.16), lambert(0xf2efe6));
+      head.position.set(wx, 2.83, 3.3);
+      house.add(head);
+    });
+    const porch = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.1, 1.15), lambert(0x4a4348));
+    porch.position.set(0, 2.62, 3.82);
+    porch.rotation.x = 0.22;
+    house.add(porch);
+    [-0.85, 0.85].forEach((px) => {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.1, 2.5, 0.1), lambert(0xf2efe6));
+      post.position.set(px, 1.25, 4.25);
+      house.add(post);
+    });
+    const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.62, 2.2, 0.62), lambert(0xe6e1d6));
+    chimney.position.set(2.2, 5.3, -0.9);
+    house.add(chimney);
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.12, 0.76), lambert(0x3a3a3e));
+    cap.position.set(2.2, 6.45, -0.9);
+    house.add(cap);
     bake(house);
     group.add(house);
   }
 
-  /* Three ranks of spruce, each paler than the last. Distance is sold with
-     colour, not with more geometry — the far rank is two-thirds of the way
-     to the sky and carries no detail at all. */
+  /* The flagpole, flying the long blue-and-yellow vimpel: a Swedish garden
+     on a summer Saturday. The pennant streams east with the clouds. */
   {
-    const cones = [];
-    const trunks = [];
-    for (let i = 0; i < 26; i++) {
-      spruce(rand, 5 + rand() * 3, SPRUCE_GREENS[Math.floor(rand() * SPRUCE_GREENS.length)], 5,
-        -32 + i * 2.5 + rand() * 1.2, -25 - rand() * 3, cones, trunks);
+    const pole = new THREE.Group();
+    pole.position.set(1.6, 0, -13.4);
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.085, 9, 8), lambert(0xf2efe6));
+    shaft.position.y = 4.5;
+    pole.add(shaft);
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), lambert(0xd8b04a));
+    knob.position.y = 9.06;
+    pole.add(knob);
+    bake(pole);
+    group.add(pole);
+    const L = 4.4;
+    const geo = new THREE.PlaneGeometry(L, 0.44, 20, 2);
+    geo.translate(L / 2, 0, 0);
+    const p = geo.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const k = p.getX(i) / L;
+      // Tapering toward a forked tail
+      const fork = k > 0.86 ? Math.max(0, 1 - Math.abs(p.getY(i)) / 0.22) * (k - 0.86) * 2.2 : 0;
+      p.setX(i, p.getX(i) - fork * L * 0.18);
+      p.setY(i, p.getY(i) * (1 - 0.72 * k));
     }
-    for (let i = 0; i < 20; i++) {
-      spruce(rand, 6 + rand() * 3, 0x466a72, 3,
-        -38 + i * 3.8 + rand() * 2, -34 - rand() * 4, cones, null);
-    }
-    for (let i = 0; i < 14; i++) {
-      spruce(rand, 7 + rand() * 3, 0x7f9fa8, 2,
-        -44 + i * 6.2 + rand() * 3, -44 - rand() * 5, cones, null);
-    }
-    // The forest closes round to the west too: the judging shot and the
-    // phones look that way, and a lawn running bare to the horizon there
-    // was the one place the garden read as a stage set. (Its own random
-    // stream, so nothing placed after it moves.)
-    const rw = mulberry(4747);
-    for (let z = -22; z < 14; z += 2.6) {
-      spruce(rw, 5 + rw() * 3, SPRUCE_GREENS[Math.floor(rw() * SPRUCE_GREENS.length)], 5, -26 - rw() * 3, z + rw(), cones, trunks);
-    }
-    for (let z = -32; z < 22; z += 3.8) spruce(rw, 6 + rw() * 3, 0x466a72, 3, -35 - rw() * 4, z + rw() * 2, cones, null);
-    for (let z = -42; z < 30; z += 6) spruce(rw, 7 + rw() * 3, 0x7f9fa8, 2, -45 - rw() * 5, z + rw() * 3, cones, null);
-    // Cones are one unit tall centred on the origin: the tip moves, the
-    // skirt's hem barely does. Each skirt is darker at its hem.
-    const coneMat = windify(lambert(0xffffff, { vertexColors: true }), wind, { amp: 0.09, base: -0.5, span: 1, freq: 0.7, key: 'spruce' });
-    const forest = instanced(shadeByHeight(new THREE.ConeGeometry(1, 1, 9), -0.5, 0.5, 0.6, 1.12), cones, coneMat);
-    refs.windy.push(forest);
-    group.add(forest);
-    group.add(instanced(new THREE.CylinderGeometry(0.5, 1, 1, 5), trunks));
+    const cv = document.createElement('canvas');
+    cv.width = 128;
+    cv.height = 16;
+    const c2 = cv.getContext('2d');
+    c2.fillStyle = '#1e5aa6';
+    c2.fillRect(0, 0, 128, 16);
+    c2.fillStyle = '#f2c230';
+    c2.fillRect(0, 6, 128, 4);
+    c2.fillRect(9, 0, 4, 16);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const mat = lambert(0xffffff, { map: tex, side: THREE.DoubleSide });
+    const ph = phaseUniform(wind, [5.2, 2.3, 0]);
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.uVimPh = ph;
+      shader.uniforms.uGust = wind.uGust;
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nuniform vec3 uVimPh;\nuniform float uGust;')
+        .replace('#include <begin_vertex>', `#include <begin_vertex>
+          float vk = clamp(position.x / ${L.toFixed(2)}, 0.0, 1.0);
+          transformed.z += sin(uVimPh.x - position.x * 2.1) * 0.32 * vk * (0.6 + uGust * 0.6);
+          transformed.y += sin(uVimPh.y - position.x * 1.3) * 0.12 * vk - vk * vk * (0.9 - uGust * 0.7);`);
+    };
+    mat.customProgramCacheKey = () => 'pm-vimpel';
+    mat.userData.windy = true;
+    const vimpel = new THREE.Mesh(geo, mat);
+    vimpel.position.set(1.6, 8.75, -13.4);
+    vimpel.rotation.y = -0.35;
+    refs.windy.push(vimpel);
+    group.add(vimpel);
   }
 
-  /* Birches: two behind the easels carrying the bunting, and one behind the
-     player's shoulder whose crown is out of frame but whose shade is not */
+  /* The forest round the garden (forest.js): the spruce edge in clusters
+     and clearings, birches in front of it, undergrowth at its foot, a hazed
+     rank and a ridge behind, and the garden's own three birches — all in a
+     handful of merged meshes sharing one foliage material */
   {
-    const trunks = new THREE.Group();
-    const crowns = new THREE.Group();
-    const rc = mulberry(5150);
-    const birch = (x, z, h) => {
-      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.15, h, 7), lambert(0xe4e0d4));
-      trunk.position.set(x, h / 2, z);
-      trunks.add(trunk);
-      for (let i = 0; i < 5; i++) {
-        const mark = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.1, 0.22), lambert(0x2a2620));
-        mark.position.set(x, h * (0.2 + rand() * 0.6), z + 0.1);
-        mark.rotation.y = rand() * Math.PI;
-        trunks.add(mark);
-      }
-      // The crown: a loose cloud of leaf clumps, sunlit on top and dark
-      // inside, instead of five smooth balls
-      for (let i = 0; i < 5; i++) {
-        const leaf = 0x6d9c3c + Math.floor(rand() * 3) * 0x040602;
-        const cx = x + (rand() - 0.5) * 1.6;
-        const cy = h + rand() * 1.2;
-        const cz = z + (rand() - 0.5) * 1.6;
-        const r0 = 1 + rand() * 0.5;
-        for (let k = 0; k < 3; k++) {
-          const r = r0 * (k ? 0.62 : 0.9);
-          const a = rc() * Math.PI * 2;
-          const g = shadeByHeight(lumpy(r, 0.16, rc() * 9), -r, r, 0.62, 1.18);
-          const clump = new THREE.Mesh(g, lambert(leaf, { vertexColors: true }));
-          clump.position.set(cx + (k ? Math.cos(a) * r0 * 0.55 : 0), cy + (k ? (rc() - 0.3) * r0 * 0.6 : 0), cz + (k ? Math.sin(a) * r0 * 0.55 : 0));
-          crowns.add(clump);
-        }
-      }
-    };
-    birch(-8.6, -8.4, 5);
-    birch(9.2, -8.8, 5.4);
-    birch(-7.6, 4.4, 5.6);
-    bake(trunks);
-    const crownMesh = bake(crowns);
-    crownMesh.material = windify(new THREE.MeshLambertMaterial({ vertexColors: true }), wind, {
-      amp: 0.22, base: 3.6, span: 3.5, freq: 0.9, instanced: false, key: 'crown'
+    const forest = buildForest(mulberry(4747), {
+      lite: lowTier,
+      wind: { phase: phaseUniform(wind, [0.95, 2.4, 0.75]), gust: wind.uGust },
+      sunDir: SUN_DIR
     });
-    refs.windy.push(crownMesh);
-    group.add(trunks, crowns);
+    refs.forest = forest;
+    // The watchdog's simpler garden swaps the foliage shader for plain Lambert
+    refs.windy.push(...forest.meshes);
+    group.add(forest.group);
 
     // The dappled light, from the near birch's canopy
     const canopy = new THREE.Mesh(
@@ -743,30 +1143,96 @@ export function buildGarden({ lowTier = false } = {}) {
     const windGrass = grassMat.onBeforeCompile;
     grassMat.onBeforeCompile = (shader) => {
       windGrass(shader);
-      shader.fragmentShader = shader.fragmentShader.replace(
-        '#include <normal_fragment_begin>',
-        '#include <normal_fragment_begin>\n  normal = normalize( vNormal );'
-      );
+      // The blades take the lawn's own variation under them: dry patches,
+      // lanes and shade, so they stand IN the lawn rather than on top of it
+      shader.uniforms.uMacro = { value: macro.tex };
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec2 vMacroUv;')
+        .replace('#include <fog_vertex>', `#include <fog_vertex>
+          vMacroUv = vec2((wOrigin.x - ${MACRO.x0.toFixed(1)}) / ${MACRO.size.toFixed(1)}, 1.0 - (wOrigin.z - ${MACRO.z0.toFixed(1)}) / ${MACRO.size.toFixed(1)});`);
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform sampler2D uMacro;\nvarying vec2 vMacroUv;')
+        .replace('#include <color_fragment>', '#include <color_fragment>\n  diffuseColor.rgb *= texture2D( uMacro, vMacroUv ).rgb * 1.176;')
+        .replace(
+          '#include <normal_fragment_begin>',
+          '#include <normal_fragment_begin>\n  normal = normalize( vNormal );'
+        );
     };
     const grass = instanced(bladeGeometry(), blades, grassMat);
     grass.receiveShadow = true;
     refs.extras.push(grass);
     group.add(grass);
 
-    // Daisies and clover heads in the near lawn
+    // Daisies, buttercups and clover heads in the near lawn — in drifts,
+    // the way they spread through a lawn, not sprinkled evenly
     const heads = [];
-    for (let i = 0; i < (lowTier ? 90 : 200); i++) {
-      const s = 0.012 + rand() * 0.01;
+    const rd = mulberry(7177);
+    const drifts = Array.from({ length: 14 }, () => [-7 + rd() * 14, -8 + rd() * 9.5, 0.4 + rd() * 0.9, rd()]);
+    for (let i = 0; i < (lowTier ? 110 : 260); i++) {
+      const [cx, cz, spread, kind] = drifts[i % drifts.length];
+      const a = rd() * Math.PI * 2;
+      const d = Math.sqrt(rd()) * spread;
+      const s = 0.012 + rd() * 0.01;
+      const pick = rd();
       heads.push({
-        pos: [-7 + rand() * 14, 0.05 + rand() * 0.06, -8 + rand() * 9.5],
+        pos: [cx + Math.cos(a) * d * 1.4, 0.05 + rd() * 0.06, cz + Math.sin(a) * d],
         scale: [s, s * 0.45, s],
-        color: rand() < 0.65 ? 0xe4e2d6 : rand() < 0.6 ? 0xe0b83c : 0xb87a9c
+        // Each drift mostly one flower: daisies, buttercups or clover
+        color: kind < 0.55 ? (pick < 0.9 ? 0xe8e6da : 0xe0b83c) : kind < 0.8 ? (pick < 0.8 ? 0xe6bf3a : 0xe8e6da) : pick < 0.85 ? 0xc48aa8 : 0xe8e6da
       });
     }
     const headMesh = instanced(new THREE.IcosahedronGeometry(1, 0), heads);
     headMesh.receiveShadow = true;
     refs.extras.push(headMesh);
     group.add(headMesh);
+  }
+
+  /* Pollen and seed fluff drifting through the sunlight: the air itself,
+     catching the light against the hedge and the shade */
+  {
+    const n = lowTier ? 70 : 160;
+    const pos = new Float32Array(n * 3);
+    const seed = new Float32Array(n);
+    const rp = mulberry(3301);
+    for (let i = 0; i < n; i++) {
+      pos.set([-7 + rp() * 13, 0.35 + rp() * 2.6, -8.5 + rp() * 10.5], i * 3);
+      seed[i] = rp() * TAU;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
+    const cv = document.createElement('canvas');
+    cv.width = 32;
+    cv.height = 32;
+    const c2 = cv.getContext('2d');
+    const gr = c2.createRadialGradient(16, 16, 0, 16, 16, 16);
+    gr.addColorStop(0, 'rgba(255,255,255,1)');
+    gr.addColorStop(0.35, 'rgba(255,255,255,0.55)');
+    gr.addColorStop(1, 'rgba(255,255,255,0)');
+    c2.fillStyle = gr;
+    c2.fillRect(0, 0, 32, 32);
+    const dot = new THREE.CanvasTexture(cv);
+    dot.colorSpace = THREE.SRGBColorSpace;
+    const mat = new THREE.PointsMaterial({
+      size: 0.03, map: dot, color: 0xfff4d6, transparent: true, opacity: 0.8, depthWrite: false, sizeAttenuation: true
+    });
+    const ph = phaseUniform(wind, [0.23, 0.31, 0.17]);
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.uPolPh = ph;
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute float aSeed;\nuniform vec3 uPolPh;')
+        .replace('#include <begin_vertex>', `#include <begin_vertex>
+          transformed.x += sin(uPolPh.x + aSeed) * 0.6 + sin(uPolPh.y * 2.0 + aSeed * 1.7) * 0.25;
+          transformed.y += sin(uPolPh.z + aSeed * 2.3) * 0.35;
+          transformed.z += cos(uPolPh.x + aSeed * 0.7) * 0.5;`)
+        // Never a big blob in front of the lens, whatever the distance
+        .replace('#include <fog_vertex>', '#include <fog_vertex>\n  gl_PointSize = clamp( gl_PointSize, 1.0, 6.0 );');
+    };
+    mat.customProgramCacheKey = () => 'pm-pollen';
+    const pollen = new THREE.Points(geo, mat);
+    pollen.frustumCulled = false;
+    refs.extras.push(pollen);
+    group.add(pollen);
   }
 
   /* Swallows, looping over the hedge */
@@ -858,6 +1324,57 @@ export function buildGarden({ lowTier = false } = {}) {
     }
     bake(table, { skip: [hat], receiveShadow: true });
     table.add(hat);
+    // A red-and-white checked cloth, hanging over the edges: a Swedish
+    // garden party is not laid on bare boards
+    {
+      const cv = document.createElement('canvas');
+      cv.width = 64;
+      cv.height = 64;
+      const c2 = cv.getContext('2d');
+      c2.fillStyle = '#f3efe6';
+      c2.fillRect(0, 0, 64, 64);
+      c2.fillStyle = 'rgba(196,40,46,0.55)';
+      for (let i = 0; i < 4; i++) {
+        c2.fillRect(i * 16, 0, 8, 64);
+        c2.fillRect(0, i * 16, 64, 8);
+      }
+      const tex = new THREE.CanvasTexture(cv);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.magFilter = THREE.NearestFilter;
+      tex.anisotropy = 4;
+      const W = 2.06;
+      const D = 0.98;
+      const drop = 0.16;
+      const parts = [];
+      const top = new THREE.PlaneGeometry(W, D);
+      top.rotateX(-Math.PI / 2);
+      top.translate(0, 0.792, 0);
+      parts.push(top);
+      [[0, D / 2, 0], [0, -D / 2, Math.PI], [W / 2, 0, Math.PI / 2], [-W / 2, 0, -Math.PI / 2]].forEach(([x, z, ry]) => {
+        const len = x ? D : W;
+        const sk = new THREE.PlaneGeometry(len, drop);
+        sk.translate(0, 0.792 - drop / 2, 0);
+        sk.rotateY(ry);
+        sk.translate(x, 0, z);
+        parts.push(sk);
+      });
+      // Checks about 6 cm across, whatever the face
+      parts.forEach((g, i) => {
+        const { uv } = g.attributes;
+        const sx = i < 3 ? W : D;
+        const sy = i === 0 ? D : drop;
+        for (let k = 0; k < uv.count; k++) uv.setXY(k, (uv.getX(k) * sx) / 0.24, (uv.getY(k) * sy) / 0.24);
+      });
+      const cloth = new THREE.Mesh(mergeGeometries(parts), new THREE.MeshLambertMaterial({
+        map: tex, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2
+      }));
+      parts.forEach((g) => g.dispose());
+      cloth.receiveShadow = true;
+      cloth.castShadow = true;
+      table.add(cloth);
+    }
     group.add(table);
   }
 
@@ -974,7 +1491,11 @@ export function animateGarden(garden, t, still) {
  */
 export function buildEasel(artMaterial, w = 1.5, h = 1.15) {
   const g = new THREE.Group();
-  const wood = 0xa8804a;
+  const wood = 0xb8905a;
+  // The player's easel is seen up close for the whole evening: its wood is
+  // its own mesh with a grain texture. Far off in the field, colour is enough.
+  const woodG = artMaterial ? new THREE.Group() : g;
+  if (artMaterial) g.add(woodG);
 
   // Three legs, all BEHIND the canvas plane. An A-frame carries the canvas
   // on a tray at its front; legs crossing in front of the picture is the
@@ -986,15 +1507,15 @@ export function buildEasel(artMaterial, w = 1.5, h = 1.15) {
     leg.position.set(x, legLen / 2 - 0.02, z);
     leg.rotation.z = tilt;
     leg.rotation.x = z < -0.3 ? -0.3 : 0.05;
-    g.add(leg);
+    woodG.add(leg);
   });
   // Tray the canvas rests on, with the brushes, a rag and the tubes on it
   const tray = new THREE.Mesh(new THREE.BoxGeometry(w + 0.14, 0.05, 0.14), lambert(wood));
   tray.position.set(0, 0.95, -0.02);
-  g.add(tray);
+  woodG.add(tray);
   const lip = new THREE.Mesh(new THREE.BoxGeometry(w + 0.14, 0.045, 0.028), lambert(wood));
   lip.position.set(0, 0.99, 0.045);
-  g.add(lip);
+  woodG.add(lip);
   if (artMaterial) {
     [[-0.3, 0.14], [-0.21, -0.1], [0.34, 0.05]].forEach(([bx, rot], i) => {
       const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.011, 0.26, 5), lambert(0xc9a05a));
@@ -1023,9 +1544,22 @@ export function buildEasel(artMaterial, w = 1.5, h = 1.15) {
     });
   }
 
+  if (artMaterial) {
+    // Your own beer, on the grass by the easel's left foot. Ten each, said the brief.
+    const bottle = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.039, 0.21, 9), lambert(0x4a2f14));
+    bottle.position.set(-0.62, 0.105, 0.24);
+    g.add(bottle);
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.021, 0.075, 8), lambert(0x4a2f14));
+    neck.position.set(-0.62, 0.247, 0.24);
+    g.add(neck);
+    const label = new THREE.Mesh(new THREE.CylinderGeometry(0.0395, 0.0395, 0.07, 9, 1, true), lambert(0xe8d9a8));
+    label.position.set(-0.62, 0.1, 0.24);
+    g.add(label);
+  }
+
   const frame = new THREE.Mesh(new THREE.BoxGeometry(w + 0.09, h + 0.09, 0.05), lambert(0xc4a878));
   frame.position.set(0, 0.98 + h / 2, 0.01);
-  g.add(frame);
+  woodG.add(frame);
 
   // A box, not a plane: the canvas is a stretched object with a visible
   // edge, and a zero-thickness quad at this distance reads as a decal.
@@ -1033,7 +1567,11 @@ export function buildEasel(artMaterial, w = 1.5, h = 1.15) {
   stretched.position.set(0, 0.98 + h / 2, 0.045);
   g.add(stretched);
 
-  bake(g, { receiveShadow: !artMaterial });
+  if (artMaterial) {
+    bake(g, { skip: [woodG] });
+    const wm = bake(woodG, { grainUv: true, receiveShadow: true });
+    wm.material = new THREE.MeshStandardMaterial({ vertexColors: true, map: woodGrain(), roughness: 0.68, metalness: 0 });
+  } else bake(g, { receiveShadow: true });
 
   let canvas = null;
   if (artMaterial) {
@@ -1085,10 +1623,15 @@ export function buildBrush() {
  * of a subdivided quad — at this distance a 16×18 grid of soft colour
  * reads as paint, and it costs no texture.
  */
+export const FIELD_W = 0.6;
+export const FIELD_H = 0.65;
+export const FIELD_SCALE = 0.88;
 export function buildFieldEasels(list) {
   const field = new THREE.Group();
-  const W = 0.78;
-  const H = 0.6;
+  // Portrait, like the motifs: a Mona Lisa squeezed into a landscape board
+  // read as somebody painting a different picture
+  const W = FIELD_W;
+  const H = FIELD_H;
   list.forEach(({ x, z, ry, art }, i) => {
     const e = buildEasel(null, W, H);
     if (art) {
@@ -1102,7 +1645,7 @@ export function buildFieldEasels(list) {
     }
     e.position.set(x, 0, z);
     e.rotation.y = ry;
-    e.scale.setScalar(0.88);
+    e.scale.setScalar(FIELD_SCALE);
     field.add(e);
     // Per Vikman's brief: ten beers each. One is open at every easel.
     const side = i % 2 ? 1 : -1;
@@ -1114,6 +1657,25 @@ export function buildFieldEasels(list) {
     const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.02, 0.07, 7), lambert(0x4a2f14));
     neck.position.set(bx, 0.235, bz);
     field.add(neck);
+    // A paint box open on the grass on the other side, tubes in its tray
+    const px2 = x - Math.cos(ry) * 0.42 * side - Math.sin(ry) * 0.25;
+    const pz2 = z + Math.sin(ry) * 0.42 * side - Math.cos(ry) * 0.25;
+    const box = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.07, 0.22), lambert(0x7a5634));
+    box.position.set(px2, 0.035, pz2);
+    box.rotation.y = ry + 0.3 * side;
+    field.add(box);
+    const lid = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.2, 0.02), lambert(0x8a643c));
+    lid.position.set(px2 - Math.sin(box.rotation.y) * 0.12, 0.1, pz2 - Math.cos(box.rotation.y) * 0.12);
+    lid.rotation.set(-0.35, box.rotation.y, 0, 'YXZ');
+    field.add(lid);
+    [0xc0242c, 0xe8b419, 0x22459b, 0xf4f2ea].forEach((col, k) => {
+      const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.013, 0.1, 6), lambert(col));
+      tube.rotation.set(Math.PI / 2, 0, 0);
+      tube.rotation.y = box.rotation.y;
+      const o = -0.11 + k * 0.07;
+      tube.position.set(px2 + Math.cos(box.rotation.y) * o, 0.082, pz2 - Math.sin(box.rotation.y) * o);
+      field.add(tube);
+    });
   });
   const mesh = bake(field);
   if (mesh) mesh.receiveShadow = true;

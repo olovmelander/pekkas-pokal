@@ -151,6 +151,77 @@ export function machineEnvironment(THREE) {
 }
 
 /**
+ * The ball's own reflection map. A steel ball is a convex mirror of
+ * everything round it, and what makes it read as steel (rather than a grey
+ * marble) is that it shows the room crisply: the fixtures overhead, the
+ * backbox up the table, a ring of warm GI at its equator and the blue
+ * playfield underneath. Values are kept moderate; the ball shader caps the
+ * result under the bloom threshold anyway.
+ */
+export function ballEnvironment(THREE) {
+  const W = 1024;
+  const H = 512;
+  const cv = document.createElement('canvas');
+  cv.width = W;
+  cv.height = H;
+  const g = cv.getContext('2d');
+  // Sky: dark room. Ground: the playfield, lit near the ball, darker far off.
+  // Not black: a steel ball in a lit arcade is silver, its darks are the
+  // room's mid-tones, not a void
+  const sky = g.createLinearGradient(0, 0, 0, H / 2);
+  sky.addColorStop(0, '#68739a');
+  sky.addColorStop(0.6, '#3c4468');
+  sky.addColorStop(1, '#262c4a');
+  g.fillStyle = sky;
+  g.fillRect(0, 0, W, H / 2);
+  const ground = g.createLinearGradient(0, H / 2, 0, H);
+  ground.addColorStop(0, '#1d2a66');
+  ground.addColorStop(0.35, '#2f45a8');
+  ground.addColorStop(1, '#3a52c0');
+  g.fillStyle = ground;
+  g.fillRect(0, H / 2, W, H / 2);
+  const soft = (x, y, w, h, color, blur) => {
+    g.save();
+    g.shadowColor = color;
+    g.shadowBlur = blur;
+    g.fillStyle = color;
+    g.fillRect(x, y, w, h);
+    g.restore();
+  };
+  // Two long ceiling fixtures, crisp-edged with a little bloom of their own,
+  // and a dimmer row further off: highlights that slide over the ball
+  soft(W * 0.1, H * 0.08, W * 0.24, H * 0.07, '#f4f6ff', 20);
+  soft(W * 0.56, H * 0.1, W * 0.26, H * 0.065, '#f4f6ff', 20);
+  soft(W * 0.62, H * 0.2, W * 0.14, H * 0.04, '#cfd6f0', 12);
+  soft(W * 0.36, H * 0.22, W * 0.12, H * 0.035, '#cfd6f0', 12);
+  soft(W * 0.86, H * 0.25, W * 0.1, H * 0.03, '#b8c2e6', 10);
+  // The backbox, amber, standing up the table (−z sits at u ≈ 0.25)
+  soft(W * 0.19, H * 0.3, W * 0.12, H * 0.14, '#d98b3a', 26);
+  soft(W * 0.21, H * 0.33, W * 0.08, H * 0.05, '#ffbf73', 10);
+  // GI ring at the horizon: warm blobs all the way round
+  for (let i = 0; i < 18; i++) {
+    const x = (i / 18) * W + (i % 2) * 14;
+    const grad = g.createRadialGradient(x, H * 0.5, 0, x, H * 0.5, 26);
+    grad.addColorStop(0, 'rgba(255,214,150,.85)');
+    grad.addColorStop(1, 'rgba(255,214,150,0)');
+    g.fillStyle = grad;
+    g.fillRect(x - 26, H * 0.5 - 26, 52, 52);
+  }
+  // Lit inserts and the lane guides in the playfield below
+  [[0.1, 0.66, '#f2c14e'], [0.3, 0.72, '#f26d8d'], [0.52, 0.64, '#7c8cf8'], [0.7, 0.7, '#5eead4'], [0.9, 0.67, '#f2c14e']].forEach(([u, v, c]) => {
+    const grad = g.createRadialGradient(u * W, v * H, 0, u * W, v * H, 34);
+    grad.addColorStop(0, c);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = grad;
+    g.fillRect(u * W - 34, v * H - 34, 68, 68);
+  });
+  const tex = new THREE.CanvasTexture(cv);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/**
  * Micro-variation for the playfield clearcoat: ink irregularity plus the fine
  * swirl a coated playfield picks up from years of balls and cloths. A coat of
  * perfectly uniform gloss is the tell-tale CG-plastic look.
@@ -205,6 +276,150 @@ function radialTexture(THREE, inner, stops) {
   g.fillStyle = grad;
   g.fillRect(0, 0, N, N);
   return new THREE.CanvasTexture(cv);
+}
+
+/**
+ * Dressed stone for the castle: courses of slightly uneven blocks with dark
+ * mortar, grey so the material colour tints it. Mapped in world units by
+ * bakeStatic (one tile = STONE_TILE units), so a merlon and a tower wall
+ * show blocks of the same size.
+ */
+const STONE_TILE = 2.4;
+function stoneTexture(THREE) {
+  const N = 256;
+  const cv = document.createElement('canvas');
+  cv.width = N;
+  cv.height = N;
+  const g = cv.getContext('2d');
+  g.fillStyle = '#5c5a58';
+  g.fillRect(0, 0, N, N);
+  let seed = 11;
+  const rnd = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  const rows = 14;
+  const rh = N / rows;
+  for (let r = 0; r < rows; r++) {
+    const cols = 7;
+    const cw = N / cols;
+    const off = r % 2 ? cw / 2 : 0;
+    for (let c = -1; c <= cols; c++) {
+      const x = c * cw + off;
+      const v = 150 + Math.round(rnd() * 46);
+      g.fillStyle = `rgb(${v + 6},${v},${v - 8})`;
+      g.fillRect(x + 1.5, r * rh + 1.5, cw - 3, rh - 3);
+      // A lit top edge and a shaded bottom: the blocks stand proud of the mortar
+      g.fillStyle = 'rgba(255,255,255,0.12)';
+      g.fillRect(x + 1.5, r * rh + 1.5, cw - 3, 2);
+      g.fillStyle = 'rgba(0,0,0,0.22)';
+      g.fillRect(x + 1.5, r * rh + rh - 3.5, cw - 3, 2);
+    }
+  }
+  // Weathering
+  for (let i = 0; i < 260; i++) {
+    const v = rnd() < 0.5 ? 255 : 0;
+    g.fillStyle = `rgba(${v},${v},${v},${0.04 + rnd() * 0.06})`;
+    g.fillRect(rnd() * N, rnd() * N, 2 + rnd() * 6, 2 + rnd() * 4);
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+/** Re-maps a (world-space) geometry's UVs: box projection, or around a tower's axis */
+function worldUV(geo, scale, cyl) {
+  const { position: p, normal: n, uv } = geo.attributes;
+  if (!p || !n || !uv) return;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i);
+    const y = p.getY(i);
+    const z = p.getZ(i);
+    let u;
+    let v;
+    const ny = Math.abs(n.getY(i));
+    if (cyl && ny < 0.7) {
+      // Seam at the back of the tower, away from the camera
+      u = (Math.atan2(x - cyl.x, z - cyl.z) * cyl.r) / scale;
+      v = y / scale;
+    } else {
+      const nx = Math.abs(n.getX(i));
+      const nz = Math.abs(n.getZ(i));
+      if (ny >= nx && ny >= nz) {
+        u = x / scale;
+        v = z / scale;
+      } else if (nx >= nz) {
+        u = z / scale;
+        v = y / scale;
+      } else {
+        u = x / scale;
+        v = y / scale;
+      }
+    }
+    uv.setXY(i, u, v);
+  }
+  uv.needsUpdate = true;
+}
+
+/**
+ * Static batching. Everything on the table that never moves on its own is
+ * merged into one mesh per material (and shadow setting), so the castle's
+ * forty-odd blocks, the wireform ties and the posts cost a handful of draw
+ * calls instead of a hundred — half of them twice, once more for the shadow
+ * map. Anything animated, swapped or recoloured is flagged `userData.keep`
+ * by its builder and left alone, with its whole subtree.
+ */
+export function bakeStatic(THREE, mergeGeometries, root) {
+  root.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
+  const buckets = new Map();
+  const visit = (o) => {
+    if (o.userData.keep || !o.visible) return;
+    if (o.isMesh && !o.isInstancedMesh && !o.isSkinnedMesh && !Array.isArray(o.material)) {
+      const key = `${o.material.uuid}|${o.castShadow ? 1 : 0}|${o.receiveShadow ? 1 : 0}|${o.renderOrder}`;
+      let b = buckets.get(key);
+      if (!b) {
+        b = { material: o.material, items: [], cast: o.castShadow, receive: o.receiveShadow, order: o.renderOrder };
+        buckets.set(key, b);
+      }
+      b.items.push(o);
+    }
+    o.children.forEach(visit);
+  };
+  root.children.forEach(visit);
+  const m = new THREE.Matrix4();
+  let merged = 0;
+  buckets.forEach((b) => {
+    const worldScale = b.material.userData.worldUV;
+    if (b.items.length < 2 && !worldScale) return;
+    const geos = b.items.map((o) => {
+      m.multiplyMatrices(inv, o.matrixWorld);
+      const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+      Object.keys(g.attributes).forEach((name) => {
+        if (name !== 'position' && name !== 'normal' && name !== 'uv') g.deleteAttribute(name);
+      });
+      g.morphAttributes = {};
+      g.clearGroups();
+      g.applyMatrix4(m);
+      if (worldScale) worldUV(g, worldScale, o.userData.cylUV);
+      return g;
+    });
+    const geo = mergeGeometries(geos, false);
+    geos.forEach((g) => g.dispose());
+    if (!geo) return;
+    const mesh = new THREE.Mesh(geo, b.material);
+    mesh.castShadow = b.cast;
+    mesh.receiveShadow = b.receive;
+    mesh.renderOrder = b.order;
+    mesh.name = 'baked';
+    root.add(mesh);
+    b.items.forEach((o) => o.parent && o.parent.remove(o));
+    merged += b.items.length;
+  });
+  return merged;
 }
 
 /* -------------------------------------------------------------- materials */
@@ -262,18 +477,31 @@ export function createMaterials(THREE, playfieldTexture) {
       metalness: 0.95,
       envMapIntensity: 1
     }),
+    // Dressed stone: the block map is grey, the colour tints it (a cool
+    // moonlit limestone, darker for the corbels and merlons)
     stone: new THREE.MeshStandardMaterial({
-      color: 0x8b93ad,
-      roughness: 0.82,
-      metalness: 0.12,
+      color: 0xa3a6b8,
+      roughness: 0.84,
+      metalness: 0.05,
       envMapIntensity: 0.25
     }),
     stoneDark: new THREE.MeshStandardMaterial({
-      color: 0x5c6480,
-      roughness: 0.85,
-      metalness: 0.1,
+      color: 0x737a96,
+      roughness: 0.86,
+      metalness: 0.05,
       envMapIntensity: 0.2
     }),
+    // Post and sling rubbers: off-white, matte, the classic look
+    rubberWhite: new THREE.MeshStandardMaterial({
+      color: 0xe9e4d8,
+      roughness: 0.62,
+      metalness: 0,
+      envMapIntensity: 0.3
+    }),
+    // Lit castle windows and the GI bulbs: self-lit, held under the bloom
+    // threshold so the small shapes never sparkle in and out of the bloom
+    window: new THREE.MeshBasicMaterial({ color: 0xffb35c }),
+    bulb: new THREE.MeshBasicMaterial({ color: 0xfff0d0 }),
     wood: new THREE.MeshStandardMaterial({
       color: 0x8a5a2b,
       roughness: 0.7,
@@ -343,19 +571,16 @@ export function createMaterials(THREE, playfieldTexture) {
       metalness: 0.1,
       envMapIntensity: 0.25
     }),
-    targetUp: new THREE.MeshStandardMaterial({
-      color: 0xf26d8d,
-      roughness: 0.4,
-      metalness: 0.35,
-      envMapIntensity: 0.35,
-      emissive: 0xf26d8d,
-      emissiveIntensity: 0.6
-    }),
-    targetDown: new THREE.MeshStandardMaterial({
-      color: 0x3a4265,
-      roughness: 0.6,
-      metalness: 0.3,
-      emissive: 0x000000
+    // The steel lip round each drop-target slot. Raised a hair off the wood
+    // and polygon-offset as well, like the inserts.
+    slotRim: new THREE.MeshStandardMaterial({
+      color: 0xc9d1ec,
+      roughness: 0.3,
+      metalness: 0.9,
+      envMapIntensity: 0.9,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1
     }),
     // Cabinet: painted plywood, deliberately darker than anything on the
     // playfield so the lit surface stays the brightest thing in frame.
@@ -385,7 +610,32 @@ export function createMaterials(THREE, playfieldTexture) {
       polygonOffsetUnits: -1
     })
   };
-  [m.chrome, m.rail, m.armour].forEach((mat) => tameGlints(mat));
+  [m.chrome, m.rail, m.armour, m.slotRim].forEach((mat) => tameGlints(mat));
+  // The GI lamps mirrored in the clearcoat were blowing out to white discs
+  // with a bloom halo. Capped (hue kept), they still read as bulbs in a
+  // glossy coat but no longer bleach the print under them.
+  m.playfield.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <lights_fragment_end>',
+      `#include <lights_fragment_end>
+      #ifdef USE_CLEARCOAT
+      {
+        float pc = max(max(clearcoatSpecularDirect.r, clearcoatSpecularDirect.g), clearcoatSpecularDirect.b);
+        clearcoatSpecularDirect *= min(1.0, 1.5 / max(pc, 1e-4));
+      }
+      #endif
+      {
+        float pd = max(max(reflectedLight.directSpecular.r, reflectedLight.directSpecular.g), reflectedLight.directSpecular.b);
+        reflectedLight.directSpecular *= min(1.0, 1.5 / max(pd, 1e-4));
+      }`
+    );
+  };
+  m.playfield.customProgramCacheKey = () => 'pb-playfield-coat';
+  const stone = stoneTexture(THREE);
+  [m.stone, m.stoneDark].forEach((mat) => {
+    mat.map = stone;
+    mat.userData.worldUV = STONE_TILE;
+  });
   return m;
 }
 
@@ -409,6 +659,9 @@ export const CAB = {
   // has to stay legible at that size.
   dmd: { w: 15.6, h: 3.9, y: 2.5 }
 };
+
+/** Height of the underside of the plastics over the slings and lane guides */
+const PLASTIC_Y = 1.95;
 
 /** World-space top edge of the backbox, for framing the camera */
 export function headTop() {
@@ -524,16 +777,44 @@ function backglassTexture(THREE, logo, faceW, faceH) {
   g.fillText('FLIPPER · 2025', W / 2, tlTop + tlH * 0.78);
   g.letterSpacing = '0px';
 
-  /* ---- Speaker panel: unlit black plastic ---- */
+  /* ---- Speaker panel: printed black plastic with the castle's heraldry ---- */
   const panel = g.createLinearGradient(0, tlBot, 0, H);
-  panel.addColorStop(0, '#15172a');
-  panel.addColorStop(1, '#07080f');
+  panel.addColorStop(0, '#1b1530');
+  panel.addColorStop(0.5, '#110d20');
+  panel.addColorStop(1, '#07060f');
   g.fillStyle = panel;
   g.fillRect(0, tlBot, W, H - tlBot);
-  g.fillStyle = 'rgba(242,193,78,.75)';
+  // Faint diamond trellis, the playfield's pattern carried up into the head
+  g.save();
+  g.beginPath();
+  g.rect(0, tlBot, W, H - tlBot);
+  g.clip();
+  g.strokeStyle = 'rgba(242,193,78,.07)';
+  g.lineWidth = 2;
+  for (let k = -H; k < W + H; k += 46) {
+    g.beginPath();
+    g.moveTo(k, tlBot);
+    g.lineTo(k - (H - tlBot), H);
+    g.moveTo(k, tlBot);
+    g.lineTo(k + (H - tlBot), H);
+    g.stroke();
+  }
+  g.restore();
+  g.fillStyle = 'rgba(242,193,78,.8)';
   g.fillRect(0, tlBot - 3, W, 6);
+  // Gold rules along the bottom edge, with a diamond in the middle
+  g.fillStyle = 'rgba(242,193,78,.55)';
+  g.fillRect(W * 0.04, H - 22, W * 0.92, 3);
+  g.fillRect(W * 0.1, H - 14, W * 0.8, 1.5);
+  g.beginPath();
+  g.moveTo(W / 2, H - 32);
+  g.lineTo(W / 2 + 12, H - 20.5);
+  g.lineTo(W / 2, H - 9);
+  g.lineTo(W / 2 - 12, H - 20.5);
+  g.closePath();
+  g.fill();
 
-  // DMD well: the dark bezel the plasma sits back in
+  // DMD well: the dark bezel the plasma sits back in, edged in gold
   const mx = (dmd.w / 2 + 0.28) * u;
   const my0 = Y(dy + dmd.h / 2 + 0.28);
   const my1 = Y(dy - dmd.h / 2 - 0.28);
@@ -541,31 +822,92 @@ function backglassTexture(THREE, logo, faceW, faceH) {
   g.beginPath();
   g.roundRect(W / 2 - mx, my0, mx * 2, my1 - my0, 18);
   g.fill();
-  g.strokeStyle = 'rgba(160,170,200,.35)';
+  g.strokeStyle = 'rgba(160,170,200,.4)';
   g.lineWidth = 4;
   g.stroke();
+  g.strokeStyle = 'rgba(242,193,78,.6)';
+  g.lineWidth = 2;
+  g.beginPath();
+  g.roundRect(W / 2 - mx - 9, my0 - 9, mx * 2 + 18, my1 - my0 + 18, 24);
+  g.stroke();
 
-  // Speaker grilles either side: a ring of chrome round a field of holes
+  // Speaker grilles either side: a gold-and-chrome ring round perforated
+  // steel, a crest in the middle of each — a real speaker panel's dress
   const gx = dmd.w / 2 + (faceW / 2 - dmd.w / 2) / 2;
-  [-gx, gx].forEach((sx) => {
+  [-gx, gx].forEach((sx, side) => {
     const cx = X(sx);
     const cy = Y(dy);
     const r = Math.min(((faceW / 2 - dmd.w / 2) / 2 - 0.15) * u, (dmd.h / 2) * u);
-    g.fillStyle = '#10121e';
+    const steel = g.createRadialGradient(cx - r * 0.3, cy - r * 0.35, r * 0.1, cx, cy, r);
+    steel.addColorStop(0, '#2a2d3e');
+    steel.addColorStop(1, '#0c0d16');
+    g.fillStyle = steel;
     g.beginPath();
     g.arc(cx, cy, r, 0, Math.PI * 2);
     g.fill();
+    // Hex-staggered perforations
     g.fillStyle = '#000';
-    for (let y = -r; y <= r; y += 11) {
-      for (let x = -r; x <= r; x += 11) {
-        if (x * x + y * y < (r - 8) * (r - 8)) g.fillRect(cx + x - 2.5, cy + y - 2.5, 5, 5);
+    for (let y = -r, row = 0; y <= r; y += 9, row++) {
+      for (let x = -r + (row % 2) * 4.5; x <= r; x += 9) {
+        if (x * x + y * y < (r - 10) * (r - 10)) {
+          g.beginPath();
+          g.arc(cx + x, cy + y, 2.6, 0, Math.PI * 2);
+          g.fill();
+        }
       }
     }
-    g.strokeStyle = 'rgba(200,210,235,.6)';
-    g.lineWidth = 6;
+    // Rings: chrome outside, gold inside
+    const ring = g.createLinearGradient(cx, cy - r, cx, cy + r);
+    ring.addColorStop(0, '#f3f6ff');
+    ring.addColorStop(0.5, '#7b8199');
+    ring.addColorStop(1, '#dfe4f5');
+    g.strokeStyle = ring;
+    g.lineWidth = 9;
     g.beginPath();
     g.arc(cx, cy, r, 0, Math.PI * 2);
     g.stroke();
+    g.strokeStyle = 'rgba(242,193,78,.85)';
+    g.lineWidth = 3;
+    g.beginPath();
+    g.arc(cx, cy, r - 9, 0, Math.PI * 2);
+    g.stroke();
+    // The crest: a shield with a trophy (left) or a tower (right)
+    const s = r * 0.36;
+    g.fillStyle = '#7a1022';
+    g.strokeStyle = '#f2c14e';
+    g.lineWidth = 4;
+    g.beginPath();
+    g.moveTo(cx - s, cy - s);
+    g.lineTo(cx + s, cy - s);
+    g.lineTo(cx + s, cy + s * 0.1);
+    g.quadraticCurveTo(cx + s, cy + s, cx, cy + s * 1.4);
+    g.quadraticCurveTo(cx - s, cy + s, cx - s, cy + s * 0.1);
+    g.closePath();
+    g.fill();
+    g.stroke();
+    g.fillStyle = '#f2c14e';
+    if (side === 0) {
+      g.beginPath();
+      g.moveTo(cx - s * 0.5, cy - s * 0.6);
+      g.lineTo(cx + s * 0.5, cy - s * 0.6);
+      g.quadraticCurveTo(cx + s * 0.45, cy + s * 0.1, cx + s * 0.1, cy + s * 0.2);
+      g.lineTo(cx + s * 0.1, cy + s * 0.45);
+      g.lineTo(cx + s * 0.32, cy + s * 0.62);
+      g.lineTo(cx - s * 0.32, cy + s * 0.62);
+      g.lineTo(cx - s * 0.1, cy + s * 0.45);
+      g.lineTo(cx - s * 0.1, cy + s * 0.2);
+      g.quadraticCurveTo(cx - s * 0.45, cy + s * 0.1, cx - s * 0.5, cy - s * 0.6);
+      g.fill();
+    } else {
+      g.fillRect(cx - s * 0.4, cy - s * 0.25, s * 0.8, s * 0.9);
+      [-0.4, -0.08, 0.24].forEach((k) => g.fillRect(cx + k * s, cy - s * 0.55, s * 0.16, s * 0.32));
+      g.fillStyle = '#7a1022';
+      g.beginPath();
+      g.arc(cx, cy + s * 0.3, s * 0.15, Math.PI, 0);
+      g.lineTo(cx + s * 0.15, cy + s * 0.65);
+      g.lineTo(cx - s * 0.15, cy + s * 0.65);
+      g.fill();
+    }
   });
 
   const tex = new THREE.CanvasTexture(cv);
@@ -742,8 +1084,9 @@ export function buildGlass(THREE) {
   // additive quad is blended whether it adds anything or not, and this is a
   // phone-first game, so the bars are sized to what actually reads.
   [
-    { w: 2.6, l: 34, x: -4.2, z: 0, rot: 0.11, a: 0.36 },
-    { w: 1.8, l: 26, x: 4.4, z: -6, rot: -0.08, a: 0.26 }
+    // Faint: they read as glass, not as searchlights over the play
+    { w: 2.4, l: 34, x: -4.2, z: 0, rot: 0.11, a: 0.17 },
+    { w: 1.6, l: 26, x: 4.4, z: -6, rot: -0.08, a: 0.12 }
   ].forEach((b) => {
     const mesh = new THREE.Mesh(
       geo,
@@ -782,7 +1125,7 @@ export function rampCurve(THREE, path) {
  * A wireform habitrail: two chrome tubes riding either side of the curve,
  * with periodic U-shaped cross ties. The Medieval Madness look.
  */
-function buildWireform(THREE, curve, materials) {
+function buildWireform(THREE, curve, materials, t0 = 0) {
   const g = new THREE.Group();
   const railR = 0.07;
   const halfGap = 0.34;
@@ -791,7 +1134,7 @@ function buildWireform(THREE, curve, materials) {
   [-1, 1].forEach((side) => {
     const pts = [];
     for (let i = 0; i <= 60; i++) {
-      const t = i / 60;
+      const t = t0 + ((1 - t0) * i) / 60;
       const p = curve.getPointAt(t);
       const tan = curve.getTangentAt(t);
       const perp = new THREE.Vector3(-tan.z, 0, tan.x);
@@ -806,6 +1149,7 @@ function buildWireform(THREE, curve, materials) {
   // Cross ties: shallow U-loops under the ball path
   for (let i = 1; i < 12; i++) {
     const t = i / 12;
+    if (t < t0 + 0.02) continue;
     const p = curve.getPointAt(t);
     const tan = curve.getTangentAt(t);
     const tie = new THREE.Mesh(
@@ -818,6 +1162,89 @@ function buildWireform(THREE, curve, materials) {
     g.add(tie);
   }
   return g;
+}
+
+/**
+ * The clear plastic entrance of a ramp: a U-channel of polycarbonate
+ * carrying the ball up off the playfield until the wireform takes over at
+ * `t1`. Returns geometries (in table space) for the plastic, its two lit
+ * top edges, and the floor sticker; buildTable merges them across ramps.
+ */
+const RAMP_PLASTIC_T = 0.2;
+// Where the two ramp-floor stickers are printed on the plastics' sheet, in
+// its playfield units (the band above every plastic is free)
+const STICKER_AREA = [
+  { x0: -10.0, x1: -8.6, y0: 13.75, y1: 16.05 },
+  { x0: -8.3, x1: -6.9, y0: 13.75, y1: 16.05 }
+];
+function plasticRampParts(THREE, curve, t1, row) {
+  const N = 30;
+  const hw = 0.6;
+  const wallH = 0.44;
+  const pos = [];
+  const idx = [];
+  const tops = [[], []];
+  const perp = new THREE.Vector3();
+  const frame = (t) => {
+    const p = curve.getPointAt(t);
+    const tan = curve.getTangentAt(t);
+    perp.set(-tan.z, 0, tan.x);
+    if (perp.lengthSq() < 1e-6) perp.set(1, 0, 0);
+    perp.normalize();
+    return p;
+  };
+  for (let i = 0; i <= N; i++) {
+    const t = (t1 * i) / N;
+    const p = frame(t);
+    const floor = p.y - 0.045;
+    const ring = [
+      p.clone().addScaledVector(perp, -(hw + 0.07)).setY(floor + wallH),
+      p.clone().addScaledVector(perp, -hw).setY(floor),
+      p.clone().addScaledVector(perp, hw).setY(floor),
+      p.clone().addScaledVector(perp, hw + 0.07).setY(floor + wallH)
+    ];
+    ring.forEach((v) => pos.push(v.x, v.y, v.z));
+    tops[0].push(ring[0]);
+    tops[1].push(ring[3]);
+    if (i < N) {
+      const a = i * 4;
+      for (let k = 0; k < 3; k++) idx.push(a + k, a + k + 4, a + k + 1, a + k + 1, a + k + 4, a + k + 5);
+    }
+  }
+  const plastic = new THREE.BufferGeometry();
+  plastic.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  plastic.setIndex(idx);
+  plastic.computeVertexNormals();
+  const edges = tops.map((pts) => new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), N, 0.028, 5, false).toNonIndexed());
+  // The sticker: a decal on the channel floor just inside the mouth
+  const spos = [];
+  const suv = [];
+  const sidx = [];
+  const M = 8;
+  const ts0 = 0.012;
+  const ts1 = 0.075;
+  for (let i = 0; i <= M; i++) {
+    const t = ts0 + ((ts1 - ts0) * i) / M;
+    const p = frame(t);
+    const y = p.y - 0.045 + 0.012;
+    [-1, 1].forEach((side) => {
+      const v = p.clone().addScaledVector(perp, side * (hw - 0.06)).setY(y);
+      spos.push(v.x, v.y, v.z);
+      // Printed on the plastics' shared sheet (see STICKER_AREA)
+      const ar = STICKER_AREA[row];
+      suv.push(side < 0 ? ar.x0 : ar.x1, ar.y0 + ((ar.y1 - ar.y0) * i) / M);
+    });
+    if (i < M) {
+      const a = i * 2;
+      sidx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+    }
+  }
+  const sticker = new THREE.BufferGeometry();
+  sticker.setAttribute('position', new THREE.Float32BufferAttribute(spos, 3));
+  sticker.setAttribute('uv', new THREE.Float32BufferAttribute(suv, 2));
+  sticker.setIndex(sidx);
+  sticker.computeVertexNormals();
+  return { plastic, edges, sticker };
 }
 
 /* ------------------------------------------------------------------ castle */
@@ -838,20 +1265,53 @@ function buildCastle(THREE, materials) {
     );
     tower.position.set(t.x, towerH / 2, -t.y);
     tower.castShadow = true;
+    tower.userData.cylUV = { x: t.x, z: -t.y, r: t.r + 0.17 };
     g.add(tower);
 
-    const roof = new THREE.Mesh(new THREE.ConeGeometry(t.r + 0.3, 1.1, 18), materials.gold);
-    roof.position.set(t.x, towerH + 0.55, -t.y);
+    // A plinth course at the foot and a corbelled gallery under the roof:
+    // the two rings that turn a cylinder into a tower
+    const plinth = new THREE.Mesh(new THREE.CylinderGeometry(t.r + 0.3, t.r + 0.34, 0.3, 18), materials.stoneDark);
+    plinth.position.set(t.x, 0.15, -t.y);
+    plinth.userData.cylUV = { x: t.x, z: -t.y, r: t.r + 0.32 };
+    g.add(plinth);
+    const corbel = new THREE.Mesh(new THREE.CylinderGeometry(t.r + 0.34, t.r + 0.16, 0.34, 18), materials.stoneDark);
+    corbel.position.set(t.x, towerH - 0.12, -t.y);
+    corbel.castShadow = true;
+    corbel.userData.cylUV = { x: t.x, z: -t.y, r: t.r + 0.3 };
+    g.add(corbel);
+
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(t.r + 0.36, 1.25, 18), materials.gold);
+    roof.position.set(t.x, towerH + 0.6, -t.y);
     roof.castShadow = true;
     g.add(roof);
+    // Finial ball on the spire
+    const finial = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), materials.gold);
+    finial.position.set(t.x, towerH + 1.27, -t.y);
+    g.add(finial);
+
+    // Arrow slits facing the player, lit from inside
+    [[0, 1.05, 0.12], [-0.42, 1.95, 0.1], [0.42, 1.95, 0.1]].forEach(([ax, y, w]) => {
+      const a = ax; // around the tower, radians from the front
+      const slit = new THREE.Mesh(new THREE.BoxGeometry(w, 0.42, 0.08), materials.window);
+      const rr = t.r + 0.15;
+      slit.position.set(t.x + Math.sin(a) * rr, y, -t.y + Math.cos(a) * rr);
+      slit.rotation.y = a;
+      g.add(slit);
+    });
 
     // Pennant flag
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.9, 6), materials.chrome);
-    pole.position.set(t.x, towerH + 1.5, -t.y);
+    pole.position.set(t.x, towerH + 1.6, -t.y);
     g.add(pole);
-    const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.3), materials.blueGlow);
-    flag.position.set(t.x + 0.28, towerH + 1.75, -t.y);
-    flag.material = materials.blueGlow;
+    const pennant = new THREE.Shape();
+    pennant.moveTo(0, 0.17);
+    pennant.lineTo(0.62, 0.03);
+    pennant.lineTo(0.5, -0.02);
+    pennant.lineTo(0.62, -0.1);
+    pennant.lineTo(0, -0.17);
+    pennant.closePath();
+    const flag = new THREE.Mesh(new THREE.ShapeGeometry(pennant), materials.blueGlow);
+    flag.position.set(t.x + 0.03, towerH + 1.86, -t.y);
     g.add(flag);
   });
 
@@ -907,6 +1367,7 @@ function buildCastle(THREE, materials) {
   portcullis.add(cross);
   // Bars are laid out in absolute playfield x, so the group only lifts them
   portcullis.position.set(0, 1.88, -gay);
+  portcullis.userData.keep = true;
   g.add(portcullis);
   refs.portcullis = portcullis;
 
@@ -922,6 +1383,7 @@ function buildCastle(THREE, materials) {
   });
   bridge.position.set(gateCx, 0.1, -(gay - 0.35));
   bridge.rotation.x = -Math.PI / 2 + 0.12; // raised (closed)
+  bridge.userData.keep = true;
   g.add(bridge);
   refs.bridge = bridge;
 
@@ -1030,6 +1492,530 @@ function apronTexture(THREE) {
   return tex;
 }
 
+/* ---------------------------------------------------------------- plastics */
+
+// Playfield region the plastics' shared print covers (2:1, like its canvas)
+const PL = { x0: -10.2, x1: 7.0, y0: 7.6, y1: 16.2 };
+
+/** The plastic pieces, in playfield coordinates */
+function plasticOutlines() {
+  const sling = [
+    [-5.0, 12.5], [-5.55, 11.9], [-5.32, 9.3], [-4.86, 8.66], [-3.55, 8.4],
+    [-3.16, 8.78], [-3.42, 9.36], [-4.58, 12.32]
+  ];
+  // A heater shield over the top of each lane guide, where the orbit
+  // returns drop onto the inlane
+  const guide = [[-7.9, 13.5], [-6.3, 13.5], [-6.3, 12.75], [-7.1, 12.05], [-7.9, 12.75]];
+  const mirror = (pts) => pts.map(([x, y]) => [mirrorX(x), y]).reverse();
+  return [
+    { id: 'slingL', pts: sling, art: 'trophy' },
+    { id: 'slingR', pts: mirror(sling), art: 'tower' },
+    { id: 'guideL', pts: guide, art: 'crown' },
+    { id: 'guideR', pts: mirror(guide), art: 'crown' }
+  ];
+}
+
+/**
+ * The plastics' print: screen-printed art on clear acrylic, one canvas for
+ * every piece so they all draw in a single call. Royal blue and crimson
+ * fields, heraldic charges in gold, a white ink keyline and the clear edge
+ * where the art stops short of the cut.
+ */
+function plasticsTexture(THREE, pieces) {
+  const W = 1024;
+  const H = 512;
+  const cv = document.createElement('canvas');
+  cv.width = W;
+  cv.height = H;
+  const g = cv.getContext('2d');
+  const sx = W / (PL.x1 - PL.x0);
+  const X = (x) => (x - PL.x0) * sx;
+  const Y = (y) => (PL.y1 - y) * sx;
+  g.fillStyle = '#1a2160';
+  g.fillRect(0, 0, W, H);
+  const GOLD = '#f2c14e';
+
+  const shield = (cx, cy, s) => {
+    const p = new Path2D();
+    p.moveTo(cx - s, cy - s * 0.95);
+    p.lineTo(cx + s, cy - s * 0.95);
+    p.lineTo(cx + s, cy + s * 0.05);
+    p.quadraticCurveTo(cx + s * 0.95, cy + s * 0.95, cx, cy + s * 1.35);
+    p.quadraticCurveTo(cx - s * 0.95, cy + s * 0.95, cx - s, cy + s * 0.05);
+    p.closePath();
+    return p;
+  };
+  const charge = (kind, cx, cy, s) => {
+    g.fillStyle = GOLD;
+    g.strokeStyle = GOLD;
+    if (kind === 'trophy') {
+      g.beginPath();
+      g.moveTo(cx - s * 0.5, cy - s * 0.55);
+      g.lineTo(cx + s * 0.5, cy - s * 0.55);
+      g.quadraticCurveTo(cx + s * 0.48, cy + s * 0.12, cx + s * 0.1, cy + s * 0.22);
+      g.lineTo(cx + s * 0.1, cy + s * 0.42);
+      g.lineTo(cx + s * 0.32, cy + s * 0.58);
+      g.lineTo(cx - s * 0.32, cy + s * 0.58);
+      g.lineTo(cx - s * 0.1, cy + s * 0.42);
+      g.lineTo(cx - s * 0.1, cy + s * 0.22);
+      g.quadraticCurveTo(cx - s * 0.48, cy + s * 0.12, cx - s * 0.5, cy - s * 0.55);
+      g.fill();
+      g.lineWidth = s * 0.09;
+      g.beginPath();
+      g.arc(cx - s * 0.5, cy - s * 0.3, s * 0.2, Math.PI * 0.5, Math.PI * 1.5);
+      g.arc(cx + s * 0.5, cy - s * 0.3, s * 0.2, -Math.PI * 0.5, Math.PI * 0.5);
+      g.stroke();
+    } else if (kind === 'tower') {
+      g.beginPath();
+      g.moveTo(cx - s * 0.42, cy + s * 0.6);
+      g.lineTo(cx - s * 0.42, cy - s * 0.3);
+      for (let i = 0; i < 4; i++) {
+        const x = cx - s * 0.42 + (i * s * 0.84) / 3.5;
+        g.lineTo(x, cy - s * 0.52);
+        g.lineTo(x + s * 0.12, cy - s * 0.52);
+        g.lineTo(x + s * 0.12, cy - s * 0.3);
+        g.lineTo(x + s * 0.24, cy - s * 0.3);
+      }
+      g.lineTo(cx + s * 0.42, cy - s * 0.52);
+      g.lineTo(cx + s * 0.42, cy + s * 0.6);
+      g.closePath();
+      g.fill();
+      g.fillStyle = '#7a1022';
+      g.beginPath();
+      g.moveTo(cx - s * 0.13, cy + s * 0.6);
+      g.lineTo(cx - s * 0.13, cy + s * 0.2);
+      g.arc(cx, cy + s * 0.2, s * 0.13, Math.PI, 0);
+      g.lineTo(cx + s * 0.13, cy + s * 0.6);
+      g.fill();
+    } else {
+      // Crown
+      g.beginPath();
+      g.moveTo(cx - s * 0.55, cy + s * 0.32);
+      g.lineTo(cx - s * 0.6, cy - s * 0.32);
+      g.lineTo(cx - s * 0.28, cy - s * 0.02);
+      g.lineTo(cx, cy - s * 0.48);
+      g.lineTo(cx + s * 0.28, cy - s * 0.02);
+      g.lineTo(cx + s * 0.6, cy - s * 0.32);
+      g.lineTo(cx + s * 0.55, cy + s * 0.32);
+      g.closePath();
+      g.fill();
+      g.fillStyle = '#c8203f';
+      [-0.6, 0, 0.6].forEach((k) => {
+        g.beginPath();
+        g.arc(cx + k * s * (k ? 1 : 0), cy - s * (k ? 0.36 : 0.52), s * 0.08, 0, Math.PI * 2);
+        g.fill();
+      });
+    }
+  };
+
+  pieces.forEach((pc) => {
+    const path = new Path2D();
+    pc.pts.forEach(([x, y], i) => (i ? path.lineTo(X(x), Y(y)) : path.moveTo(X(x), Y(y))));
+    path.closePath();
+    const xs = pc.pts.map((p) => X(p[0]));
+    const ys = pc.pts.map((p) => Y(p[1]));
+    const bx0 = Math.min(...xs);
+    const bx1 = Math.max(...xs);
+    const by0 = Math.min(...ys);
+    const by1 = Math.max(...ys);
+    const cx = (bx0 + bx1) / 2;
+    const cy = (by0 + by1) / 2;
+    const span = Math.min(bx1 - bx0, by1 - by0);
+    const isSling = pc.id.startsWith('sling');
+    g.save();
+    g.clip(path);
+    const bg = g.createLinearGradient(bx0, by0, bx1, by1);
+    if (isSling) {
+      bg.addColorStop(0, '#4560ea');
+      bg.addColorStop(1, '#1d278a');
+    } else {
+      bg.addColorStop(0, '#d92c4c');
+      bg.addColorStop(1, '#721126');
+    }
+    g.fillStyle = bg;
+    g.fillRect(bx0, by0, bx1 - bx0, by1 - by0);
+    // Diagonal heraldic bend and a field of tiny stars
+    if (isSling) {
+      g.fillStyle = 'rgba(200,32,63,0.75)';
+      g.beginPath();
+      g.moveTo(bx0, by1 - (by1 - by0) * 0.18);
+      g.lineTo(bx1, by0 + (by1 - by0) * 0.2);
+      g.lineTo(bx1, by0 + (by1 - by0) * 0.34);
+      g.lineTo(bx0, by1 - (by1 - by0) * 0.04);
+      g.fill();
+      g.fillStyle = 'rgba(255,236,190,0.6)';
+      for (let i = 0; i < 26; i++) {
+        const a = i * 2.39996;
+        const r = Math.sqrt(i / 26) * span * 0.62;
+        g.fillRect(cx + Math.cos(a) * r, cy + Math.sin(a) * r * 1.4, 2.5, 2.5);
+      }
+    }
+    // The charge on its shield
+    const s = span * (isSling ? 0.3 : 0.3);
+    const scy = cy + (isSling ? -span * 0.12 : -span * 0.04);
+    g.fillStyle = '#0d1033';
+    g.fill(shield(cx, scy, s * 1.08));
+    g.strokeStyle = GOLD;
+    g.lineWidth = Math.max(3, s * 0.12);
+    g.stroke(shield(cx, scy, s * 0.92));
+    charge(pc.art, cx, scy + s * 0.04, s * 0.9);
+    // Inner keylines: dark, then gold, just inside the cut
+    g.lineJoin = 'round';
+    g.strokeStyle = 'rgba(5,6,20,0.7)';
+    g.lineWidth = 22;
+    g.stroke(path);
+    g.strokeStyle = GOLD;
+    g.lineWidth = 12;
+    g.stroke(path);
+    g.strokeStyle = 'rgba(255,248,230,0.95)';
+    g.lineWidth = 4;
+    g.stroke(path);
+    g.restore();
+  });
+  // The ramp-floor stickers: chevrons up the ramp, gold on crimson
+  STICKER_AREA.forEach((ar) => {
+    const x0 = X(ar.x0);
+    const x1 = X(ar.x1);
+    const y0 = Y(ar.y1);
+    const y1 = Y(ar.y0);
+    g.fillStyle = '#8c1028';
+    g.beginPath();
+    g.roundRect(x0 + 4, y0 + 4, x1 - x0 - 8, y1 - y0 - 8, 10);
+    g.fill();
+    g.strokeStyle = GOLD;
+    g.lineWidth = 4;
+    g.stroke();
+    g.fillStyle = GOLD;
+    const w = x1 - x0;
+    for (let k = 0; k < 3; k++) {
+      const cy = y1 - (y1 - y0) * (0.2 + k * 0.28);
+      g.beginPath();
+      g.moveTo(x0 + w * 0.2, cy + w * 0.12);
+      g.lineTo(x0 + w * 0.5, cy - w * 0.16);
+      g.lineTo(x0 + w * 0.8, cy + w * 0.12);
+      g.lineTo(x0 + w * 0.8, cy + w * 0.26);
+      g.lineTo(x0 + w * 0.5, cy - w * 0.02);
+      g.lineTo(x0 + w * 0.2, cy + w * 0.26);
+      g.closePath();
+      g.fill();
+    }
+  });
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  // Extrusion caps carry the shape's own (playfield) coordinates as UVs
+  tex.repeat.set(1 / (PL.x1 - PL.x0), 1 / (PL.y1 - PL.y0));
+  tex.offset.set(-PL.x0 / (PL.x1 - PL.x0), -PL.y0 / (PL.y1 - PL.y0));
+  return tex;
+}
+
+/**
+ * Plastics on their standoffs, with the GI bulbs that live under them.
+ * The print is also the emissive map, tinted every frame with the GI colour
+ * by the game, so the plastics glow with the string and recolour with it.
+ */
+function buildPlastics(THREE, materials, mergeGeometries, extra = []) {
+  const group = new THREE.Group();
+  const pieces = plasticOutlines();
+  const tex = plasticsTexture(THREE, pieces);
+  const mat = new THREE.MeshStandardMaterial({
+    map: tex,
+    emissiveMap: tex,
+    emissive: 0xffe0bc,
+    emissiveIntensity: 0.32,
+    roughness: 0.2,
+    metalness: 0,
+    envMapIntensity: 0.9
+  });
+  const geos = pieces.map((pc) => {
+    const sh = new THREE.Shape();
+    pc.pts.forEach(([x, y], i) => (i ? sh.lineTo(x, y) : sh.moveTo(x, y)));
+    sh.closePath();
+    const geo = flatten(new THREE.ExtrudeGeometry(sh, {
+      depth: 0.07,
+      bevelEnabled: true,
+      bevelThickness: 0.02,
+      bevelSize: 0.03,
+      bevelOffset: -0.03,
+      bevelSegments: 1
+    }));
+    geo.translate(0, PLASTIC_Y + 0.02, 0);
+    return geo;
+  });
+  // The ramp stickers print on the same sheet, so they ride in this mesh
+  extra.forEach((x) => geos.push(x.index ? x.toNonIndexed() : x));
+  const mesh = new THREE.Mesh(mergeGeometries(geos, false), mat);
+  mesh.castShadow = true;
+  mesh.userData.keep = true;
+  group.add(mesh);
+
+  // Standoffs under the lane-guide shields (the slings stand on their posts)
+  pieces.filter((p) => p.id.startsWith('guide')).forEach((pc) => {
+    const top = pc.pts.reduce((a, p) => a + p[0], 0) / pc.pts.length;
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, PLASTIC_Y, 10), materials.chrome);
+    post.position.set(top, PLASTIC_Y / 2, -12.85);
+    group.add(post);
+  });
+
+  // GI bulbs tucked under the sling plastics, two a side
+  const bulbs = [[-5.08, 10.1], [-4.25, 8.78]];
+  bulbs.concat(bulbs.map(([x, y]) => [mirrorX(x), y])).forEach(([x, y]) => {
+    const socket = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.2, 8), materials.rubber);
+    socket.position.set(x, 0.1, -y);
+    group.add(socket);
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), materials.bulb);
+    bulb.scale.y = 1.35;
+    bulb.position.set(x, 0.34, -y);
+    group.add(bulb);
+  });
+  return { group, material: mat };
+}
+
+/* ------------------------------------------------------------ flashers */
+
+/**
+ * Two flasher domes on the wall tops, either side of the upper playfield.
+ * Each has its own material so the game can fire them independently; the
+ * light they throw is a punch on the nearest GI lamp (adding lights would
+ * change every shader on the table mid-game).
+ */
+function buildFlashers(THREE, materials) {
+  const group = new THREE.Group();
+  const list = [
+    { id: 'left', x: -10.15, y: 22.6, color: 0xff3b4e },
+    { id: 'right', x: 6.6, y: 21.2, color: 0xffb02e }
+  ].map((f) => {
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.56, 0.6, 0.18, 16), materials.rubber);
+    base.position.set(f.x, L.wallH + 0.11, -f.y);
+    group.add(base);
+    const mat = new THREE.MeshStandardMaterial({
+      color: f.color,
+      roughness: 0.18,
+      metalness: 0,
+      transparent: true,
+      opacity: 0.82,
+      emissive: f.color,
+      emissiveIntensity: 0.18,
+      envMapIntensity: 1.2
+    });
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(0.52, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), mat);
+    dome.position.set(f.x, L.wallH + 0.2, -f.y);
+    dome.scale.y = 1.25;
+    dome.renderOrder = 3;
+    dome.userData.keep = true;
+    group.add(dome);
+    return { id: f.id, x: f.x, y: f.y, color: new THREE.Color(f.color), mat, dome, t: 9 };
+  });
+  return { group, list };
+}
+
+/* ---------------------------------------------------------- lamp matrix */
+
+/**
+ * Small round inserts: the grenar row, the P-O-K-A-L letters, the locks,
+ * bonus multipliers, kickback and the inlanes. A real playfield is covered
+ * in these; the art is printed on the wood over a frosted lens.
+ *
+ * All of them are ONE mesh (and their glows a second), coloured per vertex:
+ * the game sets each lamp's level and the colours are rewritten in place —
+ * two draw calls for any number of lamps, and no new lights.
+ */
+const LAMP_DEFS = [
+  // Grenar, a row over the flippers, left to right in the order they come
+  ...["'12", "'13", "'19", "'22", "'24"].map((label, i) => ({
+    id: `gren${i}`, x: -3.3 + i * 0.84, y: 10.3, r: 0.33, color: 0x7c8cf8, label
+  })),
+  { id: 'gren5', x: -3.3 + 5 * 0.84, y: 10.3, r: 0.33, color: 0xffd166, label: 'crown' },
+  // The letters, just in front of each drop target
+  ...L.targets.map((t, i) => ({
+    id: `pokal${i}`, x: t.x + Math.sin(t.a) * 1.05, y: t.y - Math.cos(t.a) * 1.05, r: 0.36, color: 0xf26d8d, label: t.letter
+  })),
+  // Lock lamps either side of the castle arrow
+  { id: 'lock0', x: -2.25, y: 19.55, r: 0.3, color: 0x7c8cf8, label: 'lock' },
+  { id: 'lock1', x: -0.15, y: 19.55, r: 0.3, color: 0x7c8cf8, label: 'lock' },
+  // Bonus multipliers: a second row under the grenar, clear of the
+  // raised flippers
+  ...[2, 3, 4, 5, 6].map((n, i) => ({
+    id: `bx${n}`, x: L.centerX + (i - 2) * 0.84, y: 9.38, r: 0.27, color: 0xffb347, label: `${n}×`
+  })),
+  { id: 'kickback', x: -8.05, y: 11.75, r: 0.3, color: 0xf2c14e, label: 'K' },
+  { id: 'inL', x: -6.15, y: 11.55, r: 0.26, color: 0x5eead4, label: '' },
+  { id: 'inR', x: mirrorX(-6.15), y: 11.55, r: 0.26, color: 0x5eead4, label: '' }
+];
+
+function lampAtlas(THREE, defs) {
+  const C = 64;
+  const cols = 8;
+  const rows = Math.ceil(defs.length / cols);
+  const cv = document.createElement('canvas');
+  cv.width = C * cols;
+  cv.height = C * rows;
+  const g = cv.getContext('2d');
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  defs.forEach((d, i) => {
+    const x = (i % cols) * C + C / 2;
+    const y = Math.floor(i / cols) * C + C / 2;
+    // Frosted lens: bright core falling off to the rim, a thin lit edge
+    const grad = g.createRadialGradient(x - 4, y - 5, 2, x, y, C / 2);
+    grad.addColorStop(0, '#ffffff');
+    grad.addColorStop(0.55, '#d8d8d8');
+    grad.addColorStop(0.86, '#8a8a8a');
+    grad.addColorStop(0.94, '#e6e6e6');
+    grad.addColorStop(1, '#5a5a5a');
+    g.fillStyle = grad;
+    g.fillRect(x - C / 2, y - C / 2, C, C);
+    // The print over it, in dark ink
+    g.fillStyle = 'rgba(8,10,28,0.82)';
+    g.strokeStyle = 'rgba(8,10,28,0.82)';
+    if (d.label === 'crown') {
+      g.beginPath();
+      g.moveTo(x - 16, y + 10);
+      g.lineTo(x - 18, y - 9);
+      g.lineTo(x - 8, y + 1);
+      g.lineTo(x, y - 14);
+      g.lineTo(x + 8, y + 1);
+      g.lineTo(x + 18, y - 9);
+      g.lineTo(x + 16, y + 10);
+      g.closePath();
+      g.fill();
+    } else if (d.label === 'lock') {
+      g.lineWidth = 5;
+      g.beginPath();
+      g.arc(x, y - 4, 8, Math.PI, 0);
+      g.stroke();
+      g.fillRect(x - 12, y - 3, 24, 17);
+    } else if (d.label) {
+      const big = d.label.length <= 1;
+      g.font = `800 ${big ? 34 : 24}px "Schibsted Grotesk", Inter, Arial, sans-serif`;
+      g.fillText(d.label, x, y + 2);
+    } else {
+      // Plain chevron
+      g.beginPath();
+      g.moveTo(x - 14, y - 6);
+      g.lineTo(x, y + 9);
+      g.lineTo(x + 14, y - 6);
+      g.lineTo(x + 9, y - 10);
+      g.lineTo(x, y - 1);
+      g.lineTo(x - 9, y - 10);
+      g.closePath();
+      g.fill();
+    }
+  });
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return { tex, cols, rows };
+}
+
+function buildLamps(THREE, materials, mergeGeometries) {
+  const group = new THREE.Group();
+  const defs = LAMP_DEFS;
+  const { tex, cols, rows } = lampAtlas(THREE, defs);
+  const SEG = 20;
+  const lensGeos = [];
+  const glowGeos = [];
+  const bezels = [];
+  defs.forEach((d, i) => {
+    const cu = (i % cols) / cols;
+    const cvv = 1 - (Math.floor(i / cols) + 1) / rows;
+    const lens = new THREE.CircleGeometry(d.r, SEG);
+    const { uv } = lens.attributes;
+    for (let k = 0; k < uv.count; k++) uv.setXY(k, cu + uv.getX(k) / cols, cvv + uv.getY(k) / rows);
+    flatten(lens).translate(d.x, 0.032, -d.y);
+    lensGeos.push(lens.toNonIndexed());
+    const glow = flatten(new THREE.PlaneGeometry(d.r * 5.2, d.r * 5.2)).translate(d.x, 0.05, -d.y);
+    glowGeos.push(glow.toNonIndexed());
+    const ring = new THREE.Mesh(flatten(new THREE.RingGeometry(d.r * 0.98, d.r + 0.08, SEG)), materials.bezel);
+    ring.position.set(d.x, 0.018, -d.y);
+    bezels.push(ring);
+  });
+  bezels.forEach((b) => group.add(b));
+  const lensGeo = mergeGeometries(lensGeos, false);
+  const glowGeo = mergeGeometries(glowGeos, false);
+  const lensVerts = lensGeos[0].attributes.position.count;
+  const glowVerts = glowGeos[0].attributes.position.count;
+  lensGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(lensGeo.attributes.position.count * 3), 3));
+  glowGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(glowGeo.attributes.position.count * 3), 3));
+  const lens = new THREE.Mesh(lensGeo, new THREE.MeshBasicMaterial({
+    map: tex,
+    vertexColors: true,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2
+  }));
+  lens.userData.keep = true;
+  group.add(lens);
+  const glowTex = radialTexture(THREE, 0, [
+    [0, 'rgba(255,255,255,0.7)'],
+    [0.35, 'rgba(255,255,255,0.22)'],
+    [1, 'rgba(255,255,255,0)']
+  ]);
+  // The glow quads share one radial map; each covers the whole texture
+  const glow = new THREE.Mesh(glowGeo, new THREE.MeshBasicMaterial({
+    map: glowTex,
+    vertexColors: true,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    toneMapped: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -3,
+    polygonOffsetUnits: -3
+  }));
+  glow.renderOrder = 2;
+  glow.userData.keep = true;
+  group.add(glow);
+
+  const index = {};
+  defs.forEach((d, i) => {
+    index[d.id] = i;
+  });
+  const base = defs.map((d) => new THREE.Color(d.color));
+  const level = new Float32Array(defs.length);
+  const shown = new Float32Array(defs.length).fill(-1);
+  const tint = defs.map(() => null);
+  const tmp = new THREE.Color();
+  return {
+    group,
+    defs,
+    /** Target level 0…1 (and optional colour override) for a lamp by id */
+    set(id, v, color = null) {
+      const i = index[id];
+      if (i === undefined) return;
+      level[i] = v;
+      tint[i] = color;
+    },
+    /** Eases toward the targets and rewrites the vertex colours that changed */
+    update(dt) {
+      const k = Math.min(1, dt * 16);
+      const lc = lensGeo.attributes.color;
+      const gc = glowGeo.attributes.color;
+      let dirty = false;
+      for (let i = 0; i < defs.length; i++) {
+        const cur = shown[i] < 0 ? level[i] : shown[i] + (level[i] - shown[i]) * k;
+        if (Math.abs(cur - shown[i]) < 0.002) continue;
+        shown[i] = cur;
+        dirty = true;
+        const c = tint[i] || base[i];
+        // Unlit: the dark tinted plastic. Lit: a bright lens, peak kept
+        // just under the bloom threshold.
+        tmp.copy(c).multiplyScalar(0.24 + cur * 0.9);
+        tmp.r += cur * 0.12;
+        tmp.g += cur * 0.12;
+        tmp.b += cur * 0.12;
+        for (let v = 0; v < lensVerts; v++) lc.setXYZ(i * lensVerts + v, tmp.r, tmp.g, tmp.b);
+        tmp.copy(c).multiplyScalar(cur * 0.85);
+        for (let v = 0; v < glowVerts; v++) gc.setXYZ(i * glowVerts + v, tmp.r, tmp.g, tmp.b);
+      }
+      if (dirty) {
+        lc.needsUpdate = true;
+        gc.needsUpdate = true;
+      }
+    }
+  };
+}
+
 /* ------------------------------------------------------------------ builder */
 
 export function buildTable(THREE, mergeGeometries, materials) {
@@ -1045,6 +2031,7 @@ export function buildTable(THREE, mergeGeometries, materials) {
   );
   playfield.position.set((ART.x0 + ART.x1) / 2, 0, -(ART.y0 + ART.y1) / 2);
   playfield.receiveShadow = true;
+  playfield.userData.keep = true;
   group.add(playfield);
   refs.playfield = playfield;
 
@@ -1079,20 +2066,32 @@ export function buildTable(THREE, mergeGeometries, materials) {
   pushChain(L.leftRail, 0.22, railShapes);
   pushChain(L.rightRail, 0.22, railShapes);
   // One-way return gates read as thin wires
-  pushChain(L.leftReturnGate, 0.09, railShapes);
-  pushChain(L.rightReturnGate, 0.09, railShapes);
+  const gateShapes = [];
+  pushChain(L.leftReturnGate, 0.09, gateShapes);
+  pushChain(L.rightReturnGate, 0.09, gateShapes);
 
-  const wallGeos = wallShapes.map((s) =>
-    flatten(new THREE.ExtrudeGeometry(s, { depth: L.wallH, bevelEnabled: false }))
-  );
+  // Rolled edges. A sharp-cornered extrusion has nothing along its top to
+  // catch the light, so from above every wall read as a flat grey ribbon.
+  // The bevel is pulled INSIDE the outline (bevelOffset = −size), so the
+  // sides stand exactly where the colliders are; the bottom bevel sinks
+  // below the wood, out of sight.
+  const bevelled = (s, h, size, segs = 5) => flatten(new THREE.ExtrudeGeometry(s, {
+    depth: h - size,
+    curveSegments: segs,
+    bevelEnabled: true,
+    bevelThickness: size,
+    bevelSize: size,
+    bevelOffset: -size,
+    bevelSegments: 2
+  }));
+  const wallGeos = wallShapes.map((s) => bevelled(s, L.wallH, 0.09));
   const walls = new THREE.Mesh(mergeGeometries(wallGeos), materials.rail);
   walls.castShadow = true;
   walls.receiveShadow = true;
   group.add(walls);
 
-  const railGeos = railShapes.map((s) =>
-    flatten(new THREE.ExtrudeGeometry(s, { depth: 1.0, bevelEnabled: false }))
-  );
+  const railGeos = railShapes.map((s) => bevelled(s, 1.0, 0.07, 6))
+    .concat(gateShapes.map((s) => flatten(new THREE.ExtrudeGeometry(s, { depth: 1.0, curveSegments: 5, bevelEnabled: false }))));
   const rails = new THREE.Mesh(mergeGeometries(railGeos), materials.chrome);
   rails.castShadow = true;
   group.add(rails);
@@ -1121,19 +2120,50 @@ export function buildTable(THREE, mergeGeometries, materials) {
       materials.blueGlow
     );
     face.castShadow = true;
+    face.userData.keep = true;
     group.add(face);
     refs[name] = face;
+
+    // The rubber ring stretched round three posts, as on every real sling:
+    // the two plain edges carry the off-white band, the kicker edge keeps
+    // its lit face. Each post also carries a plastic above it (below).
+    const corners = [P.T, P.BO, P.BI];
+    const cx = (P.T[0] + P.BO[0] + P.BI[0]) / 3;
+    const cy = (P.T[1] + P.BO[1] + P.BI[1]) / 3;
+    const out = (p, k) => {
+      const dx = p[0] - cx;
+      const dy = p[1] - cy;
+      const l = Math.hypot(dx, dy) || 1;
+      return new THREE.Vector3(p[0] + (dx / l) * k, 0.62, -(p[1] + (dy / l) * k));
+    };
+    const band = new THREE.CatmullRomCurve3([out(P.T, 0.17), out(P.BO, 0.17), out(P.BI, 0.17)], false, 'catmullrom', 0.1);
+    const bandMesh = new THREE.Mesh(new THREE.TubeGeometry(band, 24, 0.11, 6, false), materials.rubberWhite);
+    bandMesh.castShadow = true;
+    group.add(bandMesh);
+    corners.forEach((c) => {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, PLASTIC_Y, 10), materials.chrome);
+      post.position.set(c[0], PLASTIC_Y / 2, -c[1]);
+      group.add(post);
+    });
   });
 
-  /* ---- Posts ---- */
+  /* ---- Posts: brass, each wearing its rubber ring and a star-post cap ---- */
   L.posts.forEach((p) => {
     const post = new THREE.Mesh(
-      new THREE.CylinderGeometry(p.r, p.r, L.wallH, 16),
+      new THREE.CylinderGeometry(p.r * 0.5, p.r * 0.56, L.wallH, 12),
       materials.gold
     );
     post.position.set(p.x, L.wallH / 2, -p.y);
     post.castShadow = true;
     group.add(post);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(p.r - 0.085, 0.085, 8, 20), materials.rubberWhite);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(p.x, 0.62, -p.y);
+    ring.castShadow = true;
+    group.add(ring);
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(p.r * 0.8, p.r * 0.95, 0.22, 8), materials.blueGlow);
+    cap.position.set(p.x, L.wallH + 0.11, -p.y);
+    group.add(cap);
   });
 
   /* ---- Pop bumpers ---- */
@@ -1197,24 +2227,166 @@ export function buildTable(THREE, mergeGeometries, materials) {
     light.position.y = 1.9;
     g.add(light);
 
+    g.userData.keep = true;
     group.add(g);
     refs.bumpers.push({ group: g, ring, trophy: dome, bead, light, base: 0, isTrophy: false });
   });
 
-  /* ---- Drop targets (angled banks) ---- */
+  /* ---- Drop targets (angled banks) ----
+     Real drop targets: a thin upright plate (≈5 mm), its printed face in
+     the table's crimson and gold, a rounded top edge, standing in a steel-
+     lipped slot it drops straight down into. The plate's front face sits on
+     the collider's front (radius 0.26), so the ball meets the print, not air. */
+  const PLATE_W = L.targets[0].half * 2;
+  const PLATE_TOP = 1.12;
+  const PLATE_LOW = -0.3; // hidden in the slot while up
+  const PLATE_D = 0.11; // + 2 × 0.025 bevel ≈ 0.16 ≈ 4 mm
+  const PLATE_Z = 0.25 - (PLATE_D + 0.025); // front face at +0.25
+  const plateShape = new THREE.Shape();
+  {
+    const hw = PLATE_W / 2;
+    const r = 0.13;
+    plateShape.moveTo(-hw, PLATE_LOW);
+    plateShape.lineTo(hw, PLATE_LOW);
+    plateShape.lineTo(hw, PLATE_TOP - r);
+    plateShape.quadraticCurveTo(hw, PLATE_TOP, hw - r, PLATE_TOP);
+    plateShape.lineTo(-hw + r, PLATE_TOP);
+    plateShape.quadraticCurveTo(-hw, PLATE_TOP, -hw, PLATE_TOP - r);
+    plateShape.closePath();
+  }
+  const plateGeo = new THREE.ExtrudeGeometry(plateShape, {
+    depth: PLATE_D,
+    curveSegments: 4,
+    bevelEnabled: true,
+    bevelThickness: 0.025,
+    bevelSize: 0.025,
+    bevelOffset: -0.025,
+    bevelSegments: 2
+  });
+  plateGeo.translate(0, 0, PLATE_Z);
+  {
+    // The edges (group 1) sample the plain crimson strip at the bottom of
+    // the print, so one material (one draw) covers the whole plate
+    const { uv } = plateGeo.attributes;
+    plateGeo.groups.filter((gr) => gr.materialIndex === 1).forEach((gr) => {
+      for (let k = gr.start; k < gr.start + gr.count; k++) uv.setXY(k, 0, -0.25);
+    });
+    plateGeo.clearGroups();
+  }
+  // The slot: a dark well with a steel lip, fixed to the playfield
+  const slotDark = flatten(new THREE.PlaneGeometry(PLATE_W + 0.12, 0.34));
+  const slotRim = (() => {
+    const ow = (PLATE_W + 0.36) / 2;
+    const oh = 0.29;
+    const iw = (PLATE_W + 0.1) / 2;
+    const ih = 0.16;
+    const sh = new THREE.Shape();
+    sh.moveTo(-ow, -oh);
+    sh.lineTo(ow, -oh);
+    sh.lineTo(ow, oh);
+    sh.lineTo(-ow, oh);
+    sh.closePath();
+    const hole = new THREE.Path();
+    hole.moveTo(-iw, -ih);
+    hole.lineTo(-iw, ih);
+    hole.lineTo(iw, ih);
+    hole.lineTo(iw, -ih);
+    hole.closePath();
+    sh.holes.push(hole);
+    return flatten(new THREE.ExtrudeGeometry(sh, { depth: 0.05, bevelEnabled: false }));
+  })();
+  const slotZ = PLATE_Z + (PLATE_D + 0.05) / 2 - 0.025;
+  const faceArt = (letter) => {
+    const W = 128;
+    const H = 165;
+    const vis = Math.round(H * (PLATE_TOP / (PLATE_TOP - PLATE_LOW)));
+    const cv = document.createElement('canvas');
+    cv.width = W;
+    cv.height = H;
+    const g = cv.getContext('2d');
+    g.fillStyle = '#5a0a1c';
+    g.fillRect(0, 0, W, H);
+    const bg = g.createLinearGradient(0, 0, 0, vis);
+    bg.addColorStop(0, '#c21d40');
+    bg.addColorStop(0.6, '#8f1029');
+    bg.addColorStop(1, '#650b1e');
+    g.fillStyle = bg;
+    g.fillRect(0, 0, W, vis);
+    // Gold frame with a fine inner line
+    g.strokeStyle = '#f2c14e';
+    g.lineWidth = 5;
+    g.strokeRect(8, 8, W - 16, vis - 14);
+    g.strokeStyle = 'rgba(242,193,78,.55)';
+    g.lineWidth = 1.5;
+    g.strokeRect(14, 14, W - 28, vis - 26);
+    // Diamond studs in the corners
+    g.fillStyle = '#f2c14e';
+    [[18, 18], [W - 18, 18], [18, vis - 13], [W - 18, vis - 13]].forEach(([x, y]) => {
+      g.beginPath();
+      g.moveTo(x, y - 5);
+      g.lineTo(x + 5, y);
+      g.lineTo(x, y + 5);
+      g.lineTo(x - 5, y);
+      g.closePath();
+      g.fill();
+    });
+    // The letter, a heavy old-style serif in gold with a cut shadow
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.font = '800 82px Fraunces, "Iowan Old Style", Georgia, serif';
+    g.fillStyle = 'rgba(30,4,10,.75)';
+    g.fillText(letter, W / 2 + 2.5, vis / 2 + 5.5);
+    const gold = g.createLinearGradient(0, vis * 0.2, 0, vis * 0.85);
+    gold.addColorStop(0, '#ffe7a3');
+    gold.addColorStop(0.5, '#f2c14e');
+    gold.addColorStop(1, '#b8861f');
+    g.fillStyle = gold;
+    g.fillText(letter, W / 2, vis / 2 + 3);
+    // Gloss rolling over the rounded top edge
+    const gl = g.createLinearGradient(0, 0, 0, 34);
+    gl.addColorStop(0, 'rgba(255,240,230,.4)');
+    gl.addColorStop(1, 'rgba(255,240,230,0)');
+    g.fillStyle = gl;
+    g.fillRect(0, 0, W, 34);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    // Cap UVs are the shape's own coordinates
+    tex.repeat.set(1 / PLATE_W, 1 / (PLATE_TOP - PLATE_LOW));
+    tex.offset.set(0.5, -PLATE_LOW / (PLATE_TOP - PLATE_LOW));
+    return tex;
+  };
   L.targets.forEach((t) => {
     const g = new THREE.Group();
     g.position.set(t.x, 0, -t.y);
     g.rotation.y = t.a;
-    const face = new THREE.Mesh(
-      new THREE.BoxGeometry(t.half * 2, 1.15, 0.42),
-      materials.targetUp.clone()
-    );
-    face.position.y = 0.58;
+    const art = faceArt(t.letter);
+    const mat = new THREE.MeshStandardMaterial({
+      map: art,
+      roughness: 0.3,
+      metalness: 0.05,
+      envMapIntensity: 0.6,
+      emissive: 0xffffff,
+      emissiveMap: art,
+      emissiveIntensity: 0.3
+    });
+    const face = new THREE.Mesh(plateGeo, mat);
     face.castShadow = true;
     g.add(face);
+    g.userData.keep = true;
     group.add(g);
-    refs.targets.push({ group: g, face, down: false });
+    // The slot stays put on the playfield (static, so it is batched)
+    const slot = new THREE.Group();
+    slot.position.copy(g.position);
+    slot.rotation.y = t.a;
+    const well = new THREE.Mesh(slotDark, materials.bezel);
+    well.position.set(0, 0.016, slotZ);
+    slot.add(well);
+    const rim = new THREE.Mesh(slotRim, materials.slotRim);
+    rim.position.set(0, 0, slotZ);
+    slot.add(rim);
+    group.add(slot);
+    refs.targets.push({ group: g, face, mat, down: false });
   });
 
   /* ---- Castle ---- */
@@ -1250,6 +2422,7 @@ export function buildTable(THREE, mergeGeometries, materials) {
     light.position.y = 2.4;
     g.add(light);
 
+    g.userData.keep = true;
     group.add(g);
     refs.jackpot = { group: g, trophy, halo, light };
   }
@@ -1257,10 +2430,18 @@ export function buildTable(THREE, mergeGeometries, materials) {
   /* ---- Wireform ramps ---- */
   refs.rampCurves = {};
   refs.rampArches = {};
-  ['left', 'right'].forEach((side) => {
+  // Clear plastic entrances, merged across both ramps (three draws in all)
+  const rampPlastic = [];
+  const rampEdges = [];
+  const rampStickers = [];
+  ['left', 'right'].forEach((side, row) => {
     const curve = rampCurve(THREE, L.ramps[side].path);
     refs.rampCurves[side] = curve;
-    group.add(buildWireform(THREE, curve, materials));
+    group.add(buildWireform(THREE, curve, materials, RAMP_PLASTIC_T - 0.01));
+    const parts = plasticRampParts(THREE, curve, RAMP_PLASTIC_T, row);
+    rampPlastic.push(parts.plastic);
+    rampEdges.push(...parts.edges);
+    rampStickers.push(parts.sticker);
 
     // Entrance portal: a golden arch at the capture point, flashed on capture
     const p0 = curve.getPointAt(0);
@@ -1271,9 +2452,45 @@ export function buildTable(THREE, mergeGeometries, materials) {
     arch.position.set(p0.x, 0.35, p0.z);
     const tan = curve.getTangentAt(0);
     arch.rotation.y = Math.atan2(tan.x, tan.z) + Math.PI / 2;
+    arch.userData.keep = true;
     group.add(arch);
     refs.rampArches[side] = arch;
+
+    // The entrance flap: a steel lip from the wood up to where the wires
+    // start, so a captured ball is seen to roll on rather than jump
+    const flat = new THREE.Vector3(tan.x, 0, tan.z).normalize();
+    const run = 0.75;
+    const rise = Math.max(0.05, p0.y - 0.08);
+    const flap = new THREE.Group();
+    flap.position.set(p0.x - flat.x * run * 0.5, rise * 0.5 + 0.01, p0.z - flat.z * run * 0.5);
+    flap.rotation.order = 'YXZ';
+    flap.rotation.y = Math.atan2(flat.x, flat.z);
+    flap.rotation.x = -Math.atan2(rise, run);
+    const lip = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.035, Math.hypot(run, rise) + 0.06), materials.chrome);
+    flap.add(lip);
+    group.add(flap);
   });
+  {
+    // Polycarbonate: nearly invisible face-on, bright where it turns away
+    // (the env catches it), never writing depth so the ball shows through
+    const plastic = new THREE.Mesh(mergeGeometries(rampPlastic, false), tameGlints(new THREE.MeshStandardMaterial({
+      color: 0xe4ecff,
+      roughness: 0.06,
+      metalness: 0,
+      transparent: true,
+      opacity: 0.17,
+      envMapIntensity: 1.1,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    }), 0.7));
+    plastic.renderOrder = 4;
+    plastic.userData.keep = true;
+    group.add(plastic);
+    // The cut edges of the plastic carry the GI's light: thin lit lines on
+    // top, in the bulbs' material (it follows the GI colour, and batches)
+    rampEdges.forEach((geo) => group.add(new THREE.Mesh(geo, materials.bulb)));
+    refs.rampStickers = rampStickers;
+  }
 
   /* ---- Apron: the angled plate over the drain ---- */
   {
@@ -1343,12 +2560,43 @@ export function buildTable(THREE, mergeGeometries, materials) {
       [1, 'rgba(255,255,255,0)']
     ]);
     const poolGeo = flatten(new THREE.PlaneGeometry(1, 1));
+    // The lens: a frosted insert is brightest where the bulb sits under it
+    // and falls off toward its edge, with a thin bright rim where the light
+    // escapes the cut — the difference between a lit plastic and a sticker.
+    const lensCanvas = document.createElement('canvas');
+    lensCanvas.width = 128;
+    lensCanvas.height = 128;
+    {
+      const lg = lensCanvas.getContext('2d');
+      const grad = lg.createRadialGradient(64, 60, 4, 64, 64, 70);
+      grad.addColorStop(0, '#ffffff');
+      grad.addColorStop(0.5, '#cfcfcf');
+      grad.addColorStop(0.82, '#707070');
+      grad.addColorStop(0.9, '#bdbdbd');
+      grad.addColorStop(1, '#4a4a4a');
+      lg.fillStyle = grad;
+      lg.fillRect(0, 0, 128, 128);
+    }
+    const lensFor = (disc) => {
+      const t = new THREE.CanvasTexture(lensCanvas);
+      t.colorSpace = THREE.SRGBColorSpace;
+      if (!disc) {
+        // Arrow caps carry shape coordinates: x −0.72…0.72, y −0.5…0.86
+        t.repeat.set(1 / 1.44, 1 / 1.36);
+        t.offset.set(0.5, 0.5 / 1.36);
+      }
+      return t;
+    };
+    const arrowLens = lensFor(false);
+    const discLens = lensFor(true);
     refs.inserts = {};
     SPOTS.forEach((s) => {
       const mat = materials.insert.clone();
       mat.color = new THREE.Color(s.color);
       mat.emissive = new THREE.Color(s.color);
       mat.emissiveIntensity = 0.12;
+      mat.emissiveMap = s.disc ? discLens : arrowLens;
+      mat.map = s.disc ? discLens : arrowLens;
 
       const bezel = new THREE.Mesh(s.disc ? bezelDisc : bezelGeo, materials.bezel);
       bezel.position.set(s.x, 0.016, -s.y);
@@ -1358,6 +2606,7 @@ export function buildTable(THREE, mergeGeometries, materials) {
       const mesh = new THREE.Mesh(s.disc ? discGeo : geo, mat);
       mesh.position.set(s.x, 0.035, -s.y);
       mesh.rotation.y = s.a;
+      mesh.userData.keep = true;
       group.add(mesh);
 
       const pool = new THREE.Mesh(
@@ -1378,6 +2627,7 @@ export function buildTable(THREE, mergeGeometries, materials) {
       pool.position.set(s.x, 0.05, -s.y);
       pool.scale.setScalar(s.disc ? 2.8 : 3.4);
       pool.renderOrder = 2;
+      pool.userData.keep = true;
       group.add(pool);
 
       const light = new THREE.PointLight(s.color, 0, 7, 2);
@@ -1406,6 +2656,7 @@ export function buildTable(THREE, mergeGeometries, materials) {
     );
     blade.position.y = 1.05;
     blade.castShadow = true;
+    blade.userData.keep = true;
     g.add(blade);
     group.add(g);
     refs.spinner = { group: g, blade, spin: 0 };
@@ -1424,29 +2675,19 @@ export function buildTable(THREE, mergeGeometries, materials) {
     body.castShadow = true;
     g.add(body);
 
-    // Eyes so it reads as a creature, not a peg
-    [-1, 1].forEach((side) => {
-      const eye = new THREE.Mesh(
-        new THREE.SphereGeometry(0.13, 12, 8),
-        materials.trollEye
-      );
-      eye.position.set(side * 0.24, 1.42, t.r * 0.72);
-      g.add(eye);
-    });
-    // Club-like horns
-    [-1, 1].forEach((side) => {
-      const horn = new THREE.Mesh(
-        new THREE.ConeGeometry(0.11, 0.42, 8),
-        materials.stoneDark
-      );
-      horn.position.set(side * 0.36, 1.78, 0);
-      horn.rotation.z = side * 0.4;
-      g.add(horn);
-    });
+    // Eyes so it reads as a creature, not a peg, and club-like horns —
+    // each pair one mesh (a troll is drawn every frame of a gren)
+    const eyes = mergeGeometries([-1, 1].map((side) =>
+      new THREE.SphereGeometry(0.13, 12, 8).translate(side * 0.24, 1.42, t.r * 0.72)), false);
+    g.add(new THREE.Mesh(eyes, materials.trollEye));
+    const horns = mergeGeometries([-1, 1].map((side) =>
+      new THREE.ConeGeometry(0.11, 0.42, 8).rotateZ(side * 0.4).translate(side * 0.36, 1.78, 0)), false);
+    g.add(new THREE.Mesh(horns, materials.stoneDark));
 
     // Retracted below the playfield until the mode raises them
     g.position.y = -2.2;
     g.visible = false;
+    g.userData.keep = true;
     group.add(g);
     return { group: g, up: false };
   });
@@ -1476,6 +2717,7 @@ export function buildTable(THREE, mergeGeometries, materials) {
     );
     strip.position.y = 0.3;
     g.add(strip);
+    g.userData.keep = true;
     group.add(g);
     return g;
   };
@@ -1485,26 +2727,53 @@ export function buildTable(THREE, mergeGeometries, materials) {
   /* ---- Ball ---- */
   // A near-mirror with a strong environment: the ball must pick up the
   // ceiling strips hard enough to stay findable against a dark playfield.
+  // Polished steel. It reflects its own environment (index.js hands it one
+  // made for it: ceiling fixtures, the backbox, the GI ring at the horizon,
+  // the blue playfield below), and every term is held under the bloom
+  // threshold — a near-mirror ball sparkling in and out of a third-res bloom
+  // is a firefly. The direct-light highlight is allowed to be the hottest
+  // thing on it, so it still reads as a small hard glint.
   materials.ball = new THREE.MeshStandardMaterial({
     color: 0xffffff,
-    roughness: 0.09,
+    roughness: 0.07,
     metalness: 1,
-    envMapIntensity: 2
+    envMapIntensity: 1.7
   });
+  materials.ball.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <lights_fragment_end>',
+      `#include <lights_fragment_end>
+      {
+        vec3 is = reflectedLight.indirectSpecular;
+        is *= min(1.0, 0.64 / max(max(max(is.r, is.g), is.b), 1e-4));
+        vec3 ds = reflectedLight.directSpecular;
+        ds *= min(1.0, 0.62 / max(max(max(ds.r, ds.g), ds.b), 1e-4));
+        vec3 sum = is + ds;
+        float k = min(1.0, 0.9 / max(max(max(sum.r, sum.g), sum.b), 1e-4));
+        reflectedLight.indirectSpecular = is * k;
+        reflectedLight.directSpecular = ds * k;
+      }`
+    );
+  };
+  materials.ball.customProgramCacheKey = () => 'pb-ball-steel';
   const ball = new THREE.Mesh(
     new THREE.SphereGeometry(L.ballRadius, 40, 28),
     materials.ball
   );
   ball.castShadow = true;
+  ball.userData.keep = true;
   group.add(ball);
   refs.ball = ball;
 
   // Contact shadow. The shadow map covers the whole table, so its softest
   // penumbra is wider than the ball itself and the ball reads as hovering.
   // A tight dark blob pinned under it is what puts it back on the wood.
+  // Tight and dark at the core (the contact), soft at the edge (the
+  // occlusion round it): what keeps a small ball on the wood in portrait
   refs.contactTexture = radialTexture(THREE, 0, [
-    [0, 'rgba(0,0,0,0.62)'],
-    [0.45, 'rgba(0,0,0,0.3)'],
+    [0, 'rgba(0,0,0,0.82)'],
+    [0.28, 'rgba(0,0,0,0.6)'],
+    [0.6, 'rgba(0,0,0,0.18)'],
     [1, 'rgba(0,0,0,0)']
   ]);
   refs.contactGeometry = flatten(new THREE.PlaneGeometry(1, 1));
@@ -1522,9 +2791,44 @@ export function buildTable(THREE, mergeGeometries, materials) {
     knob.position.z = 1.5;
     plunger.add(knob);
     plunger.position.set(L.laneBallX, 0.55, -L.laneBottomY + 0.6);
+    plunger.userData.keep = true;
     group.add(plunger);
     refs.plunger = plunger;
+
+    // The shooter spring: a steel coil round the rod from the lane wall to
+    // the knob, built one unit long and stretched to fit every frame, so it
+    // visibly loads up as the plunger is drawn back
+    const turns = 9;
+    const pts = [];
+    for (let i = 0; i <= turns * 14; i++) {
+      const t = i / (turns * 14);
+      const a = t * turns * Math.PI * 2;
+      pts.push(new THREE.Vector3(Math.cos(a) * 0.27, Math.sin(a) * 0.27, t));
+    }
+    const coil = new THREE.Mesh(
+      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), turns * 18, 0.034, 5, false),
+      materials.chrome
+    );
+    coil.position.set(L.laneBallX, 0.55, -L.laneBottomY + L.laneWallR);
+    coil.userData.keep = true;
+    group.add(coil);
+    refs.spring = coil;
   }
+
+  /* ---- Plastics, GI bulbs, flashers and the lamp matrix ---- */
+  const plastics = buildPlastics(THREE, materials, mergeGeometries, refs.rampStickers);
+  delete refs.rampStickers;
+  group.add(plastics.group);
+  refs.plastics = plastics.material;
+  const flashers = buildFlashers(THREE, materials);
+  group.add(flashers.group);
+  refs.flashers = flashers.list;
+  const lamps = buildLamps(THREE, materials, mergeGeometries);
+  group.add(lamps.group);
+  refs.lamps = lamps;
+
+  // Everything static becomes a handful of merged meshes
+  refs.baked = bakeStatic(THREE, mergeGeometries, group);
 
   return { group, refs };
 }

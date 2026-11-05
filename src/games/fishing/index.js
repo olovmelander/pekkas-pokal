@@ -28,10 +28,11 @@ import { guardRenderer, RenderWatchdog, gfxNotice, precompile } from '../shared/
 import { Sfx } from './audio.js';
 import { SPECIES, JUNK, fishAssets, Shoal, spawnJunk, disposeAssets, speciesSvg } from './species.js';
 import {
-  BOTTOM, causticTexture, noiseTexture, particleAtlas, buildSky, buildShore, buildWater, buildVolume,
+  BOTTOM, causticTexture, noiseTexture, particleAtlas, buildSky, buildWater, buildVolume,
   makeEnvironment, buildBasin, buildKelp, buildSeabed, buildShafts, buildLilies,
-  buildLure, buildLine, waveHeight, WATER_FOG
+  buildLure, buildLine, waveHeight, WATER_FOG, SUN_DIR, SUN_UNDER
 } from './world.js';
+import { buildShore } from './scenery.js';
 import { buildBoat, BARREL, WATERLINE } from './boat.js';
 import { createAngler } from './angler.js';
 import { Pool, CELL, buildSnow, buildRipples, pointScale, pointCap } from './fx.js';
@@ -74,13 +75,13 @@ const CLOCK_WRAP = 3600;
  * The midnight sun keeps the shallows warm; Pekkadjupet is nearly black.
  */
 const MID_STOPS = [
-  [0, 0x2fa7ae], [8, 0x1b8590], [18, 0x12667c], [30, 0x0b4565], [44, 0x062a48], [60, 0x030f1e]
+  [0, 0x2fa7ae], [8, 0x1b8590], [18, 0x12667c], [30, 0x0b4565], [44, 0x07304f], [60, 0x051a2e]
 ];
 const UP_STOPS = [
   [0, 0x9fe6d8], [8, 0x63c8c4], [18, 0x3c9cab], [30, 0x22708c], [44, 0x134a6a], [60, 0x0a2442]
 ];
 const DOWN_STOPS = [
-  [0, 0x0f5c6a], [8, 0x0a4758], [18, 0x063247], [30, 0x042138], [44, 0x021428], [60, 0x010812]
+  [0, 0x0f5c6a], [8, 0x0a4758], [18, 0x063247], [30, 0x042138], [44, 0x031830], [60, 0x020e1e]
 ];
 const RAY_STOPS = [
   [0, 0xfff0c8], [10, 0xd8f4dc], [24, 0x9fe0dc], [40, 0x6fb8d8], [60, 0x3a6ab0]
@@ -132,6 +133,9 @@ function clampDt(ms) {
 function framing(aspect) {
   const w = clamp01((aspect - 0.62) / 0.9);
   const wide = aspect > 1.15;
+  // A phone on its side is wider still: the start card takes the left
+  // two thirds, so the boat moves out to the right third
+  const xwide = clamp01((aspect - 1.7) / 0.45);
   return {
     fov: lerp(64, 50, w),
     dist: lerp(11.5, 13.8, w),
@@ -141,7 +145,9 @@ function framing(aspect) {
     // sits left and the boat right; in portrait the panel docks low and the
     // boat and sun sit above
     idleCam: wide ? [-7.0, 3.4, 14.8] : [-3.6, 3.4, 13.5],
-    idleLook: wide ? [-4.2, 2.3, 0] : [0, -3.4, 0]
+    idleLook: wide ? [lerp(-4.2, -7.6, xwide), 2.3, 0] : [0, -3.4, 0],
+    // Between casts: a portrait screen comes in closer so the throw reads
+    betweenCam: wide ? [-0.4, 3.4, 15.2] : [-0.2, 2.9, 10.6]
   };
 }
 
@@ -196,11 +202,25 @@ export async function createFishing(container) {
   const camera = new THREE.PerspectiveCamera(56, 1, 0.4, 900);
   camera.position.set(-3.2, 3.0, 13.5);
 
-  const hemi = new THREE.HemisphereLight(0xfff0d2, 0x0a2434, 1.15);
+  /*
+   * Lighting follows the midnight sun. The key light comes FROM the sun in
+   * the sky — low, behind the scene and a little right — so it rims Erik,
+   * the eka and the headland in warm gold instead of lighting them from a
+   * direction where there is no sun. A soft, cool fill from the camera's
+   * side (the bright northern sky behind the viewer) keeps faces and the
+   * hull readable, and the hemisphere adds sky above and lake below.
+   * Under the water the key turns to the refracted sun, high overhead.
+   * The light count never changes (no shader recompiles mid-game): the
+   * fill only fades.
+   */
+  const hemi = new THREE.HemisphereLight(0xe4dcec, 0x0a2434, 1.05);
   scene.add(hemi);
-  const sun = new THREE.DirectionalLight(0xffe3b6, 1.7);
-  sun.position.set(-30, 40, -20);
+  const sun = new THREE.DirectionalLight(0xffc68c, 2.4);
+  sun.position.copy(SUN_DIR).multiplyScalar(60);
   scene.add(sun);
+  const fill = new THREE.DirectionalLight(0xb4c4ec, 0.85);
+  fill.position.set(-14, 22, 50);
+  scene.add(fill);
 
   /* ---- World ---- */
   const caustics = causticTexture();
@@ -215,9 +235,9 @@ export async function createFishing(container) {
 
   const sky = buildSky(noise);
   scene.add(sky.dome);
-  const shore = buildShore();
+  const shore = buildShore({ sunDir: SUN_DIR, noise, timeU, lite: LITE });
   scene.add(shore);
-  const water = buildWater(caustics, noise);
+  const water = buildWater(caustics, noise, shore.userData.reflect);
   scene.add(water.mesh);
   const volume = buildVolume(noise);
   scene.add(volume.mesh);
@@ -234,7 +254,7 @@ export async function createFishing(container) {
   scene.add(basin);
   const kelp = buildKelp(LITE ? 80 : 130, timeU);
   scene.add(kelp);
-  const seabed = buildSeabed();
+  const seabed = buildSeabed(boat.userData.hull);
   scene.add(seabed);
   const shafts = buildShafts(noise, LITE ? 16 : 22);
   scene.add(shafts.mesh);
@@ -300,10 +320,10 @@ export async function createFishing(container) {
 
   /* ---- Shoal ---------------------------------------------------------- */
 
-  const assets = fishAssets();
+  const assets = fishAssets(LITE);
   const DECO = LITE ? 3 : 5;
   const shoal = new Shoal(assets, [42, 24, 26, 16, 16, 2]);
-  shoal.meshes.forEach((m) => scene.add(m));
+  shoal.objects.forEach((m) => scene.add(m));
 
   const fishes = [];
   const schools = [];
@@ -640,7 +660,7 @@ export async function createFishing(container) {
     state.mission = state.nextMission;
     state.missionDone = false;
     if (state.mission) state.missionsUsed.push(state.mission.id);
-    state.rec = { dodges: 0, deepest: 0, haul: 0, tapped: 0, perfect: false, peakMult: 1, bottom: false, species: {} };
+    state.rec = { dodges: 0, near: 0, chain: 0, deepest: 0, haul: 0, tapped: 0, perfect: false, peakMult: 1, bottom: false, species: {} };
     spawnFishSet();
     sfx.splash(1.1);
     ripples.spawn(0, 0, 2.6, 0.8, 1.3);
@@ -669,11 +689,16 @@ export async function createFishing(container) {
     // swing wide around everything
     if (Math.abs(dx) < rx + 0.6) {
       state.mult = Math.min(10, state.mult + 0.25);
+      state.rec.near++;
       sfx.nearMiss();
       popScore('SNÄVT!', f.mesh.position, 'near');
       glow.burst(state.lureX, -state.depth, 0.3, 10, 3, { color: 0x9ff3ff, size: 0.18, life: 0.45 });
-    } else if (state.dodges % 4 === 0) {
-      popScore(`×${state.mult.toFixed(1)}`, f.mesh.position, 'mult');
+      // Time catches its breath for a moment as the fish slides past
+      kick(0.18, 55, 1.2);
+    } else {
+      if (state.dodges % 4 === 0) popScore(`×${state.mult.toFixed(1)}`, f.mesh.position, 'mult');
+      // A small wake of light where it slipped by
+      glow.burst(f.mesh.position.x * 0.5 + state.lureX * 0.5, -state.depth + 0.6, 0.2, 5, 1.6, { color: 0x8fe3f2, size: 0.12, life: 0.35 });
     }
     renderMult();
     bumpMult();
@@ -696,6 +721,7 @@ export async function createFishing(container) {
     }
     if (fish) catchOne(fish, true);
     angler.trigger(reason === 'junk' ? 'junk' : reason === 'bottom' ? 'big' : 'strike');
+    boatRock(0.08, -0.32, -0.12); // the strike snatches the bow down
     if (reason === 'bottom') {
       const bonus = 1500 * state.mult;
       addScore(bonus, lure.position, `BOTTEN +${fmt(bonus)}`, 'gold');
@@ -728,6 +754,7 @@ export async function createFishing(container) {
     const quick = state.clock - state.lastCatchT < 0.9;
     state.reelChain = quick ? state.reelChain + 1 : 1;
     state.lastCatchT = state.clock;
+    state.rec.chain = Math.max(state.rec.chain, state.reelChain);
     const chainK = 1 + (state.reelChain - 1) * 0.1;
     const pts = Math.round(f.sp.pts * state.mult * chainK);
     if (!first) state.mult = Math.min(12, state.mult + 0.25);
@@ -799,6 +826,7 @@ export async function createFishing(container) {
     const n = state.caught.length;
     state.tossLeft = n;
     angler.trigger(n ? 'erupt' : 'miss');
+    if (n) boatRock(0.22, -0.22, -0.3);
     if (n === 0) {
       setPhaseLabel('Tomt nät den här gången');
       later(endCast, 1100);
@@ -1172,6 +1200,7 @@ export async function createFishing(container) {
   let eyeUnder = false;    // last frame: was the camera under the surface?
   let anglerAct = 'rest';  // for the test hook
   let lureGlow = 0.7;
+  const boatMotion = { y: 0, vy: 0, p: 0, vp: 0, r: 0, vr: 0 };
   const tmpColor = new THREE.Color();
   const tmpColor2 = new THREE.Color();
   const rodTip = new THREE.Vector3();
@@ -1364,7 +1393,8 @@ export async function createFishing(container) {
     } else if (state.phase === 'between') {
       // Lift off the water and put the boat in frame — the round card reads
       // over a wide shot, and the throw that follows needs the rod visible.
-      camGoal.set(boat.position.x - 0.4, 3.4, 15.2);
+      camGoal.fromArray(frame.betweenCam);
+      camGoal.x += boat.position.x;
       const at = state.castOut ? (boat.position.x + state.castOut.x) * 0.5 : boat.position.x + 0.9;
       lookGoal.set(at, state.castOut ? 1.4 : 1.9, 0);
     } else {
@@ -1451,13 +1481,16 @@ export async function createFishing(container) {
     water.uniforms.uDeepTint.value.copy(under ? WATER_FOG.uFogDown.value : tmpColor.set(0x0b4658));
     water.uniforms.uCausticStrength.value = 1 - k * 0.55;
 
-    hemi.intensity = 1.15 + envBoost - ke * 0.78;
-    sun.intensity = 1.7 - ke * 1.45;
+    hemi.intensity = (under ? 1.15 : 1.05) + envBoost - ke * 0.78;
+    sun.intensity = under ? 1.7 - ke * 1.45 : 2.4;
+    sun.position.copy(under ? SUN_UNDER : SUN_DIR).multiplyScalar(60);
+    sun.color.set(under ? 0xffe3b6 : 0xffc68c);
+    fill.intensity = under ? 0 : 0.85;
     if (under) {
       hemi.color.copy(gradient(UP_STOPS, eyeD, tmpColor)).lerp(tmpColor2.set(0xffffff), 0.5);
       hemi.groundColor.copy(WATER_FOG.uFogDown.value);
     } else {
-      hemi.color.set(0xfff0d2);
+      hemi.color.set(0xe4dcec);
       hemi.groundColor.set(0x22404c);
     }
     scene.environmentIntensity = under ? 0.9 - ke * 0.6 : 1;
@@ -1496,6 +1529,7 @@ export async function createFishing(container) {
         sfx.tunna(state.tunnaN);
         boat.userData.barrel.userData.squash = 1;
         angler.trigger('tunna');
+        boatRock(-0.06, 0.14, -0.06); // a wet fish lands at the stern
         spray.burst(top.x, top.y + 0.2, top.z, 12, 3, { cell: CELL.DROP, color: 0xdff2ff, grav: -14, size: 0.1, life: 0.6, lift: 0.8 });
         return;
       }
@@ -1637,15 +1671,28 @@ export async function createFishing(container) {
   }
 
   function updateBoat(dt, t) {
-    // Ride the swell: follow the lake's own waves at the boat, a little
-    // damped, and tilt with their slope (the dry mask keeps the lake out)
+    // Ride the swell: the hull is a mass on the lake's own waves — it is
+    // pulled toward the wave height and slope under it but carries its own
+    // momentum, so it lags a beat behind the swell and rocks on when Erik
+    // throws his weight about (boatRock). The dry mask keeps the lake out.
     const bx = boat.position.x;
     const h = waveHeight(bx, 0, t);
-    const slopeX = (waveHeight(bx + 1.2, 0, t) - waveHeight(bx - 1.2, 0, t)) / 2.4;
+    const slopeX = (waveHeight(bx + 1.4, 0, t) - waveHeight(bx - 1.4, 0, t)) / 2.8;
     const slopeZ = (waveHeight(bx, 0.8, t) - waveHeight(bx, -0.8, t)) / 1.6;
-    boat.position.y = -WATERLINE + h * 0.8;
-    boat.rotation.z = Math.atan(slopeX) * 0.6;
-    boat.rotation.x = -Math.atan(slopeZ) * 0.6;
+    const hull = boatMotion;
+    const n = Math.max(1, Math.ceil(dt / 0.012));
+    const hdt = dt / n;
+    for (let i = 0; i < n; i++) {
+      hull.vy += ((h * 0.85 - hull.y) * 30 - hull.vy * 5.5) * hdt;
+      hull.vp += ((Math.atan(slopeX) * 0.75 - hull.p) * 26 - hull.vp * 4.2) * hdt;
+      hull.vr += ((-Math.atan(slopeZ) * 0.7 - hull.r) * 22 - hull.vr * 3.2) * hdt;
+      hull.y += hull.vy * hdt;
+      hull.p += hull.vp * hdt;
+      hull.r += hull.vr * hdt;
+    }
+    boat.position.y = -WATERLINE + hull.y;
+    boat.rotation.z = hull.p;
+    boat.rotation.x = hull.r;
     const { foam, barrel, bobber } = boat.userData;
     foam.position.set(bx, h + 0.05, 0);
     foam.material.opacity = 0.06 + Math.sin(t * 2.2) * 0.02;
@@ -1667,6 +1714,13 @@ export async function createFishing(container) {
       angler.update(dt, t, anglerContext());
       anglerAct = anglerCtx.action;
     }
+  }
+
+  /** Erik shifting his weight: roll (to his side), pitch (bow down) and heave impulses. */
+  function boatRock(roll, pitch = 0, heave = 0) {
+    boatMotion.vr += roll;
+    boatMotion.vp += pitch;
+    boatMotion.vy += heave;
   }
 
   /** The lure on a short line under the tip while the card is up: a pendulum. */
@@ -1710,6 +1764,8 @@ export async function createFishing(container) {
   }
 
   let loonIn = 6;
+  let frozen = null; // test hook: null = live, else the fixed dt per frame (0 = stopped)
+  let vakIn = 2.5;
 
   function tick(now) {
     raf = requestAnimationFrame(tick);
@@ -1718,6 +1774,9 @@ export async function createFishing(container) {
     last = now;
     if (!running) return;
     adapt(rawMs);
+    // Test hook: time can be frozen (or stepped by a fixed amount) so a
+    // close-up can be taken mid-motion — the frame still renders
+    if (frozen !== null) dt = frozen;
     const rdt = dt; // real time, for the camera and UI
     clockT = (clockT + rdt) % CLOCK_WRAP;
     const t = clockT;
@@ -1738,7 +1797,10 @@ export async function createFishing(container) {
     volume.uniforms.uTime.value = t;
     shafts.uniforms.uTime.value = t;
     snow.uniforms.uTime.value = t;
-    shore.userData.vimpel.rotation.y = Math.sin(t * 2.3) * 0.3 + Math.sin(t * 5.1) * 0.08;
+    if (shore.visible) {
+      shore.userData.vimpel.rotation.y = Math.sin(t * 2.3) * 0.3 + Math.sin(t * 5.1) * 0.08;
+      shore.userData.birds.update(t);
+    }
     seabed.userData.pokal.material.emissiveIntensity = 0.85 + Math.sin(t * 2.1) * 0.3;
     lilies.userData.update(t);
 
@@ -1806,6 +1868,7 @@ export async function createFishing(container) {
           // The lure leaves from where it swung to behind his shoulder
           const p0 = dangling ? dangle : rodTip;
           state.castOut = { x: p0.x, y: p0.y, z: p0.z, x0: p0.x, y0: p0.y, z0: p0.z };
+          boatRock(0.1, -0.16, -0.05); // his weight goes into the throw
         }
         const c = state.castOut;
         const k = Math.min(1, (state.betweenT - BETWEEN_HOLD) / CAST_OUT);
@@ -1825,6 +1888,17 @@ export async function createFishing(container) {
       if (loonIn <= 0) {
         loonIn = 14 + Math.random() * 16;
         sfx.loon();
+      }
+      // …and a fish rises somewhere out on the flat water: a plop and a
+      // ring spreading through the reflections — the lake is alive
+      vakIn -= dt;
+      if (vakIn <= 0 && !eyeUnder) {
+        vakIn = 4 + Math.random() * 8;
+        const x = boat.position.x - 16 + Math.random() * 36;
+        const z = -5 - Math.random() * 28;
+        ripples.spawn(x, z, 1.4 + Math.random() * 0.8, 0.5, 2.0);
+        later(() => ripples.spawn(x, z, 0.9, 0.35, 1.5), 380);
+        spray.burst(x, 0.12, z, 7, 1.6, { cell: CELL.DROP, color: 0xe8f6ff, grav: -12, size: 0.07, life: 0.55, lift: 1.3, drag: 0.4 });
       }
     }
 
@@ -1911,7 +1985,10 @@ export async function createFishing(container) {
     bubbles.update(dt, t);
     spray.update(dt, t);
     ripples.update(dt);
-    shoal.sync();
+    // Draw only the fish near the frame: within 22 m of the eye's depth
+    // under water; from above it, only the top 17 m show through the lake
+    if (camera.position.y > 0) shoal.sync(-3, 14.5); // the catch in the air included
+    else shoal.sync(camera.position.y, 22);
     updateCamera(dt, rdt);
     updateAtmosphere(t);
     sfx.setDepth(state.depth, BOTTOM, !(camera.position.y < -0.3));
@@ -2014,6 +2091,21 @@ export async function createFishing(container) {
     skipBetween() {
       skipCard();
     },
+    /**
+     * Freeze the game clock (dt = 0 every frame), or step it by a fixed dt
+     * per frame; freeze(false) goes live again. Rendering carries on.
+     */
+    freeze(on = true, step = 0) {
+      frozen = on ? step : null;
+    },
+    /** Metres between the left hand's grip and the crank knob (≈0 when it holds it). */
+    crankGap() {
+      const hold = angler.person.sockets.holdL;
+      if (!hold) return null;
+      const a = hold.getWorldPosition(new THREE.Vector3());
+      const b = angler.knob.getWorldPosition(new THREE.Vector3());
+      return { gap: a.distanceTo(b), ...angler.dbg };
+    },
     /** Pin the camera (world position and look-at point, arrays); null releases. */
     pinCamera(pos, look) {
       camOverride = pos ? { pos, look } : null;
@@ -2089,6 +2181,7 @@ export async function createFishing(container) {
       if (o.isInstancedMesh) o.dispose();
     });
     disposeAssets();
+    shore.userData.dispose();
     caustics.dispose();
     noise.dispose();
     atlas.dispose();

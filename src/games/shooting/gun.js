@@ -202,6 +202,28 @@ export function buildShotgun({ envMap, glow, star }) {
   pad.rotation.x = 0.12;
   g.add(pad);
 
+  /* Grip frames for the shooter's hands (index.js poses a people-system
+     shooter with holdWith). hold() convention: origin = the grip centre,
+     +Y along the handle toward its business end, +Z the way the palm
+     faces. The left hand cradles the forend from below and to the near
+     side, palm up and in; the right hand wraps the pistol grip, palm
+     facing in (−x), its +Y running up the grip toward the tang. */
+  const forendGrip = new THREE.Object3D();
+  forendGrip.position.set(0, -0.042, -0.52);
+  forendGrip.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(
+    new THREE.Vector3(0.8, -0.6, 0), new THREE.Vector3(0, 0, -1), new THREE.Vector3(0.6, 0.8, 0)
+  ));
+  g.add(forendGrip);
+  const pistolGrip = new THREE.Object3D();
+  pistolGrip.position.set(0, -0.05, 0.155);
+  {
+    const y = new THREE.Vector3(0, 0.8, -0.6).normalize();
+    const z = new THREE.Vector3(-1, 0, 0);
+    const x = new THREE.Vector3().crossVectors(y, z);
+    pistolGrip.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+  }
+  g.add(pistolGrip);
+
   /* Muzzle flash: glow + star petals + a real point light */
   const muzzle = new THREE.Object3D();
   muzzle.position.set(0, 0.028, -1.27);
@@ -235,5 +257,5 @@ export function buildShotgun({ envMap, glow, star }) {
   }
   setFlash(0);
 
-  return { group: g, flashMat, starMat, starSprite, flash, setFlash, muzzle, textures };
+  return { group: g, flashMat, starMat, starSprite, flash, setFlash, muzzle, textures, forendGrip, pistolGrip };
 }

@@ -72,6 +72,14 @@
     linear-gradient(to bottom, rgba(8, 5, 3, 0.4), rgba(0, 0, 0, 0) 18%, rgba(0, 0, 0, 0) 80%, rgba(8, 5, 3, 0.45));
 }
 
+/* The replay closes in: a deeper, warmer vignette while time slows */
+.fen-vignette { transition: box-shadow 0.6s ease; }
+
+.fen[data-mode='replay'] .fen-vignette,
+.fen[data-mode='ceremony'] .fen-vignette {
+  box-shadow: inset 0 0 22vmin 6vmin rgba(12, 6, 2, 0.75);
+}
+
 .fen-flash {
   position: absolute;
   inset: 0;
@@ -263,7 +271,10 @@
 .fen-call.teal { color: #c6fff4; text-shadow: 0 0 36px rgba(94, 234, 212, 0.7), 0 3px 14px rgba(0, 0, 0, 0.7); }
 .fen-call.name { font-size: clamp(1.1rem, 5vmin, 2.4rem); letter-spacing: 0.12em; }
 .fen-call.gold { color: var(--gold); text-shadow: 0 0 40px rgba(242, 193, 78, 0.8), 0 3px 14px rgba(0, 0, 0, 0.7); }
-.fen-call.big { font-size: clamp(2rem, 10vmin, 4.6rem); }
+.fen-call.big {
+  font-size: clamp(2rem, 10vmin, 4.6rem);
+  text-shadow: 0 0 40px rgba(242, 193, 78, 0.8), 0 0 4px rgba(60, 30, 0, 0.9), 0 4px 22px rgba(0, 0, 0, 0.9);
+}
 .fen-call.gold.show { animation-duration: 4.5s; }
 
 @keyframes fen-call {
@@ -461,7 +472,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: 108px;
+  width: 118px;
   height: 46px;
   padding: 0 12px 0 16px;
   border-radius: 13px;
@@ -483,6 +494,17 @@
   background: rgba(255, 255, 255, 0.14);
   transition: background 0.15s ease, box-shadow 0.15s ease;
 }
+
+.fen-line > span { flex: 1; text-align: left; }
+
+.fen-line-ico {
+  flex: none;
+  width: 22px;
+  height: 16px;
+  opacity: 0.75;
+}
+
+.fen-line.on .fen-line-ico { opacity: 1; }
 
 .fen-line.on {
   color: #0d2228;
@@ -578,6 +600,9 @@
   opacity: 1;
   transform: none;
 }
+
+/* The salute: the board is up, the controls slide in at »En garde« */
+.fen[data-mode='intro'] .fen-board { opacity: 1; }
 
 .fen[data-mode='duel'] .fen-pad { pointer-events: auto; }
 .fen[data-mode='duel'] .fen-board { transform: translateX(-50%); }
@@ -700,7 +725,7 @@
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.14);
   cursor: pointer;
-  transition: all 0.18s ease;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
 .fen button.fen-chip:hover { border-color: rgba(242, 193, 78, 0.5); }
@@ -808,6 +833,28 @@
 }
 
 .fen-bm.pending { opacity: 0.55; border-style: dashed; }
+
+/* After a win your name moves on into the next round: it slides across
+   into its new box and the box lights up */
+.fen-bracket.adv .fen-bm.cur .fen-bm-row.you {
+  animation: fen-adv 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.35s both;
+}
+
+.fen-bracket.adv .fen-bm.cur {
+  animation: fen-adv-box 1.2s ease-out 0.5s both, fen-cur 1.6s ease-in-out 1.7s infinite;
+}
+
+@keyframes fen-adv {
+  0% { opacity: 0; transform: translateX(-48px); color: #fff; }
+  60% { opacity: 1; }
+  100% { opacity: 1; transform: none; }
+}
+
+@keyframes fen-adv-box {
+  0% { box-shadow: 0 0 0 rgba(242, 193, 78, 0); }
+  35% { box-shadow: 0 0 34px rgba(242, 193, 78, 0.7); background: rgba(242, 193, 78, 0.12); }
+  100% { box-shadow: 0 0 22px rgba(242, 193, 78, 0.25); }
+}
 
 .fen-bm-row {
   display: flex;
@@ -950,6 +997,58 @@
   color: var(--dim);
 }
 
+/* The bracket and the verdict sit beside the person they are about:
+   on the right in landscape (the camera frames the next opponent or the
+   winner on the left third), at the bottom in portrait */
+.fen[data-orient='landscape'][data-mode='bracket'] .fen-screen,
+.fen[data-orient='landscape'][data-mode='result'] .fen-screen,
+.fen[data-orient='landscape'][data-mode='final'] .fen-screen {
+  justify-content: flex-end;
+  padding-top: calc(var(--safe-t) + 54px); /* clear of the close button */
+  padding-right: max(3vw, 16px);
+  background: linear-gradient(270deg, rgba(6, 4, 3, 0.88) 0%, rgba(6, 4, 3, 0.6) 42%, rgba(6, 4, 3, 0.12) 72%, rgba(6, 4, 3, 0) 100%);
+}
+
+.fen[data-orient='landscape'][data-mode='bracket'] .fen-panel { width: min(580px, 60%); }
+.fen[data-orient='landscape'][data-mode='result'] .fen-panel,
+.fen[data-orient='landscape'][data-mode='final'] .fen-panel { width: min(440px, 56%); }
+
+.fen[data-orient='portrait'][data-mode='bracket'] .fen-screen,
+.fen[data-orient='portrait'][data-mode='result'] .fen-screen,
+.fen[data-orient='portrait'][data-mode='final'] .fen-screen {
+  align-items: flex-end;
+  padding: 20px 12px calc(var(--safe-b) + 4px);
+  background: linear-gradient(0deg, rgba(6, 4, 3, 0.92) 0%, rgba(6, 4, 3, 0.7) 45%, rgba(6, 4, 3, 0) 66%);
+}
+
+.fen[data-orient='portrait'][data-mode='bracket'] .fen-panel,
+.fen[data-orient='portrait'][data-mode='result'] .fen-panel,
+.fen[data-orient='portrait'][data-mode='final'] .fen-panel {
+  max-height: 60%;
+  padding: 14px 12px 12px;
+}
+
+.fen[data-orient='portrait'][data-mode='bracket'] .fen-bracket { margin-top: 8px; gap: 5px; }
+.fen[data-orient='portrait'][data-mode='bracket'] .fen-bm-row { padding: 3px 6px; font-size: 0.64rem; }
+.fen[data-orient='portrait'][data-mode='bracket'] .fen-bms,
+.fen[data-orient='portrait'][data-mode='bracket'] .fen-bcol { gap: 4px; }
+.fen[data-orient='portrait'][data-mode='bracket'] .fen-opp { margin-top: 10px; padding: 9px 12px; gap: 10px; }
+.fen[data-orient='portrait'][data-mode='bracket'] .fen-opp-text p { font-size: 0.74rem; margin-top: 3px; }
+.fen[data-orient='portrait'][data-mode='bracket'] .fen-go,
+.fen[data-orient='portrait'][data-mode='result'] .fen-go { margin-top: 12px; }
+.fen[data-orient='portrait'][data-mode='result'] .fen-big-score { font-size: 2.4rem; margin-top: 6px; }
+.fen[data-orient='portrait'][data-mode='result'] .fen-stats { margin-top: 10px; }
+.fen[data-orient='portrait'][data-mode='result'] .fen-lead { font-size: 0.8rem; margin-top: 8px; }
+.fen[data-orient='portrait'][data-mode='final'] .fen-medal-big svg { width: 52px; height: 52px; }
+.fen[data-orient='portrait'][data-mode='final'] .fen-medal-big { margin-bottom: 2px; }
+.fen[data-orient='portrait'][data-mode='final'] .fen-h { font-size: 1.6rem; }
+.fen[data-orient='portrait'][data-mode='final'] .fen-lead { font-size: 0.78rem; margin-top: 6px; }
+.fen[data-orient='portrait'][data-mode='final'] .fen-recap { margin-top: 8px; gap: 3px; }
+.fen[data-orient='portrait'][data-mode='final'] .fen-recap div { padding: 5px 10px; font-size: 0.74rem; }
+.fen[data-orient='portrait'][data-mode='final'] .fen-total { margin-top: 8px; }
+.fen[data-orient='portrait'][data-mode='final'] .fen-total b { font-size: 1.8rem; }
+.fen[data-orient='portrait'][data-mode='final'] .fen-go { margin-top: 10px; }
+
 /* ---- Portrait / phones ---- */
 
 .fen[data-orient='portrait'] .fen-board {
@@ -990,6 +1089,11 @@
   .fen-big-score { font-size: 2.6rem; }
 }
 
+/* Narrow desktop windows: the key strip would run under the attack buttons */
+@media (max-width: 960px) {
+  .fen .fen-keys { display: none; }
+}
+
 @media (max-height: 520px) {
   .fen-steps,
   .fen-opp,
@@ -1005,12 +1109,41 @@
   .fen-big-score { font-size: 2.2rem; margin-top: 6px; }
   .fen-lead { font-size: 0.8rem; margin-top: 6px; }
   .fen-medal-big svg { width: 64px; height: 64px; }
+  /* Short landscape phones: the title in one screenful, chips on one row */
+  .fen[data-mode='title'] .fen-screen { padding-top: calc(var(--safe-t) + 8px); padding-bottom: calc(var(--safe-b) - 6px); }
+  .fen[data-mode='title'] .fen-panel { width: min(520px, 64%); padding: 6px 12px 4px; }
+  .fen[data-mode='title'] .fen-h { font-size: 2rem; }
+  .fen[data-mode='title'] .fen-label { margin: 10px 0 6px; }
+  .fen[data-mode='title'] .fen-chips { flex-wrap: nowrap; gap: 5px; }
+  .fen[data-mode='title'] button.fen-chip { padding: 0.4rem 0.62rem; font-size: 0.74rem; }
+  .fen-foot { margin-top: 6px; }
+  /* The verdict screen in one screenful too */
+  .fen[data-mode='final'] .fen-lead { display: none; }
+  .fen[data-mode='final'] .fen-medal-big svg { width: 46px; height: 46px; }
+  .fen[data-mode='final'] .fen-h { font-size: 1.5rem; margin-top: 2px; }
+  .fen-recap { margin-top: 8px; gap: 3px; }
+  .fen-recap div { padding: 4px 10px; font-size: 0.72rem; }
+  /* The side panels start below the close button: win the height back */
+  .fen[data-orient='landscape'][data-mode='bracket'] .fen-screen,
+  .fen[data-orient='landscape'][data-mode='result'] .fen-screen,
+  .fen[data-orient='landscape'][data-mode='final'] .fen-screen { padding-bottom: max(6px, env(safe-area-inset-bottom)); }
+  .fen[data-orient='landscape'][data-mode='bracket'] .fen-kicker { display: none; }
+  .fen[data-orient='landscape'][data-mode='bracket'] .fen-panel { padding: 10px 14px; }
+  .fen[data-orient='landscape'][data-mode='bracket'] .fen-bracket { margin-top: 0; }
+  .fen[data-orient='landscape'][data-mode='bracket'] .fen-go { margin-top: 8px; }
+  .fen-total { margin-top: 6px; }
+  .fen-total b { font-size: 1.45rem; }
+  .fen[data-mode='final'] .fen-panel { padding-top: 10px; padding-bottom: 10px; }
+  .fen[data-mode='final'] .fen-medal-big { margin-bottom: 0; }
+  .fen[data-mode='final'] .fen-go { margin-top: 8px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .fen-flash.show { animation-duration: 0.3s; opacity: 0.4; }
   .fen-line.threat { animation: none; }
-  .fen-bm.cur { animation: none; }
+  .fen-bm.cur,
+  .fen-bracket.adv .fen-bm.cur,
+  .fen-bracket.adv .fen-bm.cur .fen-bm-row.you { animation: none; }
   .fen-call.show { animation-name: fen-call-calm; }
 }
 

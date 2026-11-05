@@ -9,11 +9,12 @@
  *    after a RANDOM delay (0.2–1.8 s) exactly like Olympic skeet, so the
  *    launch always startles a little.
  *  - Singles give two shells, like real trap. Doubles give one per bird.
- *  - 24 duvor over three series — singles, crossers, then doubles — and
- *    then the 25th: GULDDUVAN, small, fast and worth 500. A full round
- *    of 25, like a real scorecard.
+ *  - 24 duvor over three series — singles, crossers with incomers from
+ *    the high tower, then doubles — and then the 25th: GULDDUVAN, small,
+ *    fast and worth 500. A full round of 25, like a real scorecard.
  *  - Swing-through controls: touch, track the bird, RELEASE to fire.
- *    The whole phone is the gun.
+ *    The whole phone is the gun, and its sight rides above the finger so
+ *    the finger never hides the bird.
  *  - The shot has a time of flight (~0.1 s out to the clay) and carries
  *    the swing with it: follow the bird and release on it, and the pattern
  *    arrives where the bird has got to; stop the gun and it goes behind.
@@ -42,11 +43,12 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { guardRenderer, postTarget, addSanitize, RenderWatchdog, gfxNotice, precompile } from '../shared/gfx.js';
 import { Sfx } from './audio.js';
-import { HAZE, SUN_DIR, LIGHT_DIR, SUN_COLOR, buildSky, bakeEnvironment, buildHaze, buildHills } from './sky.js';
+import { HAZE, SUN_DIR, LIGHT_DIR, SUN_COLOR, buildSky, bakeEnvironment, buildHaze, buildHills, buildShafts } from './sky.js';
 import { buildGang } from './gang.js';
+import { createPerson, POSES, SKIN_TONES } from '../shared/people.js';
 import { mulberry, glowTexture, starTexture, buildRange, buildClay } from './range.js';
 import { buildShotgun } from './gun.js';
-import { buildGrass } from './grass.js';
+import { buildGrass, buildSeedHeads } from './grass.js';
 import { Particles, Shards, ShotCloud, buildAmbient } from './fx.js';
 import { buildHud, cardHtml, startPanelHtml, endPanelHtml, fmt } from './hud.js';
 
@@ -67,8 +69,14 @@ const MEDALS = [
 
 const SERIES = [
   { name: 'Serie 1 — Uppvärmningen', singles: 8, doubles: 0, speed: 0.85, brief: 'Åtta lugna duvor från graven. Hitta svingen.' },
-  { name: 'Serie 2 — Korsarna', singles: 8, doubles: 0, speed: 1.1, crossers: true, brief: 'Snabbare nu, och från sidorna. Sving igenom duvan!' },
-  { name: 'Serie 3 — Finalen', singles: 4, doubles: 2, speed: 1.25, crossers: true, brief: 'Fyra singlar och två dubbléer. Ett skott per duva i dubbléerna.' }
+  {
+    name: 'Serie 2 — Korsarna', singles: 8, doubles: 0, speed: 1.1, crossers: true, incomers: [2, 6],
+    brief: 'Snabbare nu, från sidorna — och två rakt mot dig från tornet. Sving igenom duvan!'
+  },
+  {
+    name: 'Serie 3 — Finalen', singles: 4, doubles: 2, speed: 1.25, crossers: true, incomers: [1],
+    brief: 'Fyra singlar, en från tornet, och två dubbléer. Ett skott per duva i dubbléerna.'
+  }
 ];
 
 /* Ballistics, tuned to feel like a 12-bore at 25–45 m */
@@ -79,6 +87,9 @@ const CLAY_R = 0.37;
 const MAX_SWING = 1.4; // rad/s — clamp on how much lead a flick can carry
 const GRAVITY = 9.8;
 const WIND = new THREE.Vector3(1.3, 0.05, 0.25); // a westerly breeze, m/s
+
+/** The high tower at the forest edge the incomers are thrown from (range.js builds it). */
+const TOWER_TOP = new THREE.Vector3(9, 8.9, -60);
 
 const ORANGE = new THREE.Color(0xff6a1c);
 const GOLD = new THREE.Color(0xf2c14e);
@@ -253,14 +264,58 @@ export async function createShooting(container) {
   const haze = buildHaze();
   scene.add(haze.group);
   scene.add(buildHills());
-  const range = buildRange(mulberry(2022), { envMap });
+  const range = buildRange(mulberry(2022), { envMap, lite: lowTier });
   scene.add(range.group);
+  const shafts = buildShafts(mulberry(606));
+  scene.add(shafts.mesh);
   const grass = buildGrass(mulberry(8123), { sunDir: SUN_DIR, sunColor: SUN_COLOR });
   scene.add(grass.mesh);
+  const seeds = buildSeedHeads(mulberry(8124), grass.uniforms, { count: lowTier ? 1400 : 2400 });
+  scene.add(seeds.mesh);
 
   const gun = buildShotgun({ envMap, glow, star });
   gun.group.scale.setScalar(0.55);
   camera.add(gun.group);
+
+  /* The shooter's own arms: a people-system person in gloves and an olive
+     shooting jacket, living in the gun's frame. The gun is a camera-space
+     miniature (its units are ~1.5× real), so the person is drawn 2.8
+     "units" tall to match it; the chest sits below the bottom of the frame
+     and the head and neck are folded away, so only the sleeves and the
+     gloved hands ever show — gripping the forend and the pistol grip with
+     the shared power grip, solved with IK every frame. */
+  const shooter = createPerson({
+    name: 'Skytten', height: 2.8, build: 'average', skin: SKIN_TONES.light,
+    hair: { style: 'buzz' },
+    outfit: { top: 'jacket', topColor: 0x6f7a55, bottom: 'trousers', bottomColor: 0x3b3a34 },
+    gloves: { side: 'both', color: 0xe9dfcc, cuff: false }
+  });
+  shooter.root.rotation.y = Math.PI; // face down the barrels (−z)
+  shooter.root.position.set(-0.1, -2.55, -0.1);
+  shooter.mesh.castShadow = false;
+  shooter.mesh.receiveShadow = false;
+  gun.group.add(shooter.root);
+  const shooterPose = POSES.stand(0);
+  const shooterReach = { L: 0, R: 0 }; // metres short of each grip (0 = holding)
+  // The power grips are solved once here, while loading; holdWith() then
+  // places the arms every frame (it respects the gun group's scale)
+  const GRIP_L = { diameter: 0.105, blend: 0 };
+  const GRIP_R = { diameter: 0.075, blend: 0 };
+  shooter.setGrip('L', 'power', GRIP_L);
+  shooter.setGrip('R', 'power', GRIP_R);
+  const poleL = new THREE.Vector3();
+  const poleR = new THREE.Vector3();
+  function poseShooter(dt, t) {
+    gun.group.updateMatrixWorld(true);
+    shooter.setPose(shooterPose, 1);
+    // Fold the head away: it would rise into the bottom of the frame
+    shooter.bones.neck.scale.setScalar(0.001);
+    gun.group.localToWorld(poleL.set(-0.75, -0.9, -0.15));
+    gun.group.localToWorld(poleR.set(0.8, -0.35, 0.3));
+    shooterReach.R = shooter.holdWith('R', gun.pistolGrip, { at: [0, 0, 0], grip: 'power', ...GRIP_R, pole: poleR });
+    shooterReach.L = shooter.holdWith('L', gun.forendGrip, { at: [0, 0, 0], grip: 'power', ...GRIP_L, pole: poleL });
+    shooter.update(dt, t);
+  }
   let flashK = 0;
 
   // The gang on the fika chairs (and Henrik with the score sheet)
@@ -368,6 +423,7 @@ export async function createShooting(container) {
     sky.dome.material = sky.plain;
     haze.group.visible = false;
     ambient.points.visible = false;
+    shafts.mesh.visible = false;
     scene.traverse((o) => {
       [].concat(o.material || []).forEach((m) => {
         if (m.envMap) {
@@ -444,6 +500,7 @@ export async function createShooting(container) {
   const pending = []; // shots in flight: { t, records, shotDir, gold }
   const timers = new Set();
   const aim = { x: 0, y: 0.12 }; // NDC
+  const finger = { x: 0, y: 0, touch: false }; // NDC of the finger under a touch aim
   const swingLog = []; // { t, dir } — the last ~150 ms of aim directions
   let tracking = false;
   const lead = { t: 0, center: new THREE.Vector3(), clay: new THREE.Vector3(), dots: [], radius: 0 };
@@ -534,9 +591,12 @@ export async function createShooting(container) {
     const el = document.createElement('div');
     el.className = `fg-pop sk-pop ${cls}`;
     el.textContent = text;
-    el.style.left = `${Math.min(view.w - 70, Math.max(70, s.x))}px`;
     el.style.top = `${Math.min(view.h - 40, Math.max(90, s.y - 16))}px`;
     hud.pops.appendChild(el);
+    // Keep the whole word on screen: the pop is centred on its anchor, so a
+    // long one ("GULDDUVAN +800") near an edge needs half its width of room
+    const half = Math.min(view.w / 2 - 8, el.offsetWidth * 0.6 + 12);
+    el.style.left = `${Math.min(view.w - half, Math.max(half, s.x))}px`;
     later(() => el.remove(), 1300);
   }
 
@@ -700,6 +760,7 @@ export async function createShooting(container) {
     clay.seen = false;
     clay.offT = 0;
     clay.shotAt = false;
+    clay.incomer = false;
     const m = clay.mesh;
     m.visible = true;
     m.scale.setScalar(state.isGold ? 0.62 : 1);
@@ -707,8 +768,26 @@ export async function createShooting(container) {
     m.material.color.copy(state.isGold ? GOLD : ORANGE);
     m.material.emissive.set(state.isGold ? 0x5a3c00 : 0x6b2400);
 
-    const speed = s.speed * (state.isGold ? 1.5 : 1) * (0.92 + rand() * 0.16);
-    if (s.crossers && (side !== 0 || rand() < 0.6)) {
+    // A first-timer's first three birds come a little gentler while they find the swing
+    const rookie = !best.score && state.serieNo === 1 && state.throwNo < 3 ? 0.82 : 1;
+    const speed = s.speed * rookie * (state.isGold ? 1.5 : 1) * (0.92 + rand() * 0.16);
+    if (side === 0 && !state.isGold && s.incomers && s.incomers.includes(state.throwNo)) {
+      // Incomer from the tower: aimed to pass a few metres up and to one
+      // side of the station, so it grows out of the treeline toward you
+      // and climbs out of the top of the frame if you let it.
+      clay.incomer = true;
+      m.position.copy(TOWER_TOP);
+      // Fast and flat enough to stay in the frame until it is close
+      const T = 2.2 / speed;
+      tmpV.set((rand() - 0.5) * 7, 4 + rand() * 1.5, 6);
+      clay.vel.set((tmpV.x - m.position.x) / T, (tmpV.y - m.position.y) / T + 0.5 * GRAVITY * T, (tmpV.z - m.position.z) / T);
+      for (let i = 0; i < 6; i++) {
+        soft.spawn({
+          pos: m.position, vel: tmpV2.set((rand() - 0.5) * 2, rand(), 1 + rand() * 2),
+          life: 1 + rand(), size: 0.4, size1: 1.4, color: new THREE.Color(0x9a8a70), alpha: 0.25, drag: 1.6, wind: 0.6
+        });
+      }
+    } else if (s.crossers && (side !== 0 || rand() < 0.6)) {
       // Crosser from the field edge. Launch it from just outside the
       // frame and scale its pace to the frame, so a phone in portrait
       // sees the same crossing a desktop does — not a clay that lands
@@ -749,7 +828,9 @@ export async function createShooting(container) {
     else clays[1].active = false;
     if (state.firstPull) {
       state.firstPull = false;
-      hint('aim', touch ? 'Följ duvan med fingret — släpp för att skjuta' : 'Följ duvan med musen — klicka för att skjuta');
+      hint('aim', touch ? 'Följ duvan med siktet ovanför fingret — släpp för att skjuta' : 'Följ duvan med musen — klicka för att skjuta');
+    } else if (clays[0].incomer) {
+      hint('incomer', 'Från tornet! Den kommer rakt mot dig — skjut innan den drar förbi över huvudet.');
     }
   }
 
@@ -786,7 +867,12 @@ export async function createShooting(container) {
     }, 450);
   }
 
-  function smash(clay) {
+  /**
+   * A broken bird. `q` is where in the pattern it was (0 = dead centre,
+   * 1 = the fringe): a centre hit turns a clay to a puff of smoke, a
+   * fringe hit only chips it into a few big pieces. Same points either way.
+   */
+  function smash(clay, q = 0.5) {
     clay.active = false;
     const m = clay.mesh;
     m.visible = false;
@@ -795,7 +881,9 @@ export async function createShooting(container) {
     markBox(clay, true);
     renderScore();
     renderStreak();
-    popScore(clay.gold ? `GULDDUVAN +${fmt(pts)}` : `KROSS +${fmt(pts)}`, at, clay.gold ? 'gold' : '');
+    const word = q < 0.32 ? 'RÖKBOLL' : 'KROSS';
+    if (q < 0.32 && !clay.gold) state.stats.smoke = (state.stats.smoke || 0) + 1;
+    popScore(clay.gold ? `GULDDUVAN +${fmt(pts)}` : `${word} +${fmt(pts)}`, at, clay.gold ? 'gold' : q < 0.32 ? 'smoke' : '');
     sfx.shatter(clay.gold);
     sfx.streak(state.streak);
     // Hit-stop: a few frames of near-freeze sell the impact more than any
@@ -803,7 +891,7 @@ export async function createShooting(container) {
     hitStopT = Math.max(hitStopT, clay.gold ? 0.12 : 0.065);
     shakeP = Math.max(shakeP, clay.gold ? 1.2 : 0.55);
     if (navigator.vibrate) navigator.vibrate(clay.gold ? 60 : 25);
-    breakFx(clay, at);
+    breakFx(clay, at, q);
     if (clay.gold) {
       flashScreen('gold');
       callout('GULDDUVAN!', 'gold');
@@ -835,19 +923,28 @@ export async function createShooting(container) {
   }
 
   /** Dust, chips, the 3D shards and a hot core — the money shot. */
-  function breakFx(clay, at) {
+  function breakFx(clay, at, q = 0.5) {
     const color = clay.gold ? GOLD : ORANGE;
-    shards.burst(at, clay.vel, color, clay.gold ? 18 : 15, fxRand, clay.gold ? 1.3 : 1);
+    const smoke = !clay.gold && q < 0.32;
+    const chip = !clay.gold && q > 0.72;
+    if (chip) {
+      // A fringe hit: two or three big pieces carry on along the line
+      shards.burst(at, clay.vel, color, 3, fxRand, 0.45, 2.1, 0.85);
+      shards.burst(at, clay.vel, color, 7, fxRand, 0.8);
+    } else {
+      shards.burst(at, clay.vel, color, clay.gold ? 18 : smoke ? 9 : 15, fxRand, clay.gold ? 1.3 : smoke ? 1.2 : 1, smoke ? 0.6 : 1);
+    }
     // The cloud a clay leaves: a dense orange core that billows and drifts
     const dust = clay.gold ? new THREE.Color(0xd08a1c) : new THREE.Color(0xe0682a);
-    for (let i = 0; i < 34; i++) {
+    const puffs = smoke ? 52 : chip ? 16 : 34;
+    for (let i = 0; i < puffs; i++) {
       const a = fxRand() * Math.PI * 2;
       const e = (fxRand() - 0.35) * 1.4;
       const sp = 1 + fxRand() * 5;
       soft.spawn({
         pos: at,
         vel: tmpV.set(Math.cos(a) * sp, e * sp * 0.7, Math.sin(a) * sp).addScaledVector(clay.vel, 0.3),
-        life: 1.4 + fxRand() * 1.6, size: 0.6, size1: 2.4 + fxRand() * 2.2,
+        life: 1.4 + fxRand() * 1.6, size: 0.6, size1: (2.4 + fxRand() * 2.2) * (smoke ? 1.35 : 1),
         color: dust.clone().offsetHSL((fxRand() - 0.5) * 0.03, -0.05, (fxRand() - 0.6) * 0.2),
         alpha: 0.78, drag: 2.2, grav: -0.12, wind: 1
       });
@@ -898,6 +995,11 @@ export async function createShooting(container) {
   /** A shot that broke nothing: reset the streak and teach the lead. */
   function missShot(rec) {
     sfx.miss();
+    // Inside about twice the pattern's reach: tell them it was close
+    if (rec && rec.ang < rec.r * 1.9) {
+      sfx.nearMiss();
+      popScore('NÄRA!', rec.at, 'near');
+    }
     if (state.streak >= 2) toast('Bom — streaken bruten');
     state.streak = 0;
     renderStreak();
@@ -938,6 +1040,7 @@ export async function createShooting(container) {
     if (reduceMotion) return;
     later(() => {
       reaction.target = 1;
+      hideLead(); // the miss diagram belongs to the field, not to the gang
     }, 250);
     later(() => {
       reaction.target = 0;
@@ -1062,7 +1165,7 @@ export async function createShooting(container) {
       const live = p.records.filter((r) => r.clay.active);
       const hits = live.filter((r) => r.hit);
       if (hits.length) {
-        hits.forEach((r) => smash(r.clay));
+        hits.forEach((r) => smash(r.clay, r.ang / r.r));
       } else if (live.length) {
         missShot(live.slice().sort((a, b) => a.ang / a.r - b.ang / b.r)[0]);
       }
@@ -1174,14 +1277,37 @@ export async function createShooting(container) {
 
   const UI = '.pb-overlay, .pb-mute, .pb-info, .pb-help, .sk-pull';
 
+  /**
+   * On a touch screen the sight rides a thumb's width ABOVE the finger, so
+   * the finger never covers the bird it is tracking (the classic mistake
+   * of phone shooters: aim under the fingertip and you shoot blind). The
+   * offset eases off near the top edge so the whole sky stays reachable.
+   */
+  function touchOffset(fingerY) {
+    const px = Math.min(92, view.h * 0.12);
+    // fingerY is NDC (+1 = top). Within the top band, shrink the lift.
+    const topRoom = ((1 - fingerY) / 2) * view.h;
+    return (Math.min(px, Math.max(0, topRoom - 8)) * 2) / view.h;
+  }
+
+  function setAimFrom(e, p) {
+    aim.x = p.x;
+    aim.y = p.y;
+    if (e.pointerType !== 'mouse') {
+      aim.y = Math.min(0.99, p.y + touchOffset(p.y));
+      finger.x = p.x;
+      finger.y = p.y;
+    }
+  }
+
   function onPointerDown(e) {
     sfx.resume();
     if (helpOpen || e.target.closest(UI) || camBlend < 0.9) return;
     const p = pointerNdc(e);
     // A touch teleports the aim; its jump must not count as swing speed
     if (e.pointerType !== 'mouse' || Math.hypot(p.x - aim.x, p.y - aim.y) > 0.05) resetSwing();
-    aim.x = p.x;
-    aim.y = p.y;
+    finger.touch = e.pointerType !== 'mouse';
+    setAimFrom(e, p);
     tracking = true;
     // Tap-to-pull: press, keep the finger down, track, release to fire —
     // the whole call-and-shoot in one gesture.
@@ -1190,9 +1316,7 @@ export async function createShooting(container) {
 
   function onPointerMove(e) {
     if (!tracking && e.pointerType !== 'mouse') return;
-    const p = pointerNdc(e);
-    aim.x = p.x;
-    aim.y = p.y;
+    setAimFrom(e, pointerNdc(e));
   }
 
   function onPointerUp(e) {
@@ -1299,7 +1423,7 @@ export async function createShooting(container) {
       hits: state.stats.hits, base: state.stats.base, bonus: state.stats.bonus,
       pairs: state.stats.pairs, clean: state.stats.clean,
       gold: state.gold === true, goldPts: state.stats.goldPts, goldHit: state.gold,
-      bestStreak: state.bestStreak, card: state.card, ludvig: LUDVIG
+      bestStreak: state.bestStreak, card: state.card, ludvig: LUDVIG, smoke: state.stats.smoke || 0
     };
     // Let the last shards fall, then pull back out to the gang
     later(() => {
@@ -1360,10 +1484,12 @@ export async function createShooting(container) {
   const reactPose = { pos: new THREE.Vector3(), q: new THREE.Quaternion(), fov: 40 };
   const GANG_CENTRE = new THREE.Vector3(0.5, 0.98, 2.65);
   const REACT_DIR = new THREE.Vector3(-0.08, 0.2, -1).normalize();
+  const REACT_DIR_TALL = new THREE.Vector3(-0.08, 0.36, -1).normalize();
   const lookM = new THREE.Matrix4();
   const lookAt = new THREE.Vector3();
   const euler = new THREE.Euler(0, 0, 0, 'YXZ');
   const applied = { fov: 0, ox: -1, oy: -1, w: 0, h: 0 };
+  let debugCam = null;
 
   /**
    * The establishing shot: behind the gang, up and to the right — the whole
@@ -1419,10 +1545,11 @@ export async function createShooting(container) {
    */
   function reactionPose(t) {
     const portrait = view.aspect < 0.9;
-    reactPose.fov = portrait ? 52 : 38;
+    reactPose.fov = portrait ? 60 : 38;
     const halfH = Math.tan(THREE.MathUtils.degToRad(reactPose.fov / 2)) * view.aspect;
-    const dist = THREE.MathUtils.clamp(2.9 / halfH, 3.8, 8.5);
-    reactPose.pos.copy(GANG_CENTRE).addScaledVector(REACT_DIR, dist);
+    const dist = THREE.MathUtils.clamp(2.9 / halfH, 3.8, portrait ? 9.5 : 8.5);
+    // A tall frame looks down over the station rail at the row instead of through it
+    reactPose.pos.copy(GANG_CENTRE).addScaledVector(portrait ? REACT_DIR_TALL : REACT_DIR, dist);
     reactPose.pos.x += Math.sin(t * 0.3) * 0.06;
     lookM.lookAt(reactPose.pos, GANG_CENTRE, THREE.Object3D.DEFAULT_UP);
     reactPose.q.setFromRotationMatrix(lookM);
@@ -1467,6 +1594,13 @@ export async function createShooting(container) {
     if (shakeP > 0.001 && !reduceMotion) {
       camera.position.x += (rand() - 0.5) * shakeP * 0.03;
       camera.position.y += (rand() - 0.5) * shakeP * 0.03;
+    }
+    if (debugCam) {
+      // Test hook only: a fixed close-up camera
+      camera.position.fromArray(debugCam.pos);
+      lookM.lookAt(camera.position, lookAt.fromArray(debugCam.look), THREE.Object3D.DEFAULT_UP);
+      camera.quaternion.setFromRotationMatrix(lookM);
+      ({ fov } = debugCam);
     }
     const ox = Math.round(vista.ox * (1 - e) * 4) / 4;
     const oy = Math.round(vista.oy * (1 - e) * 4) / 4;
@@ -1525,7 +1659,7 @@ export async function createShooting(container) {
       } else if (clay.seen) {
         clay.offT += dt;
       }
-      if (m.position.y < 0.2 || m.position.z < -140 || clay.offT > 0.6) {
+      if (m.position.y < 0.2 || m.position.z < -140 || m.position.z > 1.5 || clay.offT > 0.6) {
         escape(clay);
         sfx.miss();
       }
@@ -1541,7 +1675,7 @@ export async function createShooting(container) {
     }
   }
 
-  function updateGun(realDt) {
+  function updateGun(realDt, t) {
     recoil = Math.max(0, recoil - realDt * 5.5);
     gun.flashMat.opacity = Math.max(0, gun.flashMat.opacity - realDt * 16);
     gun.starMat.opacity = Math.max(0, gun.starMat.opacity - realDt * 22);
@@ -1551,8 +1685,11 @@ export async function createShooting(container) {
     // Placement tracks the frame so the gun sits in the same corner on any aspect
     const tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
     gun.group.visible = raise > 0.01;
+    // A tall phone frame has a wide vertical view that shrinks the gun to a
+    // toothpick in the corner; grow it back about halfway
+    gun.group.scale.setScalar(THREE.MathUtils.clamp(0.55 * Math.sqrt(tanV / 0.43), 0.52, 0.7));
     const portrait = view.aspect < 1;
-    gunBase.set(0.66 * tanV * view.aspect * (portrait ? 0.62 : 0.6), -0.66 * tanV * (portrait ? 0.86 : 0.98), -0.66);
+    gunBase.set(0.66 * tanV * view.aspect * (portrait ? 0.62 : 0.6), -0.66 * tanV * (portrait ? 0.74 : 0.82), -0.66);
     gunBase.y -= (1 - raise) * 0.45;
     gun.group.position.copy(gunBase);
     gun.group.position.z += recoil * 0.08;
@@ -1562,6 +1699,7 @@ export async function createShooting(container) {
     gun.group.lookAt(gunTarget);
     gun.group.rotateY(Math.PI); // barrels run along -z; lookAt aims +z
     gun.group.rotateX(-recoil * 0.16); // muzzle flips up
+    if (gun.group.visible) poseShooter(realDt, t);
   }
 
   function updateHud(realDt) {
@@ -1573,6 +1711,13 @@ export async function createShooting(container) {
     hud.cross.style.top = `${(-aim.y * 0.5 + 0.5) * 100}%`;
     hud.cross.classList.toggle('show', live && reaction.k < 0.05 && (state.phase === 'flight' || state.phase === 'delay' || !touch));
     hud.cross.classList.toggle('hold', tracking);
+    const showFinger = live && tracking && finger.touch && reaction.k < 0.05;
+    hud.finger.classList.toggle('show', showFinger);
+    if (showFinger) {
+      hud.finger.style.left = `${(finger.x * 0.5 + 0.5) * 100}%`;
+      hud.finger.style.top = `${(-finger.y * 0.5 + 0.5) * 100}%`;
+      hud.finger.style.setProperty('--lift', `${Math.max(0, (aim.y - finger.y) * 0.5 * view.h)}px`);
+    }
     // Arrows at the frame edge for a clay that's coming but not yet in view
     let left = null;
     let right = null;
@@ -1690,6 +1835,7 @@ export async function createShooting(container) {
     grass.uniforms.uTime.value = clock.game;
     sky.uniforms.uTime.value = clock.shader;
     haze.uniforms.uTime.value = clock.shader;
+    shafts.uniforms.uTime.value = clock.shader;
     range.flagUniforms.uTime.value = clock.game;
     ambient.uniforms.uTime.value = clock.game;
     range.swallows.update(dt, clock.game);
@@ -1701,7 +1847,7 @@ export async function createShooting(container) {
     shot.update(dt, SHOT_SPEED);
     ambient.uniforms.uScale.value = pointScale();
 
-    updateGun(realDt);
+    updateGun(realDt, t);
     updateGlint(t, dt);
     updateGang(realDt, t);
     updateHud(realDt);
@@ -1849,12 +1995,18 @@ export async function createShooting(container) {
       gameOver();
     },
     clays,
+    shafts,
+    /** Test hook: { pos: [x,y,z], look: [x,y,z], fov } pins the camera; null releases it. */
+    setDebugCam(c) {
+      debugCam = c;
+    },
     /** Show the between-series reaction shot for a given result (hits of 8); `hold` keeps it up. */
     reactionShot(hits = 8, hold = false) {
       reactToSeries(hits, 8);
       if (hold) {
         reaction.target = 1;
         reaction.k = 1;
+        hideLead();
         timers.forEach((id) => clearTimeout(id));
         timers.clear();
       }
@@ -1864,6 +2016,8 @@ export async function createShooting(container) {
       return {
         drawCalls: renderer.info.render.calls,
         triangles: renderer.info.render.triangles,
+        forestTriangles: range.forest.triangles,
+        shooterReach: { ...shooterReach },
         bloom: !!composer,
         shadows: renderer.shadowMap.enabled,
         dpr: quality.dpr,
@@ -1904,6 +2058,8 @@ export async function createShooting(container) {
     watchdog.dispose();
     // People first: their materials are shared and reference-counted
     gang.dispose();
+    shooter.dispose();
+    gun.group.remove(shooter.root);
 
     const textures = new Set([glow, star, ...gun.textures]);
     if (envMap) textures.add(envMap);

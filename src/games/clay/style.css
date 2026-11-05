@@ -432,10 +432,6 @@
   opacity: 1;
 }
 
-.lr-tools.show .lr-tool {
-  pointer-events: auto;
-}
-
 .lr-ui .lr-tool {
   pointer-events: none;
   display: inline-flex;
@@ -457,6 +453,13 @@
   user-select: none;
   -webkit-user-select: none;
   transition: transform 0.12s ease, background 0.2s ease, border-color 0.2s ease;
+}
+
+/* Only while the tools are shown — and AFTER the rule above, with more
+   weight: at equal specificity the later "none" used to win, so GLÄTTA and
+   KLAR never took a tap or a click */
+.lr-ui .lr-tools.show .lr-tool {
+  pointer-events: auto;
 }
 
 .lr-tool small {
@@ -620,6 +623,13 @@
   opacity: 1;
   transform: translateY(0);
   pointer-events: auto;
+}
+
+/* The shared HUD turns pointer events on for every button (.pb-ui button):
+   the invisible card's "Nästa alster" lay right over GLÄTTA and KLAR on a
+   phone and swallowed their taps. A hidden card catches nothing. */
+.lr-ui .lr-card:not(.show) button {
+  pointer-events: none;
 }
 
 .lr-verdict .lr-kicker {

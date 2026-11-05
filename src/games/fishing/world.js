@@ -11,7 +11,8 @@
  *    underneath a physically placed Snell's window (GLSL refract() into air,
  *    total internal reflection outside the cone) with caustics crawling over
  *    the ceiling; from above a fresnel mix of sky reflection and lake body,
- *    the treeline mirrored in it, and a sun-glitter path
+ *    every rank of the far shore (scenery.js) mirrored in it by ray-casting
+ *    against their outlines, and a sun-glitter path
  *  - an underwater volume: a background dome graded up/level/down by depth
  *    with god rays fanning from the refracted sun, and a matching
  *    direction-aware fog patched into every lit material, so far fish and
@@ -21,7 +22,8 @@
  *    sunken eka — and something golden next to it
  *  - light shafts with soft edges and a flicker
  *
- * The eka and the angler in it live in boat.js and angler.js.
+ * The shore above the water lives in scenery.js; the eka and the angler in
+ * it in boat.js and angler.js.
  */
 
 import * as THREE from 'three';
@@ -198,13 +200,13 @@ export function particleAtlas(size = 128) {
 /* ------------------------------------------------------------- shared sky */
 
 /** Low midnight sun, a little right of straight ahead. */
-const SUN_DIR = new THREE.Vector3(0.16, 0.125, -0.978).normalize();
+export const SUN_DIR = new THREE.Vector3(0.16, 0.125, -0.978).normalize();
 
 /**
  * Refracted into the water (Snell: sin θt = sin θi / 1.33), the same sun
  * comes from much higher — this is where the underwater rays fan from.
  */
-const SUN_UNDER = (() => {
+export const SUN_UNDER = (() => {
   const h = new THREE.Vector2(SUN_DIR.x, SUN_DIR.z).normalize();
   const st = Math.sqrt(1 - SUN_DIR.y * SUN_DIR.y) / 1.333;
   return new THREE.Vector3(h.x * st, Math.sqrt(1 - st * st), h.y * st);
@@ -224,8 +226,8 @@ export const WATER_FOG = {
 };
 
 const SKY_UNIFORMS = {
-  uZenith: { value: new THREE.Color(0x284a8e) },
-  uHorizon: { value: new THREE.Color(0xffb27a) },
+  uZenith: { value: new THREE.Color(0x213c7c) },
+  uHorizon: { value: new THREE.Color(0xffa572) },
   uSunColor: { value: new THREE.Color(0xfff0c8) },
   uSunDir: { value: SUN_DIR }
 };
@@ -240,7 +242,10 @@ const SKY_GLSL = `
     float h = clamp(d.y, 0.0, 1.0);
     // Almost all of the gradient happens in the first few degrees above
     // the horizon — that is what makes a low sun read as a low sun.
-    vec3 c = mix(uHorizon, uZenith, pow(h, 0.42));
+    // Gold at the horizon, a band of rose, then the clear blue of a
+    // night that never gets dark
+    vec3 c = mix(uHorizon, vec3(0.66, 0.36, 0.46), smoothstep(0.0, 0.14, h));
+    c = mix(c, uZenith, pow(smoothstep(0.05, 0.6, h), 0.75));
     float s = max(dot(d, uSunDir), 0.0);
     // Warm the horizon toward the sun's azimuth, cool it away from it
     vec2 az = normalize(d.xz + 1e-4);
@@ -249,10 +254,11 @@ const SKY_GLSL = `
     c += vec3(1.0, 0.62, 0.34) * pow(toward, 6.0) * pow(1.0 - h, 6.0) * 0.35;
     // Pink band opposite the sun (the Belt of Venus)
     c = mix(c, vec3(0.92, 0.66, 0.74), smoothstep(0.02, 0.1, h) * (1.0 - smoothstep(0.1, 0.3, h)) * (1.0 - toward) * 0.35);
-    c += uSunColor * smoothstep(0.9986, 0.9994, s) * 3.2;
-    c += uSunColor * pow(s, 26.0) * 0.75;
-    c += vec3(1.0, 0.58, 0.28) * pow(s, 9.0) * 0.42; // the warm halo of a sun that never sets
-    c += uSunColor * pow(s, 3.0) * 0.2;
+    // The disc, a hot corona, and the wide warm halo of a sun that never sets
+    c += uSunColor * smoothstep(0.9985, 0.99935, s) * 4.0;
+    c += vec3(1.0, 0.86, 0.6) * pow(s, 60.0) * 1.1;
+    c += vec3(1.0, 0.66, 0.34) * pow(s, 12.0) * 0.55;
+    c += vec3(1.0, 0.5, 0.26) * pow(s, 3.0) * 0.16 * (1.0 - h);
     return c;
   }
 `;
@@ -289,18 +295,20 @@ export function buildSky(noise) {
         // surface (alpha 0.74 looking down), so it is the lake's own deep
         // green-teal, not the peach horizon — otherwise the water near the
         // boat goes milky pink.
-        c = mix(c, vec3(0.006, 0.05, 0.062), smoothstep(-0.005, -0.18, d.y));
+        c = mix(c, vec3(0.006, 0.05, 0.062), 1.0 - smoothstep(-0.18, -0.005, d.y));
         // Clouds on a high plane, stretched along x into long summer streaks
         if (d.y > 0.0) {
           vec2 p = d.xz / (d.y + 0.06);
           p = vec2(p.x * 0.07, p.y * 0.16) + vec2(uTime * 0.0025, 0.0);
           float n = texture2D(uNoise, p).r * 0.65 + texture2D(uNoise, p * 2.7 + 0.37).g * 0.35;
-          float cl = smoothstep(0.56, 0.8, n) * smoothstep(0.015, 0.1, d.y) * (1.0 - smoothstep(0.3, 0.7, d.y));
+          float cl = smoothstep(0.6, 0.82, n) * smoothstep(0.02, 0.12, d.y) * (1.0 - smoothstep(0.3, 0.7, d.y));
           float s = max(dot(d, uSunDir), 0.0);
-          vec3 lit = mix(vec3(1.0, 0.68, 0.62), vec3(1.0, 0.84, 0.56), pow(s, 3.0));
-          vec3 cc = mix(vec3(0.62, 0.52, 0.66), lit, 0.45 + 0.55 * n);
-          c = mix(c, cc, cl * 0.7);
-          c += uSunColor * cl * pow(s, 18.0) * 1.4; // silver lining
+          // Streaks lit from below by a sun under them: rose away from it,
+          // molten gold toward it, violet in their shadowed bellies
+          vec3 lit = mix(vec3(1.0, 0.56, 0.52), vec3(1.0, 0.78, 0.42), pow(s, 3.0));
+          vec3 cc = mix(vec3(0.5, 0.4, 0.62), lit, 0.35 + 0.65 * n);
+          c = mix(c, cc, cl * 0.75);
+          c += vec3(1.0, 0.8, 0.5) * cl * pow(s, 14.0) * 1.6; // gilded edges
         }
         gl_FragColor = vec4(c, uOpacity);
         #include <tonemapping_fragment>
@@ -343,119 +351,6 @@ function mergeGeos(list, colors) {
   return out;
 }
 
-/**
- * Ridge line, three ranks of spruce on a land strip, and the stuga with its
- * brygga — where the coffee and the smoked sik are waiting. Everything here
- * is backlit by the low sun, so it is sold by silhouette and colour, not
- * by detail: each rank is paler than the one in front.
- */
-export function buildShore() {
-  const g = new THREE.Group();
-  const rand = mulberry(7);
-  const basic = (color, extra = {}) => new THREE.MeshBasicMaterial({ color, fog: false, ...extra });
-
-  const ridge = (z, color, hScale, count, spread) => {
-    const parts = [];
-    for (let i = 0; i < count; i++) {
-      const h = (1.4 + rand() * 2.8) * hScale;
-      const w = (0.55 + rand() * 0.45) * hScale;
-      const x = -spread / 2 + (i / count) * spread + rand() * 3;
-      const zz = z + rand() * 6;
-      // Two stacked cones per spruce: the tiered outline reads as spruce
-      const lower = new THREE.ConeGeometry(w, h * 0.7, 6);
-      lower.translate(x, h * 0.35, zz);
-      const upper = new THREE.ConeGeometry(w * 0.66, h * 0.55, 6);
-      upper.translate(x, h * 0.72, zz);
-      parts.push(lower.toNonIndexed(), upper.toNonIndexed());
-      lower.dispose();
-      upper.dispose();
-    }
-    const m = new THREE.Mesh(mergeGeos(parts), basic(color));
-    m.renderOrder = -8;
-    return m;
-  };
-
-  const hills = new THREE.Mesh(hillGeometry(rand), basic(0x7d8aa6));
-  hills.position.set(0, 0, -270);
-  hills.renderOrder = -9;
-  g.add(hills);
-  g.add(ridge(-245, 0x8e98ae, 4.0, 40, 640));
-  g.add(ridge(-185, 0x56667c, 3.4, 48, 520));
-  g.add(ridge(-122, 0x223040, 2.4, 64, 420));
-
-  // The land the trees stand on, so no lake shows between the ranks
-  const land = new THREE.Mesh(new THREE.PlaneGeometry(900, 300), basic(0x1c2836));
-  land.rotation.x = -Math.PI / 2;
-  land.position.set(0, 0.06, -268);
-  land.renderOrder = -8;
-  g.add(land);
-
-  /* Stuga, brygga and flaggstång, on the near shore */
-  const parts = [];
-  const cols = [];
-  const box = (w, h, d, x, y, z, color, ry = 0) => {
-    const b = new THREE.BoxGeometry(w, h, d);
-    b.rotateY(ry);
-    b.translate(x, y, z);
-    parts.push(b.toNonIndexed());
-    b.dispose();
-    cols.push(new THREE.Color(color));
-  };
-  const sx = -26;
-  const sz = -119;
-  // Seen from 120 m, anything a few cm proud of a wall would flicker on a
-  // 16-bit depth buffer: the window, door and corner boards stand 0.15 m out.
-  box(5.4, 3.0, 4.0, sx, 1.5, sz, 0x8c2a22);       // falu red walls
-  [-2.7, 2.7].forEach((dx) => box(0.3, 3.0, 4.3, sx + dx, 1.5, sz, 0xe8e2d4)); // white corners
-  box(1.0, 1.0, 0.3, sx - 1.2, 1.7, sz + 2.05, 0xffd48a); // lit window
-  box(0.9, 1.8, 0.3, sx + 1.3, 0.9, sz + 2.05, 0xe8e2d4);  // door
-  const roof = new THREE.ConeGeometry(4.1, 1.9, 4, 1);
-  roof.rotateY(Math.PI / 4);
-  roof.scale(1.0, 1, 0.78);
-  roof.translate(sx, 3.95, sz);
-  parts.push(roof.toNonIndexed());
-  roof.dispose();
-  cols.push(new THREE.Color(0x2a2b30));
-  box(1.2, 0.18, 9.0, sx + 5.5, 0.35, sz + 6.5, 0x7a6248); // brygga
-  [0, 3, 6, 9].forEach((dz) => box(0.18, 1.0, 0.18, sx + 5.0, 0.0, sz + 2 + dz, 0x4a3a2a));
-  box(0.14, 8.5, 0.14, sx - 6, 4.25, sz - 1, 0xe8e2d4); // flaggstång
-  const g2 = mergeGeos(parts, cols);
-  const stuga = new THREE.Mesh(g2, new THREE.MeshBasicMaterial({ vertexColors: true, fog: false }));
-  stuga.renderOrder = -7;
-  g.add(stuga);
-  // The vimpel: blue with a yellow edge, a long thin triangle in the breeze
-  const vimpel = new THREE.Mesh(
-    new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -0.7, 0), new THREE.Vector3(3.6, -0.35, 0)
-    ]),
-    basic(0x1f5aa6, { side: THREE.DoubleSide })
-  );
-  vimpel.position.set(sx - 6, 8.4, sz - 1);
-  vimpel.renderOrder = -7;
-  g.add(vimpel);
-  g.userData.vimpel = vimpel;
-
-  return g;
-}
-
-function hillGeometry(rand) {
-  const pts = [];
-  const span = 1000;
-  const n = 34;
-  const heights = [];
-  for (let i = 0; i <= n; i++) heights.push(16 + Math.sin(i * 0.7) * 11 + rand() * 18);
-  for (let i = 0; i < n; i++) {
-    const x0 = -span / 2 + (i / n) * span;
-    const x1 = -span / 2 + ((i + 1) / n) * span;
-    pts.push(x0, 0, 0, x1, 0, 0, x0, heights[i], 0);
-    pts.push(x1, 0, 0, x1, heights[i + 1], 0, x0, heights[i], 0);
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pts), 3));
-  g.computeVertexNormals();
-  return g;
-}
-
 /* ----------------------------------------------------------------- water */
 
 /**
@@ -465,21 +360,21 @@ function hillGeometry(rand) {
 export const WAVE_GLSL = `
   float waveH(vec2 p, float t) {
     float fade = 1.0 - smoothstep(60.0, 140.0, length(p));
-    return (sin(p.x * 0.32 + t * 1.10) * 0.30
-          + sin(p.y * 0.41 - t * 0.85) * 0.24
-          + sin((p.x + p.y) * 0.19 + t * 1.60) * 0.16
-          + sin(p.x * 1.70 + t * 2.60) * 0.045
-          + sin(p.y * 1.90 - t * 2.20) * 0.040) * fade;
+    return (sin(p.x * 0.32 + t * 1.10) * 0.21
+          + sin(p.y * 0.41 - t * 0.85) * 0.17
+          + sin((p.x + p.y) * 0.19 + t * 1.60) * 0.12
+          + sin(p.x * 1.70 + t * 2.60) * 0.026
+          + sin(p.y * 1.90 - t * 2.20) * 0.022) * fade;
   }
 `;
 
 /** The same five waves the vertex shader uses — for things that float. */
 export function waveHeight(x, z, t) {
-  return Math.sin(x * 0.32 + t * 1.1) * 0.3 +
-    Math.sin(z * 0.41 - t * 0.85) * 0.24 +
-    Math.sin((x + z) * 0.19 + t * 1.6) * 0.16 +
-    Math.sin(x * 1.7 + t * 2.6) * 0.045 +
-    Math.sin(z * 1.9 - t * 2.2) * 0.04;
+  return Math.sin(x * 0.32 + t * 1.1) * 0.21 +
+    Math.sin(z * 0.41 - t * 0.85) * 0.17 +
+    Math.sin((x + z) * 0.19 + t * 1.6) * 0.12 +
+    Math.sin(x * 1.7 + t * 2.6) * 0.026 +
+    Math.sin(z * 1.9 - t * 2.2) * 0.022;
 }
 
 /**
@@ -514,7 +409,45 @@ function waterGeometry() {
   return g;
 }
 
-export function buildWater(caustics, noise) {
+/**
+ * The far shore mirrored in the lake: the reflected ray is cast against
+ * each rank of land (scenery.js), farthest first, nearer ranks painting
+ * over — every rank is a plane at its distance with its outline in one row
+ * of a small height texture. Branch-free: every lookup always runs.
+ */
+function shoreGLSL(layers) {
+  const n = layers.length;
+  let body = '';
+  for (let i = n - 1; i >= 0; i--) {
+    body += `
+    {
+      vec4 L = uShoreL[${i}];
+      float t = (L.x - P.z) / rz;
+      float u = (P.x + R.x * t - L.y) * L.z;
+      float y = R.y * t;
+      float h = texture2D(uShoreH, vec2(clamp(u, 0.0, 1.0), ${((i + 0.5) / 8).toFixed(4)})).r * L.w;
+      float e = 0.03 + t * 0.002;
+      float hit = step(0.0, t) * step(0.0, u) * step(u, 1.0) * step(0.08, h) * (1.0 - smoothstep(h - e, h + e, y));
+      vec3 c = mix(uShoreMist[${i}], uShoreTop[${i}], smoothstep(0.0, max(0.6, h * 0.35), y));
+      res = mix(res, vec4(c, 1.0), hit);
+    }`;
+  }
+  return `
+    uniform sampler2D uShoreH;
+    uniform vec4 uShoreL[${n}];
+    uniform vec3 uShoreTop[${n}];
+    uniform vec3 uShoreMist[${n}];
+    vec4 shoreRefl(vec3 P, vec3 R) {
+      float rz = min(R.z, -1e-3);
+      vec4 res = vec4(0.0);
+      ${body}
+      return res;
+    }
+  `;
+}
+
+export function buildWater(caustics, noise, reflect) {
+  const { layers } = reflect;
   const uniforms = {
     ...SKY_UNIFORMS,
     uTime: { value: 0 },
@@ -526,7 +459,10 @@ export function buildWater(caustics, noise) {
     uFogUp: WATER_FOG.uFogUp,
     uFogDensity: { value: 0.02 },
     uCausticStrength: { value: 1 },
-    uShoreTint: { value: new THREE.Color(0x1a2532) }
+    uShoreH: { value: reflect.texture },
+    uShoreL: { value: layers.map((l) => new THREE.Vector4(l.z, l.x0, 1 / (l.x1 - l.x0), l.hmax)) },
+    uShoreTop: { value: layers.map((l) => l.top) },
+    uShoreMist: { value: layers.map((l) => l.mist) }
   };
 
   const material = new THREE.ShaderMaterial({
@@ -546,12 +482,12 @@ export function buildWater(caustics, noise) {
         float t = uTime;
         float fade = 1.0 - smoothstep(60.0, 140.0, length(w.xz));
         w.y += waveH(w.xz, t);
-        float dx = cos(w.x * 0.32 + t * 1.10) * 0.30 * 0.32
-                 + cos((w.x + w.z) * 0.19 + t * 1.60) * 0.16 * 0.19
-                 + cos(w.x * 1.70 + t * 2.60) * 0.045 * 1.70;
-        float dz = cos(w.z * 0.41 - t * 0.85) * 0.24 * 0.41
-                 + cos((w.x + w.z) * 0.19 + t * 1.60) * 0.16 * 0.19
-                 + cos(w.z * 1.90 - t * 2.20) * 0.040 * 1.90;
+        float dx = cos(w.x * 0.32 + t * 1.10) * 0.21 * 0.32
+                 + cos((w.x + w.z) * 0.19 + t * 1.60) * 0.12 * 0.19
+                 + cos(w.x * 1.70 + t * 2.60) * 0.026 * 1.70;
+        float dz = cos(w.z * 0.41 - t * 0.85) * 0.17 * 0.41
+                 + cos((w.x + w.z) * 0.19 + t * 1.60) * 0.12 * 0.19
+                 + cos(w.z * 1.90 - t * 2.20) * 0.022 * 1.90;
         vNrm = normalize(vec3(-dx * fade, 1.0, -dz * fade));
         vWorld = w.xyz;
         vec4 mv = viewMatrix * w;
@@ -561,8 +497,9 @@ export function buildWater(caustics, noise) {
     `,
     fragmentShader: `
       ${SKY_GLSL}
+      ${shoreGLSL(layers)}
       uniform sampler2D uCaustics, uNoise;
-      uniform vec3 uBody, uDeepTint, uFogColor, uFogUp, uShoreTint;
+      uniform vec3 uBody, uDeepTint, uFogColor, uFogUp;
       uniform float uFogDensity, uTime, uCausticStrength;
       varying vec3 vWorld;
       varying vec3 vNrm;
@@ -572,15 +509,6 @@ export function buildWater(caustics, noise) {
         float a = texture2D(uCaustics, p * 0.045 + vec2(uTime * 0.012, uTime * 0.008)).r;
         float b = texture2D(uCaustics, p * 0.031 - vec2(uTime * 0.009, uTime * 0.014)).r;
         return a * b * 2.4;
-      }
-
-      // Treeline elevation by azimuth — the reflection's silhouette
-      float treeline(vec3 r) {
-        // (+1e-5: atan(0, 0) is undefined, and NaN on some GPUs)
-        float az = atan(r.x, -r.z + 1e-5);
-        float n = texture2D(uNoise, vec2(az * 0.9, 0.31)).r;
-        float m = texture2D(uNoise, vec2(az * 5.3, 0.73)).g;
-        return 0.022 + n * 0.05 + m * 0.025;
       }
 
       void main() {
@@ -596,7 +524,7 @@ export function buildWater(caustics, noise) {
         vec2 q = vWorld.xz;
         vec2 r1 = texture2D(uNoise, q * 0.31 + uTime * vec2(0.031, 0.017)).rg;
         vec2 r2 = texture2D(uNoise, q * 0.83 - uTime * vec2(0.023, 0.041)).rg;
-        vec3 N = normalize(N0 + vec3(r1.x + r2.x - 1.0, 0.0, r1.y + r2.y - 1.0) * (0.05 + 0.13 * near));
+        vec3 N = normalize(N0 + vec3(r1.x + r2.x - 1.0, 0.0, r1.y + r2.y - 1.0) * (0.04 + 0.09 * near));
         vec3 V = normalize(cameraPosition - vWorld);
         vec3 col;
         float alpha;
@@ -629,20 +557,29 @@ export function buildWater(caustics, noise) {
           vec3 R = reflect(-V, N);
           R.y = abs(R.y);
           vec3 refl = skyCol(R);
-          // The far treeline mirrored in the lake — tested on the smooth
-          // wave normal so ripples bend it but never scatter it into blots
-          vec3 R0 = reflect(-V, N0);
-          float tl = treeline(R0);
-          float shore = (1.0 - smoothstep(tl - 0.01, tl + 0.006, abs(R0.y))) * smoothstep(40.0, 90.0, vDepth);
-          refl = mix(refl, uShoreTint, shore * 0.85);
+          // The far shore mirrored in the lake, rank by rank. The ripples
+          // bend it only part way, so the trees waver instead of shattering
+          // At grazing angles a tilt of a few degrees throws the mirrored
+          // ray clean off the shore, so far out the waves bend it less
+          float calm = mix(0.5, 0.12, smoothstep(8.0, 70.0, vDepth));
+          vec3 Ns = normalize(vec3(N0.x * calm, 1.0, N0.z * calm * 0.6) + (N - N0) * calm * 0.35);
+          vec3 Rs = reflect(-V, Ns);
+          Rs.y = abs(Rs.y);
+          vec4 sh = shoreRefl(vWorld, Rs);
+          sh.a *= smoothstep(3.0, 26.0, vDepth);
+          refl = mix(refl, sh.rgb, sh.a);
           vec3 body = uBody * (0.75 + 0.5 * web(vWorld.xz) * uCausticStrength * 0.25);
           col = mix(body, refl, clamp(fres * 1.25, 0.0, 1.0));
           vec3 H = normalize(uSunDir + V);
           float nh = max(dot(N, H), 0.0);
-          // Glitter: a needle-sharp glint near the boat. Far away a pixel
-          // covers many ripples, so the needle would only sparkle on and off
-          // from frame to frame — there it widens and dims instead.
-          col += uSunColor * (pow(nh, mix(260.0, 900.0, near)) * mix(2.4, 9.0, near) + pow(nh, 90.0) * 0.55);
+          // The glitter path: a warm sheen running from under the sun to
+          // the boat, and needle-sharp glints in it near the boat. Far away
+          // a pixel covers many ripples, so the needle would only sparkle on
+          // and off from frame to frame — there it widens and dims instead.
+          // (Where the far shore is mirrored the sun is hidden behind it.)
+          float open = 1.0 - sh.a * 0.85;
+          col += vec3(1.0, 0.62, 0.3) * pow(nh, 36.0) * 0.42 * open;
+          col += uSunColor * (pow(nh, mix(260.0, 900.0, near)) * mix(2.4, 9.0, near) + pow(nh, 90.0) * 0.7) * open;
           alpha = mix(0.74, 0.985, fres);
         }
 
@@ -1017,7 +954,7 @@ export function buildKelp(count, timeUniform) {
 
 /* --------------------------------------------------------------- seabed */
 
-export function buildSeabed() {
+export function buildSeabed(hull) {
   const g = new THREE.Group();
   const rand = mulberry(19);
 
@@ -1029,13 +966,11 @@ export function buildSeabed() {
   const c = new THREE.Color();
   const silt = new THREE.Color(0x1d2536);
   const sand = new THREE.Color(0x5c5a52);
+  const bedH = (x, z) => Math.sin(x * 0.11) * 1.1 + Math.cos(z * 0.17 + 1.2) * 0.8 + Math.sin(x * 0.31 + z * 0.21) * 0.45;
   for (let i = 0; i < bp.count; i++) {
     const x = bp.getX(i);
     const z = bp.getZ(i);
-    const hgt =
-      Math.sin(x * 0.11) * 1.1 +
-      Math.cos(z * 0.17 + 1.2) * 0.8 +
-      Math.sin(x * 0.31 + z * 0.21) * 0.45;
+    const hgt = bedH(x, z);
     bp.setY(i, hgt);
     // Silt in the hollows, pale sand ripples on the crests
     const k = Math.min(1, Math.max(0, hgt * 0.3 + 0.45 + Math.sin(x * 1.3 + z * 0.4) * 0.12));
@@ -1064,7 +999,12 @@ export function buildSeabed() {
     const r = 0.5 + rand() * 1.6;
     let p;
     if (i < 22) {
-      p = new THREE.Vector3(-32 + rand() * 64, r * 0.35, -14 + rand() * 18);
+      const x = -32 + rand() * 64;
+      const z = -14 + rand() * 18;
+      // Bedded in the silt, and clear of the wreck and the pokal
+      const clear = Math.hypot(x - 1.9, z + 1.4) < 2.6 || Math.hypot(x + 5.4, z + 4.4) < 3.4;
+      p = new THREE.Vector3(clear ? x + 9 : x, 0, z);
+      p.y = bedH(p.x, p.z) + r * 0.12;
     } else {
       const th = sideAngle(rand);
       const y = -6 - rand() * 50;
@@ -1079,27 +1019,31 @@ export function buildSeabed() {
   }
   g.add(stones);
 
-  // A sunken eka, half buried — a landmark that says "you made it down"
-  const wreck = new THREE.Group();
-  const wshape = new THREE.Shape();
-  wshape.moveTo(-1.8, 0.4);
-  wshape.lineTo(1.9, 0.5);
-  wshape.lineTo(2.1, 0.1);
-  wshape.quadraticCurveTo(0, -0.5, -1.8, -0.05);
-  wshape.closePath();
-  const wg = new THREE.ExtrudeGeometry(wshape, { depth: 1.4, bevelEnabled: false, curveSegments: 4 });
-  wg.translate(0, 0, -0.7);
-  const wreckMat = new THREE.MeshLambertMaterial({ color: 0x3b4a44, flatShading: true });
-  wreckMat.onBeforeCompile = fogWithReach(1);
-  wreckMat.customProgramCacheKey = () => 'fiske-rock-plain';
-  wreck.add(new THREE.Mesh(wg, wreckMat));
-  const plank = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.08, 0.3), wreckMat);
-  plank.position.set(0.2, 0.5, 0.2);
-  plank.rotation.y = 0.3;
-  wreck.add(plank);
-  wreck.position.set(-9, 0.5, -3);
-  wreck.rotation.set(0.2, 0.5, 0.35);
-  g.add(wreck);
+  // A sunken eka on its side, half buried — the same clinker boat Erik
+  // sits in, gone green with years down here: a landmark that says "you
+  // made it down"
+  if (hull) {
+    const wreckMat = new THREE.MeshLambertMaterial({ vertexColors: true, color: 0x6a8270 });
+    wreckMat.onBeforeCompile = fogWithReach(1);
+    wreckMat.customProgramCacheKey = () => 'fiske-wreck';
+    const wreck = new THREE.Mesh(hull, wreckMat);
+    wreck.position.set(-5.4, bedH(-5.4, -4.4) + 0.42, -4.4);
+    wreck.rotation.set(0.15, 0.55, 0.55);
+    wreck.scale.setScalar(1.15);
+    g.add(wreck);
+    // A loose thwart and an oar beside it
+    const plankMat = new THREE.MeshLambertMaterial({ color: 0x4a5a48, flatShading: true });
+    plankMat.onBeforeCompile = fogWithReach(1);
+    plankMat.customProgramCacheKey = () => 'fiske-rock-plain';
+    const plank = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.06, 0.26), plankMat);
+    plank.position.set(-2.6, bedH(-2.6, -2.2) + 0.05, -2.2);
+    plank.rotation.set(0.05, -0.6, 0.12);
+    g.add(plank);
+    const oar = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.06, 0.08), plankMat);
+    oar.position.set(-8.4, bedH(-8.4, -2.4) + 0.05, -2.4);
+    oar.rotation.set(0, 0.35, 0.06);
+    g.add(oar);
+  }
 
   // …and next to it, something nobody expected to find down here
   const pts = [];
@@ -1110,7 +1054,8 @@ export function buildSeabed() {
     new THREE.LatheGeometry(pts, 18),
     new THREE.MeshStandardMaterial({ color: 0xf2c14e, metalness: 0.85, roughness: 0.25, emissive: 0xb07a12, emissiveIntensity: 0.9 })
   );
-  pokal.position.set(-5.2, -0.15, -2.4);
+  // Placed where a lure on the bottom has it in view, half sunk in the silt
+  pokal.position.set(1.9, bedH(1.9, -1.4) - 0.12, -1.4);
   pokal.rotation.set(0.5, 0, -0.9);
   pokal.scale.setScalar(1.25);
   g.add(pokal);
@@ -1241,7 +1186,7 @@ export function buildLilies() {
   padMesh.renderOrder = 3;
   const tint = new THREE.Color();
   pads.forEach((p, i) => {
-    tint.setHSL(0.22 + rand() * 0.06, 0.32, 0.2 + rand() * 0.08);
+    tint.setHSL(0.24 + rand() * 0.06, 0.4, 0.11 + rand() * 0.06);
     padMesh.setColorAt(i, tint);
   });
 

@@ -182,6 +182,34 @@ export class Sfx {
     this.noiseHit(0.05, 0.12, 420, 0.7);
   }
 
+  /** A footwork step: the lead foot lands, then the other (soft soles on metal). */
+  footfall(gain = 1, dur = 0.34) {
+    this.noiseHit(0.05, 0.1 * gain, 260, 0.8, dur * 0.55, 'lowpass');
+    this.noiseHit(0.03, 0.035 * gain, 2600, 1.2, dur * 0.55);
+    this.noiseHit(0.05, 0.07 * gain, 240, 0.8, dur * 0.95, 'lowpass');
+  }
+
+  /** The coil before an attack: a short, rising breath of cloth and air. */
+  coil() {
+    if (!this.ctx || this.muted) return;
+    const t = this.ctx.currentTime;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noise();
+    const f = this.ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.Q.value = 1.4;
+    f.frequency.setValueAtTime(500, t);
+    f.frequency.exponentialRampToValueAtTime(1600, t + 0.28);
+    const env = this.ctx.createGain();
+    env.gain.setValueAtTime(0.0001, t);
+    env.gain.exponentialRampToValueAtTime(0.16, t + 0.2);
+    env.gain.exponentialRampToValueAtTime(0.0001, t + 0.34);
+    src.connect(f).connect(env);
+    this.out(env);
+    src.start(t, Math.random());
+    src.stop(t + 0.36);
+  }
+
   /** The appel: a feint's stamp of the front foot. */
   feint() {
     this.noiseHit(0.08, 0.2, 3000, 1);

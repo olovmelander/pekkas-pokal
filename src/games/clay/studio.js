@@ -20,7 +20,7 @@
  */
 
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 
 /* ---------------------------------------------------------------- helpers */
 
@@ -187,21 +187,23 @@ function barcelonaTexture() {
   const [cv, ctx] = canvas(w, h);
   const rand = mulberry(9);
   const sky = ctx.createLinearGradient(0, 0, 0, h);
-  sky.addColorStop(0, '#f3b77a');
-  sky.addColorStop(0.42, '#ffcf8f');
-  sky.addColorStop(0.66, '#ffb06a');
-  sky.addColorStop(1, '#e58450');
+  // A deep sunset rather than a white-out, so the skyline reads against it
+  sky.addColorStop(0, '#b8685a');
+  sky.addColorStop(0.3, '#e08a62');
+  sky.addColorStop(0.55, '#f7a964');
+  sky.addColorStop(0.7, '#ffb868');
+  sky.addColorStop(1, '#e07a48');
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, w, h);
 
   // The low sun, a big soft bloom around a hot core
   const sx = w * 0.58;
   const sy = h * 0.6;
-  let g = ctx.createRadialGradient(sx, sy, 2, sx, sy, 230);
+  let g = ctx.createRadialGradient(sx, sy, 2, sx, sy, 200);
   g.addColorStop(0, 'rgba(255,250,232,1)');
-  g.addColorStop(0.08, 'rgba(255,240,200,0.95)');
-  g.addColorStop(0.35, 'rgba(255,214,150,0.35)');
-  g.addColorStop(1, 'rgba(255,200,140,0)');
+  g.addColorStop(0.07, 'rgba(255,236,190,0.95)');
+  g.addColorStop(0.3, 'rgba(255,200,130,0.32)');
+  g.addColorStop(1, 'rgba(255,190,120,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
 
@@ -695,19 +697,29 @@ function buildKiln(metal) {
   [-0.62, 0.62].forEach((x) => [-0.52, 0.52].forEach((z) => {
     steel.add(new THREE.BoxGeometry(0.07, 0.35, 0.07), 0x2b2a2e, [x, 0.175, z]);
   }));
-  steel.add(new THREE.BoxGeometry(0.3, 1.6, 1.4), 0x46454b, [-0.6, 1.15, 0]);
-  steel.add(new THREE.BoxGeometry(0.3, 1.6, 1.4), 0x46454b, [0.6, 1.15, 0]);
-  steel.add(new THREE.BoxGeometry(0.9, 0.28, 1.4), 0x46454b, [0, 1.81, 0]);
-  steel.add(new THREE.BoxGeometry(0.9, 0.27, 1.4), 0x46454b, [0, 0.485, 0]);
-  steel.add(new THREE.BoxGeometry(0.9, 1.05, 0.2), 0x46454b, [0, 1.15, -0.6]);
+  steel.add(new THREE.BoxGeometry(0.3, 1.6, 1.4), 0x77767c, [-0.6, 1.15, 0]);
+  steel.add(new THREE.BoxGeometry(0.3, 1.6, 1.4), 0x77767c, [0.6, 1.15, 0]);
+  steel.add(new THREE.BoxGeometry(0.9, 0.28, 1.4), 0x77767c, [0, 1.81, 0]);
+  steel.add(new THREE.BoxGeometry(0.9, 0.27, 1.4), 0x77767c, [0, 0.485, 0]);
+  steel.add(new THREE.BoxGeometry(0.9, 1.05, 0.2), 0x77767c, [0, 1.15, -0.6]);
   [0.52, 1.15, 1.78].forEach((y) => {
-    steel.add(new THREE.BoxGeometry(1.55, 0.05, 1.45), 0x6a6970, [0, y, 0]);
+    steel.add(new THREE.BoxGeometry(1.55, 0.05, 1.45), 0xa3a2a8, [0, y, 0]);
   });
   // Flue pipe and hood
   steel.add(new THREE.CylinderGeometry(0.09, 0.09, 1.5, 10), 0x3a393e, [0.3, 2.7, -0.3]);
   steel.add(new THREE.CylinderGeometry(0.16, 0.2, 0.14, 10), 0x55545a, [0.3, 2.0, -0.3]);
-  // Controller box on the right pillar
+  // Controller box on the right pillar, and its armoured cable to the wall
   steel.add(new THREE.BoxGeometry(0.3, 0.42, 0.08), 0x1e1d22, [0.6, 1.45, 0.73]);
+  steel.add(new THREE.CylinderGeometry(0.025, 0.025, 1.3, 6), 0x2a2a2e, [0.78, 0.9, 0.2], [0.6, 0, 0.12]);
+  // Bolts along the bands (flat heads: a tiny metal dome is a speck that
+  // twinkles on a real GPU), and a peephole plug in each side
+  [-0.74, 0.74].forEach((x) => [0.84, 1.47].forEach((y) => [-0.45, 0, 0.45].forEach((z) => {
+    steel.add(new THREE.CylinderGeometry(0.02, 0.02, 0.016, 6), 0x9c9ba1, [x + Math.sign(x) * 0.016, y, z], [0, 0, Math.PI / 2]);
+  })));
+  [-0.76, 0.76].forEach((x) => steel.add(new THREE.CylinderGeometry(0.05, 0.05, 0.06, 8), 0xd9d2c4, [x, 1.4, -0.2], [0, 0, Math.PI / 2]));
+  // A hand-painted warning plate on the right pillar: HOT
+  steel.add(new THREE.BoxGeometry(0.17, 0.13, 0.012), 0xe2b72e, [0.655, 0.95, 0.718]);
+  steel.add(new THREE.BoxGeometry(0.12, 0.03, 0.012), 0x2a2420, [0.655, 0.95, 0.729]);
   const body = steel.mesh(metal);
   body.castShadow = true;
   body.receiveShadow = true;
@@ -731,7 +743,7 @@ function buildKiln(metal) {
   const hinge = new THREE.Group();
   hinge.position.set(0.54, 1.15, 0.72);
   const db = new Batch();
-  db.add(new THREE.BoxGeometry(1.04, 1.18, 0.13), 0x4f4e55, [-0.52, 0, 0]);
+  db.add(new THREE.BoxGeometry(1.04, 1.18, 0.13), 0x85848a, [-0.52, 0, 0]);
   db.add(new THREE.BoxGeometry(0.9, 1.02, 0.03), 0x9c8467, [-0.52, 0, -0.075]);
   db.add(new THREE.CylinderGeometry(0.025, 0.025, 0.32, 6), 0x9a9aa2, [-0.95, 0, 0.12]);
   db.add(new THREE.BoxGeometry(0.04, 0.04, 0.1), 0x9a9aa2, [-0.95, 0.13, 0.08]);
@@ -760,7 +772,8 @@ function buildKiln(metal) {
   ledPlane.position.set(0.6, 1.53, 0.775);
   g.add(ledPlane);
 
-  return { group: g, hinge, chamberMat, glowMat, led, flue: new THREE.Vector3(0.3, 3.45, -0.3) };
+  // handle: the middle of the door's bar, in the hinge's space (keramikern takes hold of it)
+  return { group: g, hinge, handle: new THREE.Vector3(-0.95, 0, 0.12), chamberMat, glowMat, led, flue: new THREE.Vector3(0.3, 3.45, -0.3) };
 }
 
 export function buildStudio() {
@@ -800,7 +813,8 @@ export function buildStudio() {
   /* Barcelona outside, behind the hole */
   const outside = new THREE.Mesh(
     new THREE.PlaneGeometry(4.6, 5.0),
-    new THREE.MeshBasicMaterial({ map: barcelonaTexture(), color: new THREE.Color(1.6, 1.45, 1.3), fog: false })
+    // Bright enough to read as the light source, not so bright that the skyline burns out
+    new THREE.MeshBasicMaterial({ map: barcelonaTexture(), color: new THREE.Color(1.25, 1.14, 1.04), fog: false })
   );
   outside.position.set(WIN.x + 0.2, 3.3, -6.6);
   g.add(outside);
@@ -809,7 +823,8 @@ export function buildStudio() {
   /* Contact shadows under the furniture: [x, z, width, depth, turn] */
   g.add(contactShadows([
     [0, 0, 2.9, 2.9], [4.5, -2.6, 2.3, 2.1, -0.55], [2.55, -0.75, 1.2, 1.2], [-4.6, -1.9, 2.6, 1.6, 0.35],
-    [-7.3, -2.6, 3.6, 1.3, 1.1], [6.6, -4.4, 3.6, 1.2, -0.38], [-1.75, 1.0, 0.75, 0.75], [-1.7, -4.9, 2.0, 0.9]
+    [-7.3, -2.6, 3.6, 1.3, 1.1], [6.6, -4.4, 3.6, 1.2, -0.38], [-1.75, 1.0, 0.75, 0.75], [-1.7, -4.9, 2.0, 0.9],
+    [3.12, -4.95, 2.5, 0.75], [-6.1, -4.7, 0.95, 0.95], [5.75, -1.25, 1.0, 0.9, 0.3], [-0.62, -4.88, 1.1, 0.85]
   ]));
 
   /* Shelves with fired pots, framing the room */
@@ -842,6 +857,66 @@ export function buildStudio() {
   steel.add(new THREE.CylinderGeometry(0.24, 0.19, 0.38, 14, 1, true), 0x5c6670, [-1.75, 0.19, 1.0]);
   steel.add(new THREE.CircleGeometry(0.19, 14), 0x5c6670, [-1.75, 0.005, 1.0], [-Math.PI / 2, 0, 0]);
   glossy.add(new THREE.CircleGeometry(0.22, 14), 0x6e5a40, [-1.75, 0.3, 1.0], [-Math.PI / 2, 0, 0]);
+
+  /*
+   * The evening's story in the corners (all merged into the batches above,
+   * so none of it costs a draw call):
+   *  - a ware board on a bracket over the clay bags: this afternoon's pots
+   *    drying, leather-hard (darker, matte) to bone-dry (pale)
+   *  - bisque pots waiting for glaze on the floor by the bags
+   *  - the four glaze buckets of the game by the kiln, lids off, drips
+   *    down their sides, a dipping ladle hooked over one
+   *  - kiln furniture stacked beside the kiln: shelves and posts
+   *  - a potted olive by the window, as in every Barcelona courtyard
+   */
+  wood.add(new THREE.BoxGeometry(2.1, 0.06, 0.38), 0x7b5634, [-1.6, 1.95, -5.28]);
+  [-2.45, -0.75].forEach((bx) => wood.add(new THREE.BoxGeometry(0.05, 0.22, 0.3), 0x4a2e1c, [bx, 1.83, -5.34]));
+  const potRand = mulberry(77);
+  [[-2.4, 0.42, 0x9a6444], [-2.0, 0.34, 0x9e6a48], [-1.62, 0.5, 0xa7765a], [-1.2, 0.3, 0xc39c80], [-0.85, 0.38, 0xd5b9a0]].forEach(([px, h, c]) => {
+    const lathe = new THREE.LatheGeometry(potProfile(potRand, potRand() < 0.3 ? 'bowl' : 'pot'), 14);
+    lathe.scale(h, h, h);
+    wood.add(lathe, c, [px, 1.98, -5.28]);
+  });
+  [[-0.7, -4.95, 0.42], [-0.3, -5.05, 0.36], [-0.95, -4.6, 0.3]].forEach(([px, pz, h]) => {
+    const lathe = new THREE.LatheGeometry(potProfile(potRand, 'pot'), 14);
+    lathe.scale(h, h, h);
+    wood.add(lathe, 0xe3b392, [px, 0, pz]);
+  });
+  const GLAZE_BUCKETS = [[0xd89a2c, 2.3], [0x163f8e, 2.85], [0x86b496, 3.4], [0xe0ac3c, 3.95]];
+  GLAZE_BUCKETS.forEach(([gc, bx], i) => {
+    const bz = -5.0 + (i % 2) * 0.12;
+    steel.add(new THREE.CylinderGeometry(0.21, 0.18, 0.42, 14, 1, true), 0xd9d6cf, [bx, 0.21, bz]);
+    steel.add(new THREE.CircleGeometry(0.18, 14), 0xd9d6cf, [bx, 0.005, bz], [-Math.PI / 2, 0, 0]);
+    glossy.add(new THREE.CircleGeometry(0.2, 14), gc, [bx, 0.39, bz], [-Math.PI / 2, 0, 0]);
+    // drips down the front of the bucket, each a thin tapering streak
+    for (let d = 0; d < 3; d++) {
+      const a = -0.5 + d * 0.5 + (i % 3) * 0.1;
+      const len = 0.08 + ((i * 3 + d) % 4) * 0.05;
+      // (matte batch: a tiny glossy capsule is exactly the kind of speck that twinkles)
+      wood.add(new THREE.CapsuleGeometry(0.012, len, 2, 5), gc,
+        [bx + Math.sin(a) * 0.212, 0.42 - len / 2 - 0.01, bz + Math.cos(a) * 0.212]);
+    }
+  });
+  steel.add(new THREE.CylinderGeometry(0.012, 0.012, 0.62, 5), 0x8a8a90, [2.85, 0.55, -4.78], [0.35, 0, 0]);
+  steel.add(new THREE.SphereGeometry(0.07, 8, 6, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), 0x8a8a90, [2.85, 0.26, -4.68]);
+  for (let k = 0; k < 5; k++) {
+    wood.add(new THREE.BoxGeometry(0.62, 0.03, 0.5), 0xd8cfc0, [5.75, 0.05 + k * 0.035, -1.35], [0, 0.2 + k * 0.07, 0]);
+  }
+  [[5.55, -1.0], [5.75, -0.95], [5.95, -1.02]].forEach(([px, pz], k) => {
+    wood.add(new THREE.CylinderGeometry(0.035, 0.035, 0.12 + k * 0.05, 6), 0xcfc6b6, [px, 0.24 + (0.12 + k * 0.05) / 2, pz]);
+  });
+  const olive = new THREE.LatheGeometry([
+    new THREE.Vector2(0.18, 0), new THREE.Vector2(0.24, 0.05), new THREE.Vector2(0.3, 0.48), new THREE.Vector2(0.34, 0.52), new THREE.Vector2(0.33, 0.56)
+  ], 16);
+  wood.add(olive, 0xa8573a, [-6.1, 0, -4.7]);
+  wood.add(new THREE.CylinderGeometry(0.028, 0.04, 1.0, 6), 0x5a4632, [-6.1, 1.0, -4.7], [0.05, 0, -0.08]);
+  const leafRand = mulberry(31);
+  for (let k = 0; k < 9; k++) {
+    const a = leafRand() * Math.PI * 2;
+    const rr = 0.12 + leafRand() * 0.3;
+    wood.add(new THREE.SphereGeometry(0.2 + leafRand() * 0.12, 8, 6), leafRand() < 0.5 ? 0x5b6b3c : 0x6f7d4a,
+      [-6.1 + Math.cos(a) * rr - 0.04, 1.45 + leafRand() * 0.45, -4.7 + Math.sin(a) * rr * 0.7], [0, a, 0], [1.3, 0.7, 1]);
+  }
 
   /* The reveal stand: a stool with a banding wheel, by the kiln */
   const reveal = new THREE.Vector3(2.55, 1.05, -0.75);
@@ -1025,96 +1100,46 @@ export function buildWheel() {
 
 /* -------------------------------------------------------- hands and tools */
 
-/** A capsule from a to b whose radius runs from ra (at a) to rb (at b). */
-function limb(a, b, ra, rb, radial = 10) {
-  const axis = new THREE.Vector3().subVectors(b, a);
-  const len = axis.length();
-  const r = Math.max(ra, rb);
-  const geo = new THREE.CapsuleGeometry(r, Math.max(0.001, len), 4, radial);
-  // Taper: scale each ring by where it sits along the bone (y runs −len/2 … len/2)
-  const pos = geo.attributes.position;
-  for (let i = 0; i < pos.count; i++) {
-    const t = Math.max(0, Math.min(1, pos.getY(i) / len + 0.5));
-    const k = (ra + (rb - ra) * t) / r;
-    pos.setX(i, pos.getX(i) * k);
-    pos.setZ(i, pos.getZ(i) * k);
-  }
-  geo.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis.normalize()));
-  geo.translate((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
-  geo.computeVertexNormals();
-  return geo;
-}
-
 /**
- * A stylised right hand reaching in from the potter's side: palm toward the
- * camera, four tapered fingers stacked and pointing at the clay, knuckles,
- * the thumb tucked under them, and the forearm running out to a rolled
- * linen sleeve and the upper arm, which leave the frame toward the viewer —
- * so no cut-off limb ever floats in the picture. The fingertips wear a coat
- * of slip. The contact point (fingertip pads) is the local origin; mirror
- * with scale.x = −1 for the left side. The skin is the same soft, sheened
- * material family as the people in every game.
+ * The sponge GLÄTTA works with: a soft, rounded block of yellow synthetic
+ * sponge, pitted with pores, soaked dark with slip on the face that rides
+ * the clay (−x, toward the pot) and drier and brighter at the back.
  */
-export function buildHand() {
-  const b = new Batch();
-  const skin = new THREE.Color(0xd8a07a);
-  const linen = new THREE.Color(0xd9ccb2);
-  const slip = new THREE.Color(0x9c5a36);
-  const V = (x, y, z) => new THREE.Vector3(x, y, z);
-  const fingers = [
-    [0.075, 0.25, 0.04],
-    [0.025, 0.28, 0.045],
-    [-0.025, 0.27, 0.045],
-    [-0.072, 0.22, 0.04]
-  ];
-  fingers.forEach(([y, len, rad], i) => {
-    const yy = y * 1.15;
-    const z = 0.02 - i * 0.012;
-    // Tip at the clay, base at the knuckle; a touch thinner at the tip
-    b.add(limb(V(rad * 0.9 + 0.005, yy, z), V(len + rad, yy, z), rad * 0.82, rad), skin);
-    b.add(new THREE.SphereGeometry(rad * 1.12, 10, 8), skin, [len + rad + 0.02, yy, z + 0.01]);
-  });
-  b.add(limb(V(0.12, -0.13, 0.06), V(0.3, -0.06, 0.03), 0.04, 0.055), skin);
-  b.add(new THREE.SphereGeometry(0.16, 14, 10), skin, [0.36, -0.01, 0], [0, 0, 0], [0.75, 1.0, 0.5]);
-  // Forearm from the wrist to the elbow, then the rolled sleeve and the upper arm out of frame
-  const wrist = V(0.44, -0.07, 0.02);
-  const elbow = V(1.3, -0.72, 0.55);
-  const shoulder = V(2.3, -1.25, 2.9);
-  b.add(limb(wrist, elbow, 0.085, 0.112, 12), skin);
-  const dir = elbow.clone().sub(wrist).normalize();
-  b.add(limb(elbow.clone().addScaledVector(dir, -0.16), elbow.clone().addScaledVector(dir, 0.05), 0.135, 0.145, 14), linen);
-  b.add(limb(elbow, shoulder, 0.14, 0.17, 14), linen);
-  const mesh = b.mesh(new THREE.MeshPhysicalMaterial({
-    vertexColors: true, roughness: 0.55, metalness: 0, sheen: 0.3, sheenRoughness: 0.5, sheenColor: new THREE.Color(0.7, 0.34, 0.26)
-  }));
-  // Paint the slip coat onto the fingertips: blend by distance from the tips
-  const pos = mesh.geometry.attributes.position;
-  const col = mesh.geometry.attributes.color;
-  const c = new THREE.Color();
-  for (let i = 0; i < pos.count; i++) {
-    const k = Math.max(0, Math.min(1, (0.22 - pos.getX(i)) / 0.16));
-    c.setRGB(col.getX(i), col.getY(i), col.getZ(i)).lerp(slip, k * 0.85);
-    col.setXYZ(i, c.r, c.g, c.b);
-  }
-  mesh.castShadow = true;
-  return mesh;
-}
-
-/** The yellow sponge GLÄTTA works with. */
 export function buildSponge() {
-  const geo = new THREE.SphereGeometry(0.15, 12, 8);
-  geo.scale(0.8, 1.15, 0.9);
-  // Lumpy, by a function of position so seam duplicates move together
+  const box = new THREE.BoxGeometry(0.2, 0.3, 0.2, 6, 8, 6);
+  box.deleteAttribute('normal');
+  box.deleteAttribute('uv');
+  // One shared vertex per corner, so the pillow shades smooth across the box's seams
+  const geo = mergeVertices(box);
+  box.dispose();
   const pos = geo.attributes.position;
+  const col = new Float32Array(pos.count * 3);
+  const dry = new THREE.Color(0xe8c04e);
+  const wet = new THREE.Color(0x9a6a34);
+  const slip = new THREE.Color(0x7e4a2c);
+  const c = new THREE.Color();
+  const v = new THREE.Vector3();
   for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i);
-    const y = pos.getY(i);
-    const z = pos.getZ(i);
-    const k = 0.97 + 0.04 * Math.sin(x * 41) * Math.sin(y * 37 + 1) * Math.sin(z * 29 + 2);
-    pos.setXYZ(i, x * k, y * k, z * k);
+    v.fromBufferAttribute(pos, i);
+    // Round the box into a soft pillow (by position, so the seams move together)
+    const n = v.clone().multiply(new THREE.Vector3(1 / 0.1, 1 / 0.15, 1 / 0.1));
+    const k = 1 / Math.max(1, Math.hypot(n.x * 0.82, n.y * 0.7, n.z * 0.82));
+    v.multiplyScalar(0.55 + 0.45 * k);
+    // Pores: little dents everywhere
+    const pore = Math.sin(v.x * 173) * Math.sin(v.y * 151 + 1.3) * Math.sin(v.z * 167 + 2.1);
+    v.multiplyScalar(1 - Math.max(0, pore) * 0.06);
+    pos.setXYZ(i, v.x, v.y, v.z);
+    // Wet on the clay side, slip in the pores
+    const wetK = Math.max(0, Math.min(1, 0.55 - v.x * 6));
+    c.copy(dry).lerp(wet, wetK * 0.85);
+    if (pore > 0.35) c.lerp(slip, 0.5 + wetK * 0.3);
+    col[i * 3] = c.r;
+    col[i * 3 + 1] = c.g;
+    col[i * 3 + 2] = c.b;
   }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   geo.computeVertexNormals();
-  const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0xe6c04a, roughness: 1 }));
+  const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }));
   m.castShadow = true;
   return m;
 }

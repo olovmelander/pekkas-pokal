@@ -21,16 +21,25 @@
  * handed and your opponents are left-handed (as a good share of elite
  * foilists are). The person is never mirrored: faces, hair partings and
  * the lamé stay true; only which hand holds the foil changes.
+ *
+ * Hands: the foil sits in the people grip library's French grip (index
+ * and thumb pinch the handle behind the bell, the other fingers wrap it
+ * as aids) inside a white glove with a gauntlet cuff; the rear hand
+ * closes on the mask's padded top while it carries it. Footwork steps
+ * one foot at a time and lifts any foot that travels, so nothing slides.
  */
 
 import * as THREE from 'three';
-import { createPerson, appearanceFor } from '../shared/people.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { createPerson, appearanceFor, HAND_BONES } from '../shared/people.js';
 
 /* ---- Proportions (metres, for a 1.80 m fencer; scaled per person) ------ */
 
 export const ANKLE_H = 0.08; // ankle joint above the sole
 export const BLADE = 0.9;
-const BLADE_START = 0.075; // from the fist to where the blade leaves the bell
+const BLADE_START = 0.075; // from the foil's origin to where the blade leaves the bell
+/** The foil's origin sits this far up the handle from the grip centre (the bell clears the fingers). */
+const GRIP_OFF = 0.026;
 const PELVIS = 0.76; // hips height en garde: knees well bent
 const FRONT_FOOT = 0.38;
 const BACK_FOOT = -0.36;
@@ -107,7 +116,10 @@ const BODY = [
   'hips', 'spine', 'chest', 'neck', 'head', 'shoulderL', 'upperArmL', 'forearmL', 'handL',
   'shoulderR', 'upperArmR', 'forearmR', 'handR', 'thighL', 'shinL', 'footL', 'thighR', 'shinR', 'footR'
 ];
-const FINGERS = ['thumbL', 'indexL', 'indexTipL', 'fingersL', 'fingersTipL', 'thumbR', 'indexR', 'indexTipR', 'fingersR', 'fingersTipR'];
+// Every finger bone of both hands blends between the duel and the at-ease
+// stance (the old five-per-hand names are a fallback for an older rig)
+const FINGERS = (HAND_BONES && HAND_BONES.length ? HAND_BONES : ['thumb', 'index', 'indexTip', 'fingers', 'fingersTip'])
+  .flatMap((n) => [`${n}L`, `${n}R`]);
 const BLEND = [...BODY, ...FINGERS];
 const swapLR = (n) => (n.endsWith('L') ? `${n.slice(0, -1)}R` : n.endsWith('R') ? `${n.slice(0, -1)}L` : n);
 
@@ -225,6 +237,9 @@ function buildMask(mats) {
   }
   bib.scale(R[0] * er * 1.02, 1, R[2] * er * 1.02);
   bib.computeVertexNormals();
+  // The bib wears the fencer's lamé, which reads vertex colours: give it
+  // the lamé's own grey (without them it would draw black)
+  bib.setAttribute('color', new THREE.Float32BufferAttribute(new Array(pos.count * 3).fill(0.6), 3));
   bib.translate(C[0], ey - 0.05, C[2]);
   const bibMat = mats.pad;
   const bibMesh = add(bib, bibMat);
@@ -237,14 +252,35 @@ function buildFoil(mats) {
   const bellGeo = new THREE.SphereGeometry(0.06, 16, 6, 0, Math.PI * 2, 0, Math.PI / 2.6);
   bellGeo.rotateZ(-Math.PI / 2);
   bellGeo.translate(0.03, 0, 0);
-  const bell = new THREE.Mesh(bellGeo, mats.steel);
-  bell.castShadow = true;
-  g.add(bell);
-  const gripGeo = new THREE.CylinderGeometry(0.012, 0.015, 0.12, 6);
+  // The French grip: a slightly curved, tapering handle with the thumb
+  // pad inside the bell, and the pommel at the end that rests against the
+  // wrist (the pommel is steel: merged into the bell's mesh)
+  const gripGeo = new THREE.CylinderGeometry(0.011, 0.015, 0.12, 6, 3);
   gripGeo.rotateZ(Math.PI / 2);
   gripGeo.translate(-0.025, 0, 0);
-  const grip = new THREE.Mesh(gripGeo, mats.grip);
+  const gp = gripGeo.attributes.position;
+  for (let i = 0; i < gp.count; i++) {
+    const x = gp.getX(i) + 0.025;
+    gp.setY(i, gp.getY(i) - 0.5 * x * x); // the curve, towards the palm
+  }
+  gripGeo.computeVertexNormals();
+  // The cushion sits inside the bell, against its inner face
+  const pad = new THREE.CylinderGeometry(0.05, 0.05, 0.008, 16);
+  pad.rotateZ(Math.PI / 2);
+  pad.translate(0.056, 0, 0);
+  const grip = new THREE.Mesh(mergeGeometries([gripGeo, pad]), mats.grip);
+  gripGeo.dispose();
+  pad.dispose();
   g.add(grip);
+  const pommelGeo = new THREE.SphereGeometry(0.016, 10, 6);
+  pommelGeo.scale(1.25, 1, 1);
+  pommelGeo.translate(-0.092, -0.0042, 0);
+  const bellAll = mergeGeometries([bellGeo.toNonIndexed(), pommelGeo.toNonIndexed()]);
+  bellGeo.dispose();
+  pommelGeo.dispose();
+  const bell = new THREE.Mesh(bellAll, mats.steel);
+  bell.castShadow = true;
+  g.add(bell);
   // The blade is rebuilt in place whenever its curvature changes
   const segs = 12;
   const bladeGeo = new THREE.CylinderGeometry(0.0032, 0.0062, BLADE, 4, segs, false);
@@ -261,6 +297,186 @@ function buildFoil(mats) {
   return { group: g, blade, rest, button };
 }
 
+/* ---- Fabric: the whites and the lamé read as cloth -------------------- */
+
+/*
+ * A small layer on the fencer's own cloth and lamé materials (people
+ * createPerson({ ownMaterials: true }), so the referee and the benches are
+ * untouched). Everything is computed from the BIND-pose position and normal
+ * (the skinned mesh's raw attributes), so seams and folds stick to the
+ * cloth as it moves. Safe on real GPUs: every fine detail fades out by its
+ * own screen footprint (fwidth), so nothing sub-pixel can crawl or blink;
+ * no divisions by ~0, no sine hashes, no reversed smoothstep edges.
+ *
+ *  - side seams on the jacket and the breeches (where the cloth faces
+ *    straight out to the side), the jacket's collar line and the piping
+ *    along the top of the lamé: stitched lines a shade darker;
+ *  - soft folds as a derivative bump (no tangents needed);
+ *  - the lamé only (FAB_LAME): a coarse woven-metal sparkle that is only
+ *    there when the camera is close enough to resolve it.
+ */
+const FAB_VERT_PARS = /* glsl */ `
+varying vec3 vFabP;
+varying vec3 vFabN;`;
+const FAB_VERT = /* glsl */ `
+vFabP = position;
+vFabN = normal;`;
+const FAB_FRAG_PARS = /* glsl */ `
+varying vec3 vFabP;
+varying vec3 vFabN;
+uniform float uFabScale;
+uniform vec3 uFabShL;
+uniform vec3 uFabShR;
+uniform vec3 uFabAxL;
+uniform vec3 uFabAxR;
+float fabHash(vec2 c) {
+  vec3 p3 = fract(vec3(c.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+// A line of width L at distance d, antialiased by its footprint f
+float fabLine(float d, float L) {
+  float f = max(fwidth(d), 1e-5);
+  return clamp(0.5 + (L * 0.5 - d) / f, 0.0, 1.0) * min(1.0, L / f);
+}
+// A seam ring round an arm, just below the shoulder joint (sh: the joint,
+// ax: down the arm, both in the bind pose)
+float fabArmRing(vec3 p, vec3 sh, vec3 ax) {
+  vec3 q = p - sh;
+  float t = dot(q, ax);
+  float r = length(q - ax * t);
+  return fabLine(abs(t - 0.04), 0.003) * step(r, 0.085) * step(-0.02, t);
+}
+vec3 fabPerturb(vec3 surfPos, vec3 surfNorm, vec2 dHdxy, float faceDir) {
+  vec3 dx = dFdx(surfPos);
+  vec3 dy = dFdy(surfPos);
+  if (dot(dx, dx) < 1e-20 || dot(dy, dy) < 1e-20) return surfNorm;
+  vec3 sx = normalize(dx);
+  vec3 sy = normalize(dy);
+  vec3 r1 = cross(sy, surfNorm);
+  vec3 r2 = cross(surfNorm, sx);
+  float det = dot(sx, r1) * faceDir;
+  vec3 grad = sign(det) * (dHdxy.x * r1 + dHdxy.y * r2);
+  vec3 n = abs(det) * surfNorm - grad;
+  float l = length(n);
+  return l > 1e-6 ? n / l : surfNorm;
+}`;
+const FAB_COLOR = /* glsl */ `
+vec3 fabP = vFabP / max(uFabScale, 0.1);
+vec3 fabN = vFabN;
+// Around the body: arc length (u) and height (v), in metres
+float fabZ = fabP.z - 0.02;
+fabZ = abs(fabZ) < 1e-4 ? 1e-4 : fabZ; // atan(0, 0) is undefined
+float fabU = atan(fabP.x, fabZ) * 0.15;
+float fabV = fabP.y;
+float fabOut = step(0.0, fabP.x * fabN.x);
+// Side seams: where the cloth turns from facing front to facing back
+// (the horizontal normal's front/back component crosses zero)
+float fabPhi = abs(atan(fabN.z, abs(fabN.x) + 1e-5));
+float fabTorso = step(0.93, fabP.y) * step(fabP.y, 1.31) * step(abs(fabP.x), 0.2);
+float fabLeg = step(0.47, fabP.y) * step(fabP.y, 0.88) * step(abs(fabP.x), 0.22);
+float fabSeam = fabLine(fabPhi * (fabP.y > 0.9 ? 0.15 : 0.07), 0.0035) * max(fabTorso, fabLeg) * fabOut;
+// The sleeves set into the body, and the zip down the back
+fabSeam = max(fabSeam, max(fabArmRing(fabP, uFabShL, uFabAxL), fabArmRing(fabP, uFabShR, uFabAxR)));
+float fabBack = step(fabN.z, 0.0) * step(0.95, fabP.y) * step(fabP.y, 1.5) * step(abs(fabP.x), 0.12);
+fabSeam = max(fabSeam, fabLine(abs(atan(fabN.x, max(-fabN.z, 0.0) + 1e-5)) * 0.15, 0.004) * fabBack);
+// The collar line and the piping along the top of the lamé
+float fabNeck = step(abs(fabP.x), 0.12) * step(1.47, fabP.y);
+fabSeam = max(fabSeam, fabLine(abs(fabP.y - 1.522), 0.003) * fabNeck);
+fabSeam = max(fabSeam, fabLine(abs(fabP.y - 1.441), 0.004) * step(abs(fabP.x), 0.19));
+#ifdef FAB_LAME
+  // Woven metal: cells of a few millimetres, each catching the light a
+  // little differently; gone as soon as a cell is smaller than a pixel
+  vec2 fabCellC = vec2(fabU, fabV) * 560.0;
+  float fabFade = 1.0 - smoothstep(0.3, 0.9, max(fwidth(fabCellC.x), fwidth(fabCellC.y)));
+  float fabR = fabHash(floor(fabCellC));
+  float fabGlint = step(0.9, fabR) * fabFade;
+  diffuseColor.rgb *= 1.0 + (fabR - 0.5) * 0.1 * fabFade;
+  diffuseColor.rgb *= 1.0 - 0.22 * fabSeam;
+  float fabCollar = 0.0;
+#else
+  float fabGlint = 0.0;
+  // The lamé's stand-up collar round the neck (the jacket's own collar
+  // under it): woven-metal grey, on the cloth mesh
+  float fabCollar = smoothstep(1.45, 1.462, fabP.y) * (1.0 - smoothstep(0.1, 0.118, abs(fabP.x)));
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.34, 0.35, 0.37), fabCollar);
+  fabSeam = max(fabSeam, fabLine(abs(fabP.y - 1.456), 0.004) * step(abs(fabP.x), 0.11));
+  diffuseColor.rgb *= 1.0 - 0.2 * fabSeam;
+#endif`;
+const FAB_ROUGH = /* glsl */ `
+roughnessFactor = mix(roughnessFactor, 0.66, fabCollar);
+roughnessFactor = clamp(roughnessFactor + 0.12 * fabSeam - 0.14 * fabGlint, 0.32, 1.0);`;
+const FAB_METAL = /* glsl */ `
+metalnessFactor = mix(metalnessFactor, 0.44, fabCollar);`;
+const FAB_NORMAL = /* glsl */ `
+{
+  // Soft folds: shallow, irregular ridges, deeper round the waist
+  float fabWaist = 1.0 - 0.55 * smoothstep(1.0, 1.4, fabV);
+  #ifdef FAB_LAME
+    float fabA = 0.0026 * fabWaist;
+  #else
+    float fabA = 0.0011 * fabWaist;
+  #endif
+  float fabH = fabA * (sin(fabV * 47.0 + 1.7 * sin(fabU * 19.0)) + 0.55 * sin(fabU * 33.0 - fabV * 11.0));
+  #ifdef FAB_LAME
+    // Metal thread creases finer than cotton: a second, smaller set
+    fabH += 0.0009 * sin(fabV * 131.0 + 2.3 * sin(fabU * 57.0 + fabV * 9.0));
+  #endif
+  normal = fabPerturb(-vViewPosition, normal, vec2(dFdx(fabH), dFdy(fabH)), faceDirection);
+}`;
+
+function fabricCompile(shader) {
+  const u = this.userData;
+  shader.uniforms.uFabScale = u.fabScale;
+  shader.uniforms.uFabShL = u.fabShL;
+  shader.uniforms.uFabShR = u.fabShR;
+  shader.uniforms.uFabAxL = u.fabAxL;
+  shader.uniforms.uFabAxR = u.fabAxR;
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', `#include <common>${FAB_VERT_PARS}`)
+    .replace('#include <begin_vertex>', `#include <begin_vertex>${FAB_VERT}`);
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', `#include <common>${FAB_FRAG_PARS}`)
+    .replace('#include <color_fragment>', `#include <color_fragment>${FAB_COLOR}`)
+    .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>${FAB_ROUGH}`)
+    .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>${FAB_METAL}`)
+    .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>${FAB_NORMAL}`);
+}
+
+const _bindM = new THREE.Matrix4();
+
+/** Where a bone sits in the bind pose (÷ scale) and which way it hangs. */
+function bindBone(person, name, pos, dir) {
+  const skel = person.mesh.skeleton;
+  const b = person.bones[name];
+  const i = skel && b ? skel.bones.indexOf(b) : -1;
+  if (i < 0) return;
+  _bindM.copy(skel.boneInverses[i]).invert();
+  pos.setFromMatrixPosition(_bindM).multiplyScalar(1 / person.scale);
+  dir.set(0, -1, 0).transformDirection(_bindM);
+}
+
+/** Turn one of the fencer's own materials into fabric (cloth or lamé). */
+function makeFabric(mat, person, lame) {
+  if (!mat) return;
+  const u = mat.userData;
+  if (!u.fabScale) {
+    u.fabScale = { value: 1 };
+    // Defaults far away: no ring until the bind pose is read
+    u.fabShL = { value: new THREE.Vector3(0, -9, 0) };
+    u.fabShR = { value: new THREE.Vector3(0, -9, 0) };
+    u.fabAxL = { value: new THREE.Vector3(0, -1, 0) };
+    u.fabAxR = { value: new THREE.Vector3(0, -1, 0) };
+  }
+  u.fabScale.value = person.scale;
+  bindBone(person, 'upperArmL', u.fabShL.value, u.fabAxL.value);
+  bindBone(person, 'upperArmR', u.fabShR.value, u.fabAxR.value);
+  if (mat.onBeforeCompile === fabricCompile) return;
+  mat.onBeforeCompile = fabricCompile;
+  if (lame) mat.defines = { ...(mat.defines || {}), FAB_LAME: '' };
+  mat.needsUpdate = true;
+}
+
 /* ---- The fencer ------------------------------------------------------- */
 
 const _v = new THREE.Vector3();
@@ -269,6 +485,7 @@ const _v3 = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _q2 = new THREE.Quaternion();
+const _q3 = new THREE.Quaternion();
 const _m = new THREE.Matrix4();
 const _m2 = new THREE.Matrix4();
 const _s = new THREE.Vector3();
@@ -321,7 +538,7 @@ export class Fencer {
     this.hb = new THREE.Vector3();
     // Scratch vectors for the per-frame solve (no garbage every frame)
     this.pool = Array.from({ length: 48 }, () => new THREE.Vector3());
-    this.qpool = Array.from({ length: 4 }, () => new THREE.Quaternion());
+    this.qpool = Array.from({ length: 8 }, () => new THREE.Quaternion());
     this.pi = 0;
     this.qi = 0;
 
@@ -330,7 +547,9 @@ export class Fencer {
         color: 0x9aa2ae, map: gridTexture(), roughness: 0.42, metalness: 0.7, transparent: true, opacity: 0.84
       }),
       pad: new THREE.MeshStandardMaterial({ color: 0xf1efe8, roughness: 0.7 }),
-      steel: new THREE.MeshStandardMaterial({ color: 0xdfe4ec, roughness: 0.3, metalness: 0.95 }),
+      // Satin steel: a polished mirror only shows the dark panelling and
+      // reads black up close; a little roughness keeps the bell silver
+      steel: new THREE.MeshStandardMaterial({ color: 0xdfe4ec, roughness: 0.38, metalness: 0.88 }),
       grip: new THREE.MeshStandardMaterial({ color: 0x2a2422, roughness: 0.7 }),
       // The point's button: a warm pin of light that bloom can catch
       button: new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 1.4, 1.0) })
@@ -344,17 +563,21 @@ export class Fencer {
     this.blade = foil.blade;
     this.bladeRest = foil.rest;
     this.button = foil.button;
-    // The fencing glove on the sword hand: a padded white fist and a long
-    // gauntlet cuff over the sleeve
-    const gloveGeo = new THREE.SphereGeometry(1, 12, 9);
-    gloveGeo.scale(0.047, 0.056, 0.05);
-    this.glove = new THREE.Mesh(gloveGeo, this.mats.pad);
-    this.glove.castShadow = true;
-    const cuffGeo = new THREE.CylinderGeometry(0.056, 0.047, 0.1, 12, 1, true);
-    this.cuff = new THREE.Mesh(cuffGeo, this.mats.pad);
-    this.cuff.castShadow = true;
     // Foil space → fist space: +x along the blade, +y the way it bows
     this.foilQ = frameQuat(new THREE.Vector3(1, 0, 0), BLADE_L, new THREE.Vector3(0, 1, 0), BOW_L, new THREE.Quaternion());
+    this.foilBaseQ = new THREE.Quaternion();
+    // The weapon arm's last targets, re-solved after person.update()
+    this.wGrip = new THREE.Vector3();
+    this.wDir = new THREE.Vector3(1, 0, 0);
+    this.wPole = new THREE.Vector3();
+    this.wValid = false;
+    this.clock = 0;
+    this.foilHolder = new THREE.Group();
+    this.foilHolder.add(this.foil);
+    this.bladeL = new THREE.Vector3().copy(BLADE_L);
+    this.cosYB = COS_YB;
+    this.sinYB = SIN_YB;
+    this.gripOff = 0;
     this.person = null;
     this.setPerson(name, sock);
     this._setBend(0);
@@ -367,22 +590,39 @@ export class Fencer {
     this.sock = sock;
     // The new person first, then the old one goes: the shared materials and
     // their shader programs stay alive, so nothing recompiles mid-game
-    const p = createPerson(appearanceFor(name, {
-      outfit: { top: 'fencing', bottom: 'knickers', accent: sock, shoes: 'sneakers', shoeColor: 0xe9e7e2 }
-    }));
+    // Faces, hair and glasses are the person's own (appearanceFor); the kit
+    // is the salle's: whites, lamé, socks in their colour, and the white
+    // glove with its gauntlet cuff on the weapon hand only
+    // (off-white whites and creamy breeches, never paper white: under the
+    // evening sun pure white clips flat and reads as plastic)
+    const p = createPerson({
+      ...appearanceFor(name, {
+        outfit: {
+          top: 'fencing', topColor: 0xeeebe3, bottom: 'knickers', bottomColor: 0xe9dfca, accent: sock, shoes: 'sneakers', shoeColor: 0xe9e7e2
+        },
+        gloves: { side: this.hand, color: 0xf1efe8, cuff: true }
+      }),
+      ownMaterials: true
+    });
     if (this.person) this.person.dispose();
     this.person = p;
     this.s = p.scale;
     this.group.add(p.root);
-    p.attach(this.foil, `grip${this.hand}`, { quaternion: this.foilQ });
-    p.attach(this.glove, `grip${this.hand}`, { position: [0, 0.008 * p.scale, 0], scale: p.scale });
-    p.attach(this.cuff, `forearm${this.hand}`, { position: [0, -0.215 * p.scale, 0.004 * p.scale], scale: p.scale });
+    this.rearGrip = '';
+    this._grip();
+    // A new person between bouts: their grips are solved here, on the
+    // bracket screen, never mid-phrase
+    this.warmGrips();
+    makeFabric(p.materials.cloth, p, false);
     const { lame } = p.materials;
     if (lame) {
-      // Lamé is woven metal: duller than a mirror, so the sun leaves a sheen
-      // rather than a hot glint that bloom would turn into a firefly
-      lame.roughness = 0.46;
-      lame.metalness = 0.62;
+      // Lamé is woven metal thread, not plate: mid-grey silver with a soft
+      // sheen, the room only faintly mirrored in it
+      lame.roughness = 0.66;
+      lame.metalness = 0.44;
+      lame.envMapIntensity = 0.36;
+      lame.color.setRGB(0.9, 0.91, 0.93);
+      makeFabric(lame, p, true);
       lame.emissive.copy(this.flashColor);
       lame.emissiveIntensity = 0;
       this.bib.material = lame;
@@ -395,6 +635,40 @@ export class Fencer {
     this._measure();
     this.apply(this.pose);
     this.update(0, 0);
+  }
+
+  /**
+   * The foil in the French grip. With the people grip library the fingers
+   * really close on the handle: the index and thumb pinch it just behind
+   * the bell, the last three fingers wrap it, the pommel lies against the
+   * wrist. (Without it, the foil sits in the fist socket.)
+   */
+  _grip() {
+    const p = this.person;
+    const H = this.hand;
+    if (typeof p.hold === 'function') {
+      // Grip frame: +Y pommel → blade, +Z the flat under the thumb (the way the blade bows)
+      this.foilBaseQ.setFromRotationMatrix(_m.makeBasis(_v.set(0, 1, 0), _v2.set(0, 0, 1), _v3.set(1, 0, 0)));
+      this.foil.quaternion.copy(this.foilBaseQ);
+      this.foil.position.set(0, GRIP_OFF, 0);
+      this.foilHolder.position.set(0, 0, 0);
+      p.hold(this.foilHolder, H, 'foil', { handle: [0.016, 0.012], blend: 0 });
+      const anchor = p.sockets[`hold${H}`];
+      this.gripSock = anchor;
+      this.bladeL.set(0, 1, 0).applyQuaternion(anchor.quaternion).normalize();
+      this.gripOff = GRIP_OFF;
+    } else {
+      this.foilBaseQ.copy(this.foilQ);
+      this.foil.quaternion.copy(this.foilQ);
+      this.foil.position.set(0, 0, 0);
+      p.attach(this.foilHolder, `grip${H}`);
+      this.gripSock = p.sockets[`grip${H}`];
+      this.bladeL.copy(BLADE_L);
+      this.gripOff = 0;
+    }
+    // Hand +Y (up the forearm) = cos · blade + sin · (the perpendicular towards the elbow)
+    this.cosYB = this.bladeL.y;
+    this.sinYB = Math.sqrt(Math.max(0, 1 - this.cosYB * this.cosYB));
   }
 
   /**
@@ -482,19 +756,24 @@ export class Fencer {
       if (relax < 0.999) {
         this._capture(this.qb, this.hb);
         const k = smooth(relax);
-        BLEND.forEach((n, i) => b[n].quaternion.slerpQuaternions(this.qa[i], this.qb[i], k));
+        BLEND.forEach((n, i) => b[n] && b[n].quaternion.slerpQuaternions(this.qa[i], this.qb[i], k));
         b.hips.position.lerpVectors(this.ha, this.hb, k);
         root.rotation.y = lerp(duelYaw, easeYaw, k);
       }
     }
+    // Only a pure stance can be re-solved after update(): a blend between
+    // the two is a slerp of both solves
+    this.wValid = relax < 0.001 || relax > 0.999;
     this._setBend(p[P.bend] * (1 - relax));
     const { lame } = person.materials;
-    if (lame) lame.emissiveIntensity = p[P.flash] * 1.6;
+    // The touch lights the lamé up — bright enough to read, not so bright
+    // that bloom swallows the whole fencer
+    if (lame) lame.emissiveIntensity = p[P.flash] * 1.2;
   }
 
   _capture(qs, hp) {
     const b = this.person.bones;
-    BLEND.forEach((n, i) => qs[i].copy(b[n].quaternion));
+    BLEND.forEach((n, i) => b[n] && qs[i].copy(b[n].quaternion));
     hp.copy(b.hips.position);
   }
 
@@ -580,10 +859,15 @@ export class Fencer {
     const ch = clamp(p[P.cheer], -1, 1);
     const up = Math.max(0, ch);
     const down = Math.max(0, -ch);
+    // Never a statue at ease: a slow, personal sway through the spine and
+    // shoulders (the legs stay put, so the feet never slide)
+    const ph = this.clock + ((this.person.look.seed || 0) % 97);
+    const sway = Math.sin(ph * 0.83) * 0.022 + Math.sin(ph * 0.31) * 0.014;
+    const turn = Math.sin(ph * 0.47) * 0.05;
     const w = this.writer.clear();
     w.set('hips', 0.0, 0.08, 0.02)
-      .set('spine', 0.02 + down * 0.16, 0.0, -0.01)
-      .set('chest', -0.02 - up * 0.08 + down * 0.1, -0.06, 0)
+      .set('spine', 0.02 + down * 0.16, turn * 0.4, -0.01 + sway)
+      .set('chest', -0.02 - up * 0.08 + down * 0.1, -0.06 + turn * 0.6, -sway * 0.5)
       .set('neck', 0.04 + down * 0.12, 0, 0)
       .set('head', -0.03 + down * 0.28 - up * 0.12, 0.0, 0)
       .set('shoulderL', 0, 0, -0.03 - down * 0.05)
@@ -609,9 +893,11 @@ export class Fencer {
     const dir = ldir(lerp(lerp(-0.22, -0.08, down), -0.25, up), lerp(lerp(-0.72, -0.98, down), 1, up), lerp(lerp(0.62, 0.22, down), 0.12, up), this.V());
     const pole = local(lerp(-0.7, -1.2, up), lerp(0.9, 1.7, up), lerp(-0.6, -0.1, up), this.V());
     this._weapon(grip, dir, pole);
-    const rw = local(0.24, 0.84, 0.03, this.V());
-    const rPole = local(0.6, 1.1, -0.7, this.V());
-    const fing = ldir(0.04, -1, 0.06, this.V());
+    // The rear hand carries the mask by the side — or lifts the cup high
+    const cup = this.trophy ? up : 0;
+    const rw = local(lerp(0.24, 0.3, cup), lerp(0.84, 2.0, cup), lerp(0.03, 0.14, cup), this.V());
+    const rPole = local(lerp(0.6, 0.9, cup), lerp(1.1, 1.5, cup), lerp(-0.7, -0.25, cup), this.V());
+    const fing = ldir(0.04, lerp(-1, 1, cup), lerp(0.06, 0.12, cup), this.V());
     const palm = ldir(-1, 0, 0.1, this.V());
     // ldir already mirrors x; hand on the person's own left/right is handled in _rearHand
     this._rearHandW(rw, rPole, fing, palm);
@@ -624,8 +910,13 @@ export class Fencer {
    */
   _weapon(grip, dir, pole) {
     const { person } = this;
+    if (grip !== this.wGrip) {
+      this.wGrip.copy(grip);
+      this.wDir.copy(dir);
+      this.wPole.copy(pole);
+    }
     const b = person.bones;
-    const sock = person.sockets[`grip${this.hand}`].position;
+    const sock = this.gripSock.position;
     const bladeW = this.V().copy(dir).normalize();
     const q = this.Q();
     const wrist = this.V();
@@ -638,15 +929,38 @@ export class Fencer {
       add(this._dir(-1, 0, 0, _v3), 0.08);
       if (u.lengthSq() < 1e-8) u.set(0, 0, 1).addScaledVector(bladeW, -bladeW.z);
       u.normalize();
-      const yW = this.V().copy(bladeW).multiplyScalar(COS_YB).addScaledVector(u, SIN_YB);
-      frameQuat(BLADE_L, bladeW, UP_L, yW, q);
+      const yW = this.V().copy(bladeW).multiplyScalar(this.cosYB).addScaledVector(u, this.sinYB);
+      frameQuat(this.bladeL, bladeW, UP_L, yW, q);
       wrist.copy(sock).applyQuaternion(q).negate().add(grip);
-      person.ikArm(this.hand, wrist, pole, q);
+      this.short = person.ikArm(this.hand, wrist, pole, q);
     };
     solve(null);
     const elbow = b[`forearm${this.hand}`].getWorldPosition(this.V());
     const hand = b[`hand${this.hand}`].getWorldPosition(this.V());
     solve(elbow.sub(hand));
+    this._rollBow(q);
+  }
+
+  /**
+   * Turn the foil about its own blade so the bend always bows upwards in
+   * the blade's vertical plane, whatever the wrist's roll: a round blade
+   * shows no difference, and the point lands exactly where the Animator's
+   * contact() aimed it.
+   */
+  _rollBow(handQ) {
+    const base = this.foilBaseQ;
+    const hq = this.Q().copy(handQ).multiply(this.gripSock.quaternion);
+    const bladeH = this.V().set(1, 0, 0).applyQuaternion(base);
+    const bowH = this.V().set(0, 1, 0).applyQuaternion(base);
+    const bladeW = this.V().copy(bladeH).applyQuaternion(hq);
+    const want = this.V().set(0, 1, 0).addScaledVector(bladeW, -bladeW.y);
+    if (want.lengthSq() < 1e-6) {
+      this.foil.quaternion.copy(base);
+      return;
+    }
+    want.normalize().applyQuaternion(this.Q().copy(hq).invert());
+    const ang = Math.atan2(this.V().crossVectors(bowH, want).dot(bladeH), bowH.dot(want));
+    this.foil.quaternion.setFromAxisAngle(bladeH, ang).multiply(base);
   }
 
   /** Rear hand IK from fencer-frame finger/palm directions. */
@@ -701,6 +1015,7 @@ export class Fencer {
    */
   update(dt, t) {
     const { person } = this;
+    this.clock = (this.clock + dt) % 600;
     const e = this.expr;
     if (e.t > 0) {
       e.t -= dt;
@@ -708,8 +1023,46 @@ export class Fencer {
     }
     person.lookAt(this.look, this.lookWeight);
     person.update(dt, t);
+    // update() breathes the spine and turns the chest with the look-at,
+    // which carries the whole arm with it: solve the weapon arm once more
+    // on top, so the point stays exactly where the pose aimed it
+    if (this.wValid) {
+      const up = person.bones[`upperArm${this.hand}`];
+      up.parent.updateWorldMatrix(true, false);
+      this._weapon(this.wGrip, this.wDir, this.wPole);
+    }
     this._placeMask();
     this.group.updateMatrixWorld(true);
+  }
+
+  /**
+   * Solve every grip this fencer will use once, while the game loads: the
+   * first solve of a grip and size costs a few milliseconds, then it is
+   * cached (the foil's French grip is solved in setPerson already).
+   */
+  warmGrips() {
+    const p = this.person;
+    if (typeof p.setGrip !== 'function') return;
+    p.setGrip(this.rear, 'power', { diameter: 0.03, blend: 0 });
+    p.setGrip(this.rear, 'fist', { diameter: 0.04, blend: 0 });
+    p.setGrip(this.rear, null, { blend: 0 });
+    this.rearGrip = '';
+  }
+
+  /**
+   * The rear hand's fingers: closed on the mask's padded top while it is
+   * carried or going on, a loose fist round the cup's stem, and handed
+   * back to the pose (the relaxed carriage) once the mask is on.
+   */
+  _rearFingers(carrying) {
+    const p = this.person;
+    if (typeof p.setGrip !== 'function') return;
+    const want = this.trophy ? 'cup' : carrying ? 'mask' : 'pose';
+    if (want === this.rearGrip) return;
+    this.rearGrip = want;
+    if (want === 'mask') p.setGrip(this.rear, 'power', { diameter: 0.03, blend: 0.18 });
+    else if (want === 'cup') p.setGrip(this.rear, 'fist', { diameter: 0.04, blend: 0.2 });
+    else p.setGrip(this.rear, null, { blend: 0.25 });
   }
 
   _placeMask() {
@@ -717,12 +1070,25 @@ export class Fencer {
     const { s } = this;
     const m = clamp(this.pose[P.mask], 0, 1);
     const k = smooth(clamp((m - 0.22) / 0.4, 0, 1));
+    this._rearFingers(k < 0.999);
     const { head } = person.bones;
     head.updateWorldMatrix(true, false);
     // Worn: centred on the head
     const pw = head.localToWorld(_v.copy(this.headC));
     head.getWorldQuaternion(_q);
     let pos = pw;
+    if (this.trophy) {
+      // Put down on the piste beside him, grille up, while he lifts the cup
+      person.root.getWorldQuaternion(_q2);
+      const out = this.rear === 'L' ? 1 : -1;
+      pos = _v3.set(out * 0.32 * s, 0.13 * s, 0.22 * s).applyQuaternion(_q2).add(person.root.getWorldPosition(_v2));
+      pos.y = this.group.position.y + 0.13 * s;
+      _q.copy(_q2).multiply(_q3.setFromAxisAngle(_v2.set(1, 0, 0), -Math.PI / 2));
+      this.mask.position.copy(this.group.worldToLocal(pos));
+      this.mask.quaternion.copy(_q);
+      this.mask.scale.setScalar(s);
+      return;
+    }
     if (k < 1) {
       // Carried: hanging upright from the rear fist by the strap, grille
       // facing the way the fencer faces — upright whatever the wrist does,
@@ -734,10 +1100,33 @@ export class Fencer {
       const ph = sock.getWorldPosition(_v2).add(_v3.set(out * 0.05 * s, -0.16 * s, 0.03 * s).applyQuaternion(_q2));
       pos = _v3.copy(ph).lerp(pw, k);
       _q.slerpQuaternions(_q2, _q, k);
+      // Chin first: on its way the mask's crown leans out in front of the
+      // face, then rolls back over the forehead into place
+      const roll = Math.sin(Math.PI * k);
+      if (roll > 1e-3) {
+        _q.multiply(_q2.setFromAxisAngle(_v2.set(1, 0, 0), 0.75 * roll));
+        pos.add(_v2.set(0, 0, 0.05 * s * roll).applyQuaternion(_q));
+      }
     }
     this.mask.position.copy(this.group.worldToLocal(pos));
     this.mask.quaternion.copy(_q);
     this.mask.scale.setScalar(s);
+  }
+
+  /**
+   * The champion lifts the cup in the rear hand (held by its stem, raised
+   * high); the mask is put down on the piste beside him meanwhile.
+   */
+  holdTrophy(obj) {
+    this.trophy = obj;
+    this.person.attach(obj, `grip${this.rear}`, { position: [0, 0.12 * this.s, 0.01 * this.s], rotation: [Math.PI, 0, 0], scale: 0.82 * this.s });
+  }
+
+  /** Lets go of the cup (the caller puts it back where it belongs). */
+  dropTrophy() {
+    const o = this.trophy;
+    this.trophy = null;
+    return o;
   }
 
   /** A held expression that relaxes back to the base one. */
@@ -783,7 +1172,7 @@ export class Fencer {
 
   dispose() {
     this.person.dispose();
-    for (const o of [this.mask, this.foil, this.glove, this.cuff]) {
+    for (const o of [this.mask, this.foil]) {
       o.traverse((c) => {
         if (c.geometry) c.geometry.dispose();
       });
@@ -841,12 +1230,25 @@ const ACTIONS = {
   },
 
   parry(a, out, ctx, k) {
-    // The beat: a short sharp sweep into the line, then back
+    // The beat, in the line it closes: a short sharp wrist action out
+    // and back, the hand moving only a few centimetres.
+    //  HÖG  sixte: point up, the hand lifts and turns out
+    //  MITT quarte: the blade sweeps across the body, point at the eyes
+    //  LÅG  octave: a half circle down, point towards the knee
     a.guardPose(out, ctx);
+    const { s } = a.f;
     const b = bell(clamp(k * 1.6, 0, 1));
-    out[P.fa] += 0.38 * b * (a.line === 2 ? -1 : 1);
-    out[P.fyaw] = 0.04 + 0.42 * b;
-    out[P.hx] += 0.04 * b * a.f.s;
+    const set = [
+      { fa: 0.42, yaw: 0.36, hy: 0.05, hx: 0.03 },
+      { fa: 0.26, yaw: 0.58, hy: 0.02, hx: 0.02 },
+      { fa: -0.72, yaw: 0.3, hy: -0.06, hx: 0.04 }
+    ][a.line];
+    out[P.fa] += set.fa * b;
+    out[P.fyaw] = 0.04 + set.yaw * b;
+    out[P.hx] += set.hx * b * s;
+    out[P.hy] += set.hy * b * s;
+    // The body stays still: only the rear arm answers the beat
+    out[P.back] = 0.12 * b;
     return 44;
   },
 
@@ -904,20 +1306,57 @@ const ACTIONS = {
     return 24;
   },
 
+  /**
+   * The end of a bout, as the rules want it: mask off, a salute to the
+   * opponent, and only then the joy or the disappointment.
+   */
+  win(a, out, ctx) {
+    a.guardPose(out, ctx);
+    const big = a.act === 'champion' ? 1 : 0.7;
+    // The champion's moment comes after the bout's salute: no second one
+    const t = a.act === 'champion' ? 9 : a.t;
+    if (t < 1.55) return a.boutSalute(out, t);
+    const r = smooth(clamp((t - 1.55) * 2, 0, 1));
+    out[P.relax] = r;
+    out[P.mask] = 0;
+    out[P.cheer] = big * r;
+    out[P.bob] = Math.abs(Math.sin(a.t * 6.5)) * (a.act === 'champion' ? 0.05 : 0.012) * a.f.s * r;
+    return 9;
+  },
+
+  lose(a, out, ctx) {
+    a.guardPose(out, ctx);
+    if (a.t < 1.55) return a.boutSalute(out, a.t);
+    const r = smooth(clamp((a.t - 1.55) * 1.5, 0, 1));
+    out[P.relax] = r;
+    out[P.mask] = 0;
+    out[P.cheer] = -r;
+    return 7;
+  },
+
   salute(a, out, ctx, k) {
-    // Mask in the rear hand: blade up before the face, sweep down towards
-    // the opponent, then the mask goes on and down into guard
+    // The salute as it is done on a real piste: standing tall on the
+    // en-garde line, heels together, mask in the rear hand. The bell comes
+    // up to the chin with the blade vertical, then the arm sweeps down and
+    // out towards the opponent. The mask goes on chin first, and only then
+    // the front foot steps out into en garde.
     a.guardPose(out, ctx);
     const { s } = a.f;
-    const up = smooth(clamp(k / 0.36, 0, 1)) * (1 - smooth(clamp((k - 0.48) / 0.18, 0, 1)));
-    const down = smooth(clamp((k - 0.48) / 0.18, 0, 1)) * (1 - smooth(clamp((k - 0.8) / 0.18, 0, 1)));
-    out[P.hx] += (0.14 * s - out[P.hx]) * up + (0.42 * s - out[P.hx]) * down;
-    out[P.hy] += (0.0 - out[P.hy]) * up + (-0.24 * s - out[P.hy]) * down;
-    out[P.fa] += (Math.PI / 2 - out[P.fa]) * up + (-0.6 - out[P.fa]) * down;
+    const up = smooth(clamp(k / 0.28, 0, 1)) * (1 - smooth(clamp((k - 0.4) / 0.14, 0, 1)));
+    const down = smooth(clamp((k - 0.4) / 0.14, 0, 1)) * (1 - smooth(clamp((k - 0.66) / 0.14, 0, 1)));
+    const stand = 1 - smooth(clamp((k - 0.8) / 0.16, 0, 1));
+    out[P.hx] += (0.14 * s - out[P.hx]) * up + (0.44 * s - out[P.hx]) * down;
+    out[P.hy] += (0.0 - out[P.hy]) * up + (-0.26 * s - out[P.hy]) * down;
+    out[P.fa] += (Math.PI / 2 - out[P.fa]) * up + (-0.62 - out[P.fa]) * down;
     out[P.fyaw] += 0.12 * up;
-    out[P.py] += 0.1 * (up + down) * s;
-    out[P.nod] += 0.08 * up;
-    out[P.mask] = k < 0.62 ? 0 : 1;
+    // Upright over the back foot, the front heel at its instep (a right
+    // angle); coming en garde, only the front foot steps out
+    out[P.py] = lerp(out[P.py], 0.9 * s, stand);
+    out[P.lean] = lerp(out[P.lean], -0.02, stand);
+    out[P.ffx] = lerp(out[P.ffx], out[P.bfx] + 0.13 * s, stand);
+    out[P.px] = lerp(out[P.px], out[P.bfx] + 0.07 * s, stand);
+    out[P.nod] += 0.08 * up - 0.05 * down;
+    out[P.mask] = k < 0.6 ? 0 : 1;
     return 12;
   },
 
@@ -926,26 +1365,6 @@ const ACTIONS = {
     a.guardPose(out, ctx);
     out[P.relax] = 1;
     out[P.mask] = 0;
-    return 7;
-  },
-
-  win(a, out, ctx, k) {
-    a.guardPose(out, ctx);
-    const big = a.act === 'champion' ? 1 : 0.7;
-    const r = smooth(clamp(k * 2, 0, 1));
-    out[P.relax] = r;
-    out[P.mask] = 0;
-    out[P.cheer] = big * r;
-    out[P.bob] = Math.abs(Math.sin(a.t * 6.5)) * (a.act === 'champion' ? 0.05 : 0.012) * a.f.s * r;
-    return 9;
-  },
-
-  lose(a, out, ctx, k) {
-    a.guardPose(out, ctx);
-    const r = smooth(clamp(k * 1.5, 0, 1));
-    out[P.relax] = r;
-    out[P.mask] = 0;
-    out[P.cheer] = -r;
     return 7;
   },
 
@@ -973,7 +1392,9 @@ export class Animator {
     this.opts = {};
     this.line = 1;
     this.phase = seed;
-    this.ox = 0; // footwork offset along the piste
+    this.ox = 0; // footwork offset along the piste (the pelvis)
+    this.oxF = 0; // … and of each foot: a step moves one foot, then the other
+    this.oxB = 0;
     this.step = null; // { from, to, t, dur }
     this.flash = 0;
     this.hold = -1; // target line while the point is in contact
@@ -997,10 +1418,16 @@ export class Animator {
     this.vel.fill(0);
   }
 
-  /** Small advance (+) or retreat (−) step, front foot leads on advance. */
-  stepBy(dx, dur = 0.3) {
-    if (this.step) return;
+  /**
+   * Small advance (+) or retreat (−) step. Real footwork: on the advance
+   * the front foot goes first — toes up, heel lands — and the back foot
+   * follows; on the retreat the back foot leads. Never both at once, and
+   * never a slide.
+   */
+  stepBy(dx, dur = 0.34) {
+    if (this.step) return false;
     this.step = { from: this.ox, to: this.ox + dx, t: 0, dur };
+    return true;
   }
 
   /** Physical jolt: push a channel's velocity (hit reactions). */
@@ -1025,10 +1452,10 @@ export class Animator {
     out[P.px] = this.ox + Math.sin(ph * 2.6) * 0.012 * s;
     out[P.py] = (PELVIS + bob * 0.014) * s;
     out[P.lean] = 0.05 + bob * 0.008;
-    out[P.ffx] = this.ox + FRONT_FOOT * s;
+    out[P.ffx] = this.oxF + FRONT_FOOT * s;
     out[P.ffy] = ANKLE_H * s;
     out[P.ffp] = 0;
-    out[P.bfx] = this.ox + BACK_FOOT * s;
+    out[P.bfx] = this.oxB + BACK_FOOT * s;
     out[P.bfy] = ANKLE_H * s;
     out[P.bfp] = 0;
     // The hand drifts between lines rather than snapping
@@ -1047,6 +1474,34 @@ export class Animator {
     out[P.bob] = 0;
   }
 
+  /**
+   * After the last touch: straighten up, the mask comes off (the rear hand
+   * lifts it from the face), then the blade comes up to the chin and
+   * sweeps down towards the opponent. `t` in seconds.
+   */
+  boutSalute(out, t) {
+    const { s } = this.f;
+    const stand = smooth(clamp(t / 0.4, 0, 1));
+    out[P.py] = lerp(out[P.py], 0.9 * s, stand);
+    out[P.lean] = lerp(out[P.lean], -0.02, stand);
+    out[P.ffx] = lerp(out[P.ffx], out[P.bfx] + 0.13 * s, stand);
+    out[P.px] = lerp(out[P.px], out[P.bfx] + 0.07 * s, stand);
+    out[P.mask] = t < 0.1 ? 1 : 0;
+    // Blade down by the side while the mask comes off, then the salute
+    const rest = stand * (1 - smooth(clamp((t - 0.62) / 0.16, 0, 1)));
+    out[P.hx] += (0.16 * s - out[P.hx]) * rest;
+    out[P.hy] += (-0.42 * s - out[P.hy]) * rest;
+    out[P.fa] += (-1.0 - out[P.fa]) * rest;
+    const up = smooth(clamp((t - 0.62) / 0.22, 0, 1)) * (1 - smooth(clamp((t - 1.02) / 0.16, 0, 1)));
+    const down = smooth(clamp((t - 1.02) / 0.16, 0, 1));
+    out[P.hx] += (0.14 * s - out[P.hx]) * up + (0.44 * s - out[P.hx]) * down;
+    out[P.hy] += (0.0 - out[P.hy]) * up + (-0.26 * s - out[P.hy]) * down;
+    out[P.fa] += (Math.PI / 2 - out[P.fa]) * up + (-0.62 - out[P.fa]) * down;
+    out[P.nod] += 0.08 * up - 0.05 * down;
+    out[P.back] = 0;
+    return 12;
+  }
+
   /** The lunge (player) and the attack (AI) share one shape. */
   lungePose(out, ctx, k, hold, line, depth = 1) {
     this.guardPose(out, ctx, line);
@@ -1056,12 +1511,12 @@ export class Animator {
     // How far the body has to travel for the point to land. The rear foot
     // slides up a little (a step-lunge), which is what lets the back leg
     // stay on the floor at full stretch.
-    const need = clamp(ctx.dist - ctx.oppPx - ctx.front - 1.76 * s, 0.15 * s, 0.72 * s) * depth;
+    const need = clamp(ctx.dist - ctx.oppPx - ctx.front - 1.76 * s - this.ox, 0.15 * s, 0.8 * s) * depth;
     out[P.px] += need * e;
     out[P.py] = (PELVIS - 0.16 * e * depth) * s;
     out[P.lean] = 0.05 + 0.24 * e;
     out[P.ffx] += (need + 0.1 * s) * e;
-    out[P.bfx] += need * 0.4 * smooth(clamp(k * 1.3, 0, 1));
+    out[P.bfx] += need * 0.22 * smooth(clamp(k * 1.3, 0, 1));
     const flight = clamp(k * 1.25, 0, 1);
     out[P.ffy] = (ANKLE_H + 0.12 * bell(flight) * depth) * s;
     out[P.ffp] = 0.45 * bell(flight * 0.9) - (k > 0.75 ? 0.1 * bell((k - 0.75) * 4) : 0);
@@ -1092,12 +1547,20 @@ export class Animator {
    */
   contact(p, ctx, line) {
     const a2 = this.aim(p, ctx, line);
-    const bx = a2.handX + Math.cos(a2.a) * BLADE_START;
-    const by = a2.handY + Math.sin(a2.a) * BLADE_START;
-    const d = Math.hypot(a2.tx - bx, a2.ty - by);
-    const kb = bendFor(d);
+    const st = BLADE_START + this.f.gripOff;
+    // The blade leaves the bell along its START tangent (fa), not along
+    // the line to the target: solve the two together (converges in a few
+    // rounds — the bell is only ten centimetres out from the grip)
+    let fa = a2.a;
+    let kb = 0;
+    for (let i = 0; i < 4; i++) {
+      const bx = a2.handX + Math.cos(fa) * st;
+      const by = a2.handY + Math.sin(fa) * st;
+      kb = bendFor(Math.hypot(a2.tx - bx, a2.ty - by));
+      fa = Math.atan2(a2.ty - by, a2.tx - bx) - (kb * BLADE) / 2;
+    }
     p[P.bend] = kb;
-    p[P.fa] = a2.a - (kb * BLADE) / 2;
+    p[P.fa] = fa;
   }
 
   /** Writes this frame's target pose and springs the real pose to it. */
@@ -1109,25 +1572,63 @@ export class Animator {
     const k = this.dur > 0 ? this.t / this.dur : 1;
     this.hold = -1;
 
+    let leadK = 0;
+    let trailK = 0;
+    let fwd = true;
     if (this.step) {
       const st = this.step;
       st.t += dt;
       const sk = clamp(st.t / st.dur, 0, 1);
-      this.ox = st.from + (st.to - st.from) * smooth(sk);
-      if (sk >= 1) this.step = null;
+      fwd = st.to > st.from;
+      const d = st.to - st.from;
+      // The pelvis glides through the whole step; the lead foot travels in
+      // the first 60 %, the trailing foot in the last 60 %
+      leadK = clamp(sk / 0.6, 0, 1);
+      trailK = clamp((sk - 0.4) / 0.6, 0, 1);
+      this.ox = st.from + d * smooth(sk);
+      const lead = st.from + d * smooth(leadK);
+      const trail = st.from + d * smooth(trailK);
+      this.oxF = fwd ? lead : trail;
+      this.oxB = fwd ? trail : lead;
+      if (sk >= 1) {
+        this.step = null;
+        this.oxF = this.ox;
+        this.oxB = this.ox;
+      }
+    } else {
+      this.oxF = this.ox;
+      this.oxB = this.ox;
     }
 
     const w = (ACTIONS[act] || ACTIONS.guard)(this, out, ctx, k);
+    const { s } = this.f;
 
-    // Footwork: the moving foot lifts in a small arc, the other follows
+    // Footwork: the moving foot clears the piste in a low arc; the front
+    // foot leads with the toes up so the heel lands first
     if (this.step) {
-      const st = this.step;
-      const sk = clamp(st.t / st.dur, 0, 1);
-      const fwd = st.to > st.from;
-      const lead = bell(clamp(sk * 1.6, 0, 1)) * 0.05 * this.f.s;
-      const trail = bell(clamp(sk * 1.6 - 0.6, 0, 1)) * 0.04 * this.f.s;
-      out[fwd ? P.ffy : P.bfy] += lead;
-      out[fwd ? P.bfy : P.ffy] += trail;
+      const lift = bell(leadK) * 0.045 * s;
+      const follow = bell(trailK) * 0.035 * s;
+      out[fwd ? P.ffy : P.bfy] += lift;
+      out[fwd ? P.bfy : P.ffy] += follow;
+      if (fwd) out[P.ffp] += 0.3 * bell(leadK * 0.9);
+      else out[P.ffp] += 0.18 * bell(trailK);
+    }
+
+    // No foot ever slides: one that still has ground to cover lifts while
+    // it travels and lands as it arrives (recovering from a lunge, a
+    // stagger, the step back after a touch). The planted back foot of a
+    // lunge is the exception — it stays flat on the piste.
+    if (out[P.relax] < 0.5) {
+      const lunging = act === 'lunge' || act === 'attack';
+      const travel = (x, y, pch, front) => {
+        const d = Math.abs(out[x] - this.f.pose[x]);
+        const up = clamp((d - 0.025 * s) * 0.55, 0, 0.065 * s);
+        if (up <= 0) return;
+        out[y] = Math.max(out[y], ANKLE_H * s + up);
+        if (front) out[pch] = Math.max(out[pch], up * 3);
+      };
+      travel(P.ffx, P.ffy, P.ffp, true);
+      if (!lunging) travel(P.bfx, P.bfy, P.bfp, false);
     }
 
     // Spring the real pose to the target

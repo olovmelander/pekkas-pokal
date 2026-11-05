@@ -7,25 +7,36 @@
  * Barcelona a real keramiker set the task and judged the results, and that
  * is his job here too:
  *
- *  - when a lump lands he points at it and says what he wants
- *  - while you throw he stands by the kiln with his arms crossed, watching
- *    your hands; a new star earns a nod and a smile, three stars raise his
+ *  - on the start screen he waits by the wheel and tells you about the
+ *    evening, hands talking
+ *  - when a lump lands he walks to his place, points at it and says what
+ *    he wants
+ *  - while you throw he stands by the kiln with his arms folded (for real:
+ *    forearm over forearm, not an X at the wrists), watching your hands —
+ *    or takes his boxwood rib out of his apron pocket and turns it over in
+ *    his hand (the shared 'flat' grip), putting it back before he needs the
+ *    hand again; a new star earns a nod and a smile, three stars raise his
  *    eyebrows, an off-centre wobble a frown and a shake of the head
- *  - while the piece fires he watches the kiln, hands on hips
+ *  - he shuts the kiln door himself, hand round its bar, watches it fire
+ *    with his hands on his hips, pulls the door open and steps back out of
+ *    the way of the hot piece
  *  - when it comes out he steps up to the banding wheel and leans in, one
  *    hand turning the wheel and a fist under his chin, then gives the
  *    verdict with his whole face: a grin and an arm in the air for 8+, a
- *    nod for decent work, a frown and a slow head shake for a rustic piece
- *    — talking while the card shows his words
+ *    thumbs-up for decent work, a shrug, or a frown and a slow head shake
+ *    for a rustic piece — talking while the card shows his words
  *
  * Posing is the shared pose library plus a few layers of our own,
  * cross-faded with eased weights (so no state change ever snaps), two-bone
- * IK for the hand on the wheel and the fist on the chin, and nods and
- * shakes written on top before people.js adds breathing and look-at.
+ * IK for every contact (folded arms, the door bar, the wheel, the chin, the
+ * pointing arm), hand shapes from the shared grip library (thumbsUp, point,
+ * fist, power), the shared IK walk with the stride matched to the ground
+ * covered, and nods and shakes written on top before people.js adds
+ * breathing and look-at.
  */
 
 import * as THREE from 'three';
-import { createPerson, POSES, emptyPose, WALK_STRIDE } from '../shared/people.js';
+import { createPerson, POSES, emptyPose, WALK_STRIDE, WALK_STRIDES } from '../shared/people.js';
 
 /** The studio is built a touch over life size; he matches its props. */
 export const KERAMIKER_HEIGHT = 2.05;
@@ -76,6 +87,15 @@ function mixAll(a, b, k) {
 }
 
 const ease = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
+/*
+ * Walk style from speed: 0 = 'stroll' … 0.5 = 'walk' (people.js takes a
+ * number). The root must cover exactly that style's stride per cycle, or
+ * the planted foot slides.
+ */
+const STROLL = (WALK_STRIDES && WALK_STRIDES.stroll) || WALK_STRIDE;
+const WALK = (WALK_STRIDES && WALK_STRIDES.walk) || WALK_STRIDE;
+const styleFor = (speed) => Math.max(0, Math.min(0.5, (speed - 0.35) / 1.3));
+const strideOf = (style) => STROLL + (WALK - STROLL) * style * 2;
 /** 0 → 1 → 0 over [a, b] with soft shoulders of width w. */
 const window01 = (x, a, b, w = 0.25) => ease((x - a) / w) * ease((b - x) / w);
 const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -188,7 +208,47 @@ function armUp(t, out) {
   return p;
 }
 
-/** Forearm out, fist forward; the thumb is raised after setPose (see THUMB_UP). */
+/**
+ * His wooden rib: a kidney-ish card of boxwood for smoothing a wall, built
+ * to the shared grip library's 'flat' convention — the origin on the middle
+ * of the held edge at mid-thickness, +Y the top face, the card along +Z.
+ */
+function buildRib(s) {
+  const L = 0.135 * s;
+  const W = 0.08 * s;
+  const T = 0.0055 * s;
+  const sh = new THREE.Shape();
+  sh.moveTo(-L / 2, 0);
+  sh.lineTo(L / 2, 0);
+  sh.quadraticCurveTo(L / 2 + 0.012 * s, W * 0.6, L * 0.28, W);
+  // the working edge, gently concave
+  sh.quadraticCurveTo(0, W * 0.82, -L * 0.28, W);
+  sh.quadraticCurveTo(-L / 2 - 0.012 * s, W * 0.6, -L / 2, 0);
+  const hole = new THREE.Path();
+  hole.absarc(0, W * 0.46, 0.011 * s, 0, Math.PI * 2, true);
+  sh.holes.push(hole);
+  const geo = new THREE.ExtrudeGeometry(sh, { depth: T, bevelEnabled: true, bevelThickness: T * 0.25, bevelSize: T * 0.3, bevelSegments: 1, curveSegments: 8 });
+  geo.translate(0, 0, -T / 2);
+  geo.rotateX(Math.PI / 2);
+  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0xb07e4c, roughness: 0.68 }));
+  mesh.castShadow = true;
+  return mesh;
+}
+
+/** Waiting with his rib: left hand on the hip, the right turning the rib over in front of him. */
+function ribHold(t, out) {
+  const p = POSES.handsOnHips(t, out);
+  const turn = Math.sin(t * 0.9) * 0.25;
+  p.shoulderR = [0, 0, 0];
+  p.upperArmR = [-0.3, 0.32, -0.12];
+  p.forearmR = [-1.55, 0, 0];
+  p.handR = [0.15 + Math.sin(t * 0.6) * 0.08, 0.5 + turn, 0.35];
+  p.chest = [0.02, 0.05, 0];
+  p.head = [0.14, 0.05, 0];
+  return p;
+}
+
+/** Forearm out, fist forward; the thumb goes up with the hand library's 'thumbsUp' grip. */
 function thumbsUp(t, out) {
   const p = POSES.handsOnHips(t, out);
   p.upperArmR = [-0.5, 0.3, -0.2];
@@ -234,9 +294,8 @@ function leanIn(t, out) {
 /** Upper-body layers in blend order: [weight name, pose function]. */
 const LAYERS = [
   ['crossed', POSES.armsCrossed], ['hips', POSES.handsOnHips], ['point', POSES.point], ['clap', POSES.clap],
-  ['cheer', POSES.cheer], ['armUp', armUp], ['thumb', thumbsUp], ['shrug', shrug], ['lean', leanIn]
+  ['cheer', POSES.cheer], ['armUp', armUp], ['thumb', thumbsUp], ['shrug', shrug], ['lean', leanIn], ['explain', POSES.explain], ['rib', ribHold]
 ];
-const THUMB_UP = new THREE.Quaternion().setFromEuler(new THREE.Euler(-1.45, 0.1, 0.2));
 
 /**
  * @param {object} o
@@ -246,8 +305,15 @@ const THUMB_UP = new THREE.Quaternion().setFromEuler(new THREE.Euler(-1.45, 0.1,
  * @param {THREE.Vector3} o.banding   banding wheel top centre
  * @param {number} o.bandingRadius
  * @param {THREE.Vector3} o.kilnDoor  the kiln door (what he watches while it fires)
+ * @param {THREE.Vector3} [o.kilnSpot]   where he tends the kiln (beside its door)
+ * @param {THREE.Object3D} [o.kilnHinge] the door's hinge group, which the game swings
+ * @param {THREE.Vector3} [o.kilnHandle] the door handle, in the hinge's space
+ * @param {THREE.Vector3} [o.kilnBack]   where he steps back to, clear of the door and the piece's flight
+ * @param {THREE.Vector3} [o.greet]      where he welcomes you on the start screen (by the wheel)
  */
-export function createKeramiker({ home, judge, wheel, banding, bandingRadius, kilnDoor }) {
+export function createKeramiker({
+  home, judge, wheel, banding, bandingRadius, kilnDoor, kilnSpot = null, kilnHinge = null, kilnHandle = null, kilnBack = null, greet = null
+}) {
   const person = createPerson(LOOK);
   smearApron(person);
   const { root, bones, sockets } = person;
@@ -256,8 +322,22 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
   root.add(blob.mesh);
   const beret = buildBeret(s);
   person.attach(beret, 'headTop', { position: [-0.006 * s, -0.028 * s, -0.004 * s], rotation: [-0.16, 0, -0.3] });
-  root.position.copy(home);
-  root.rotation.y = Math.atan2(wheel.x - home.x, wheel.z - home.z);
+  // Solve every grip he will use now, while the game loads (each first
+  // setGrip runs a 5–50 ms finger solve that people.js then caches), so
+  // none of them costs a hitch mid-game
+  const rib = buildRib(s);
+  const RIB_GRIP = { thickness: 0.0055 * s };
+  // In his apron pocket until he wants it: the card down in the pocket, its edge peeking out
+  const RIB_POCKET = { position: [-0.06 * s, -0.085 * s, 0.152 * s], rotation: [Math.PI / 2 - 0.1, 0, 0.08] };
+  person.attach(rib, 'hips', RIB_POCKET);
+  person.setGrip('R', 'flat', { ...RIB_GRIP, blend: 0 });
+  for (const g of ['thumbsUp', 'point', 'fist']) person.setGrip('R', g, { blend: 0 });
+  person.setGrip('L', 'fist', { blend: 0 });
+  person.setGrip('L', 'power', { diameter: 0.05, blend: 0 });
+  person.setGrip('R', null, { blend: 0 });
+  person.setGrip('L', null, { blend: 0 });
+  root.position.copy(greet || home);
+  root.rotation.y = greet ? 0 : Math.atan2(wheel.x - home.x, wheel.z - home.z);
 
   /* Pose buffers and layer weights, reused every frame */
   const base = emptyPose();
@@ -275,7 +355,15 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
     now: 0,
     walkW: 0,
     phase: 0, // walk cycle
-    rim: 0, // IK weights: hand on the banding wheel, fist on the chin
+    style: 0.3, // walk style, 0 stroll … 0.5 walk
+    rim: 0, // IK weights: hand on the banding wheel, fist on the chin, hand on the kiln door
+    door: 0,
+    doorGrip: false,
+    doorAnchor: null,
+    gripR: null,
+    gripL: null,
+    ribHeld: false,
+    backing: false,
     chin: 0,
     expr: '',
     talking: -1,
@@ -285,7 +373,7 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
     overT: -1
   };
   /** What this frame asks for, filled by the plan* functions below. */
-  const plan = { look: null, exprKey: '', expr: null, talk: false, nod: 0, shake: 0, tilt: 0, lean: false };
+  const plan = { look: null, exprKey: '', expr: null, talk: false, nod: 0, shake: 0, tilt: 0, lean: false, door: 0 };
 
   const goal = new THREE.Vector3();
   const faceAt = new THREE.Vector3();
@@ -301,6 +389,11 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
   const ax = new THREE.Vector3();
   const ay = new THREE.Vector3();
   const az = new THREE.Vector3();
+  const v1 = new THREE.Vector3();
+  const doorLook = new THREE.Vector3();
+  const handlePos = new THREE.Vector3();
+  const handleQ = new THREE.Quaternion();
+  const v2 = new THREE.Vector3();
 
   /** World quaternion for a bone whose local X and Y should point along x and y (orthonormalised). */
   function basisQuat(x, y, out) {
@@ -353,6 +446,14 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
     express('warm', { smile: 0.45 });
     if (ctx.phase !== 'over') {
       st.overT = -1;
+      // Now and then he tells you about tonight's work, hands talking
+      const cyc = t % 10;
+      if (cyc > 6.5) {
+        goalW.explain = window01(cyc, 6.5, 10, 0.5);
+        goalW.hips = 1 - goalW.explain;
+        plan.talk = cyc > 6.9 && cyc < 9.3;
+        express('tell', { smile: 0.55 });
+      }
       return;
     }
     // The evening is over: applause, then hands on hips, proud
@@ -371,15 +472,17 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
     st.poseSwap += dt;
     const swap = Math.floor(st.poseSwap / 9) % 2 === 1;
     goalW.crossed = swap ? 0 : 1;
-    goalW.hips = swap ? 1 : 0;
+    goalW.rib = swap ? 1 : 0;
     express('watch', { focus: 0.35 });
     const c = st.cue;
+    // Coming over from the start screen: the "this one" waits till he is at his place
+    if (c && c.kind === 'intro' && root.position.distanceTo(goal) > 0.3) c.t0 = t;
     const age = c ? t - c.t0 : 99;
     if (c && c.kind === 'intro' && age < 2.1) {
       // "This one": points at the lump and says what he wants
       goalW.point = window01(age, 0.1, 1.9, 0.3);
       goalW.crossed = 0;
-      goalW.hips = 0;
+      goalW.rib = 0;
       plan.talk = age > 0.2 && age < 1.7;
       plan.look = age < 0.9 ? ctx.camera : ctx.attention;
       express('tell', { smile: 0.35 });
@@ -402,6 +505,13 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
     faceAt.copy(kilnDoor);
     plan.look = kilnDoor;
     goalW.hips = 1;
+    // He shuts the door himself, hand on the handle as it swings home, and
+    // pulls it open again when the firing is done
+    if (kilnHinge && ctx.fireT !== undefined && root.position.distanceTo(goal) < 0.2) {
+      const ft = ctx.fireT;
+      plan.door = Math.max(window01(ft, 1.0, 1.8, 0.22), window01(ft, 3.5, 4.12, 0.18));
+      if (plan.door > 0.5) plan.look = doorLook.copy(kilnHandle).applyMatrix4(kilnHinge.matrixWorld);
+    }
     if (ctx.heat > 0.3) express('kiln', { focus: 0.7 });
     else express('watch', { focus: 0.35 });
   }
@@ -465,13 +575,26 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
     tmp.subVectors(goal, root.position).setY(0);
     const dist = tmp.length();
     let walkGoal = 0;
-    if (dist > 0.03) {
+    const backErr = dist > 0.03 ? wrapAngle(Math.atan2(-tmp.x, -tmp.z) - root.rotation.y) : 0;
+    if (dist > 0.03 && st.backing && Math.abs(backErr) < 0.9) {
+      // A short step BACK (out of the way of the kiln door and the hot
+      // piece): no turning round, still facing what he faces, legs in reverse
+      root.rotation.y += backErr * k(4);
+      const step = Math.min(dist, Math.min(0.85, 0.35 + dist * 1.4) * dt);
+      root.position.addScaledVector(tmp.normalize(), step);
+      st.style += (0 - st.style) * k(6);
+      st.phase -= (step / (strideOf(st.style) * s)) * Math.PI * 2;
+      walkGoal = 0.8;
+    } else if (dist > 0.03) {
       const err = wrapAngle(Math.atan2(tmp.x, tmp.z) - root.rotation.y);
       root.rotation.y += err * k(7);
       const speed = Math.abs(err) > 1.1 ? 0 : Math.min(1.15, 0.3 + dist * 1.6) * (1 - Math.abs(err) / 1.6);
       const step = Math.min(dist, speed * dt);
       root.position.addScaledVector(tmp.normalize(), step);
-      st.phase += (step / (WALK_STRIDE * s)) * Math.PI * 2;
+      // A short move is a stroll, across the room a walk; the phase follows the
+      // ground covered at that style's stride, so the planted foot stays put
+      st.style += (styleFor(speed) - st.style) * k(4);
+      st.phase += (step / (strideOf(st.style) * s)) * Math.PI * 2;
       walkGoal = 1;
     } else {
       root.position.x = goal.x;
@@ -494,9 +617,17 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
       const g = goalW[name];
       w[name] += (g - w[name]) * (1 - Math.exp(-(g > w[name] ? 5.5 : 4) * dt));
     }
-    POSES.idle(t, base);
-    if (st.walkW > 1e-3) mixAll(base, POSES.walk(st.phase, walkP), st.walkW);
-    for (const [name, fn] of LAYERS) if (w[name] > 1e-3) mixUpper(base, fn(t, buf[name]), w[name]);
+    // His own idle (seeded: weight shifts and fidgets nobody else shares)
+    POSES.idle(t, base, person.look.seed);
+    if (st.walkW > 1e-3) mixAll(base, POSES.walk(st.phase, walkP, st.style), st.walkW);
+    // Walking, he lets his arms swing: the resting layers give way to the stride
+    const free = 1 - 0.8 * st.walkW;
+    for (const [name, fn] of LAYERS) {
+      const wk = name === 'hips' || name === 'crossed' ? w[name] * free : w[name];
+      if (wk > 1e-3) mixUpper(base, fn(t, buf[name]), wk);
+    }
+    // A hand on the kiln door closes round its handle
+    if (st.door > 1e-3 && !st.doorGrip) base.gripL += (0.92 - base.gripL) * ease(st.door);
     person.setPose(base, 1);
   }
 
@@ -506,8 +637,56 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
     st.rim += ((plan.lean ? 1 : 0) - st.rim) * k(5);
     st.chin += ((plan.lean ? 1 : 0) - st.chin) * k(3.5);
     const pointW = ctx.attention ? w.point : 0;
-    if (st.rim < 0.004 && st.chin < 0.004 && pointW < 0.004) return;
+    const foldW = w.crossed * (1 - 0.8 * st.walkW);
+    st.door += (plan.door - st.door) * k(plan.door > st.door ? 7 : 5);
+    if (st.rim < 0.004 && st.chin < 0.004 && pointW < 0.004 && foldW < 0.004 && st.door < 0.004) return;
     root.updateMatrixWorld(true);
+    if (foldW > 0.004) {
+      // Arms folded the way people fold them — not an X at the wrists: the
+      // left forearm lies over the right, its hand resting on the right upper
+      // arm; the right hand is tucked in under the left arm against the ribs.
+      // Both forearms clear the apron by a couple of centimetres.
+      bones.chest.getWorldQuaternion(qa);
+      const C = (x, y, z, out) => bones.chest.localToWorld(out.set(x * s, y * s, z * s));
+      C(-0.05, 0.0, 0.29, target);
+      basisQuat(v1.set(0, 0.6, 0.8).applyQuaternion(qa), v2.set(0.85, 0.45, 0.25).applyQuaternion(qa), handQ);
+      C(0.6, -0.2, 0.35, pole);
+      reachFor('L', target, handQ, pole, foldW);
+      C(0.06, -0.065, 0.21, target);
+      basisQuat(v1.set(0, 0, -1).applyQuaternion(qa), v2.set(-0.9, 0, 0.3).applyQuaternion(qa), handQ);
+      C(-0.6, -0.25, 0.3, pole);
+      reachFor('R', target, handQ, pole, foldW);
+    }
+    // The kiln door's bar: the shared grip library closes the fingers round it
+    // (people.js setGrip 'power'); the arm reaches by our own eased weight
+    const wantGrip = st.door > 0.15;
+    if (wantGrip !== st.doorGrip) {
+      st.doorGrip = wantGrip;
+      st.doorAnchor = person.setGrip('L', wantGrip ? 'power' : null, { diameter: 0.05, blend: 0.18 });
+    }
+    if (st.door > 0.004) {
+      // The bar's frame: +Y up its length, +Z the way the palm faces — square
+      // to the reach, to his right (a left hand, thumb up)
+      kilnHinge.updateMatrixWorld(true);
+      handlePos.copy(kilnHandle).applyMatrix4(kilnHinge.matrixWorld);
+      bones.upperArmL.getWorldPosition(tmp2);
+      const reachDir = tmp2.subVectors(handlePos, tmp2).setY(0).normalize();
+      az.crossVectors(reachDir, ay.set(0, 1, 0)).normalize();
+      ax.crossVectors(ay, az);
+      mBasis.makeBasis(ax, ay, az);
+      handleQ.setFromRotationMatrix(mBasis);
+      const anchor = st.doorAnchor;
+      if (anchor) {
+        // hand = bar × anchor⁻¹ (the same sum holdWith does, but weighted)
+        handQ.copy(handleQ).multiply(qa.copy(anchor.quaternion).invert());
+        target.copy(handlePos).sub(tmp.copy(anchor.position).applyQuaternion(handQ));
+      } else {
+        basisQuat(v1.set(Math.cos(root.rotation.y), 0, -Math.sin(root.rotation.y)), reachDir.negate(), handQ);
+        target.copy(handlePos);
+      }
+      bones.chest.localToWorld(pole.set(0.6 * s, -0.5 * s, -0.25 * s));
+      reachFor('L', target, handQ, pole, st.door);
+    }
     if (st.rim > 0.004) {
       // The rim point on his left, riding round with the wheel and back
       const left = tmp2.set(Math.cos(root.rotation.y), 0, -Math.sin(root.rotation.y));
@@ -550,8 +729,11 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
    *   attention: what he watches while you throw (your hand, or the clay)
    *   piece: the fired piece while it is judged · camera: the viewer · heat: kiln glow 0..1
    */
-  function update(dt, t, ctx) {
-    st.now = t;
+  function update(dt, tWall, ctx) {
+    // His own clock runs on frame time, so a fast-forwarded firing (or a
+    // slow test machine) plays every gesture at the speed of the game
+    st.now += dt;
+    const t = st.now;
     const { phase } = ctx;
     for (const [name] of LAYERS) goalW[name] = 0;
     plan.look = null;
@@ -560,9 +742,18 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
     plan.shake = 0;
     plan.tilt = 0;
     plan.lean = false;
+    plan.door = 0;
 
     const atJudge = phase === 'judge' || (phase === 'fire' && ctx.opened);
-    goal.copy(atJudge ? judge : home);
+    // The door swings open and the hot piece comes out past his spot: he
+    // steps back first, then goes round to the banding wheel
+    st.backing = phase === 'fire' && !!kilnBack && !!ctx.doorOpening && root.position.distanceTo(kilnBack) > 0.05 &&
+      (!ctx.opened || st.backing);
+    if (st.backing) goal.copy(kilnBack);
+    else if (atJudge) goal.copy(judge);
+    else if (phase === 'fire' && kilnSpot) goal.copy(kilnSpot);
+    else if (phase === 'idle' && greet) goal.copy(greet);
+    else goal.copy(home);
     if (phase === 'idle' || phase === 'over') planWaiting(t, ctx);
     else if (phase === 'intro' || phase === 'throw') planThrow(dt, t, ctx);
     else if (!atJudge) planKiln(ctx);
@@ -571,8 +762,37 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
     locomotion(dt);
     pose(dt, t);
     hands(dt, t, ctx);
-    // The thumbs-up thumb: straight out of the top of the fist
-    if (w.thumb > 0.01) bones.thumbR.quaternion.slerp(THUMB_UP, ease(w.thumb));
+    // The rib: taken out of the apron pocket when he settles to wait, put
+    // back before the hand is needed for anything else
+    const wantRib = w.rib > 0.5 && w.point < 0.2 && w.thumb < 0.2 && st.chin < 0.2;
+    if (wantRib !== st.ribHeld) {
+      st.ribHeld = wantRib;
+      if (wantRib) {
+        person.hold(rib, 'R', 'flat', { ...RIB_GRIP, blend: 0.22 });
+        st.gripR = 'rib';
+      } else {
+        person.release('R', { blend: 0.22 });
+        person.attach(rib, 'hips', RIB_POCKET);
+        st.gripR = null;
+      }
+    }
+    // His right hand's shape from the shared hand library (people.js setGrip),
+    // eased in and out: a real thumbs-up, a pointing index, a fist under the
+    // chin or in the air; otherwise the pose's own relaxed fingers
+    let gripR = null;
+    if (w.thumb > 0.35) gripR = 'thumbsUp';
+    else if (w.point > 0.35) gripR = 'point';
+    else if (st.chin > 0.4 || w.armUp > 0.35 || w.cheer > 0.35) gripR = 'fist';
+    if (!st.ribHeld && gripR !== st.gripR) {
+      st.gripR = gripR;
+      person.setGrip('R', gripR, { blend: 0.2 });
+    }
+    // ...and the left, when it is not on the kiln door
+    const gripL = st.doorGrip ? 'door' : w.cheer > 0.35 ? 'fist' : null;
+    if (gripL !== st.gripL) {
+      st.gripL = gripL;
+      if (gripL !== 'door') person.setGrip('L', gripL, { blend: 0.2 });
+    }
     // Nods, shakes and tilts on top (people.update keeps them and adds look-at)
     if (plan.nod) bones.head.rotation.x += plan.nod;
     if (plan.shake) {
@@ -590,7 +810,7 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
       st.talking = talk;
       person.talk(talk);
     }
-    person.update(dt, t);
+    person.update(dt, tWall);
   }
 
   return {
@@ -603,6 +823,8 @@ export function createKeramiker({ home, judge, wheel, banding, bandingRadius, ki
       st.verdict = null;
     },
     dispose() {
+      rib.geometry.dispose();
+      rib.material.dispose();
       beret.geometry.dispose();
       beret.children[0].geometry.dispose();
       beret.material.dispose();

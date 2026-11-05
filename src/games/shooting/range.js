@@ -26,6 +26,7 @@
 
 import * as THREE from 'three';
 import { HAZE } from './sky.js';
+import { buildForest } from './forest.js';
 
 export function mulberry(seed) {
   let a = seed;
@@ -241,40 +242,6 @@ function flagTexture() {
 /* ------------------------------------------------------------------ trees */
 
 /**
- * A rank of spruce as one merged, lit, vertex-coloured mesh. Three stacked
- * cones give the stepped, drooping silhouette of a Norrland gran; trunks on
- * the near rank only. The far rank is pre-tinted toward the haze so it sits
- * behind the near one even before the fog gets to it.
- */
-function spruceRank(rand, z, count, spread, opts) {
-  const b = new Batch();
-  const haze = new THREE.Color(HAZE);
-  const base = new THREE.Color(opts.color);
-  for (let i = 0; i < count; i++) {
-    const h = (2.0 + rand() * 5.2) * opts.scale;
-    const w = h * (0.17 + rand() * 0.08);
-    const x = -spread / 2 + (i / count) * spread + (rand() - 0.5) * (spread / count) * 2.2;
-    const zz = z + (rand() - 0.5) * opts.depth;
-    const y0 = opts.lift;
-    const tint = base.clone();
-    tint.offsetHSL((rand() - 0.5) * 0.03, (rand() - 0.5) * 0.1, (rand() - 0.5) * 0.12);
-    tint.lerp(haze, opts.haze);
-    b.put(new THREE.ConeGeometry(w, h * 0.55, 6), tint, { at: [x, y0 + h * 0.3, zz], darken: 0.4 });
-    b.put(new THREE.ConeGeometry(w * 0.74, h * 0.45, 6), tint.clone().multiplyScalar(1.06),
-      { at: [x, y0 + h * 0.56, zz], darken: 0.3 });
-    b.put(new THREE.ConeGeometry(w * 0.46, h * 0.36, 5), tint.clone().multiplyScalar(1.12),
-      { at: [x, y0 + h * 0.8, zz], darken: 0.2 });
-    if (opts.trunks) {
-      b.put(cyl(w * 0.08, w * 0.12, h * 0.2, 4), new THREE.Color(0x4a3826).lerp(haze, opts.haze),
-        { at: [x, y0 + h * 0.08, zz], darken: 0.3 });
-    }
-  }
-  const mesh = b.mesh();
-  mesh.renderOrder = -6;
-  return mesh;
-}
-
-/**
  * A continuous jagged skyline of spruce tips standing behind a rank, so
  * the gaps between cones read as more forest instead of as sky. Lit, but
  * only ever seen as a dark silhouette in the haze.
@@ -297,31 +264,6 @@ function forestMass(rand, z, height, color, haze) {
   mesh.position.z = z;
   mesh.renderOrder = -7;
   return mesh;
-}
-
-/** Birches at the field edge: white stems, light crowns — a Swedish tell. */
-const BIRCH_SPOTS = [[24, -58], [31, -64], [38, -57], [46, -70], [55, -62],
-  [-48, -66], [-56, -74], [16, -84], [-14, -92], [64, -80],
-  // behind the station, where the reaction shot looks
-  [-26, 52], [-19, 60], [-31, 66], [22, 58], [30, 49], [37, 63], [8, 74]];
-
-function birches(rand) {
-  const b = new Batch();
-  BIRCH_SPOTS.forEach(([x, z]) => {
-    const h = 5 + rand() * 4;
-    b.put(cyl(0.12, 0.18, h, 5), 0xe9e5da, { at: [x, h / 2, z], rot: [0, 0, (rand() - 0.5) * 0.12], darken: 0.25 });
-    const n = 5 + Math.floor(rand() * 3);
-    for (let k = 0; k < n; k++) {
-      const r = 0.6 + rand() * 0.8;
-      const tint = new THREE.Color(0x86a04a).offsetHSL((rand() - 0.5) * 0.05, 0, (rand() - 0.5) * 0.12);
-      b.put(new THREE.IcosahedronGeometry(r, 0), tint, {
-        at: [x + (rand() - 0.5) * 1.8, h * (0.55 + rand() * 0.45), z + (rand() - 0.5) * 1.8],
-        scale: [1, 1.4, 1],
-        darken: 0.3
-      });
-    }
-  });
-  return b.mesh();
 }
 
 /* ---------------------------------------------------------------- flowers */
@@ -451,7 +393,7 @@ function buildSwallows(rand, count) {
 
 /* ----------------------------------------------------------------- range */
 
-export function buildRange(rand, { envMap } = {}) {
+export function buildRange(rand, { envMap, lite = false } = {}) {
   const g = new THREE.Group();
 
   /* ---- Ground ---- */
@@ -496,13 +438,84 @@ export function buildRange(rand, { envMap } = {}) {
   // Shell crate
   props.put(box(0.42, 0.3, 0.3), 0x7a5a34, { at: [-1.25, 0.15, 0.5], rot: [0, 0.3, 0] });
   props.put(box(0.36, 0.02, 0.24), 0xc23a2a, { at: [-1.25, 0.31, 0.5], rot: [0, 0.3, 0] });
-  // Trap house: green-painted concrete, roof, the dark launch slot, sandbags
-  props.put(box(3.4, 1.2, 2.4), 0x55684e, { at: [0, 0.45, -17], darken: 0.25 });
-  props.put(box(3.8, 0.16, 2.7), 0x3d4b3d, { at: [0, 1.13, -17] });
-  props.put(box(2.7, 0.34, 0.1), 0x0c110c, { at: [0, 0.78, -15.74] });
-  [-1.2, -0.4, 0.4, 1.2].forEach((x) => {
-    props.put(new THREE.SphereGeometry(0.24, 6, 4), 0x9a8a63, { at: [x, 0.16, -15.65], scale: [1.25, 0.7, 0.85] });
+  // A station number post at the front corner of the deck: white plate, black "1"
+  props.put(box(0.07, 1.15, 0.07), 0x6b5136, { at: [1.02, 0.575, -0.9] });
+  props.put(box(0.26, 0.26, 0.03), 0xf2efe6, { at: [1.02, 1.0, -0.86] });
+  props.put(box(0.045, 0.17, 0.012), 0x1c1c1c, { at: [1.02, 1.0, -0.84] });
+  props.put(box(0.035, 0.02, 0.012), 0x1c1c1c, { at: [1.0, 1.07, -0.84], rot: [0, 0, 0.7] });
+  // Empties on the boards and in the grass — red plastic, brass heads
+  const shellRand = mulberry(53);
+  for (let i = 0; i < 9; i++) {
+    const sx = (shellRand() - 0.5) * 2.2;
+    const sz = (shellRand() - 0.3) * 1.6;
+    const ry = shellRand() * Math.PI;
+    const y = Math.abs(sx) < 0.86 && Math.abs(sz) < 0.85 ? 0.072 : 0.03;
+    props.put(cyl(0.0105, 0.0105, 0.065, 6), 0xb8231c, { at: [sx, y, sz], rot: [Math.PI / 2, ry, 0] });
+  }
+  // A bucket for the empties, by the crate
+  props.put(cyl(0.13, 0.1, 0.28, 10), 0x3d6a3a, { at: [-1.25, 0.14, 0.95], darken: 0.3 });
+  // The gun rack at the end of the row: two posts, a padded rail, a notched foot
+  [-0.5, 0.5].forEach((dx) => props.put(box(0.06, 1.05, 0.06), 0x6b5136, { at: [-2.75 + dx, 0.525, 2.25] }));
+  props.put(box(1.12, 0.07, 0.08), 0x4e3a26, { at: [-2.75, 1.02, 2.25] });
+  props.put(box(1.12, 0.06, 0.18), 0x5a432c, { at: [-2.75, 0.06, 2.42] });
+  // …with two over-unders leaning in it, stocks on the foot, barrels on the rail
+  [-0.22, 0.18].forEach((dx, i) => {
+    const lean = -0.17 - i * 0.03;
+    props.put(box(0.045, 0.36, 0.09), 0x6e3f22, { at: [-2.75 + dx, 0.24, 2.4], rot: [lean, 0, 0] });
+    props.put(box(0.03, 0.78, 0.035), 0x1c2026, { at: [-2.75 + dx, 0.77, 2.31], rot: [lean, 0, 0] });
+    props.put(box(0.04, 0.16, 0.05), 0xb9bec4, { at: [-2.75 + dx, 0.44, 2.37], rot: [lean, 0, 0] });
   });
+  // The trap house: a concrete bunker dug into a grass berm (only its roof
+  // lip and the dark launch slot show from the station), a side door, and
+  // red-and-white marker poles so the shooter can find it at a glance
+  props.put(box(3.6, 1.05, 2.6), 0x9b998f, { at: [0, 0.5, -17.2], darken: 0.35 });
+  props.put(box(3.9, 0.13, 2.9), 0xa8a69c, { at: [0, 1.08, -17.2] });
+  props.put(box(2.5, 0.24, 0.06), 0x0b0e0b, { at: [0, 0.9, -15.88] });
+  props.put(box(2.7, 0.04, 0.12), 0x8a8a82, { at: [0, 1.02, -15.86] });
+  const berm = new THREE.Shape();
+  berm.moveTo(0, 0);
+  berm.lineTo(2.6, 0);
+  berm.quadraticCurveTo(1.0, 0.25, 0, 0.78);
+  berm.closePath();
+  const bermGeo = new THREE.ExtrudeGeometry(berm, { depth: 4.4, bevelEnabled: false, curveSegments: 6 });
+  bermGeo.translate(0, 0, -2.2);
+  props.put(bermGeo, 0xa9ae5e, { at: [0, -0.02, -15.92], rot: [0, -Math.PI / 2, 0], darken: 0.15 });
+  props.put(box(0.04, 0.9, 0.7), 0x6a4a2c, { at: [1.83, 0.45, -17.6] });
+  props.put(box(0.03, 0.06, 0.06), 0xb9bec4, { at: [1.86, 0.48, -17.35] });
+  [-2.05, 2.05].forEach((x) => {
+    for (let k = 0; k < 4; k++) {
+      props.put(cyl(0.028, 0.028, 0.4, 6), k % 2 ? 0xf2efe6 : 0xc8312c, { at: [x, 0.2 + k * 0.4, -15.9] });
+    }
+  });
+  // The high tower the incomers are thrown from (index.js TOWER_TOP): four
+  // splayed legs with X-braces, a platform with a rail, and the trapper's
+  // hut with its open front
+  {
+    const TX = 9;
+    const TZ = -60;
+    const WOOD = 0x7d6c58;
+    const legH = 8.1;
+    [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sz]) => {
+      props.put(box(0.18, legH + 0.1, 0.18), WOOD, {
+        at: [TX + sx * 1.25, legH / 2, TZ + sz * 1.25], rot: [-sz * 0.05, 0, sx * 0.05], darken: 0.25
+      });
+    });
+    for (let k = 0; k < 3; k++) {
+      const y = 1.5 + k * 2.3;
+      const w = 2.7 - k * 0.2;
+      [-1, 1].forEach((d) => {
+        props.put(box(0.07, 3.2, 0.07), WOOD, { at: [TX, y + 1, TZ + 1.3 - k * 0.07], rot: [0, 0, d * 0.72] });
+        props.put(box(0.07, 3.2, 0.07), WOOD, { at: [TX + 1.3 - k * 0.07, y + 1, TZ], rot: [d * 0.72, 0, 0] });
+      });
+      props.put(box(w, 0.08, 0.08), WOOD, { at: [TX, y, TZ + 1.3 - k * 0.07] });
+    }
+    props.put(box(3.0, 0.14, 3.0), 0x6a5a48, { at: [TX, legH, TZ] });
+    props.put(box(2.2, 1.7, 1.8), 0x5d6b52, { at: [TX, legH + 0.92, TZ - 0.4], darken: 0.2 });
+    props.put(box(2.5, 0.1, 2.3), 0x3a3d40, { at: [TX, legH + 1.84, TZ - 0.4], rot: [0.08, 0, 0] });
+    props.put(box(1.5, 0.5, 0.06), 0x111411, { at: [TX, legH + 0.95, TZ + 0.53] });
+    props.put(box(3.0, 0.06, 0.06), WOOD, { at: [TX, legH + 0.9, TZ + 1.47] });
+    [-1.47, 1.47].forEach((x) => props.put(box(0.06, 0.06, 3.0), WOOD, { at: [TX + x, legH + 0.9, TZ] }));
+  }
   // Fika table at the end of the gang's row: thermos, cups and a plate of bullar
   const [tx, tz] = FIKA_TABLE;
   props.put(box(0.9, 0.04, 0.6), 0xd8d2c2, { at: [tx, 0.72, tz] });
@@ -516,79 +529,60 @@ export function buildRange(rand, { envMap } = {}) {
     props.put(new THREE.SphereGeometry(0.04, 6, 4), 0xc08440, { at: [tx + x, 0.78, tz + z], scale: [1, 0.6, 1] });
   });
   // Flagpole by the barn, white with a gilded knob
-  props.put(cyl(0.06, 0.09, 10, 6), 0xf2efe6, { at: [-20, 5, -41] });
-  props.put(new THREE.SphereGeometry(0.14, 8, 6), 0xe0b040, { at: [-20, 10.1, -41] });
+  props.put(cyl(0.05, 0.085, 10, 8), 0xf2efe6, { at: [-20, 5, -41] });
+  props.put(new THREE.SphereGeometry(0.15, 10, 8), 0xe0b040, { at: [-20, 10.12, -41] });
+  props.put(cyl(0.3, 0.36, 0.25, 8), 0x8a8780, { at: [-20, 0.1, -41] });
   const propMesh = props.mesh();
   propMesh.castShadow = true;
   propMesh.receiveShadow = true;
   g.add(propMesh);
 
-  /* ---- Scatter: boulders, bushes, wildflowers ---- */
-  const rocks = new Batch();
-  for (let i = 0; i < 16; i++) {
-    const a = rand() * Math.PI * 2;
-    const r = 9 + rand() * 34;
-    const s = 0.3 + rand() * 0.85;
-    const tint = new THREE.Color(0x8c8f88).offsetHSL(0, 0, (rand() - 0.5) * 0.16);
-    rocks.put(new THREE.DodecahedronGeometry(s, 0), tint, {
-      at: [Math.cos(a) * r, s * 0.34, Math.sin(a) * r - 6],
-      rot: [0, rand() * 3, 0],
-      scale: [1, 0.6 + rand() * 0.35, 1],
-      darken: 0.3
-    });
-  }
-  const rockMesh = rocks.mesh();
-  rockMesh.castShadow = true;
-  rockMesh.receiveShadow = true;
-  g.add(rockMesh);
-
-  const bushes = new Batch();
-  for (let i = 0; i < 22; i++) {
-    const a = rand() * Math.PI * 2;
-    const r = 12 + rand() * 32;
-    const bx = Math.cos(a) * r;
-    const bz = Math.sin(a) * r - 8;
-    if (bz > -4 && Math.abs(bx) < 9) continue; // keep the vista's foreground open
-    const clumps = 3 + Math.floor(rand() * 3);
-    const tint = new THREE.Color(0x3f6330).offsetHSL((rand() - 0.5) * 0.04, 0, (rand() - 0.5) * 0.12);
-    for (let k = 0; k < clumps; k++) {
-      const s = 0.4 + rand() * 0.55;
-      bushes.put(new THREE.IcosahedronGeometry(s, 0), tint, {
-        at: [bx + (rand() - 0.5) * 1.1, s * 0.75, bz + (rand() - 0.5) * 1.1],
-        darken: 0.4
-      });
-    }
-  }
-  const bushMesh = bushes.mesh();
-  bushMesh.castShadow = true;
-  g.add(bushMesh);
-
+  /* ---- Scatter: wildflowers (the bushes and boulders grow in forest.js) ---- */
   // Wildflowers of a Norrland August verge, merged flat, near-free:
   // prästkrage and smörblomma as petal stars, rödklöver as a soft ball,
   // blåklocka as a nodding bell.
   const flowers = new Batch();
   const STARS = [[0xf2c230, 0xf7f3e6], [0xf2c230, 0xf7f3e6], [0xe8a820, 0xf0d43a], [0xf7e9a0, 0xe9eef2]];
-  for (let i = 0; i < 230; i++) {
-    const a = rand() * Math.PI * 2;
-    const r = 2.4 + rand() * 22;
-    const fx = Math.cos(a) * r;
-    const fz = Math.sin(a) * r;
-    if (Math.abs(fx) < 1.4 && Math.abs(fz) < 1.8) continue;
-    const h = 0.28 + rand() * 0.2;
+  // In drifts, the way a verge flowers: a patch of daisies here, clover there
+  const flowerAt = (fx, fz, kind) => {
+    const h = 0.26 + rand() * 0.22;
     const lean = [(rand() - 0.5) * 0.5, 0, (rand() - 0.5) * 0.5];
-    flowers.put(cyl(0.006, 0.01, h, 3), 0x5c7434, { at: [fx, h / 2, fz] });
-    const kind = rand();
+    flowers.put(cyl(0.006, 0.01, h, 3), 0x7c9a48, { at: [fx, h / 2, fz] });
     if (kind < 0.6) {
       const [eye, tip] = STARS[Math.floor(rand() * STARS.length)];
-      const head = flowerHead(0.05 + rand() * 0.025, kind < 0.4 ? 8 : 5, eye, tip);
+      const head = flowerHead(0.06 + rand() * 0.03, kind < 0.4 ? 8 : 5, eye, tip);
       flowers.put(head, null, { at: [fx, h, fz], rot: lean });
     } else if (kind < 0.8) {
-      flowers.put(new THREE.IcosahedronGeometry(0.03 + rand() * 0.012, 1), 0xc8507a,
-        { at: [fx, h, fz], scale: [1, 1.15, 1], darken: 0.35 });
+      flowers.put(new THREE.IcosahedronGeometry(0.036 + rand() * 0.014, 1), 0xd0588a,
+        { at: [fx, h, fz], scale: [1, 1.15, 1], darken: 0.25 });
     } else {
-      flowers.put(new THREE.ConeGeometry(0.026, 0.05, 6, 1, true), 0x6f62c8,
-        { at: [fx, h - 0.02, fz], rot: [Math.PI + lean[0], 0, lean[2]], darken: 0.3 });
+      flowers.put(new THREE.ConeGeometry(0.032, 0.06, 6, 1, true), 0x7a6ad8,
+        { at: [fx, h - 0.02, fz], rot: [Math.PI + lean[0], 0, lean[2]], darken: 0.25 });
     }
+  };
+  for (let i = 0; i < 64; i++) {
+    const a = rand() * Math.PI * 2;
+    const r = 2.6 + rand() * 22;
+    const cx = Math.cos(a) * r;
+    const cz = Math.sin(a) * r;
+    const kind = rand();
+    const n = 3 + Math.floor(rand() * 6);
+    for (let k = 0; k < n; k++) {
+      const fx = cx + (rand() - 0.5) * 1.6;
+      const fz = cz + (rand() - 0.5) * 1.6;
+      if (Math.abs(fx) < 1.4 && Math.abs(fz) < 1.8) continue;
+      if (Math.abs(fx) < 2.6 && fz < -13.2 && fz > -19) continue;
+      // Not right under the muzzle: up close a flower is a dark stick across the view
+      if (fz < 0 && fz > -7 && Math.abs(fx) < 4 + -fz * 0.6) continue;
+      flowerAt(fx, fz, rand() < 0.8 ? kind : rand());
+    }
+  }
+  // …and a few more right where the vista's camera looks down past the gang
+  for (let i = 0; i < 60; i++) {
+    const fx = -3 + rand() * 9;
+    const fz = 3.6 + rand() * 5;
+    if (fx > 2.6 && fx < 3.9 && fz < 3.1) continue;
+    flowerAt(fx, fz, rand());
   }
   const flowerMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide });
   g.add(flowers.mesh(flowerMat));
@@ -620,39 +614,87 @@ export function buildRange(rand, { envMap } = {}) {
   ));
 
   /* ---- The red barn with vita knutar ---- */
+  // Falu red board-and-batten on a grey stone plinth, a black roof with an
+  // overhang and white fascia, white corner boards, a double loge door with
+  // white X-braces, and windows with crossbars. Every layer stands at least
+  // 4 cm proud of the one behind it (no coplanar faces for a 16-bit depth
+  // buffer to fight over at 60 m).
   const barn = new Batch();
   const FALU = 0x8f2d26;
   const WHITE = 0xf0ede4;
-  barn.put(box(9, 5, 6), FALU, { at: [0, 2.5, 0], darken: 0.15 });
-  // Gable roof as an extruded triangle with a little overhang
+  const barnRand = mulberry(77);
+  barn.put(box(9.3, 0.55, 6.3), 0x8a8780, { at: [0, 0.27, 0], darken: 0.35 });
+  barn.put(box(9, 4.5, 6), FALU, { at: [0, 2.8, 0], darken: 0.18 });
+  // Battens on the long front, a shade apart so the wall has a rhythm
+  for (let i = 0; i < 20; i++) {
+    const x = -4.28 + i * 0.45;
+    if (Math.abs(x) < 1.55) continue; // the door
+    const tone = new THREE.Color(FALU).offsetHSL(0, 0, (barnRand() - 0.5) * 0.05);
+    barn.put(box(0.07, 4.4, 0.05), tone, { at: [x, 2.8, 3.04], darken: 0.2 });
+  }
+  // Gable roof: extruded triangle with overhang on every side
   const roofShape = new THREE.Shape();
-  roofShape.moveTo(-3.5, 0);
-  roofShape.lineTo(3.5, 0);
-  roofShape.lineTo(0, 2.7);
+  roofShape.moveTo(-3.55, 0);
+  roofShape.lineTo(3.55, 0);
+  roofShape.lineTo(0, 2.75);
   roofShape.closePath();
-  const roof = new THREE.ExtrudeGeometry(roofShape, { depth: 9.6, bevelEnabled: false });
-  roof.translate(0, 0, -4.8);
-  barn.put(roof, 0x3c3f47, { at: [0, 5, 0], rot: [0, Math.PI / 2, 0] });
-  barn.put(box(9.2, 0.25, 0.12), WHITE, { at: [0, 5.05, 3.04] });
+  const roofGable = new THREE.ExtrudeGeometry(roofShape, { depth: 9.0, bevelEnabled: false });
+  roofGable.translate(0, 0, -4.5);
+  barn.put(roofGable, FALU, { at: [0, 5.05, 0], rot: [0, Math.PI / 2, 0], darken: 0.1 });
+  // The roof planes: two slabs along the slopes, over the gable
+  const slope = Math.atan2(2.75, 3.55);
+  const slab = Math.hypot(3.55, 2.75) + 0.5;
+  [-1, 1].forEach((sd) => {
+    barn.put(box(10.0, 0.14, slab), 0x2c2e33, {
+      at: [0, 5.05 + 2.75 / 2 + 0.1, sd * (3.55 / 2 + 0.05)], rot: [sd * slope, 0, 0]
+    });
+    // White fascia along the eave
+    barn.put(box(10.0, 0.22, 0.06), WHITE, { at: [0, 4.98, sd * 3.84] });
+  });
+  barn.put(box(10.1, 0.16, 0.24), 0x24262a, { at: [0, 7.92, 0] });
+  // White rake boards along the gable ends
+  [-1, 1].forEach((ex) => {
+    [-1, 1].forEach((sd) => {
+      barn.put(box(0.06, 0.2, slab - 0.2), WHITE, {
+        at: [ex * 5.02, 5.05 + 2.75 / 2, sd * (3.55 / 2 - 0.05)], rot: [sd * slope, 0, 0]
+      });
+    });
+  });
+  // Corner boards (knutar)
   [-4.55, 4.55].forEach((x) => {
-    [2.8, -2.8].forEach((z) => barn.put(box(0.45, 5, 0.45), WHITE, { at: [x, 2.5, z] }));
+    [3.05, -3.05].forEach((z) => barn.put(box(0.32, 4.5, 0.32), WHITE, { at: [x, 2.8, z] }));
   });
-  // Door: white frame, red boards, the white cross brace. Each layer stands
-  // 5–6 cm proud of the one behind: invisible at 60 m, but enough depth for
-  // any GPU's depth buffer to keep them apart (no shimmering door).
-  barn.put(box(2.8, 3.6, 0.12), WHITE, { at: [0, 1.8, 3.0] });
-  barn.put(box(2.4, 3.2, 0.12), 0x7a241e, { at: [0, 1.7, 3.05] });
-  barn.put(box(0.16, 3.6, 0.04), WHITE, { at: [0, 1.7, 3.13], rot: [0, 0, 0.64] });
-  barn.put(box(0.16, 3.6, 0.04), WHITE, { at: [0, 1.7, 3.13], rot: [0, 0, -0.64] });
-  // Windows with white frames
-  [-3, 3].forEach((x) => {
-    barn.put(box(1.1, 0.9, 0.1), WHITE, { at: [x, 3.3, 3.0] });
-    barn.put(box(0.86, 0.66, 0.1), 0x2a3038, { at: [x, 3.3, 3.05] });
+  // The loge door: white frame, red leaves, white X on each leaf
+  barn.put(box(3.0, 3.7, 0.1), WHITE, { at: [0, 2.4, 3.06] });
+  [-0.68, 0.68].forEach((x) => {
+    barn.put(box(1.25, 3.35, 0.1), 0x7a241e, { at: [x, 2.28, 3.12] });
+    barn.put(box(0.13, 3.5, 0.04), WHITE, { at: [x, 2.28, 3.2], rot: [0, 0, 0.36] });
+    barn.put(box(0.13, 3.5, 0.04), WHITE, { at: [x, 2.28, 3.2], rot: [0, 0, -0.36] });
   });
+  // Windows with white frames and crossbars
+  [-3.05, 3.05].forEach((x) => {
+    barn.put(box(1.1, 0.95, 0.1), WHITE, { at: [x, 3.6, 3.07] });
+    barn.put(box(0.86, 0.71, 0.1), 0x1f252c, { at: [x, 3.6, 3.12] });
+    barn.put(box(0.06, 0.71, 0.04), WHITE, { at: [x, 3.6, 3.19] });
+    barn.put(box(0.86, 0.06, 0.04), WHITE, { at: [x, 3.6, 3.19] });
+  });
+  // A gable window high on the end wall the vista sees
+  barn.put(box(0.1, 0.8, 0.7), WHITE, { at: [4.56, 6.0, 0] });
+  barn.put(box(0.1, 0.6, 0.5), 0x1f252c, { at: [4.61, 6.0, 0] });
   const barnMesh = barn.mesh();
   barnMesh.position.set(-31, 0, -49);
   barnMesh.rotation.y = 0.45;
+  barnMesh.castShadow = false;
   g.add(barnMesh);
+
+  /* ---- Silage bales, the white "dinosaur eggs" of every Swedish field ---- */
+  const bales = new Batch();
+  [[-22, -46, 0.2], [-20.6, -46.6, 0.5], [-21.4, -44.9, 1.4], [-24.5, -52, 0.1], [14, -55, 1.1], [15.5, -54.2, 0.3]].forEach(([x, z, r]) => {
+    const tone = new THREE.Color(0xe8e6de).offsetHSL(0, 0, (barnRand() - 0.5) * 0.06);
+    bales.put(new THREE.CylinderGeometry(0.62, 0.62, 1.2, 14), tone, { at: [x, 0.6, z], rot: [Math.PI / 2, 0, r], darken: 0.3 });
+  });
+  const baleMesh = bales.mesh(new THREE.MeshLambertMaterial({ vertexColors: true }));
+  g.add(baleMesh);
 
   /* ---- Swedish flag, waving in the vertex shader ---- */
   const flagUniforms = { uTime: { value: 0 } };
@@ -678,22 +720,14 @@ export function buildRange(rand, { envMap } = {}) {
   flag.rotation.y = -0.15;
   g.add(flag);
 
-  /* ---- Forest: two ranks, the far one hazed for aerial perspective ---- */
+  /* ---- Forest: the far silhouettes here, every tree in forest.js ---- */
   g.add(forestMass(rand, -170, 15, 0x2c4a3a, 0.66));
-  g.add(spruceRank(rand, -155, 84, 480, {
-    color: 0x2c4a3a, scale: 3.0, depth: 22, haze: 0.56, trunks: false, lift: -1.5
-  }));
-  g.add(forestMass(rand, -118, 8, 0x1f3a26, 0.22));
-  g.add(spruceRank(rand, -108, 96, 380, {
-    color: 0x22402a, scale: 2.0, depth: 16, haze: 0.16, trunks: true, lift: -0.6
-  }));
-  g.add(birches(rand));
+  g.add(forestMass(rand, -121, 9, 0x1f3a26, 0.3));
+  const forest = buildForest(mulberry(4711), { lite });
+  g.add(forest.group);
   // Behind the station: only the reaction shot after a series turns round
   // far enough to see it, but then it needs to be a forest edge, not a void
   g.add(forestMass(rand, 108, 10, 0x22402a, 0.42));
-  g.add(spruceRank(rand, 94, 74, 420, {
-    color: 0x22402a, scale: 2.2, depth: 14, haze: 0.3, trunks: true, lift: -1.0
-  }));
 
   /* ---- Pekkas Pokal itself, waiting on the fika table ---- */
   const trophyMat = new THREE.MeshStandardMaterial({
@@ -723,7 +757,7 @@ export function buildRange(rand, { envMap } = {}) {
   const swallows = buildSwallows(rand, 11);
   g.add(swallows.mesh);
 
-  return { group: g, swallows, flagUniforms };
+  return { group: g, swallows, flagUniforms, forest };
 }
 
 /* ----------------------------------------------------------------- clays */

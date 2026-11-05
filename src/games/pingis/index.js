@@ -224,7 +224,7 @@ export async function createPingis(container) {
   renderer.setPixelRatio(pixelRatio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
+  renderer.toneMappingExposure = 1.06;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   canvasHost.appendChild(renderer.domElement);
@@ -246,7 +246,10 @@ export async function createPingis(container) {
   const base = { fov: 50, pos: new THREE.Vector3(), look: new THREE.Vector3() };
 
   /* Lights — hierarchy: hemisphere fill, one casting key, lamp accents */
-  const hemi = new THREE.HemisphereLight(0x9aa8c8, 0x241a10, 0.3);
+  // A warm evening fill: the sky term is the lamplit ceiling and walls of a
+  // timber hall, not a blue sky, and the bounce off the floor is honey
+  const HEMI = 0.44;
+  const hemi = new THREE.HemisphereLight(0xdcc4a2, 0x3c2916, HEMI);
   scene.add(hemi);
 
   const key = new THREE.DirectionalLight(0xffe2b0, 1.55);
@@ -277,15 +280,39 @@ export async function createPingis(container) {
 
   // A low fill from the player's side so the opponent's face reads instead
   // of going to silhouette against his own hall.
-  const faceFill = new THREE.DirectionalLight(0xffe8d0, 0.55);
-  faceFill.position.set(0.5, 2.2, 6);
+  // Off to the left, so faces are modelled — the key comes high from the
+  // right, this fills the shadow side softly, the rim (below) draws the edge
+  const faceFill = new THREE.DirectionalLight(0xffe2c4, 0.34);
+  faceFill.position.set(-4.5, 2.2, 3.2);
   scene.add(faceFill);
+
+  // A back light from the stage lip, high over his shoulders: it rims the
+  // opponent's head, shoulders and bat arm in warm light so he stands out
+  // from the people behind him — the broadcast look. A cone, not a sun,
+  // so the floor and the table do not wash out. On every tier: on a phone
+  // the opponent is the one big figure in the frame.
+  const rim = new THREE.SpotLight(0xffc48a, 16, 9, 0.5, 0.7, 2);
+  rim.position.set(0.3, 3.5, -4.5);
+  rim.target.position.set(0, 1.2, -2.1);
+  scene.add(rim, rim.target);
+  // The wall sconces really light the people sitting under them (the wide
+  // desktop lens is the one that sees the wall seating)
+  if (!low) {
+    [[-4.05, -1.7], [4.05, -1.45]].forEach(([x, z]) => {
+      const sconce = new THREE.PointLight(0xffb878, 3.2, 5, 2);
+      sconce.position.set(x, 2.45, z);
+      scene.add(sconce);
+    });
+  }
 
   /* World */
   const glow = glowTexture();
   const hall = buildHall(glow, { tier, pixelRatio, profile: gfx });
   scene.add(hall.group);
   hall.refs.dust.layers.set(NO_MIRROR);
+  // Floor paint, scuffs and the little counter: a draw each that the
+  // mirror pass does not need
+  hall.refs.noMirror.forEach((o) => o.layers.set(NO_MIRROR));
   if (hall.refs.reflector) hall.refs.reflector.getReflectionCamera(camera).layers.disable(NO_MIRROR);
 
   /* Shaders are compiled before anything is drawn, off the main thread
@@ -546,6 +573,8 @@ export async function createPingis(container) {
   let simT = 0; // simulation clock (stops for hit-stop, help and replays)
   let pointSimT = 0; // simT when the last point was decided (replay anchor)
   let touchHints = coarse ? 3 : Infinity; // a finger gets the hint for its first points
+  let ghostServes = 0; // serves a finger has played itself
+  let ghostSeen = false; // …two of them, and the ghost finger has done its job
   /* Balance runs play thousands of matches headless. The whole loop is
      dt-driven, so the only thing standing between a match and running in
      milliseconds is the frame we never look at. */
@@ -807,10 +836,13 @@ export async function createPingis(container) {
     renderPts();
     hud.phase(myServe() ? `DIN SERVE — ${hud.serveHint}` : `${first()} servar…`);
     onBeginPoint();
+    // A finger's first serves get a ghost finger showing the gesture
+    if (renderOn) hud.ghost(coarse && myServe() && touchHints >= 0 && !ghostSeen);
   }
 
   function playerServe() {
     if (state.phase !== 'serve' || !myServe()) return;
+    if (renderOn) hud.ghost(false);
     sfx.toss();
     const power = Math.min(1, 0.4 + Math.hypot(me.dragVX, me.dragVY) * 0.16);
     const spin = THREE.MathUtils.clamp(-me.dragVY * 0.34, -0.9, 0.9);
@@ -1083,6 +1115,8 @@ export async function createPingis(container) {
   /* ---- Feedback hooks (visual and audio only — never touch the rules) -- */
 
   const tmpC = new THREE.Color();
+  const hitGlowC = new THREE.Color();
+  let hitGlow = 0;
   const tmpV = new THREE.Vector3();
   const flatQ = new THREE.Quaternion();
   const net = { x: 0, amp: 0, t: 0 };
@@ -1127,7 +1161,13 @@ export async function createPingis(container) {
     const arrow = side > 0.22 ? ' →' : side < -0.22 ? ' ←' : '';
     const strength = Math.abs(spin) > 0.7 ? '+' : '';
     popScore(`${word}${strength}${arrow}`, tmpV.set(me.x, PADDLE_Y + 0.25, HITZ), 'pg-spinpop', spinCss(spin, side));
-    if (power > 0.82 && !smash) sfx.swish(0.18);
+    if (power > 0.82 && !smash) {
+      sfx.swish(0.18);
+      fovPunch = Math.max(fovPunch, 1.6); // a drive you can feel in the lens
+    }
+    // The rubber flares in the spin colour at contact, then cools
+    spinColor(spin, side, hitGlowC);
+    hitGlow = smash ? 1.4 : 0.6 + power * 0.5;
     if (smash) onSmash(true);
   }
 
@@ -1200,7 +1240,9 @@ export async function createPingis(container) {
     } else {
       // A long rally earns him applause too — it is a friendly hall
       crowd.react(rally >= 8 ? 'applause' : 'groan', power);
-      if (rally >= 4) sfx.groan();
+      // …and you hear what you see: a polite hand for a long one, a groan otherwise
+      if (rally >= 8) sfx.applause(false);
+      else if (rally >= 4) sfx.groan();
     }
     if (foe) foe.cue(mine ? 'lost' : 'point', power);
   }
@@ -1216,6 +1258,8 @@ export async function createPingis(container) {
   /* ---- Flow ------------------------------------------------------------- */
 
   let camMode = 'menu';
+  let lightMix = 0; // 0 play lighting … 1 the intro portrait
+  let camCut = false;
   let celebT = 0;
   let singleIdx = 0;
 
@@ -1240,6 +1284,7 @@ export async function createPingis(container) {
     hud.hideIntro();
     hud.replay(false);
     hud.showKeys(false);
+    hud.ghost(false);
   }
 
   function showMenu() {
@@ -1476,6 +1521,7 @@ export async function createPingis(container) {
     replay.t = replay.start;
     replay.ev = events.findIndex((e) => e.t >= replay.start);
     camMode = 'replay';
+    camCut = true; // a broadcast replay CUTS to its camera, it does not pan there
     trail.clear();
     hud.replay(true);
     hud.phase('');
@@ -1488,6 +1534,7 @@ export async function createPingis(container) {
     state.replayWanted = false;
     state.phase = 'point';
     camMode = 'play';
+    camCut = true;
     trail.clear();
     if (state.decided) endMatch(state.myPts > state.aiPts);
     else beginPoint();
@@ -1551,6 +1598,7 @@ export async function createPingis(container) {
       return;
     }
     dragging = true;
+    hud.ghost(false);
     lastPX = e.clientX;
     lastPY = e.clientY;
     lastPT = e.timeStamp || performance.now();
@@ -1582,7 +1630,11 @@ export async function createPingis(container) {
   }
 
   function onPointerUp() {
-    if (dragging && state.phase === 'serve' && myServe()) playerServe();
+    if (dragging && state.phase === 'serve' && myServe()) {
+      // Two serves of its own, and a finger no longer needs the ghost
+      if (++ghostServes >= 2) ghostSeen = true;
+      playerServe();
+    }
     dragging = false;
   }
 
@@ -1817,9 +1869,17 @@ export async function createPingis(container) {
   const view = {
     t: 0, bx: 0, by: 1, bz: HITZ, bvis: false, st: 0, ss: 0, vz: 0, live: false, smash: false,
     meX: 0, meVx: 0, meDVX: 0, meDVY: 0, meSwing: 0, meSpin: 0, aiX: 0, foeX: 0, foeZ: FOE_Z, stroke: 0, fh: 1,
-    hc: false, cx: 0, cy: 0, cz: 0, toss: -1
+    hc: false, cx: 0, cy: 0, cz: 0, toss: -1, mpX: 0, mpY: PADDLE_Y, mpZ: HITZ, mpReach: 0
   };
   const foeAnim = { x: 0, z: FOE_Z, fh: 1, stroke: 0, read: -1, swing: 0, hc: false, c: new THREE.Vector3() };
+  /* Your bat goes to MEET the ball. The rules hit it wherever it drops to
+     bat height, which can be a metre in front of a bat parked at the end
+     of the table — so for the picture the bat reads where the ball will be
+     met (the same pure prediction the bot reads with) and rises and
+     reaches there over the last third of a second, then follows through
+     and settles back. Sideways it only leans toward the ball: x stays the
+     bat you are steering, so a ball out of reach is visibly missed. */
+  const meAnim = { read: -1, c: new THREE.Vector3(), tHit: 0, swing: 0, follow: 0 };
 
   function liveView(dt) {
     const src = dead.on ? dead.pos : b.pos;
@@ -1840,6 +1900,28 @@ export async function createPingis(container) {
     if (me.swing > 0) me.swing = Math.max(0, me.swing - dt * 5);
     view.meSwing = me.swing;
     view.meSpin = me.swingSpin;
+    const toMe = b.live && b.vel.z > 0 && b.lastHitter === 'ai' && state.phase === 'rally';
+    if (toMe && meAnim.read !== state.rallyHits) {
+      meAnim.read = state.rallyHits;
+      const r = predictStrike(1);
+      meAnim.c.set(r.x, r.y, r.z);
+      meAnim.tHit = simT + r.t;
+    }
+    let reach = 0;
+    if (toMe && meAnim.read === state.rallyHits) reach = 1 - smooth(0.03, 0.32, meAnim.tHit - simT);
+    if (me.swing > meAnim.swing + 0.5) {
+      // Contact (or your serve): the ball is exactly where the bat met it
+      meAnim.c.copy(b.pos);
+      meAnim.follow = 1;
+    }
+    meAnim.swing = me.swing;
+    meAnim.follow = Math.max(0, meAnim.follow - dt * 2.4);
+    reach = Math.max(reach, smooth(0, 0.55, meAnim.follow));
+    const leanX = THREE.MathUtils.clamp(meAnim.c.x - me.x, -0.36, 0.36) * 0.6;
+    view.mpReach = reach;
+    view.mpX = me.x + leanX * reach;
+    view.mpY = THREE.MathUtils.lerp(PADDLE_Y, THREE.MathUtils.clamp(meAnim.c.y - 0.1, PADDLE_Y, 1.5), reach);
+    view.mpZ = THREE.MathUtils.lerp(HITZ, THREE.MathUtils.clamp(meAnim.c.z + 0.06, 0.25, HITZ), reach);
     view.aiX = ai.x;
     // The opponent's stroke: wind up as the ball arrives, follow through
     // after contact. Forehand unless it is coming well to his backhand.
@@ -1916,7 +1998,7 @@ export async function createPingis(container) {
     const c = rec[i];
     const k = THREE.MathUtils.clamp((replay.t - a.t) / Math.max(1e-5, c.t - a.t), 0, 1);
     Object.assign(rv, c);
-    ['bx', 'by', 'bz', 'meX', 'meVx', 'aiX', 'foeX', 'foeZ', 'stroke', 'meSwing'].forEach((f) => {
+    ['bx', 'by', 'bz', 'meX', 'meVx', 'aiX', 'foeX', 'foeZ', 'stroke', 'meSwing', 'mpX', 'mpY', 'mpZ', 'mpReach'].forEach((f) => {
       rv[f] = a[f] + (c[f] - a[f]) * k;
     });
     if (Math.abs(c.stroke - a.stroke) > 0.8) rv.stroke = c.stroke;
@@ -1935,7 +2017,7 @@ export async function createPingis(container) {
   /* The opponent, from the view: where he stands, the stroke, the ball he
      is watching, and what the moment asks of his face */
   const foeView = {
-    x: 0, z: FOE_Z, stroke: 0, fh: 1, ball: null, contact: null, mode: 'menu', look: null, focus: 0,
+    x: 0, z: FOE_Z, stroke: 0, fh: 1, ball: null, contact: null, mode: 'menu', relax: false, look: null, focus: 0,
     toss: -1, tossBall: new THREE.Vector3(), servePoint: new THREE.Vector3()
   };
   const contactW = new THREE.Vector3();
@@ -1947,6 +2029,8 @@ export async function createPingis(container) {
     fv.mode = ph === 'menu' ? 'menu'
       : ph === 'intro' ? 'intro'
         : ph === 'celebrate' || (ph === 'over' && state.champion) ? 'clap' : 'play';
+    // The match is over and the card is up: he stands at ease
+    fv.relax = ph === 'matchend' || (ph === 'over' && !state.champion);
     fv.x = v.foeX;
     fv.z = v.foeZ;
     fv.stroke = v.stroke;
@@ -1998,11 +2082,22 @@ export async function createPingis(container) {
       fov = wide ? 32 : 48;
       rate = 2.2;
     } else if (camMode === 'replay') {
-      // A low broadcast angle from the side, far enough back to hold both
-      // ends of the table, drifting with the ball
-      tPos.set(2.9, 1.45, THREE.MathUtils.clamp(v.bz * 0.3, -0.9, 0.9) + 0.35);
-      tLook.set(v.bx * 0.25, 0.92, v.bz * 0.45 - 0.15);
-      fov = camera.aspect < 0.8 ? 62 : 42;
+      if (camera.aspect < 0.8) {
+        // A tall frame has no width for a side angle: from high over your
+        // right shoulder, down the length of the table to him, drifting
+        // with the ball
+        tPos.set(0.85 + v.bx * 0.15, 2.05, 2.55);
+        tLook.set(v.bx * 0.35, 0.9, -0.85 + v.bz * 0.15);
+        fov = 56;
+      } else {
+        // The broadcast three-quarter: low from your right-hand corner,
+        // looking up the table at him — the ball's curve and his stroke in
+        // one frame — creeping in as the rally plays out
+        const k = THREE.MathUtils.clamp((replay.t - replay.start) / Math.max(0.1, replay.end - replay.start), 0, 1);
+        tPos.set(2.75 - k * 0.25, 1.42 - k * 0.06, 2.25 + THREE.MathUtils.clamp(v.bz * 0.18, -0.35, 0.35) - k * 0.2);
+        tLook.set(v.bx * 0.3, 0.96, -0.55 + v.bz * 0.28);
+        fov = 41;
+      }
       rate = 4;
     } else if (camMode === 'celebrate') {
       celebT += dt;
@@ -2015,7 +2110,9 @@ export async function createPingis(container) {
       fov = camera.aspect < 0.8 ? 56 : 44;
       rate = celebT < 1.5 ? 1.5 : 3;
     }
-    const k = 1 - Math.exp(-dt * rate);
+    const k = camCut ? 1 : 1 - Math.exp(-dt * rate);
+    if (camCut) camFov = fov;
+    camCut = false;
     camPos.lerp(tPos, k);
     camLook.lerp(tLook, k);
     camFov += (fov - camFov) * k;
@@ -2058,16 +2155,27 @@ export async function createPingis(container) {
        SEE what you would play if the ball arrived now. */
     const preSpin = THREE.MathUtils.clamp(-v.meDVY * 0.3, -1, 1);
     const preSide = THREE.MathUtils.clamp(v.meDVX * 0.16, -1, 1);
-    myPaddle.position.x = v.meX;
-    myPaddle.rotation.y = THREE.MathUtils.clamp(v.meVx * 0.06, -0.35, 0.35);
-    myPaddle.rotation.z = THREE.MathUtils.clamp(-v.meVx * 0.09 - v.meDVX * 0.06, -0.6, 0.6);
+    // A bat with no player behind it only belongs in the player's own view
+    myPaddle.visible = camMode === 'play' || camMode === 'replay';
+    const lean = v.mpX - v.meX;
+    myPaddle.position.x = v.mpX;
+    myPaddle.position.z = v.mpZ;
+    myPaddle.rotation.y = THREE.MathUtils.clamp(v.meVx * 0.06 - lean * 0.5, -0.45, 0.45);
+    myPaddle.rotation.z = THREE.MathUtils.clamp(-v.meVx * 0.09 - v.meDVX * 0.06 - lean * 1.2, -0.7, 0.7);
     const sw = Math.sin(v.meSwing * Math.PI);
     const dir = v.meSpin < -0.25 ? -1 : 1;
-    myPaddle.position.y = PADDLE_Y + Math.sin(t * 2.1) * 0.008 + sw * 0.07 * dir;
-    myPaddle.rotation.x = -0.4 - preSpin * 0.22 - sw * 0.8 * dir;
+    const idle = Math.sin(t * 2.1) * 0.008 * (1 - v.mpReach);
+    myPaddle.position.y = v.mpY + idle + sw * 0.07 * dir;
+    // Squared up to the ball as it arrives (the face turns to the net)
+    myPaddle.rotation.x = -0.4 + v.mpReach * 0.22 - preSpin * 0.22 - sw * 0.8 * dir;
     const flick = Math.min(1, Math.hypot(preSpin, preSide) * 1.3);
     spinColor(preSpin, preSide, rubber.emissive);
     rubber.emissiveIntensity = flick * 0.55;
+    if (hitGlow > 0.01) {
+      hitGlow *= Math.exp(-dt * (replaying ? 3 : 7));
+      rubber.emissive.lerp(hitGlowC, Math.min(1, hitGlow));
+      rubber.emissiveIntensity = Math.max(rubber.emissiveIntensity, hitGlow * 0.6);
+    }
     myPaddle.localToWorld(bladeA.set(0, 0.03, 0));
     myPaddle.localToWorld(bladeB.set(0, 0.21, 0));
     swooshMe.sample(bladeA, bladeB, dt);
@@ -2129,7 +2237,13 @@ export async function createPingis(container) {
 
     /* Match-point drama */
     drama.v += (drama.target - drama.v) * Math.min(1, dt * 2.5);
-    hemi.intensity = 0.3 * (1 - 0.5 * drama.v);
+    hemi.intensity = HEMI * (1 - 0.5 * drama.v);
+    // The intro card is a portrait: the fill drops away and the rim comes
+    // up, so the face is modelled by the key instead of lit flat
+    const portrait = camMode === 'intro' ? 1 : 0;
+    lightMix += (portrait - lightMix) * Math.min(1, dt * 3);
+    faceFill.intensity = 0.34 * (1 - 0.7 * lightMix);
+    rim.intensity = 16 * (1 + 0.6 * lightMix);
     key.intensity = 1.55 * (1 + 0.28 * drama.v);
     pendants[2].intensity = 5 * (1 - 0.55 * drama.v);
     hall.refs.lampMats.forEach((l, i) => {
