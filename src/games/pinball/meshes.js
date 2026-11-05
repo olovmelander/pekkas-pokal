@@ -641,473 +641,12 @@ export function createMaterials(THREE, playfieldTexture) {
 
 /* ----------------------------------------------------------- the machine */
 
-/**
- * Where the cabinet sits around the playfield. Everything the cabinet builds
- * hangs off these, and index.js frames the camera on them.
- */
-export const CAB = {
-  x0: -L.flareX - 1.15,
-  x1: L.outerX + 1.15,
-  z0: 2.1, // front edge, on the player's side of the apron
-  z1: -(L.domeY + L.domeOuterR + 1.2),
-  glassY: 6.4, // the glass clears the tallest ramp and the castle roofs
-  railY: 4.7, // top edge of the side armour
-  backH: 7.4, // how far the backbox stands above the playfield
-  headTilt: 0.44, // leans away from the player, as a real head does
-  // The DMD window in the head, in head-face units from its bottom centre.
-  // Big on purpose: on a phone the head is ~250 px wide, and the display
-  // has to stay legible at that size.
-  dmd: { w: 15.6, h: 3.9, y: 2.5 }
-};
+// The cabinet, backbox and glass live in cabinet.js; re-exported here so
+// existing imports keep working.
+export { CAB, headTop, buildCabinet, buildGlass } from './cabinet.js';
 
 /** Height of the underside of the plastics over the slings and lane guides */
 const PLASTIC_Y = 1.95;
-
-/** World-space top edge of the backbox, for framing the camera */
-export function headTop() {
-  return {
-    y: CAB.backH * Math.cos(CAB.headTilt),
-    z: CAB.z1 + 0.4 - CAB.backH * Math.sin(CAB.headTilt)
-  };
-}
-
-/**
- * The head's face art: a translite lit from behind across the top, and the
- * speaker panel below it with the DMD window and two grilles — the layout of
- * every machine since the mid-nineties.
- */
-function backglassTexture(THREE, logo, faceW, faceH) {
-  const W = 2048;
-  const H = Math.round((W * faceH) / faceW);
-  const u = W / faceW; // pixels per unit
-  const cv = document.createElement('canvas');
-  cv.width = W;
-  cv.height = H;
-  const g = cv.getContext('2d');
-
-  // Face-space helpers: x from the centre, y up from the bottom of the face
-  const X = (x) => W / 2 + x * u;
-  const Y = (y) => H - y * u;
-  const { dmd } = CAB;
-  // The face plane starts 0.35 above the head's bottom edge
-  const dy = dmd.y - 0.35;
-  const panelTop = dy + dmd.h / 2 + 0.45;
-
-  /* ---- Translite ---- */
-  const tlTop = 0;
-  const tlBot = Y(panelTop);
-  const bg = g.createLinearGradient(0, tlTop, 0, tlBot);
-  bg.addColorStop(0, '#1d2a62');
-  bg.addColorStop(1, '#0b1030');
-  g.fillStyle = bg;
-  g.fillRect(0, tlTop, W, tlBot);
-  // Lit from behind, so the light pools behind the artwork
-  const pool = g.createRadialGradient(W / 2, tlBot * 0.55, 20, W / 2, tlBot * 0.55, W * 0.42);
-  pool.addColorStop(0, 'rgba(242,193,78,.42)');
-  pool.addColorStop(0.5, 'rgba(124,140,248,.18)');
-  pool.addColorStop(1, 'rgba(0,0,0,0)');
-  g.fillStyle = pool;
-  g.fillRect(0, tlTop, W, tlBot);
-  // Stars over the castle sky
-  for (let i = 0; i < 70; i++) {
-    g.fillStyle = `rgba(255,240,210,${0.25 + Math.random() * 0.5})`;
-    g.fillRect(Math.random() * W, Math.random() * tlBot * 0.8, 2.5, 2.5);
-  }
-
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  const tlH = tlBot - tlTop;
-  if (logo && logo.width) {
-    const h = tlH * 0.8;
-    const w = (h * logo.width) / logo.height;
-    g.save();
-    g.shadowColor = 'rgba(242,193,78,.9)';
-    g.shadowBlur = 40;
-    g.drawImage(logo, W * 0.045, tlTop + tlH * 0.1, w, h);
-    g.restore();
-  }
-  // Castle silhouette on the right, pennants flying
-  {
-    const bx = W * 0.83;
-    const by = tlBot - 6;
-    g.fillStyle = '#0a0e24';
-    g.strokeStyle = 'rgba(242,193,78,.85)';
-    g.lineWidth = 4;
-    const path = new Path2D();
-    const s = tlH / 230;
-    const pts = [
-      [-150, 0], [-150, -120], [-170, -120], [-130, -190], [-90, -120], [-110, -120], [-110, -80], [-60, -80],
-      [-60, -100], [-40, -100], [-40, -80], [-20, -80], [-20, -100], [0, -100], [0, -80], [20, -80],
-      [20, -100], [40, -100], [40, -80], [60, -80], [60, -100], [80, -100], [80, -80], [110, -80],
-      [110, -120], [90, -120], [130, -190], [170, -120], [150, -120], [150, 0]
-    ];
-    pts.forEach(([px, py], i) => (i ? path.lineTo(bx + px * s, by + py * s) : path.moveTo(bx + px * s, by + py * s)));
-    path.closePath();
-    g.fill(path);
-    g.shadowColor = 'rgba(242,193,78,.8)';
-    g.shadowBlur = 16;
-    g.stroke(path);
-    g.shadowBlur = 0;
-    g.fillStyle = 'rgba(255,200,110,.9)';
-    g.beginPath();
-    g.arc(bx, by - 30 * s, 22 * s, Math.PI, 0);
-    g.lineTo(bx + 22 * s, by);
-    g.lineTo(bx - 22 * s, by);
-    g.fill();
-    g.fillStyle = '#7c8cf8';
-    [[-130, -190], [130, -190]].forEach(([px, py]) => {
-      g.fillRect(bx + px * s - 2, by + (py - 40) * s, 4, 40 * s);
-      g.beginPath();
-      g.moveTo(bx + px * s + 2, by + (py - 40) * s);
-      g.lineTo(bx + (px + 34) * s, by + (py - 30) * s);
-      g.lineTo(bx + px * s + 2, by + (py - 20) * s);
-      g.fill();
-    });
-  }
-  g.fillStyle = '#f2c14e';
-  g.font = `700 ${Math.round(tlH * 0.36)}px Fraunces, Georgia, serif`;
-  g.letterSpacing = '8px';
-  g.shadowColor = 'rgba(242,193,78,.85)';
-  g.shadowBlur = 28;
-  g.fillText('PEKKAS POKAL', W / 2, tlTop + tlH * 0.42);
-  g.shadowBlur = 0;
-  g.fillStyle = 'rgba(214,222,255,.85)';
-  g.font = `700 ${Math.round(tlH * 0.13)}px "Schibsted Grotesk", Inter, sans-serif`;
-  g.letterSpacing = '14px';
-  g.fillText('FLIPPER · 2025', W / 2, tlTop + tlH * 0.78);
-  g.letterSpacing = '0px';
-
-  /* ---- Speaker panel: printed black plastic with the castle's heraldry ---- */
-  const panel = g.createLinearGradient(0, tlBot, 0, H);
-  panel.addColorStop(0, '#1b1530');
-  panel.addColorStop(0.5, '#110d20');
-  panel.addColorStop(1, '#07060f');
-  g.fillStyle = panel;
-  g.fillRect(0, tlBot, W, H - tlBot);
-  // Faint diamond trellis, the playfield's pattern carried up into the head
-  g.save();
-  g.beginPath();
-  g.rect(0, tlBot, W, H - tlBot);
-  g.clip();
-  g.strokeStyle = 'rgba(242,193,78,.07)';
-  g.lineWidth = 2;
-  for (let k = -H; k < W + H; k += 46) {
-    g.beginPath();
-    g.moveTo(k, tlBot);
-    g.lineTo(k - (H - tlBot), H);
-    g.moveTo(k, tlBot);
-    g.lineTo(k + (H - tlBot), H);
-    g.stroke();
-  }
-  g.restore();
-  g.fillStyle = 'rgba(242,193,78,.8)';
-  g.fillRect(0, tlBot - 3, W, 6);
-  // Gold rules along the bottom edge, with a diamond in the middle
-  g.fillStyle = 'rgba(242,193,78,.55)';
-  g.fillRect(W * 0.04, H - 22, W * 0.92, 3);
-  g.fillRect(W * 0.1, H - 14, W * 0.8, 1.5);
-  g.beginPath();
-  g.moveTo(W / 2, H - 32);
-  g.lineTo(W / 2 + 12, H - 20.5);
-  g.lineTo(W / 2, H - 9);
-  g.lineTo(W / 2 - 12, H - 20.5);
-  g.closePath();
-  g.fill();
-
-  // DMD well: the dark bezel the plasma sits back in, edged in gold
-  const mx = (dmd.w / 2 + 0.28) * u;
-  const my0 = Y(dy + dmd.h / 2 + 0.28);
-  const my1 = Y(dy - dmd.h / 2 - 0.28);
-  g.fillStyle = '#020203';
-  g.beginPath();
-  g.roundRect(W / 2 - mx, my0, mx * 2, my1 - my0, 18);
-  g.fill();
-  g.strokeStyle = 'rgba(160,170,200,.4)';
-  g.lineWidth = 4;
-  g.stroke();
-  g.strokeStyle = 'rgba(242,193,78,.6)';
-  g.lineWidth = 2;
-  g.beginPath();
-  g.roundRect(W / 2 - mx - 9, my0 - 9, mx * 2 + 18, my1 - my0 + 18, 24);
-  g.stroke();
-
-  // Speaker grilles either side: a gold-and-chrome ring round perforated
-  // steel, a crest in the middle of each — a real speaker panel's dress
-  const gx = dmd.w / 2 + (faceW / 2 - dmd.w / 2) / 2;
-  [-gx, gx].forEach((sx, side) => {
-    const cx = X(sx);
-    const cy = Y(dy);
-    const r = Math.min(((faceW / 2 - dmd.w / 2) / 2 - 0.15) * u, (dmd.h / 2) * u);
-    const steel = g.createRadialGradient(cx - r * 0.3, cy - r * 0.35, r * 0.1, cx, cy, r);
-    steel.addColorStop(0, '#2a2d3e');
-    steel.addColorStop(1, '#0c0d16');
-    g.fillStyle = steel;
-    g.beginPath();
-    g.arc(cx, cy, r, 0, Math.PI * 2);
-    g.fill();
-    // Hex-staggered perforations
-    g.fillStyle = '#000';
-    for (let y = -r, row = 0; y <= r; y += 9, row++) {
-      for (let x = -r + (row % 2) * 4.5; x <= r; x += 9) {
-        if (x * x + y * y < (r - 10) * (r - 10)) {
-          g.beginPath();
-          g.arc(cx + x, cy + y, 2.6, 0, Math.PI * 2);
-          g.fill();
-        }
-      }
-    }
-    // Rings: chrome outside, gold inside
-    const ring = g.createLinearGradient(cx, cy - r, cx, cy + r);
-    ring.addColorStop(0, '#f3f6ff');
-    ring.addColorStop(0.5, '#7b8199');
-    ring.addColorStop(1, '#dfe4f5');
-    g.strokeStyle = ring;
-    g.lineWidth = 9;
-    g.beginPath();
-    g.arc(cx, cy, r, 0, Math.PI * 2);
-    g.stroke();
-    g.strokeStyle = 'rgba(242,193,78,.85)';
-    g.lineWidth = 3;
-    g.beginPath();
-    g.arc(cx, cy, r - 9, 0, Math.PI * 2);
-    g.stroke();
-    // The crest: a shield with a trophy (left) or a tower (right)
-    const s = r * 0.36;
-    g.fillStyle = '#7a1022';
-    g.strokeStyle = '#f2c14e';
-    g.lineWidth = 4;
-    g.beginPath();
-    g.moveTo(cx - s, cy - s);
-    g.lineTo(cx + s, cy - s);
-    g.lineTo(cx + s, cy + s * 0.1);
-    g.quadraticCurveTo(cx + s, cy + s, cx, cy + s * 1.4);
-    g.quadraticCurveTo(cx - s, cy + s, cx - s, cy + s * 0.1);
-    g.closePath();
-    g.fill();
-    g.stroke();
-    g.fillStyle = '#f2c14e';
-    if (side === 0) {
-      g.beginPath();
-      g.moveTo(cx - s * 0.5, cy - s * 0.6);
-      g.lineTo(cx + s * 0.5, cy - s * 0.6);
-      g.quadraticCurveTo(cx + s * 0.45, cy + s * 0.1, cx + s * 0.1, cy + s * 0.2);
-      g.lineTo(cx + s * 0.1, cy + s * 0.45);
-      g.lineTo(cx + s * 0.32, cy + s * 0.62);
-      g.lineTo(cx - s * 0.32, cy + s * 0.62);
-      g.lineTo(cx - s * 0.1, cy + s * 0.45);
-      g.lineTo(cx - s * 0.1, cy + s * 0.2);
-      g.quadraticCurveTo(cx - s * 0.45, cy + s * 0.1, cx - s * 0.5, cy - s * 0.6);
-      g.fill();
-    } else {
-      g.fillRect(cx - s * 0.4, cy - s * 0.25, s * 0.8, s * 0.9);
-      [-0.4, -0.08, 0.24].forEach((k) => g.fillRect(cx + k * s, cy - s * 0.55, s * 0.16, s * 0.32));
-      g.fillStyle = '#7a1022';
-      g.beginPath();
-      g.arc(cx, cy + s * 0.3, s * 0.15, Math.PI, 0);
-      g.lineTo(cx + s * 0.15, cy + s * 0.65);
-      g.lineTo(cx - s * 0.15, cy + s * 0.65);
-      g.fill();
-    }
-  });
-
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
-  return tex;
-}
-
-/**
- * The cabinet the playfield lives in: body, side armour, lockdown bar and a
- * lit backglass standing at the far end.
- *
- * Without it the table floats in a void, which is the single thing that most
- * gives away a pinball render as a diorama rather than a photograph. The
- * armour and the lockdown bar are also the brightest metal in frame, so they
- * do the job a picture frame does — they bound the composition.
- */
-export function buildCabinet(THREE, materials, logo, dmdMaterial) {
-  const g = new THREE.Group();
-  const refs = {};
-  const { x0, x1, z0, z1, railY, backH, dmd } = CAB;
-  const w = x1 - x0;
-  const len = z0 - z1;
-  const cx = (x0 + x1) / 2;
-  const cz = (z0 + z1) / 2;
-
-  // Body below the playfield, as deep as a real cabinet: on a wide screen
-  // the floor is in frame and a shallow box would read as a tray on stilts.
-  // Top face must land BELOW the playfield plane, not on it: at y = 0 this
-  // box covers the entire print and the table renders as a dark slab. And
-  // well below — the playfield covers it completely, and a top face a
-  // tenth of a unit under the wood fights it in a 16-bit depth buffer.
-  const body = new THREE.Mesh(new THREE.BoxGeometry(w, 12, len), materials.cabinet);
-  body.position.set(cx, -6 - 0.5, cz);
-  body.receiveShadow = true;
-  g.add(body);
-
-  // Inner cabinet walls, standing just outside the playfield's own guides
-  [-1, 1].forEach((side) => {
-    const wall = new THREE.Mesh(
-      new THREE.BoxGeometry(0.5, railY, len),
-      materials.cabinet
-    );
-    wall.position.set(side < 0 ? x0 + 0.25 : x1 - 0.25, railY / 2, cz);
-    wall.receiveShadow = true;
-    g.add(wall);
-  });
-
-  // Side armour: the polished trim that carries the glass
-  [-1, 1].forEach((side) => {
-    const rail = new THREE.Mesh(
-      new THREE.BoxGeometry(0.78, 1.5, len),
-      materials.armour
-    );
-    rail.position.set(side < 0 ? x0 + 0.3 : x1 - 0.3, railY + 0.5, cz);
-    rail.castShadow = true;
-    g.add(rail);
-  });
-
-  // Lockdown bar across the front — the bright bar at the bottom of every
-  // pinball photograph, and the thing that says "this is a machine".
-  const bar = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.62, 0.62, w, 20, 1, false, -Math.PI / 2, Math.PI * 1.35),
-    materials.armour
-  );
-  bar.rotation.z = Math.PI / 2;
-  bar.position.set(cx, railY + 0.62, z0 - 0.5);
-  bar.castShadow = true;
-  g.add(bar);
-
-  const front = new THREE.Mesh(
-    new THREE.BoxGeometry(w, railY + 0.4, 0.6),
-    materials.cabinet
-  );
-  front.position.set(cx, (railY + 0.4) / 2, z0 - 0.3);
-  g.add(front);
-
-  /* ---- Backbox: translite, speaker panel and the DMD ---- */
-  {
-    const head = new THREE.Group();
-    head.position.set(cx, 0, z1 + 0.4);
-    head.rotation.x = -CAB.headTilt;
-
-    const shell = new THREE.Mesh(
-      new THREE.BoxGeometry(w, backH, 0.9),
-      materials.cabinet
-    );
-    shell.position.set(0, backH / 2, -0.5);
-    head.add(shell);
-
-    const faceW = w - 1.2;
-    const faceH = backH - 0.7;
-    const tex = backglassTexture(THREE, logo, faceW, faceH);
-    // A backglass is a lamp: it must not be shaded by the playfield's lights
-    const glass = new THREE.Mesh(
-      new THREE.PlaneGeometry(faceW, faceH),
-      new THREE.MeshBasicMaterial({ map: tex })
-    );
-    glass.position.set(0, backH / 2, 0.02);
-    head.add(glass);
-
-    // The display sits proud of the panel art, in the well drawn round it
-    if (dmdMaterial) {
-      const screen = new THREE.Mesh(new THREE.PlaneGeometry(dmd.w, dmd.h), dmdMaterial);
-      screen.position.set(0, dmd.y, 0.06);
-      head.add(screen);
-      refs.dmd = screen;
-    }
-
-    // Chrome bezel around the glass
-    const bezel = new THREE.Mesh(
-      new THREE.BoxGeometry(w, backH, 0.3),
-      materials.armour
-    );
-    bezel.position.set(0, backH / 2, -0.16);
-    head.add(bezel);
-
-    // The head throws light down the upper playfield
-    const lamp = new THREE.PointLight(0xffd39a, 70, 44, 2);
-    lamp.position.set(0, 3.2, 2.6);
-    head.add(lamp);
-
-    g.add(head);
-    refs.backglass = glass;
-    refs.headLamp = lamp;
-  }
-
-  return { group: g, refs };
-}
-
-/**
- * The playfield glass.
- *
- * Everything is played through a sheet of tempered glass, and the streaks of
- * the room's ceiling lights sliding across it are most of what makes a
- * pinball render read as a photograph.
- *
- * Drawn as three narrow bars rather than one sheet over the whole opening:
- * additive black is a no-op, so a full-size quad spends its entire fill rate
- * blending nothing over most of the table. The bars cover about a fifth of
- * the area for the same picture.
- */
-export function buildGlass(THREE) {
-  const W = 64;
-  const H = 256;
-  const cv = document.createElement('canvas');
-  cv.width = W;
-  cv.height = H;
-  const g = cv.getContext('2d');
-  const img = g.createImageData(W, H);
-  for (let y = 0; y < H; y++) {
-    // Fades in and out along its length, brightest along its spine
-    const along = Math.pow(Math.sin(Math.PI * ((y + 0.5) / H)), 0.55);
-    for (let x = 0; x < W; x++) {
-      const u = (x + 0.5) / W - 0.5;
-      const across = Math.exp(-(u * u) / 0.022);
-      const i = (y * W + x) * 4;
-      img.data[i] = 214;
-      img.data[i + 1] = 228;
-      img.data[i + 2] = 255;
-      img.data[i + 3] = Math.round(along * across * 255);
-    }
-  }
-  g.putImageData(img, 0, 0);
-
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  const geo = new THREE.PlaneGeometry(1, 1);
-  const group = new THREE.Group();
-  const cx = (CAB.x0 + CAB.x1) / 2;
-  const cz = (CAB.z0 + CAB.z1) / 2;
-
-  // Two reflections of the ceiling fixtures. Kept narrow: every pixel of an
-  // additive quad is blended whether it adds anything or not, and this is a
-  // phone-first game, so the bars are sized to what actually reads.
-  [
-    // Faint: they read as glass, not as searchlights over the play
-    { w: 2.4, l: 34, x: -4.2, z: 0, rot: 0.11, a: 0.17 },
-    { w: 1.6, l: 26, x: 4.4, z: -6, rot: -0.08, a: 0.12 }
-  ].forEach((b) => {
-    const mesh = new THREE.Mesh(
-      geo,
-      new THREE.MeshBasicMaterial({
-        map: tex,
-        transparent: true,
-        opacity: b.a,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        toneMapped: false,
-        side: THREE.DoubleSide
-      })
-    );
-    mesh.scale.set(b.w, b.l, 1);
-    mesh.rotation.set(-Math.PI / 2, 0, b.rot);
-    mesh.position.set(cx + b.x, CAB.glassY, cz + b.z);
-    mesh.renderOrder = 5;
-    group.add(mesh);
-  });
-  return group;
-}
 
 /* ------------------------------------------------------------------- ramps */
 
@@ -1307,14 +846,29 @@ function gateDoorTexture(THREE) {
       g.fillRect(x, 0, 2, FH);
     }
     // The courtyard's glow through the splits (frames 2 and 3)
+    // A jagged, charred-edged hole, not a lamp
     if (f >= 2) {
-      g.fillStyle = 'rgba(255,190,90,0.95)';
-      g.beginPath();
-      g.ellipse(ox + FW * 0.52, FH * 0.5, f === 3 ? 46 : 18, f === 3 ? 30 : 12, 0.3, 0, Math.PI * 2);
+      const hx = ox + FW * 0.62;
+      const hy = FH * 0.4;
+      const R = f === 3 ? 40 : 16;
+      const hole = (scale) => {
+        g.beginPath();
+        for (let k = 0; k < 14; k++) {
+          const a = (k / 14) * Math.PI * 2;
+          const r = R * scale * (k % 2 ? 0.55 : 1) * (0.8 + ((k * 53) % 7) / 14);
+          g.lineTo(hx + Math.cos(a) * r * 1.3, hy + Math.sin(a) * r);
+        }
+        g.closePath();
+      };
+      g.fillStyle = 'rgba(20,10,4,0.95)';
+      hole(1.18);
       g.fill();
-      g.fillStyle = 'rgba(255,240,200,0.9)';
-      g.beginPath();
-      g.ellipse(ox + FW * 0.52, FH * 0.5, f === 3 ? 22 : 7, f === 3 ? 13 : 5, 0.3, 0, Math.PI * 2);
+      const lg = g.createRadialGradient(hx, hy + R * 0.3, 1, hx, hy, R * 1.3);
+      lg.addColorStop(0, 'rgba(255,214,140,1)');
+      lg.addColorStop(0.6, 'rgba(214,120,40,1)');
+      lg.addColorStop(1, 'rgba(90,40,10,1)');
+      g.fillStyle = lg;
+      hole(0.92);
       g.fill();
     }
     // Iron straps with rivets; bent and torn as the door gives way
@@ -1647,8 +1201,8 @@ const PL = { x0: -10.2, x1: 7.0, y0: 7.6, y1: 16.2 };
 function plasticOutlines() {
   // Follows L.leftSlingPts (raised clear of the flipper's swing)
   const sling = [
-    [-5.05, 13.1], [-5.6, 12.5], [-5.55, 10.05], [-5.1, 9.4], [-3.95, 9.05],
-    [-3.6, 9.45], [-3.85, 10.0], [-4.63, 12.92]
+    [-5.15, 12.2], [-5.7, 11.6], [-5.6, 9.7], [-5.14, 9.06], [-4.05, 8.9],
+    [-3.66, 9.28], [-3.92, 9.86], [-4.73, 12.02]
   ];
   // A heater shield over the top of each lane guide, where the orbit
   // returns drop onto the inlane
@@ -1905,7 +1459,7 @@ function buildPlastics(THREE, materials, mergeGeometries, extra = []) {
   });
 
   // GI bulbs tucked under the sling plastics, two a side
-  const bulbs = [[-5.2, 10.75], [-4.55, 9.45]];
+  const bulbs = [[-5.3, 10.3], [-4.65, 9.25]];
   bulbs.concat(bulbs.map(([x, y]) => [mirrorX(x), y])).forEach(([x, y]) => {
     const socket = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.2, 8), materials.rubber);
     socket.position.set(x, 0.1, -y);
@@ -1990,10 +1544,11 @@ const LAMP_DEFS = [
   // right ramp, the extra-ball lamp on the Kungsvägen (left ramp) approach
   { id: 'super', x: L.centerX, y: 18.2, r: 0.3, color: 0xffd166, label: 'S' },
   { id: 'addBall', x: 5.45, y: 16.55, r: 0.3, color: 0x5eead4, label: '+1' },
-  { id: 'eb', x: -6.95, y: 16.35, r: 0.32, color: 0xff7a59, label: 'EB' },
+  // (placed from the ramp's capture line, so it follows the lane)
+  { id: 'eb', x: (L.ramps.left.capture[0] + L.ramps.left.capture[2]) / 2, y: L.ramps.left.capture[1] - 0.9, r: 0.32, color: 0xff7a59, label: 'EB' },
   // Gate damage: three lamps on the forecourt, one per hit
   ...[0, 1, 2].map((i) => ({
-    id: `gate${i}`, x: L.centerX - 0.9 + i * 0.9, y: 26.0, r: 0.24, color: 0xff9a3c, label: ''
+    id: `gate${i}`, x: L.centerX - 0.9 + i * 0.9, y: 26.0, r: 0.24, color: 0xff9a3c, label: 'up'
   })),
   { id: 'inL', x: -6.15, y: 11.55, r: 0.26, color: 0x5eead4, label: '' },
   { id: 'inR', x: mirrorX(-6.15), y: 11.55, r: 0.26, color: 0x5eead4, label: '' }
@@ -2033,6 +1588,17 @@ function lampAtlas(THREE, defs) {
       g.lineTo(x + 8, y + 1);
       g.lineTo(x + 18, y - 9);
       g.lineTo(x + 16, y + 10);
+      g.closePath();
+      g.fill();
+    } else if (d.label === 'up') {
+      // A chevron pointing up the table: "this way"
+      g.beginPath();
+      g.moveTo(x - 14, y + 6);
+      g.lineTo(x, y - 9);
+      g.lineTo(x + 14, y + 6);
+      g.lineTo(x + 9, y + 10);
+      g.lineTo(x, y + 1);
+      g.lineTo(x - 9, y + 10);
       g.closePath();
       g.fill();
     } else if (d.label === 'lock') {

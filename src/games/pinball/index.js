@@ -20,10 +20,9 @@ import { guardRenderer, postTarget, addSanitize, RenderWatchdog, gfxNotice, prec
 
 import { World, Ball, clamp } from './physics.js';
 import { L, buildColliders, createPlayfieldCanvas } from './table.js';
-import {
-  CAB, headTop, buildTable, buildCabinet, buildGlass, createMaterials, machineEnvironment, bakeStatic,
-  ballEnvironment
-} from './meshes.js';
+import { buildTable, createMaterials, machineEnvironment, bakeStatic, ballEnvironment } from './meshes.js';
+import { CAB, ROOM, headTop, buildCabinet, buildGlass } from './cabinet.js';
+import { createShowcase } from './showcase.js';
 import { Dmd, fmtScore } from './dmd.js';
 import { Sfx } from './audio.js';
 import { createFx } from './fx.js';
@@ -212,8 +211,9 @@ export async function createPinball(container, opts = {}) {
   materials.ball.envMap = ballEnvRT.texture;
 
   // Ball mesh pool for multiball, plus parked meshes for locked balls
+  // Four: a two-ball multiball plus add-a-ball, with one more on a wireform
   const ballMeshes = [refs.ball];
-  for (let i = 1; i < 3; i++) {
+  for (let i = 1; i < 4; i++) {
     const m = refs.ball.clone();
     m.visible = false;
     tableGroup.add(m);
@@ -265,13 +265,19 @@ export async function createPinball(container, opts = {}) {
 
   /* ---- Cabinet with its DMD, the glass, and the room around it ---- */
   const dmd = new Dmd(THREE, { calm: reduceMotion });
-  const cab = buildCabinet(THREE, materials, logo, dmd.material);
+  // Phones get the cabinet art at half resolution: it is off-frame in play
+  const cab = buildCabinet(THREE, materials, logo, dmd.material, { lite: small });
   bakeStatic(THREE, mergeGeometries, cab.group);
   scene.add(cab.group);
   const glass = buildGlass(THREE);
   scene.add(glass);
+  const glassSheet = glass.userData.sheet;
   const room = buildRoom(THREE, { mergeGeometries, materials });
   scene.add(room.group);
+  // Attract-mode camera round the machine (wide screens only, see fitCamera)
+  const showcase = createShowcase(THREE, { CAB, ROOM, reduceMotion });
+  let showcaseOk = false;
+  let overSince = 0;
   const fx = createFx(THREE, tableGroup, { ballRadius: L.ballRadius });
 
   /* ---- Lights ----
@@ -817,6 +823,12 @@ export async function createPinball(container, opts = {}) {
 
   const GATE_X = (L.castle.gate[0] + L.castle.gate[2]) / 2;
   const GATE_Y = L.castle.gate[1];
+  // Where the shots are, read from the layout so tips and score pops follow
+  // any change to the lanes: the middle of a sensor line, nudged up a little
+  const spotOf = (line, up = 0) => [(line[0] + line[2]) / 2, (line[1] + line[3]) / 2 + up];
+  const ORBIT_L = spotOf(L.sensors.leftOrbit);
+  const ORBIT_R = spotOf(L.sensors.rightOrbit);
+  const RAMP_L = spotOf(L.ramps.left.capture, -0.9);
 
   /* ======================= Borgen (the castle) ======================= */
 
@@ -824,7 +836,13 @@ export async function createPinball(container, opts = {}) {
    * The door's motion: `ang` 0 standing … π/2 flat on the forecourt, a
    * spring `wob` for the shudder of a hit, `rattle` for the portcullis.
    */
-  const gateAnim = { ang: 0, vel: 0, wob: 0, wobV: 0, rattle: 0, winching: false, wasOpen: false };
+  const gateAnim = { ang: 0, vel: 0, wob: 0, wobV: 0, rattle: 0, glow: 0, winching: false, wasOpen: false };
+  // The tower windows: candle-lit at rest, flaring on every hit, burning
+  // orange while the gate is down (the castle is under siege)
+  const WIN_BASE = new THREE.Color(0xffb35c);
+  const WIN_HOT = new THREE.Color(0xfff0c0);
+  const WIN_SIEGE = new THREE.Color(0xff6a2a);
+  const winCol = new THREE.Color();
 
   /** Every hit on the door lands with weight: shake, splinters, flash, sound */
   function castleImpact(n, v) {
@@ -836,6 +854,7 @@ export async function createPinball(container, opts = {}) {
     // The door shudders back on its hinges, the portcullis rattles
     gateAnim.wobV -= 2.2 + Math.min(40, v) * 0.05;
     gateAnim.rattle = 0.09;
+    gateAnim.glow = Math.min(1, 0.55 + n * 0.15);
     fireFlasher(n % 2 ? 'left' : 'right', 0.5 + n * 0.15);
     flash(null, refs.castle.lamp, 1.6 + n * 0.6, 0.6);
     // Splinters off the planks, grit off the stone, a puff of dust
@@ -853,6 +872,7 @@ export async function createPinball(container, opts = {}) {
     state.gate.until = now + 12000;
     sfx.gateCrash();
     dmd.gateFalls();
+    gateAnim.glow = 1;
     fireFlasher('both', 1.1);
     flash(null, refs.castle.lamp, 3.4, 0.6);
     lampShow('chase', 0xff9a3c, 1.2);
@@ -877,6 +897,7 @@ export async function createPinball(container, opts = {}) {
     const pts = award(Math.min(30000, 10000 + 5000 * (c.storms - 1)), L.jackpot.x, L.jackpot.y, 'big');
     sfx.castleStorm();
     dmd.castleStorm(c.storms, pts);
+    gateAnim.glow = 1;
     fireFlasher('both', 1.3);
     buzz([30, 40, 30, 40, 90]);
     lampShow('strobe', 0xff9a3c, 1.4);
@@ -891,7 +912,7 @@ export async function createPinball(container, opts = {}) {
       c.ebLit = true;
       later(() => {
         say(['EXTRA BOLL TÄND', 'SKJUT KUNGSVÄGEN'], { prio: 2, flash: true, border: true, dur: 2.2 });
-        coach('eb', 'Extra boll! Skjut vänster ramp', -6.9, 16.4);
+        coach('eb', 'Extra boll! Skjut vänster ramp', RAMP_L[0], RAMP_L[1]);
       }, 2900);
     }
   }
@@ -1049,7 +1070,7 @@ export async function createPinball(container, opts = {}) {
           say(allDone ? ['FINALEN TÄND', 'VÄNSTER ORBIT'] : ['P-O-K-A-L!', 'GREN TÄND · V. ORBIT'],
             { prio: 2, flash: true, border: true, dur: 2.2 });
           later(() => {
-            if (state.modeStartLit) coach('orbit', 'Skjut vänster orbit — starta grenen!', -8.95, 17.2);
+            if (state.modeStartLit) coach('orbit', 'Skjut vänster orbit — starta grenen!', ORBIT_L[0], ORBIT_L[1] - 0.8);
           }, 900);
         } else {
           say(['P-O-K-A-L!', `POÄNG ×${state.mult}`], { prio: 2, flash: true, dur: 2 });
@@ -1216,7 +1237,7 @@ export async function createPinball(container, opts = {}) {
       }
 
       // Orbits
-      const op = id === 'leftOrbit' ? [-8.95, 18] : [5.5, 27.2];
+      const op = id === 'leftOrbit' ? ORBIT_L : ORBIT_R;
       award(1500, op[0], op[1]);
       state.perBall.orbits++;
       sfx.orbit();
@@ -1346,7 +1367,7 @@ export async function createPinball(container, opts = {}) {
     renderGrenar();
     updateStatus();
     const spot = {
-      gokart: [-8.95, 17.2, 'Orbit eller ramp = ett varv'],
+      gokart: [ORBIT_L[0], ORBIT_L[1] - 0.8, 'Orbit eller ramp = ett varv'],
       femkamp: [L.centerX, 16.4, 'Fem olika skott — vad som helst'],
       pingis: [-2.4, 24.4, 'Bumprarna! Tolv träffar'],
       skytte: [L.targets[0].x, L.targets[0].y, 'Börja med P, sen O, K, A, L'],
@@ -1374,6 +1395,14 @@ export async function createPinball(container, opts = {}) {
     if (state.modeDone.size >= 2 && !state.extraBallGiven) {
       state.extraBallGiven = true;
       later(giveExtraBall, 1500);
+    }
+    // The road to Finalen, and once all five are won Finalen lights at
+    // once — no extra bank to clear first
+    dmd.ladder(MODES.map((x) => ({ label: `'${String(x.year).slice(2)}`, done: state.modeDone.has(x.id) })),
+      MODES.indexOf(m.def));
+    if (MODES.every((x) => state.modeDone.has(x.id)) && !state.multiball) {
+      state.modeStartLit = true;
+      later(() => coach('finalen', 'Finalen tänd — skjut vänster orbit!', ORBIT_L[0], ORBIT_L[1] - 0.8), 3200);
     }
   }
 
@@ -1685,7 +1714,7 @@ export async function createPinball(container, opts = {}) {
       later(() => hud.zones.classList.remove('show'), 3500);
     }
     if (state.ballNo === 1 && !state.saveUsed) {
-      later(() => coach('bank', 'Fäll alla fem P-O-K-A-L-mål', -4.3, 16.0), touch ? 3800 : 1600);
+      later(() => coach('bank', 'Fäll alla fem P-O-K-A-L-mål', L.targets[1].x, L.targets[1].y), touch ? 3800 : 1600);
     }
 
     buzz(14 + Math.round(p * 16));
@@ -2188,6 +2217,8 @@ export async function createPinball(container, opts = {}) {
     corners.push(new THREE.Vector3(x, top.y, top.z));
   }
   const pv = new THREE.Vector3();
+  // The play camera's framing, kept for the showcase to fly back into
+  const playView = {};
 
   /** The machine's bounding box on screen, in pixels, for the current camera */
   function projectBox(W, H) {
@@ -2247,6 +2278,10 @@ export async function createPinball(container, opts = {}) {
     const dy = ins.t + RH / 2 - box.cy;
     camera.setViewOffset(W, H, -dx, -dy, W, H);
     camBase.copy(camera.position);
+    Object.assign(playView, {
+      W, H, fov: camera.fov, near: camera.near, far: camera.far,
+      fogNear: scene.fog.near, fogFar: scene.fog.far, offX: dx, offY: dy
+    });
     return { l: box.x0 + dx, r: W - box.x1 - dx, t: box.y0 + dy, b: H - box.y1 - dy };
   }
 
@@ -2266,6 +2301,16 @@ export async function createPinball(container, opts = {}) {
     root.style.setProperty('--side-w', `${Math.round(clamp(side - 44, 170, 380))}px`);
     root.style.setProperty('--cab-t', `${Math.round(fit.t)}px`);
     root.style.setProperty('--cab-b', `${Math.round(fit.b)}px`);
+    // Showcase on wide screens only: the column between the side panels,
+    // widened a little into their margins. Portrait keeps the play framing.
+    showcaseOk = W / H > 1.02;
+    if (showcaseOk) {
+      const grow = 0.22;
+      const l = fit.l * (1 - grow);
+      const r = fit.r * (1 - grow);
+      const ins = land ? LANDSCAPE_INSETS : PORTRAIT_INSETS;
+      showcase.fit(W, H, { x: l, y: ins.t + 6, w: Math.max(80, W - l - r), h: Math.max(80, H - ins.t - ins.b - 12) }, { ...playView });
+    }
   }
 
   function resize() {
@@ -2897,6 +2942,11 @@ export async function createPinball(container, opts = {}) {
       if (ga.rattle > 0) port.position.y += Math.sin(now * 0.09) * ga.rattle;
       refs.castle.lamp.intensity +=
         ((open ? 1.4 : 0.6) - refs.castle.lamp.intensity) * k;
+      ga.glow = Math.max(0, ga.glow - dtRaw * 1.6);
+      const siege = state.gate.bashed && open ? 0.5 + 0.5 * Math.sin(now / 140) : 0;
+      const flick = reduceMotion ? 1 : 0.92 + 0.08 * Math.sin(now / 97) * Math.sin(now / 53);
+      winCol.copy(WIN_BASE).lerp(WIN_SIEGE, siege * 0.6).lerp(WIN_HOT, ga.glow).multiplyScalar(flick);
+      materials.window.color.copy(winCol);
     }
 
     // Mission select: runs out on its own if the player does not choose
@@ -3005,6 +3055,12 @@ export async function createPinball(container, opts = {}) {
 
     updateShake(dtRaw);
 
+    // The cabinet's plunger rod follows the launch power, like the one inside
+    if (cab.refs.plungerRod) {
+      const rod = cab.refs.plungerRod;
+      rod.position.z = rod.userData.home + (state.phase === 'launch' ? state.power * 1.5 : 0);
+    }
+
     // Plunger pull-back
     if (refs.plunger) {
       const back = state.phase === 'launch' ? state.power * 1.5 : 0;
@@ -3071,6 +3127,16 @@ export async function createPinball(container, opts = {}) {
     camera.position.copy(camBase).add(kick.p);
     pv.copy(target).addScaledVector(kick.p, 0.5);
     camera.lookAt(pv);
+    // Attract showcase: before Start (or a while after a game ends), on a
+    // wide screen, the camera tours the cabinet; Start flies it back in
+    if (state.phase !== 'over') overSince = now;
+    const wantShow = showcaseOk && !peek && (state.phase === 'idle' || (state.phase === 'over' && now - overSince > 9000));
+    showcase.apply(camera, scene.fog, pv, dtRaw, wantShow);
+    const sk = showcase.k;
+    // The glass sheet only shows at a low angle; on phones it is a full-table
+    // blend for nothing while playing, so it is drawn only in the showcase
+    glassSheet.visible = !small || sk > 0;
+    room.fill.intensity = 0.1 + 1.25 * sk;
     if (peek) {
       // Test hook: a close-up camera (window.__pbFlipper.peek)
       camera.position.copy(peek.from);
@@ -3153,7 +3219,8 @@ export async function createPinball(container, opts = {}) {
         shadows: renderer.shadowMap.enabled,
         lights: lightRig,
         watchdog: watchdog.level,
-        near: camera.near
+        near: camera.near,
+        showcase: Math.round(showcase.k * 100) / 100
       };
     },
     startGame,
@@ -3210,7 +3277,9 @@ export async function createPinball(container, opts = {}) {
         resize();
         return;
       }
+      showcase.cut(0);
       peek = { from: new THREE.Vector3(...from), to: new THREE.Vector3(...to) };
+      camera.up.set(0, 1, 0);
       camera.clearViewOffset();
       camera.near = 0.5;
       camera.updateProjectionMatrix();

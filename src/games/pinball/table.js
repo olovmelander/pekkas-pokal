@@ -47,7 +47,9 @@ export const L = {
   // must stay far enough apart that a ball falls cleanly between them
   // instead of perching on both: 2.44 apart, 1.52 clear, ball is 1.08.
   flipperSpread: 3.95,
-  flipperLength: 3.15,
+  // Long enough that the tapered tip (radius 0.33) leaves the same centre
+  // gap the old fat capsule did
+  flipperLength: 3.25,
   flipperRest: -30 * D,
   flipperSwing: 62 * D,
 
@@ -77,11 +79,15 @@ L.bumpers = [
  */
 const bankA = Math.atan2(3.6, 3.2); // ~48°
 L.targets = [
-  { letter: 'P', x: -5.37, y: 14.8, half: 0.55, a: bankA },
-  { letter: 'O', x: -4.3, y: 16.0, half: 0.55, a: bankA },
-  { letter: 'K', x: -3.23, y: 17.2, half: 0.55, a: bankA },
-  { letter: 'A', x: 1.8, y: 17.13, half: 0.55, a: -bankA },
-  { letter: 'L', x: 3.0, y: 15.78, half: 0.55, a: -bankA }
+  // Both banks sit 1.8 higher than they first did: lower down, the P end
+  // stood square in the path of every shot to the left orbit and left ramp,
+  // and L in front of the right ramp, so with the banks up only the castle
+  // was makeable (headless rig sweeps, see the pin-feel report)
+  { letter: 'P', x: -5.37, y: 16.6, half: 0.55, a: bankA },
+  { letter: 'O', x: -4.3, y: 17.8, half: 0.55, a: bankA },
+  { letter: 'K', x: -3.23, y: 19.0, half: 0.55, a: bankA },
+  { letter: 'A', x: 1.8, y: 18.93, half: 0.55, a: -bankA },
+  { letter: 'L', x: 3.0, y: 17.58, half: 0.55, a: -bankA }
 ];
 
 /* ------------------------------------------------------------------- castle */
@@ -127,12 +133,12 @@ L.lockSlots = [
  */
 L.ramps = {
   left: {
-    capture: [-7.6, 18.0, -5.95, 18.0],
+    capture: [-6.9, 18.0, -5.5, 18.0],
     minVy: 5.0,
     exit: { x: 3.73, y: 12.2, vx: -1.2, vy: -7 },
     path: [
-      [-6.75, 18.0, 0.4],
-      [-7.15, 22.2, 1.5],
+      [-6.2, 18.0, 0.4],
+      [-6.75, 22.2, 1.5],
       [-6.5, 26.6, 2.6],
       [-4.5, 30.4, 3.4],
       [-1.5, 32.5, 3.9],
@@ -192,7 +198,7 @@ L.rightWall = [
  * 0.13 units of clearance around the ball and jammed.
  */
 L.leftDivider = [
-  [-7.9, 15.2],
+  [-7.9, 20.0],
   [-7.9, 23.5]
 ];
 
@@ -239,14 +245,15 @@ L.rightRail = L.leftRail.map(([x, y]) => [mirrorX(x), y]);
  * T→BI is the kicker face; the other two edges are plain walls.
  */
 // The lower inner corner sits over the first third of the flipper, as on a
-// real machine, and clear of the raised bat. It used to hang over the
-// flipper's middle, so every shot off the inner half clipped the sling's
-// underside and was kicked up-left into the P target, whatever the timing.
-L.leftSlingPts = { T: [-5.0, 12.3], BO: [-4.95, 10.15], BI: [-4.2, 9.65] };
+// real machine, and clear of the raised bat; the top is low enough that a
+// late cross shot off the far flipper's tip skims over it to the orbit. It
+// used to hang over the flipper's middle, so every shot off the inner half
+// clipped the sling's underside and was kicked up-left into the P target.
+L.leftSlingPts = { T: [-5.1, 11.4], BO: [-5.0, 9.85], BI: [-4.25, 9.5] };
 L.rightSlingPts = {
-  T: [mirrorX(-5.0), 12.3],
-  BO: [mirrorX(-4.95), 10.15],
-  BI: [mirrorX(-4.2), 9.65]
+  T: [mirrorX(-5.1), 11.4],
+  BO: [mirrorX(-5.0), 9.85],
+  BI: [mirrorX(-4.25), 9.5]
 };
 // Kept as simple 2-point faces for the mesh flash lookup
 L.leftSling = [L.leftSlingPts.T, L.leftSlingPts.BI];
@@ -254,10 +261,10 @@ L.rightSling = [L.rightSlingPts.T, L.rightSlingPts.BI];
 
 // Rubber posts protecting bank ends and the ramp-lane mouth
 L.posts = [
-  { x: -5.85, y: 14.2, r: 0.28 },
-  { x: -2.75, y: 17.9, r: 0.28 },
-  { x: 1.25, y: 17.9, r: 0.28 },
-  { x: 3.45, y: 14.6, r: 0.28 },
+  { x: -5.85, y: 16.0, r: 0.28 },
+  { x: -2.75, y: 19.7, r: 0.28 },
+  { x: 1.25, y: 19.7, r: 0.28 },
+  { x: 3.45, y: 16.4, r: 0.28 },
   { x: -5.4, y: 19.6, r: 0.28 }
 ];
 
@@ -280,7 +287,7 @@ L.trolls = [
 
 // Scoring switches: invisible sensors the ball rolls through.
 L.sensors = {
-  leftOrbit: [-9.85, 18, -8.05, 18],
+  leftOrbit: [-9.85, 20.5, -8.1, 20.5],
   spinner: [L.spinner.x - L.spinner.half, L.spinner.y, L.spinner.x + L.spinner.half, L.spinner.y],
   rightOrbit: [4.6, 27.2, 6.5, 27.2],
   leftRamp: L.ramps.left.capture,
@@ -456,7 +463,8 @@ export function buildColliders(world, hooks = {}) {
   const rp = L.centerX + L.flipperSpread;
   refs.flippers.left = world.addFlipper(
     new Flipper(lp, L.flipperY, L.flipperLength, L.flipperRest, L.flipperRest + L.flipperSwing, {
-      radius: 0.46,
+      radius: 0.49,
+      tipRadius: 0.33,
       onHit: (v, b) => hooks.onFlipper && hooks.onFlipper('left', v, b)
     })
   );
@@ -468,7 +476,8 @@ export function buildColliders(world, hooks = {}) {
       Math.PI - L.flipperRest,
       Math.PI - L.flipperRest - L.flipperSwing,
       {
-        radius: 0.46,
+        radius: 0.49,
+        tipRadius: 0.33,
         onHit: (v, b) => hooks.onFlipper && hooks.onFlipper('right', v, b)
       }
     )

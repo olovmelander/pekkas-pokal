@@ -460,7 +460,7 @@ export class Dmd {
   }
 
   /** Draws text; returns its width. align: 'left' | 'center' | 'right' */
-  text(str, x, y, { s = 1, align = 'left', v = 255 } = {}) {
+  text(str, x, y, { s = 1, align = 'left', v = 255, cut = false } = {}) {
     const txt = String(str).toUpperCase();
     const w = this.measure(txt, s);
     let cx = Math.round(align === 'center' ? x - w / 2 : align === 'right' ? x - w : x);
@@ -477,7 +477,10 @@ export class Dmd {
       for (let r = 0; r < 7; r++) {
         const row = g.rows[r];
         for (let c = 0; c < g.w; c++) {
-          if (row & (16 >> (c + g.off))) this.rect(cx + c * s, y + r * s, s, s, v);
+          if (!(row & (16 >> (c + g.off)))) continue;
+          // `cut`: dark letters punched out of a lit panel
+          if (cut) for (let j = 0; j < s * s; j++) this.put(cx + c * s + (j % s), y + r * s + Math.floor(j / s), 0);
+          else this.rect(cx + c * s, y + r * s, s, s, v);
         }
       }
       cx += (g.w + 1) * s;
@@ -878,8 +881,9 @@ export class Dmd {
       d.icon('trophy', 113, 10 + Math.round(Math.cos(t * 8) * 2));
       d.text('SUPER JACKPOT', 64, 1, { s: 1, align: 'center', v: 200 });
       const k = Math.min(1, (t - 0.7) / 0.9);
-      const txt = fmtScore(Math.round((pts * k) / 10) * 10);
-      d.text(txt, 64, 11, { s: d.measure(txt, 3) <= 96 ? 3 : 2, align: 'center' });
+      // Sized for the final figure, so the count-up never jumps a size
+      const sc = d.measure(fmtScore(pts), 3) <= 96 ? 3 : 2;
+      d.text(fmtScore(Math.round((pts * k) / 10) * 10), 64, sc === 3 ? 9 : 11, { s: sc, align: 'center' });
       d.sparkle(24);
       d.border(t, 230, 90);
     }, 3.4, 3);
@@ -936,6 +940,30 @@ export class Dmd {
         d.stack([label || '', `${p}/${goal}`], { maxS: 2 });
       }
     }, 1.4, 2);
+  }
+
+  /**
+   * The road to Finalen: a badge per gren (filled when won, the newest one
+   * stamping in), the crown at the end, and how many are left.
+   */
+  ladder(items, fresh = -1) {
+    this.show((d, t) => {
+      const left = items.filter((it) => !it.done).length;
+      d.text(left ? `${left} KVAR TILL FINALEN` : 'FINALEN TÄND!', 64, 0, { align: 'center', v: 200 });
+      items.forEach((it, i) => {
+        const x = 2 + i * 21;
+        const stamp = i === fresh && t < 0.5;
+        if (it.done && !(stamp && Math.floor(t * 12) % 2)) {
+          d.rect(x, 11, 19, 13, 230);
+          d.text(it.label, x + 10, 14, { align: 'center', cut: true });
+        } else {
+          d.frame(x, 11, 19, 13, 120);
+          d.text(it.label, x + 10, 14, { align: 'center', v: 120 });
+        }
+      });
+      d.icon('crown', 110, 13, left ? 90 : (Math.floor(t * 5) % 2 ? 255 : 160));
+      if (!left) d.sparkle(10);
+    }, 2.2, 2);
   }
 
   /** Mission select, the base screen while the ball waits in the castle */

@@ -206,8 +206,7 @@ function profilePanel(THREE, prof, x, facing, uvOf) {
     for (let i = 0; i < nrm.count; i++) nrm.setXYZ(i, -1, 0, 0);
   }
   geo.translate(x, 0, 0);
-  const p = geo.attributes.position;
-  const uv = geo.attributes.uv;
+  const { position: p, uv } = geo.attributes;
   for (let i = 0; i < p.count; i++) {
     const [u, v] = uvOf(p.getZ(i), p.getY(i));
     uv.setXY(i, u, v);
@@ -217,7 +216,7 @@ function profilePanel(THREE, prof, x, facing, uvOf) {
 
 /** Re-maps every UV of a geometry through fn(u, v) */
 function remapUV(geo, fn) {
-  const uv = geo.attributes.uv;
+  const { uv } = geo.attributes;
   for (let i = 0; i < uv.count; i++) {
     const [u, v] = fn(uv.getX(i), uv.getY(i));
     uv.setXY(i, u, v);
@@ -746,6 +745,14 @@ function drawHeadSide(g, ox, oy, w, h, front, k) {
 const FACE_W = CAB.hw * 2 - 1.2;
 const FACE_H = CAB.backH - 0.7;
 
+const SWATCHES = ['#d82a2a', '#f2c14e', '#ff8a3d', '#fff2d8', '#5ad08c', '#6f84ff'];
+const SW = { red: 0, gold: 1, amber: 2, white: 3, green: 4, blue: 5 };
+// Speaker grilles on the panel, in face units from its centre line
+const GRILLES = [-1, 1].map((k) => {
+  const room = FACE_W / 2 - CAB.dmd.w / 2;
+  return { x: k * (CAB.dmd.w / 2 + room / 2), r: Math.min(room / 2 - 0.2, CAB.dmd.h / 2) };
+});
+
 /**
  * The backbox face: the translite over the speaker panel, plus a strip of
  * lit swatches below them (buttons, price plate, coin inserts) so every
@@ -972,14 +979,6 @@ function faceTexture(THREE, logo, scale) {
   };
   return tex;
 }
-
-const SWATCHES = ['#d82a2a', '#f2c14e', '#ff8a3d', '#fff2d8', '#5ad08c', '#6f84ff'];
-const SW = { red: 0, gold: 1, amber: 2, white: 3, green: 4, blue: 5 };
-// Speaker grilles on the panel, in face units from its centre line
-const GRILLES = [-1, 1].map((k) => {
-  const room = FACE_W / 2 - CAB.dmd.w / 2;
-  return { x: k * (CAB.dmd.w / 2 + room / 2), r: Math.min(room / 2 - 0.2, CAB.dmd.h / 2) };
-});
 
 /* -------------------------------------------------------- the cabinet */
 
@@ -1259,7 +1258,7 @@ export function buildCabinet(THREE, materials, logo, dmdMaterial, opts = {}) {
     armour.push(rail(x1 - 0.55, x1 + 1.9));
     // Lockdown bar: rounded front, full width, the action button on top
     const s = new THREE.Shape();
-    const d = 2.7;
+    const d = 2.2;
     const h = armourTop - topY;
     s.moveTo(0, 0);
     s.lineTo(d, 0);
@@ -1322,10 +1321,11 @@ export function buildCabinet(THREE, materials, logo, dmdMaterial, opts = {}) {
       const side = rx < cx ? -1 : 1;
       const h = legTop - legBot;
       // A square leg tapering toward the floor (4-sided cylinder, turned 45°)
-      const leg = new THREE.CylinderGeometry(half * Math.SQRT2, (half - 0.32) * Math.SQRT2, h, 4, 1);
-      leg.rotateY(Math.PI / 4);
-      leg.computeVertexNormals();
-      legs.push(place(leg.translate(0, 0, 0), rx, legBot + h / 2, rd));
+      const legSrc = new THREE.CylinderGeometry(half * Math.SQRT2, (half - 0.32) * Math.SQRT2, h, 4, 1).rotateY(Math.PI / 4);
+      const leg = legSrc.toNonIndexed();
+      legSrc.dispose();
+      leg.computeVertexNormals(); // flat: a square leg, not a rounded one
+      legs.push(place(leg, rx, legBot + h / 2, rd));
       // Chrome leg plate on the outer face, two bolts through it
       const plate = new THREE.BoxGeometry(0.1, 5.4, 2.3);
       chrome.push(place(plate, rx + side * (half + 0.06), CAB.legH + 3.4, rd));
@@ -1417,6 +1417,46 @@ export function buildCabinet(THREE, materials, logo, dmdMaterial, opts = {}) {
   return { group: g, refs };
 }
 
+/**
+ * The same machine as plain shells, for the neighbours in the row: paint
+ * (body and head), chrome (armour and bar) and powder-coat (legs). Built in
+ * this machine's own world frame; place a copy with a translation.
+ */
+export function shellGeometries(THREE) {
+  const { x0, x1, hw, cx, topY, armourTop, z1 } = CAB;
+  const xo0 = cx - hw;
+  const xo1 = cx + hw;
+  const fb = roomPoint(CAB.legH, 0);
+  const bb = roomPoint(CAB.legH, -CAB.bodyL);
+  const faceZ = (y) => headPoint((y + 0.08 * Math.sin(CAB.headTilt)) / Math.cos(CAB.headTilt), -0.08).z;
+  const topYh = headPoint(CAB.backH + 0.45, -0.08).y;
+  const side = [[CAB.frontZ, topY], [fb.z, fb.y], [bb.z, bb.y], [backZ(0), 0], [faceZ(0), 0], [faceZ(topY), topY]];
+  const head = [[faceZ(0), 0], [backZ(0), 0], [backZ(topYh), topYh], [headPoint(CAB.backH + 0.45, -0.08).z, topYh]];
+  const front = [[CAB.frontZ, topY], [fb.z, fb.y], [fb.z - 1, fb.y], [CAB.frontZ - 1, topY]];
+  const under = [[CAB.frontZ, -0.5], [fb.z, fb.y + 0.2], [bb.z, bb.y + 0.2], [backZ(-0.06), -0.06], [z1 - 0.3, -0.06], [z1 - 0.3, -0.5]];
+  const paint = mergeSimple(THREE, [
+    profilePrism(THREE, side, xo0, x0, { bevel: 0 }),
+    profilePrism(THREE, side, x1, xo1, { bevel: 0 }),
+    profilePrism(THREE, front, x0, x1, { bevel: 0 }),
+    profilePrism(THREE, under, x0, x1, { bevel: 0 }),
+    profilePrism(THREE, head, xo0, xo1, { bevel: 0 })
+  ]);
+  const h = armourTop - topY;
+  const metal = mergeSimple(THREE, [
+    new THREE.BoxGeometry(2.45, h, CAB.frontZ - faceZ(topY)).translate(x0 - 0.68, topY + h / 2, (CAB.frontZ + faceZ(topY)) / 2),
+    new THREE.BoxGeometry(2.45, h, CAB.frontZ - faceZ(topY)).translate(x1 + 0.68, topY + h / 2, (CAB.frontZ + faceZ(topY)) / 2),
+    new THREE.BoxGeometry(hw * 2 + 0.3, h, 2.2).translate(cx, topY + h / 2, CAB.frontZ + 0.35 - 1.1)
+  ]);
+  const legs = [];
+  [[xo0 + 1.2, -1.2], [xo1 - 1.2, -1.2], [xo0 + 1.2, -CAB.bodyL + 1.2], [xo1 - 1.2, -CAB.bodyL + 1.2]].forEach(([rx, rd]) => {
+    const m = new THREE.Matrix4().makeRotationX(-CAB.slope);
+    const p = roomPoint(CAB.legH / 2 + 3, rd);
+    m.setPosition(rx, p.y, p.z);
+    legs.push(new THREE.BoxGeometry(2.4, CAB.legH + 6, 2.4).applyMatrix4(m));
+  });
+  return { paint, metal, legs: mergeSimple(THREE, legs) };
+}
+
 /** Merges position/normal/uv of geometries (indexed or not) into one */
 function mergeSimple(THREE, geos) {
   const parts = geos.map((g) => {
@@ -1481,12 +1521,11 @@ function buttonGeo(THREE, r, h, swatch, domeRect, seg) {
   const top = new THREE.SphereGeometry(r, seg, 6, 0, Math.PI * 2, 0, Math.PI * 0.32);
   const lift = Math.cos(Math.PI * 0.32) * r;
   top.translate(0, h - lift, 0);
-  const p = top.attributes.position;
-  const uv = top.attributes.uv;
+  const { position: p, uv } = top.attributes;
   for (let i = 0; i < p.count; i++) {
     if (domeRect) {
       const fu = 0.5 + p.getX(i) / (2 * r);
-      const fv = 0.5 - p.getZ(i) / (2 * r);
+      const fv = 0.5 + p.getZ(i) / (2 * r);
       uv.setXY(i, domeRect.u0 + fu * (domeRect.u1 - domeRect.u0), domeRect.v1 + fv * (domeRect.v0 - domeRect.v1));
     } else uv.setXY(i, swatch[0], swatch[1]);
   }
@@ -1563,7 +1602,7 @@ export function buildGlass(THREE) {
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   const group = new THREE.Group();
-  const cx = CAB.cx;
+  const { cx } = CAB;
   const cz = (CAB.z0 + CAB.z1) / 2;
 
   // Two reflections of the ceiling fixtures, faint, merged into one mesh;

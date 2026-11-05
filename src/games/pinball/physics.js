@@ -149,7 +149,11 @@ export class Flipper {
     this.omega = 0;
     this.pressed = false;
     this.eos = false;
+    // Tapered like the real bat: thick rubber over the pivot, slim at the
+    // tip. The taper tilts the face normal a few degrees toward the tip,
+    // which is part of what lets a late flip send the ball cross-table.
     this.radius = opts.radius ?? 0.42;
+    this.tipRadius = opts.tipRadius ?? this.radius;
     this.restitution = opts.restitution ?? 0.42;
     this.hitRestitution = opts.hitRestitution ?? 0.75;
     // Stroke profile, rad/s and rad/s². Full stroke ≈ 28 ms up, ≈ 55 ms back.
@@ -159,8 +163,8 @@ export class Flipper {
     this.downAccel = opts.downAccel ?? 1500;
     // Hold winding: how hard the raised bat is pulled back to its stop, and
     // how much a hit moves it (inverse moment of inertia, per unit impulse)
-    this.holdAccel = opts.holdAccel ?? 1300;
-    this.invInertia = opts.invInertia ?? 0.055;
+    this.holdAccel = opts.holdAccel ?? 400;
+    this.invInertia = opts.invInertia ?? 0.12;
     this.onHit = opts.onHit || null;
     this.enabled = true;
   }
@@ -216,14 +220,24 @@ export class Flipper {
   collide(ball) {
     if (!this.enabled) return false;
 
-    const bx = this.tipX;
-    const by = this.tipY;
-    const [qx, qy, along] = closestOnSegment(ball.x, ball.y, this.px, this.py, bx, by);
+    // Closest point on a tapered capsule: the touching sphere along the axis
+    // sits h·tan(α) behind the ball's projection, sin(α) = taper / length
+    const ux = Math.cos(this.angle);
+    const uy = Math.sin(this.angle);
+    const ox = ball.x - this.px;
+    const oy = ball.y - this.py;
+    const s = ox * ux + oy * uy;
+    const h = Math.abs(-ox * uy + oy * ux);
+    const k = (this.radius - this.tipRadius) / this.length;
+    const sa = clamp(s - (h * k) / Math.sqrt(1 - k * k), 0, this.length);
+    const along = sa / this.length;
+    const qx = this.px + ux * sa;
+    const qy = this.py + uy * sa;
 
     let dx = ball.x - qx;
     let dy = ball.y - qy;
     let dist = len(dx, dy);
-    const minDist = ball.radius + this.radius;
+    const minDist = ball.radius + this.radius - k * sa;
     if (dist >= minDist) return false;
 
     if (dist < 1e-6) {
@@ -242,8 +256,8 @@ export class Flipper {
     ball.y += ny * pen;
 
     // Velocity of the flipper surface at the contact point: ω × r
-    const rx = qx - this.px;
-    const ry = qy - this.py;
+    const rx = ball.x - nx * ball.radius - this.px;
+    const ry = ball.y - ny * ball.radius - this.py;
     const contactVx = -this.omega * ry;
     const contactVy = this.omega * rx;
 
@@ -266,7 +280,9 @@ export class Flipper {
       // coupling, and the bat is knocked back toward rest
       let k = 1;
       const torqueArm = rx * ny - ry * nx; // r × n
-      const yields = this.pressed && this.eos && torqueArm * this.dir > 0;
+      // Only a real hit moves it: a ball resting on the raised bat (a cradle,
+      // or one balanced on the tip) gets a rigid, ordinary contact
+      const yields = this.pressed && this.eos && torqueArm * this.dir > 0 && -vn > 3;
       if (yields) k = 1 / (1 + torqueArm * torqueArm * this.invInertia);
       const j = -(1 + e) * vn * k;
       ball.vx += nx * j;
@@ -279,7 +295,11 @@ export class Flipper {
       const tx = -ny;
       const ty = nx;
       const vt = (ball.vx - contactVx) * tx + (ball.vy - contactVy) * ty;
-      const dvt = clamp(vt, -0.18 * j, 0.18 * j);
+      // Only on a real impact: the ball rolls, so a resting contact has no
+      // sliding to resist (as static friction it would hold a ball balanced
+      // on the tip, or stop it rolling down the bat)
+      const mu = -vn > 2 ? 0.18 * j : 0;
+      const dvt = clamp(vt, -mu, mu);
       ball.vx -= tx * dvt;
       ball.vy -= ty * dvt;
 
@@ -466,6 +486,17 @@ export class World {
       ball.vy = (ball.vy / sp) * this.maxSpeed;
     }
 
+    // A nearly stopped ball gets a breath of noise. A real ball can never
+    // balance on the very top of a post, a rail end or a raised flipper tip;
+    // a simulated one, perfectly still on a perfectly round cap, can — and
+    // then sits there forever. In a pocket (a cradle, the shooter lane) the
+    // noise just settles back out.
+    if (ball.vx * ball.vx + ball.vy * ball.vy < 0.04) {
+      const a = this.random() * Math.PI * 2;
+      ball.vx += Math.cos(a) * 0.35;
+      ball.vy += Math.sin(a) * 0.35;
+    }
+
     ball.x += ball.vx * dt;
     ball.y += ball.vy * dt;
 
@@ -542,7 +573,7 @@ export class World {
       const tx = -ny;
       const ty = nx;
       const vt = ball.vx * tx + ball.vy * ty;
-      const mu = c.friction * 2.5 * j;
+      const mu = -vn > 2 ? c.friction * 2.5 * j : 0;
       const dvt = clamp(vt, -mu, mu);
       ball.vx -= tx * dvt;
       ball.vy -= ty * dvt;
