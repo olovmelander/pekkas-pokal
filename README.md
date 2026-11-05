@@ -70,8 +70,8 @@ public/photos/2025.jpg
 public/photos/2024.jpg
 ```
 
-Bilden dyker upp automatiskt högst upp på det årets kort i Historik och i
-resultatrutan. Saknas en bild händer ingenting — inget att konfigurera.
+Bilden dyker upp automatiskt högst upp på det årets kort i Historik och på
+årets egen sida (`#/ar/<år>`). Saknas en bild händer ingenting — inget att konfigurera.
 Liggande format och ca 1200 px bredd fungerar bäst.
 
 ### 4. Sångboken
@@ -914,19 +914,32 @@ bara när den syns och ersätter en SVG-pokal som redan står på plats, så
 inget hoppar och inget saknas utan WebGL. Bakom den ligger höjdkurvor —
 Höga kusten, dit koordinaterna i loggan pekar.
 
+Diagrammen visar en deltagare i taget i guld – tryck på en linje eller ett namn
+under diagrammet för att följa någon annan – och kurvorna går aldrig utanför de
+verkliga värdena; det inställda året 2020 syns som ett skuggat band.
+Medaljracet visar när medaljerna kom, år för år, och snittplaceringen är
+sorterad med den bästa först. Alla tal skrivs på svenska med decimalkomma, och
+texten klarar WCAG AA-kontrast i båda temana. På telefon visar medaljtabellen
+guld, silver, brons och totalt på en rad. Innehåll som tonar in när man
+scrollar syns ändå från början och vid utskrift. Arkadens affischer är
+stillbilder ur spelen och visar en suddig miniatyr tills bilden har laddat.
+
 ### Adresser
 
-Varje vy, profil, år och spel har en egen adress som går att dela. Profiler,
-årsresultat och spel läggs ovanpå vyn i webbläsarens historik, så bakåt
-stänger dem.
+Varje vy, profil, år och spel har en egen adress. Profiler och år är egna
+sidor; bakåtknappen landar där man var i listan man kom ifrån, och spelen
+läggs ovanpå så att bakåt eller Esc stänger dem. Knappen **Dela** på års- och
+profilsidorna delar en adress som `…/pekkas-pokal/ar/2019/` — en liten statisk
+sida som `scripts/share-pages.mjs` bygger vid varje publicering, så att länken
+får rätt titel och bild i förhandsvisningen och sedan leder vidare till sidan.
 
 | Adress | Visar |
 | --- | --- |
 | `#/` | Översikten |
 | `#/medaljliga`, `#/historik`, `#/utmarkelser`, `#/statistik`, `#/sangbok`, `#/spel` | Vyerna |
 | `#/sangbok/<id>` | En sång, t.ex. `#/sangbok/varat-pekkas` |
-| `#/deltagare/<namn>` | En profil, t.ex. `#/deltagare/viktor-jones` |
-| `#/ar/<år>` | Årets fullständiga resultat |
+| `#/deltagare/<namn>` | En profil: nyckeltal, placering per år, medaljer, utmärkelser och inbördes möten, t.ex. `#/deltagare/viktor-jones` |
+| `#/ar/<år>` | Årets sida: pall, alla resultat med Elo-förändring, arrangörer, karta, årets spel och sånger, t.ex. `#/ar/2019` |
 | `#/spel/<år>` | Årets spel, t.ex. `#/spel/2024` |
 
 Äldre länkar som `#medals` leder fortfarande rätt.
@@ -935,12 +948,12 @@ stänger dem.
 
 | Fil | Ansvar |
 | --- | --- |
-| `index.html` | All markup, de sju vyerna, spelscenen och modalen |
+| `index.html` | All markup: de sju vyerna, års- och profilsidan och spelscenen |
 | `src/scripts/app.js` | Hela applikationen: dataladdning, statistik, Elo, routing, rendering |
 | `src/scripts/trophy.js` | Pokalen i 3D på översikten |
 | `src/scripts/achievement-engine.js` | Beräknar vilka utmärkelser varje deltagare låst upp |
 | `src/data/achievements.js` | Definitioner av alla utmärkelser |
-| `src/styles/` | `main` (tokens/teman), `layout`, `components`, `animations`, `games` (arkaden och spelscenen), `game-hud` (spelens delade HUD), `responsive` |
+| `src/styles/` | `main` (tokens/teman), `layout`, `components`, `pages` (års- och profilsidorna), `animations`, `games` (arkaden och spelscenen), `game-hud` (spelens delade HUD), `responsive` |
 | `src/games/shared/` | Delat av alla spel: `gfx` (grafikvakten: tålig efterbehandling, NaN-skydd, svart-bild-vakt, förkompilering, `?gfx=safe`), `people` med `people-*` (personsystemet: skelett, händer och grepp, ansikten, utseenden, poser, gång, publik) |
 | `src/games/pinball/` | Flipperspelet: `physics` (2D-kollision), `table` (layout + banans grafik), `meshes` (3D), `room` (arkadhallen), `dmd` (punktmatrisen), `fx` (gnistor, bollspår), `audio` (syntetiskt ljud), `hud` (paneler), `scores` (topplistan), `index` (spelloop) |
 | `src/games/fishing/` | Fiskespelet: `species` (procedurella fiskar), `world` (sjö, vattenshader), `scenery` (stranden, udden, speglingarna), `boat` (klinkbyggda ekan), `angler` (Erik i ekan, IK mot spöet), `fx` (stänk, bubblor, glimtar), `hud` (paneler, fångstdagbok), `progress` (uppdrag och rekord), `audio` (syntetiskt ljud), `index` (spelloop) |
@@ -949,6 +962,7 @@ stänger dem.
 | `src/games/shooting/` | Skyttespelet: `range` (fält, lerduvor), `forest` (skogsbrynet), `gang` (2022 års gäng på fikastolarna), `sky` (himmelsshader och moln), `gun` (bockbössan i PBR), `grass` (instansierad äng med vind), `fx` (skärvor, damm, haglsvärm), `hud` (25-kortet, spökstapeln, slutkortet), `audio` (syntetiskt ljud), `index` (banor + spelloop) |
 | `src/games/pingis/` | Pingisspelet: `hall` (bygdegård, bord), `foe` (motståndaren och racketen), `crowd` (publiken på personsystemet), `scoreboard` (fällbara siffror), `fx` (bollspår, ringar, gnistor), `post` (bloom, gradering, spegelgolv), `hud` (paneler, scoutingkort), `audio` (syntetiskt ljud), `index` (fysik, AI och spelloop) |
 | `src/games/painting/` | Målerispelet: `artworks` (motiven + färgblandning i RYB och Lab), `canvasart` (penseldrag och dukens höjdkarta), `palette` (paletten i 3D), `garden` (trädgården, stafflier), `forest` (skogskanten), `cast` (Hägglund och 2021 års målare), `gait` (fötter som står kvar), `hud` (paneler, dom, galleri), `audio` (syntetiskt ljud), `index` (spelloop och dom) |
+| `scripts/share-pages.mjs` | Bygger de statiska delningssidorna (`ar/<år>/`, `deltagare/<namn>/`) med titel och bild för länkförhandsvisning |
 | `public/` | Statiska filer: `event.json`, `manifest.json`, ikoner, `brand/` (älgen), `og-image.png`, `games/` (affischbilder), `photos/` |
 
 Data hämtas från `competition-data.csv` vid sidladdning. Om filen inte går att

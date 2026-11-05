@@ -1743,7 +1743,9 @@
           ppPointColors: years.map((y) => medalColors[medalAt(s, y)] || 'transparent'),
           ppPointRadius: years.map((y) => (medalAt(s, y) ? 5 : 0)),
           spanGaps: true,
-          tension: 0,
+          // A medal arrives at one event: steps read as a race, slopes read
+          // as a gradual climb (and as a lattice of diagonals for the others)
+          stepped: 'before',
           segment: { borderDash: gapDash }
         };
       });
