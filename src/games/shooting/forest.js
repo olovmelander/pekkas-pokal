@@ -166,7 +166,9 @@ export function addSpruce(G, rand, x, y0, z, h, o) {
     const yTop = y0 + bare + (h - bare) * (1 - (1 - f1) ** 1.12);
     const top = i === tiers - 1;
     const r = (w * (1 - f0) ** 0.95 + h * 0.01) * (0.82 + rand() * 0.34);
-    const th = ((h - bare) / tiers) * (top ? 1.6 : 1.75 + rand() * 0.45);
+    // Elbowed (near, old) trees get shorter skirts, so the whorls read as
+    // separate layers with a shadow band under each
+    const th = ((h - bare) / tiers) * (top ? 1.6 : o.elbow ? 1.4 + rand() * 0.3 : 1.75 + rand() * 0.45);
     const ax = x + lean * f1;
     const az = z + leanZ * f1;
     const ay = top ? y0 + h : yTop;

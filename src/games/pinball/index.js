@@ -174,6 +174,25 @@ export async function createPinball(container, opts = {}) {
   const materials = createMaterials(THREE, pfTexture);
   const { group: tableGroup, refs } = buildTable(THREE, mergeGeometries, materials);
   scene.add(tableGroup);
+  // Phone tier: small movers stop casting into the shadow map — each caster
+  // is one more draw call every frame, and at phone size these shadows are a
+  // pixel or two. The ball, flippers, castle and plastics keep theirs.
+  if (small) {
+    refs.targets.forEach((t) => {
+      t.face.castShadow = false;
+    });
+    refs.bumpers.forEach((b) => {
+      b.group.children[0].castShadow = false; // the skirt (the cap still casts)
+    });
+    refs.jackpot.trophy.children.slice(1).forEach((h) => {
+      h.castShadow = false; // the handles
+    });
+    refs.trolls.forEach((tr) => {
+      tr.group.children[0].castShadow = false;
+    });
+    refs.spinner.blade.castShadow = false;
+  }
+
   // The ball mirrors a room made for it (see ballEnvironment)
   const ballEnvSource = ballEnvironment(THREE);
   const ballEnvRT = pmrem.fromEquirectangular(ballEnvSource);

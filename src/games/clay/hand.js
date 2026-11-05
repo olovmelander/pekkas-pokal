@@ -39,10 +39,10 @@ const HS = 3.7;
 
 const DIGITS = [
   // name, knuckle [x, y, z], segment lengths, base radius, rest curl per joint
-  { mcp: [0.002, 0.095, 0.029], len: [0.044, 0.026, 0.021], r: 0.0094, curl: [0.16, 0.24, 0.16] },
-  { mcp: [0.0, 0.099, 0.0095], len: [0.048, 0.029, 0.022], r: 0.0097, curl: [0.12, 0.2, 0.14] },
-  { mcp: [0.001, 0.095, -0.0095], len: [0.045, 0.027, 0.021], r: 0.0091, curl: [0.18, 0.27, 0.18] },
-  { mcp: [0.004, 0.086, -0.0275], len: [0.035, 0.021, 0.019], r: 0.0081, curl: [0.26, 0.34, 0.22] }
+  { mcp: [0.002, 0.095, 0.029], len: [0.044, 0.026, 0.021], r: 0.0094, curl: [0.2, 0.3, 0.2] },
+  { mcp: [0.0, 0.099, 0.0095], len: [0.048, 0.029, 0.022], r: 0.0097, curl: [0.14, 0.24, 0.16] },
+  { mcp: [0.001, 0.095, -0.0095], len: [0.045, 0.027, 0.021], r: 0.0091, curl: [0.22, 0.34, 0.22] },
+  { mcp: [0.004, 0.086, -0.0275], len: [0.035, 0.021, 0.019], r: 0.0081, curl: [0.34, 0.42, 0.28] }
 ];
 const THUMB = { cmc: [-0.011, 0.024, 0.021], dir: [-0.36, 0.8, 0.48], len: [0.044, 0.032, 0.027], r: 0.0125 };
 const FOREARM = 0.26;
@@ -375,8 +375,8 @@ export function buildPotterHand() {
         // the slip coat: everything past the middle joint, the pads most
         // the slip: a wet coat on the pads and fingertips, thinning toward the
         // knuckles — the skin still reads against the clay
-        const slip = smooth(0.45, 0.85, s) * (0.45 + 0.4 * palmSide) * (0.85 + 0.15 * Math.sin(s * 40 + fi * 2));
-        return c.lerp(SLIP, Math.min(0.8, slip));
+        const slip = smooth(0.4, 0.82, s) * (0.6 + 0.3 * palmSide) * (0.8 + 0.2 * Math.sin(s * 40 + fi * 2));
+        return c.lerp(SLIP, Math.min(0.82, slip));
       },
       wetOf: (s, palmSide) => smooth(0.35, 0.8, s) * (0.6 + 0.4 * palmSide),
       thinOf: (s) => 0.55 + 0.45 * smooth(0.6, 1, s)
@@ -427,8 +427,9 @@ export function buildPotterHand() {
     const c = SKIN.clone();
     const palm = smooth(0, -0.012 * HS, p.x);
     c.lerp(SKIN_PALM, palm * 0.5);
-    // slip smears up the palm side and across the knuckles
-    return c.lerp(SLIP, Math.min(0.6, palm * smooth(0.04 * HS, 0.1 * HS, p.y) * 0.8 + 0.25 * smooth(0.08 * HS, 0.1 * HS, p.y)));
+    // slip smears up the palm side, and in streaks back from the knuckles
+    const streak = Math.max(0, Math.sin(p.z * 260 / HS)) * smooth(0.05 * HS, 0.1 * HS, p.y);
+    return c.lerp(SLIP, Math.min(0.6, palm * smooth(0.04 * HS, 0.1 * HS, p.y) * 0.8 + 0.3 * streak));
   }, {
     power: 2.5,
     latN: 12,
@@ -514,6 +515,8 @@ export function buildPotterHand() {
   /* -------------------------------------------------------------- posing */
   const qa = new THREE.Quaternion();
   const qLean = new THREE.Quaternion();
+  const qYaw = new THREE.Quaternion();
+  const vy = new THREE.Vector3(0, 1, 0);
   const qInv = new THREE.Quaternion();
   const vz = new THREE.Vector3(0, 0, 1);
   const tmp = new THREE.Vector3();
@@ -541,6 +544,7 @@ export function buildPotterHand() {
    * o.curv    the wall's profile curvature there (a convex wall < 0 curls the fingers in)
    * o.press   0..1 how hard: deeper curl, the hand leans into the wall
    * o.grip    0..1 extra curl (holding the sponge)
+   * o.yaw     the contact point's azimuth round the pot (+ toward the viewer)
    * o.reach   inside only: where the elbow goes (over the pot's mouth), in this group's space
    * o.t       clock, for a living micro-motion
    */
@@ -553,7 +557,10 @@ export function buildPotterHand() {
     DIGITS.forEach((D, fi) => {
       const wob = Math.sin(t * 1.7 + fi * 1.9) * 0.025;
       fingerBones[fi].forEach((bi, j) => {
-        const c = D.curl[j] * (1 + 0.8 * press) + grip * [0.35, 0.55, 0.45][j] - (o.curv || 0) * D.len[j] * HS + wob;
+        // inside the pot the wall curves round the fingers: they stay nearly
+        // straight (a curl would push the tips through the clay)
+        const rest = o.inside ? D.curl[j] * 0.25 : D.curl[j] * (1 + 0.8 * press);
+        const c = rest + grip * [0.35, 0.55, 0.45][j] - (o.inside ? 0 : (o.curv || 0) * D.len[j] * HS) + wob;
         bones[bi].quaternion.setFromAxisAngle(vz, Math.max(-0.25, Math.min(1.5, c)));
       });
     });
@@ -577,9 +584,12 @@ export function buildPotterHand() {
     }
     az.crossVectors(ax, ay);
     m4.makeBasis(ax, ay, az);
-    // ...leaning into the wall as it presses
+    // ...leaning into the wall as it presses, and turned round the pot to
+    // where it touches (o.yaw: the contact's azimuth, + toward the viewer),
+    // so the palm presses the wall square and the camera sees the back of the hand
     qLean.setFromAxisAngle(vz, press * 0.07);
-    qa.setFromRotationMatrix(m4).multiply(qLean);
+    qYaw.setFromAxisAngle(vy, -(o.yaw || 0));
+    qa.setFromRotationMatrix(m4).premultiply(qYaw).multiply(qLean);
     handBone.position.set(0, 0, 0);
     handBone.quaternion.copy(qa);
     // the contact pad on the origin (after the curl)

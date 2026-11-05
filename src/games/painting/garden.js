@@ -1266,6 +1266,57 @@ export function buildGarden({ lowTier = false } = {}) {
     }
     bake(table, { skip: [hat], receiveShadow: true });
     table.add(hat);
+    // A red-and-white checked cloth, hanging over the edges: a Swedish
+    // garden party is not laid on bare boards
+    {
+      const cv = document.createElement('canvas');
+      cv.width = 64;
+      cv.height = 64;
+      const c2 = cv.getContext('2d');
+      c2.fillStyle = '#f3efe6';
+      c2.fillRect(0, 0, 64, 64);
+      c2.fillStyle = 'rgba(196,40,46,0.55)';
+      for (let i = 0; i < 4; i++) {
+        c2.fillRect(i * 16, 0, 8, 64);
+        c2.fillRect(0, i * 16, 64, 8);
+      }
+      const tex = new THREE.CanvasTexture(cv);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.magFilter = THREE.NearestFilter;
+      tex.anisotropy = 4;
+      const W = 2.06;
+      const D = 0.98;
+      const drop = 0.16;
+      const parts = [];
+      const top = new THREE.PlaneGeometry(W, D);
+      top.rotateX(-Math.PI / 2);
+      top.translate(0, 0.792, 0);
+      parts.push(top);
+      [[0, D / 2, 0], [0, -D / 2, Math.PI], [W / 2, 0, Math.PI / 2], [-W / 2, 0, -Math.PI / 2]].forEach(([x, z, ry]) => {
+        const len = x ? D : W;
+        const sk = new THREE.PlaneGeometry(len, drop);
+        sk.translate(0, 0.792 - drop / 2, 0);
+        sk.rotateY(ry);
+        sk.translate(x, 0, z);
+        parts.push(sk);
+      });
+      // Checks about 6 cm across, whatever the face
+      parts.forEach((g, i) => {
+        const { uv } = g.attributes;
+        const sx = i < 3 ? W : D;
+        const sy = i === 0 ? D : drop;
+        for (let k = 0; k < uv.count; k++) uv.setXY(k, (uv.getX(k) * sx) / 0.24, (uv.getY(k) * sy) / 0.24);
+      });
+      const cloth = new THREE.Mesh(mergeGeometries(parts), new THREE.MeshLambertMaterial({
+        map: tex, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2
+      }));
+      parts.forEach((g) => g.dispose());
+      cloth.receiveShadow = true;
+      cloth.castShadow = true;
+      table.add(cloth);
+    }
     group.add(table);
   }
 

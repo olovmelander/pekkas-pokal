@@ -508,18 +508,18 @@ export function buildForest(rand, { lite = false, wind, sunDir } = {}) {
   placeRow((t, j) => [-44 + t * 88, -35 - j * 6], Math.round(30 * q), 0.26);
 
   /* Birches in front of the spruce, in loose groups */
-  for (let i = 0; i < (lite ? 7 : 13); i++) {
+  for (let i = 0; i < (lite ? 6 : 10); i++) {
     const gx = -28 + rand() * 56;
     const n = 1 + Math.floor(rand() * 3);
     for (let k = 0; k < n; k++) {
       const bx = gx + (rand() - 0.5) * 4;
       const bz = -24 - rand() * 3;
       if (!clearOf(bx, bz)) continue;
-      addBirch(edge, rand, bx, -0.2, bz, 5 + rand() * 3, { haze: 0.08, clumps: lite ? 8 : 14, detail: 0, clumpScale: 0.8, leaf: 0x8cab4c });
+      addBirch(edge, rand, bx, -0.2, bz, 5 + rand() * 3, { haze: 0.1, clumps: lite ? 8 : 14, detail: lite ? 0 : 1, clumpScale: 0.8, leaf: 0x7f9e46 });
     }
   }
   for (let i = 0; i < (lite ? 3 : 6); i++) {
-    addBirch(edge, rand, -23.5 - rand() * 2.5, -0.2, -15 + rand() * 26, 5 + rand() * 3, { haze: 0.06, clumps: lite ? 8 : 14, detail: 0, clumpScale: 0.8, leaf: 0x8cab4c });
+    addBirch(edge, rand, -23.5 - rand() * 2.5, -0.2, -15 + rand() * 26, 5 + rand() * 3, { haze: 0.08, clumps: lite ? 8 : 14, detail: lite ? 0 : 1, clumpScale: 0.8, leaf: 0x7f9e46 });
   }
   emit(edge);
 

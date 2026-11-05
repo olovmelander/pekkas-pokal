@@ -876,7 +876,7 @@ class Spectators {
     // 0 sits back … 1 elbows on the knees; negative leans back
     let lean = 0.15;
     let look = focus;
-    if (m === 'tense') lean = 0.85;
+    if (m === 'tense') lean = 1;
     else if (m === 'ooh') {
       lean = -0.25;
       if (mt > 0.8) this.mood = 'idle';
@@ -1108,6 +1108,14 @@ class Referee {
       this.seq.shift();
       this.kind = this.seq[0][0];
       if (this.kind === 'point' || this.kind === 'parry' || this.kind === 'attack') this.say(0.4);
+    }
+    // A signal is held, then the arms come down: hands behind the back
+    // while the phrase runs, and after the touch has been given
+    const hold = { allez: 1.5, point: 2.6, halt: 2.2, attack: 2.6, parry: 2.6 }[this.kind];
+    if (hold && this.seq.length === 1 && this.t > hold) {
+      this.seq = REF_SEQ.idle.slice();
+      this.kind = 'idle';
+      this.t = 0;
     }
     if (this.talkT > 0) {
       this.talkT -= dt;
