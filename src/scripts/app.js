@@ -173,6 +173,8 @@
   /**
    * `colors` tonar affischen och laddkortet; `cover` är en stillbild ur
    * spelet (public/games/) — saknas den visas emblemet i stället.
+   * `coverBlur` är samma bild 24 px bred (base64), suddig bakom kortet tills
+   * stillbilden laddat; `coverFocus` håller motivet i bild på smala kort.
    */
   const GAMES = [
     {
@@ -197,7 +199,7 @@
       colors: ['#a8482a', '#191a2e'],
       cover: 'games/painting.webp',
       coverBlur:
-        'data:image/webp;base64,UklGRqoAAABXRUJQVlA4IJ4AAACwBACdASoYABEAPt1kqU+opaOiKAqpEBuJYgAAMAfVYt3O9zpmoU1ZvrpAS7gAAPwhICVpYEiTlVizFnZNdsHD1C2D8GjJ+tL1kpO4nR3/lYZMGpL6B8yFSqGlzd8/opMxnuLL56IYp37atijtjX8TCtSrNYEVj2vWG8sdOZTZSh39wpU4avGw4tVPpSUQOkbuzby4kbr2OcLcrAAAAA==',
+        'data:image/webp;base64,UklGRqoAAABXRUJQVlA4IJ4AAABwBQCdASoYABEAPt1kqU+opaOiKAqpEBuJZAC293+A78L84zIuPAyzVK8hOZOXWmmEcs2wAP5I70uiL/dMxy0f5uGKlufD9KhMegpkJusa2Jf5HOv+ILDo8leBSh1AnUzwQpNFGsYv4YfngBm5Z/XjMFY2sxAusvJOSAFzXv/Rlgv0UrEHEzdnSCHdph8oO1wBVcb36na8FvNFADoAAA==',
       module: 'src/games/painting/index.js'
     },
     {
@@ -222,7 +224,7 @@
       colors: ['#9a6a24', '#1a160d'],
       cover: 'games/shooting.webp',
       coverBlur:
-        'data:image/webp;base64,UklGRqgAAABXRUJQVlA4IJwAAADwBACdASoYABEAPt1kqE+opaOiKAqpEBuJQBllgkb/K7h93rRebjtPCei9WjuTuvAA4mVHz8yADubjz2jbmXIaoOVKv7uSGL/GWtEdslwpfxyXqs09rBcXtE8f8a98IjPlIXENacsS/+MJrCGSqYvj6OybOMnW01YABVefRVhVX04p0jtO9asyPrpcFkMnVVAXk+FkH+TstKFfgAA=',
+        'data:image/webp;base64,UklGRo4AAABXRUJQVlA4IIIAAABQBACdASoYABEAPt1iqU+opSOiKAqpEBuJQBdgAiOztRSnyoCqd5aqvA7AAP6+D+i5MTQc0lg/8YDTg5ALNXyxldM6657OltiFH2bTZ8vVyPL9cLZj07j8dnO+l7QAZcMFUCXW8bVExdJL6Kjhsf0chBKoj4Ba4G1Q+fuTZzI28gAA',
       module: 'src/games/shooting/index.js'
     },
     {
@@ -234,7 +236,7 @@
       colors: ['#34446e', '#0c0e18'],
       cover: 'games/fencing.webp',
       coverBlur:
-        'data:image/webp;base64,UklGRrgAAABXRUJQVlA4IKwAAAAwBQCdASoYABEAPt1grE8opSQiKAqpEBuJYgCxHzQ6SA8RUTXKJh9zJWr3nolQAGPTkAD+3Wp78lig9/j3QkxOgF/044Yhme5uRAyJ542Xwo7Ldg4j8wnb4afyZOMTWAXSkTK9DOwuN7wfhkMJBrqdbqGtHKrloF85WTFPjE1+WBc+XACgHRuphuFwMZCcxIR/DccMiML1/biL8XDc8big9ICLS+nEDAGnJwAA',
+        'data:image/webp;base64,UklGRrQAAABXRUJQVlA4IKgAAAAQBQCdASoYABEAPt1kqk+opSOiKAqpEBuJQBdl6RAU60bDBgHj19nZ3+oOqnabrXWQAP7djBXFEwFDNkxUgwOwxf/nuTlXRZzjPmadRVa6hskCIQsFOTWBvl4bWyLJsCf2Gpd6qSzUywpAth7tNUa/Lw/Zv01blVy209gZnKoDdtalDztEVtRzGAsrJuRcoAejHAItnNhIIoIm7QfrHK5ILaDlai7gAAA=',
       coverFocus: '44% 50%',
       module: 'src/games/fencing/index.js'
     },

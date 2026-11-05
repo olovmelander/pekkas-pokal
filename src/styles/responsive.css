@@ -13,6 +13,36 @@
   }
 }
 
+/* ---------- Smal skärm med toppmeny (surfplatta, telefon på tvären) ----------
+   Menyn och varumärket får inte plats bredvid varandra: bara älgmärket står
+   kvar (länken behåller sitt namn via aria-label) och menyn tätas. */
+@media (min-width: 761px) and (max-width: 980px) {
+  .header-inner {
+    gap: var(--sp-3);
+  }
+
+  .brand-text {
+    display: none;
+  }
+
+  .brand-mark {
+    width: 46px;
+  }
+
+  .nav-link {
+    padding: 0.5rem 0.5rem;
+  }
+}
+
+/* Toppmenyns länkar blir 44 px höga på pekskärm */
+@media (min-width: 761px) and (pointer: coarse) {
+  .nav-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}
+
 /* ---------- Surfplatta ---------- */
 @media (max-width: 1024px) {
   .hero {
