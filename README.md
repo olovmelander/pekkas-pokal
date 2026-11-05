@@ -32,7 +32,10 @@ Exempel:
 Regler:
 
 - **Placering** skrivs som en siffra (`1` = vinnare). Lämna tomt eller skriv `-`
-  för den som inte deltog.
+  för den som inte deltog. Saknas placeringar för några som var med (som 2014
+  och 2015, där bara pallen är känd), lämna deras rutor tomma: en resultatlista
+  med luckor gör att utmärkelserna räknar de tomma rutorna som okända i stället
+  för som frånvaro.
 - **Datum** i formatet `ÅÅÅÅ-MM-DD`. Kan lämnas tomt.
 - **Plats** måste matcha en plats i kartan för att få en nål — se
   `LOCATION_COORDS` i [`src/scripts/app.js`](src/scripts/app.js) om du behöver
@@ -992,8 +995,10 @@ får rätt titel och bild i förhandsvisningen och sedan leder vidare till sidan
 | `index.html` | All markup: de sju vyerna, års- och profilsidan och spelscenen |
 | `src/scripts/app.js` | Hela applikationen: dataladdning, statistik, Elo, routing, rendering |
 | `src/scripts/trophy.js` | Pokalen i 3D på översikten |
-| `src/scripts/achievement-engine.js` | Beräknar vilka utmärkelser varje deltagare låst upp |
-| `src/data/achievements.js` | Definitioner av alla utmärkelser |
+| `src/scripts/achievement-engine.js` | Kör utmärkelsernas regler: vem som har vad, vilket år den låstes upp och vem som är närmast |
+| `src/data/achievements.js` | Alla utmärkelser: beskrivning, sällsynthet, poäng och regeln i kod |
+| `src/data/achievement-icons.js` | Pekkas egna ikoner för utmärkelserna: en ram per sällsynthet och en ritad symbol per utmärkelse |
+| `tests/achievements.test.js` | Tester för utmärkelserna mot de riktiga resultaten (`npx vitest run`) |
 | `src/styles/` | `main` (tokens/teman), `layout`, `components`, `pages` (års- och profilsidorna), `animations`, `games` (arkaden och spelscenen), `game-hud` (spelens delade HUD), `responsive` |
 | `src/games/shared/` | Delat av alla spel: `gfx` (grafikvakten: tålig efterbehandling, NaN-skydd, svart-bild-vakt, förkompilering, `?gfx=safe`), `people` med `people-*` (personsystemet: skelett, händer och grepp, ansikten, utseenden, poser, gång, publik) |
 | `src/games/pinball/` | Flipperspelet: `physics` (2D-kollision), `table` (layout + banans grafik), `meshes` (3D), `cabinet` (skåpet, toppboxen och glaset), `room` (arkadhallen), `showcase` (kameraturen före start), `dmd` (punktmatrisen), `fx` (gnistor, bollspår), `audio` (syntetiskt ljud), `hud` (paneler), `scores` (topplistan), `index` (spelloop) |
@@ -1016,6 +1021,52 @@ Varje tävling behandlas som en serie dueller: alla par av startande jämförs, 
 den som placerat sig högst vinner duellen. Alla börjar på 1500 och varje par är
 värt `K/(n−1)`, vilket gör att ett år med tolv deltagare inte kan svänga
 ratingen mer än ett år med tre.
+
+### Så fungerar utmärkelserna
+
+Utmärkelserna på `#/utmarkelser` är 53 regler som räknas fram ur resultaten varje
+gång sidan laddas. Alla finns i [`src/data/achievements.js`](src/data/achievements.js),
+där regeln i koden gör exakt det som beskrivningen säger, och
+[`src/scripts/achievement-engine.js`](src/scripts/achievement-engine.js) kör dem.
+
+- **Sju kategorier:** Medaljer, Sviter, Milstolpar, Arrangörer, Rivaler,
+  Roliga och Titlar. Inga dubbletter: en bedrift som går i steg har en stege
+  (vinn 1, 3, 5, 7 upplagor) i stället för flera namn för samma sak.
+- **Poängen följer sällsyntheten:** Vanlig 10, Sällsynt 25, Episk 50,
+  Legendarisk 100, Mytisk 250. Poängligan på sidan är summan.
+- **Egna ikoner** i stället för emojier, ritade för sajten i
+  [`src/data/achievement-icons.js`](src/data/achievement-icons.js):
+  - **Ramens form visar sällsyntheten**, så den syns även utan färg: cirkel
+    (Vanlig), sköld (Sällsynt), hexagon (Episk), rosett (Legendarisk) och
+    åttauddig stjärna (Mytisk).
+  - **Symbolen** är en guldlinje på ett rutnät på 24×24. Pokalen har samma
+    form som 3D-pokalen, Grundaren är en graverad plåt som på sockeln, och
+    siffrorna är satta i Fraunces.
+  - **Låsta utmärkelser** visas grå med streckad ram, så man ser vad man
+    siktar på.
+- **Titlar** (The GOAT, Medaljhamstraren, Decenniets mästare, Arrangörskungen
+  och Mr. Consistent) har en innehavare åt gången, delas vid lika och kan byta
+  ägare efter nästa tävling.
+- **Upplåst år:** varje innehavare visas med året utmärkelsen låstes upp
+  (för titlar sedan när de har den), också på profilsidan.
+- **Närmast:** de som ingen har låst upp än visar vem som är närmast, till
+  exempel Guldkungen: Viktor J. 4 av 5. Allt som är låst går att nå.
+  Grundaren (med 2011) är den enda historiska och kan inte längre låsas upp.
+- **Regler för data:** en upplaga är ett år med tävling (covidåret 2020
+  hoppas över, så 2019 och 2021 är två i rad). Bara kända placeringar räknas,
+  och sist är bara sist i ett fält på minst fem.
+- **Arrangörer:** räknas från kolumnerna Arrangör 3:a och Arrangör näst sist
+  för det år de arrangerade.
+
+Testerna i [`tests/achievements.test.js`](tests/achievements.test.js) läser
+`competition-data.csv` med samma parser som sajten och kontrollerar reglerna,
+poängen och ett antal kända bedrifter (`npx vitest run`). Ett nytt år med en
+ny vinnare kan låsa upp nya utmärkelser direkt: vinner Viktor 2027 får han
+Hattrick och Guldkungen.
+
+Den gamla versionen hade 77 utmärkelser. Av dem kunde 35 aldrig låsas upp
+eftersom de saknade en regel, flera gick till fel person och några var
+omöjliga, som ”från utanför topp 20” med tretton deltagare.
 
 ### Deploy
 

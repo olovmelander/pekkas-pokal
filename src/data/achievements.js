@@ -1,917 +1,604 @@
 /**
- * Achievement Definitions for Pekkas Pokal
- * All possible achievements that can be unlocked
+ * Utmärkelserna i Pekkas Pokal.
+ *
+ * Varje utmärkelse är en exakt regel som räknas fram ur resultaten. Regeln
+ * står i `desc`, och `test` gör precis det som står där, varken mer eller
+ * mindre. AchievementEngine (src/scripts/achievement-engine.js) kör reglerna
+ * på hela historiken och på varje år för sig, så att sajten kan visa vem som
+ * har en utmärkelse, vilket år den låstes upp och hur nära de andra är.
+ *
+ * Grundregler för alla utmärkelser:
+ * - En upplaga är ett år med en tävling. Covid-året 2020 räknas inte, så 2019
+ *   och 2021 är två upplagor i rad.
+ * - Bara kända placeringar räknas. En tom ruta betyder att personen inte var
+ *   med, utom i upplagor där resultatlistan har luckor (2014 och 2015 har bara
+ *   pallen, 2023 saknar femman och sexan). Där är de tomma rutorna okända:
+ *   varken starter, frånvaro eller placeringar, och de bryter en svit.
+ * - ”Pallplats” är topp 3. ”Sist” är den sämsta placeringen en upplaga där
+ *   hela resultatlistan är känd.
+ * - Poängen följer sällsyntheten: Vanlig 10, Sällsynt 25, Episk 50,
+ *   Legendarisk 100, Mytisk 250.
+ * - Titlar har bara en innehavare åt gången (delas vid lika). De kan byta
+ *   ägare när nya resultat kommer in.
+ *
+ * Fält:
+ *   id, name, desc, category, rarity (ikonen ritas i achievement-icons.js)
+ *   test(p, ctx)      → true om personen p har utmärkelsen
+ *   progress(p, ctx)  → [nu, mål] för ”närmast”-raden (valfri)
+ *   title: true       → titel; score(p, ctx) ger ett tal (högst vinner), eller null
+ *   historic: true    → kan inte längre låsas upp (visas som historisk)
+ *
+ * Personobjektet p (se engine): name, id, res (en post per upplaga, äldst
+ * först: { year, s: 'pos' | 'unk' | 'abs', pos, field, last, host }),
+ * known (bara poster med placering), starts, wins, silvers, bronzes,
+ * podiums, hosts, count(pos), run(pred) (längsta svit), current(pred) (pågående
+ * svit), winYears, missedSinceDebut.
  */
 
+const POINTS = { common: 10, rare: 25, epic: 50, legendary: 100, mythic: 250 };
+
+/** Two results in a row: consecutive editions, both with a known placing */
+function pairs(p) {
+  const out = [];
+  for (let i = 1; i < p.res.length; i++) {
+    const a = p.res[i - 1];
+    const b = p.res[i];
+    if (a.s === 'pos' && b.s === 'pos') out.push([a, b]);
+  }
+  return out;
+}
+
+/** Longest run of consecutive known results matching `pred` over a window */
+function windowRun(p, len, pred) {
+  for (let i = 0; i + len <= p.res.length; i++) {
+    const w = p.res.slice(i, i + len);
+    if (w.every((e) => e.s === 'pos') && pred(w)) return true;
+  }
+  return false;
+}
+
+/** Placings of p and q in every edition where both have a known placing */
+function shared(p, q) {
+  const out = [];
+  p.res.forEach((e, i) => {
+    const f = q.res[i];
+    if (e.s === 'pos' && f.s === 'pos') out.push([e.pos, f.pos]);
+  });
+  return out;
+}
+
+/** Head-to-head [wins, losses] against everyone p has met at least five times */
+function h2hRecords(p, ctx) {
+  return ctx.people
+    .filter((q) => q !== p)
+    .map((q) => {
+      const games = shared(p, q);
+      return [games.filter(([a, b]) => a < b).length, games.filter(([a, b]) => a > b).length];
+    })
+    .filter(([w, l]) => w + l >= 5);
+}
+
 const ACHIEVEMENT_DEFINITIONS = [
-  // ===== MEDAL ACHIEVEMENTS =====
+  /* ===================== MEDALJER ===================== */
   {
-    id: 'first_win',
-    icon: '🥇',
-    name: 'Första Segern',
-    desc: 'Vinn din första årliga Pekkas Pokal',
+    id: 'podium_1',
+    name: 'Första pallplatsen',
+    desc: 'Ta en pallplats (topp 3) i en upplaga.',
     category: 'medals',
     rarity: 'common',
-    points: 10
+    test: (p) => p.podiums >= 1
   },
   {
-    id: 'gold_collector',
-    icon: '🏆',
-    name: 'Guldsamlare',
-    desc: '3+ guldmedaljer i Pekkas Pokal',
+    id: 'win_1',
+    name: 'Första segern',
+    desc: 'Vinn en upplaga.',
     category: 'medals',
     rarity: 'rare',
-    points: 30
+    test: (p) => p.wins >= 1
   },
   {
-    id: 'gold_king',
-    icon: '👑',
+    id: 'win_3',
+    name: 'Trefaldig mästare',
+    desc: 'Vinn tre upplagor.',
+    category: 'medals',
+    rarity: 'epic',
+    test: (p) => p.wins >= 3,
+    progress: (p) => [p.wins, 3]
+  },
+  {
+    id: 'win_5',
     name: 'Guldkungen',
-    desc: '5+ guldmedaljer - Pokalens regent',
+    desc: 'Vinn fem upplagor.',
     category: 'medals',
     rarity: 'legendary',
-    points: 100
+    test: (p) => p.wins >= 5,
+    progress: (p) => [p.wins, 5]
   },
   {
-    id: 'medal_hoarder',
-    icon: '🏅',
-    name: 'Medaljhamstraren',
-    desc: 'Flest medaljer totalt av alla',
+    id: 'win_7',
+    name: 'Pokalens regent',
+    desc: 'Vinn sju upplagor.',
     category: 'medals',
     rarity: 'mythic',
-    points: 150
+    test: (p) => p.wins >= 7,
+    progress: (p) => [p.wins, 7]
   },
   {
-    id: 'medal_magnet',
-    icon: '🧲',
-    name: 'Medaljmagnet',
-    desc: '10+ medaljer totalt',
+    id: 'podium_5',
+    name: 'Medaljsamlaren',
+    desc: 'Ta fem pallplatser.',
+    category: 'medals',
+    rarity: 'rare',
+    test: (p) => p.podiums >= 5,
+    progress: (p) => [p.podiums, 5]
+  },
+  {
+    id: 'podium_10',
+    name: 'Medaljmagneten',
+    desc: 'Ta tio pallplatser.',
+    category: 'medals',
+    rarity: 'legendary',
+    test: (p) => p.podiums >= 10,
+    progress: (p) => [p.podiums, 10]
+  },
+  {
+    id: 'silver_3',
+    name: 'Eviga tvåan',
+    desc: 'Kom tvåa tre gånger.',
     category: 'medals',
     rarity: 'epic',
-    points: 50
+    test: (p) => p.silvers >= 3,
+    progress: (p) => [p.silvers, 3]
   },
   {
-    id: 'rainbow_medals',
-    icon: '🌈',
-    name: 'Regnbågssamlare',
-    desc: 'Minst en guld, silver och brons',
-    category: 'medals',
-    rarity: 'rare',
-    points: 25
-  },
-  {
-    id: 'silver_specialist',
-    icon: '🥈',
-    name: 'Eviga Tvåan',
-    desc: '3+ silvermedaljer - alltid nära',
-    category: 'medals',
-    rarity: 'rare',
-    points: 20
-  },
-  {
-    id: 'bronze_collector',
-    icon: '🥉',
+    id: 'bronze_3',
     name: 'Bronsbaronen',
-    desc: '3+ bronsmedaljer',
-    category: 'medals',
-    rarity: 'common',
-    points: 15
-  },
-  {
-    id: 'full_house',
-    icon: '🃏',
-    name: 'Full House',
-    desc: 'Har tagit guld, silver och brons vid olika år',
-    category: 'medals',
-    rarity: 'rare',
-    points: 25
-  },
-  {
-    id: 'triple_crown_medals',
-    icon: '🎗️',
-    name: 'Triple Crown',
-    desc: 'Tre förstaplatser totalt',
+    desc: 'Kom trea tre gånger.',
     category: 'medals',
     rarity: 'epic',
-    points: 60
+    test: (p) => p.bronzes >= 3,
+    progress: (p) => [p.bronzes, 3]
   },
   {
-    id: 'podium_regular',
-    icon: '🥉',
-    name: 'Pallräven',
-    desc: 'Topp 3 totalt fem olika år',
-    category: 'medals',
-    rarity: 'rare',
-    points: 30
-  },
-  {
-    id: 'rising_star',
-    icon: '🌠',
-    name: 'Stigande Stjärna',
-    desc: 'Tre år i rad bättre placering och avslutar med medalj',
+    id: 'full_set',
+    name: 'Hela setet',
+    desc: 'Ta guld, silver och brons, i vilken ordning som helst.',
     category: 'medals',
     rarity: 'epic',
-    points: 55
-  },
-  {
-    id: 'silver_streak',
-    icon: '🥈',
-    name: 'Silversvit',
-    desc: 'Två år i rad som tvåa',
-    category: 'medals',
-    rarity: 'rare',
-    points: 25
+    test: (p) => p.wins >= 1 && p.silvers >= 1 && p.bronzes >= 1,
+    progress: (p) => [(p.wins > 0) + (p.silvers > 0) + (p.bronzes > 0), 3]
   },
 
-  // ===== STREAK ACHIEVEMENTS =====
+  /* ===================== SVITER ===================== */
   {
-    id: 'win_streak_3',
-    icon: '🔥',
-    name: 'Hattrick',
-    desc: '3 år i rad som vinnare',
+    id: 'podium_streak_2',
+    name: 'Pallen igen',
+    desc: 'Ta pallplats två upplagor i rad.',
     category: 'streaks',
-    rarity: 'legendary',
-    points: 200
-  },
-  {
-    id: 'win_streak_2',
-    icon: '⚡',
-    name: 'Dubbelmästare',
-    desc: '2 år i rad som vinnare',
-    category: 'streaks',
-    rarity: 'epic',
-    points: 75
-  },
-  {
-    id: 'podium_streak_5',
-    icon: '⭐',
-    name: 'Pallplatsmästaren',
-    desc: '5 år i rad på pallen',
-    category: 'streaks',
-    rarity: 'epic',
-    points: 80
+    rarity: 'rare',
+    test: (p) => p.run((e) => e.pos <= 3) >= 2,
+    progress: (p) => [p.current((e) => e.pos <= 3), 2]
   },
   {
     id: 'podium_streak_3',
-    icon: '🌟',
-    name: 'Pall-Konsistens',
-    desc: '3 år i rad på pallen',
+    name: 'Pallkonsistens',
+    desc: 'Ta pallplats tre upplagor i rad.',
     category: 'streaks',
-    rarity: 'rare',
-    points: 40
+    rarity: 'epic',
+    test: (p) => p.run((e) => e.pos <= 3) >= 3,
+    progress: (p) => [p.current((e) => e.pos <= 3), 3]
   },
   {
-    id: 'never_missed',
-    icon: '🏃',
-    name: 'Järnmannen',
-    desc: 'Aldrig missat en årlig tävling',
+    id: 'podium_streak_5',
+    name: 'Pallplatsmästaren',
+    desc: 'Ta pallplats fem upplagor i rad.',
+    category: 'streaks',
+    rarity: 'mythic',
+    test: (p) => p.run((e) => e.pos <= 3) >= 5,
+    progress: (p) => [p.current((e) => e.pos <= 3), 5]
+  },
+  {
+    id: 'win_streak_2',
+    name: 'Dubbelmästare',
+    desc: 'Vinn två upplagor i rad.',
     category: 'streaks',
     rarity: 'legendary',
-    points: 120
+    test: (p) => p.run((e) => e.pos === 1) >= 2,
+    progress: (p) => [p.current((e) => e.pos === 1), 2]
   },
   {
-    id: 'comeback_kid',
-    icon: '💪',
-    name: 'Comeback Kid',
-    desc: 'Vinn efter 3+ år utan vinst',
+    id: 'win_streak_3',
+    name: 'Hattrick',
+    desc: 'Vinn tre upplagor i rad.',
+    category: 'streaks',
+    rarity: 'mythic',
+    test: (p) => p.run((e) => e.pos === 1) >= 3,
+    progress: (p) => [p.current((e) => e.pos === 1), 3]
+  },
+  {
+    id: 'top_half_5',
+    name: 'Stabil',
+    desc: 'Placera dig i övre halvan av fältet fem upplagor i rad.',
     category: 'streaks',
     rarity: 'epic',
-    points: 60
+    test: (p) => p.run((e) => e.pos <= e.field / 2) >= 5,
+    progress: (p) => [p.current((e) => e.pos <= e.field / 2), 5]
   },
   {
-    id: 'losing_streak',
-    icon: '📉',
-    name: 'Formsvackan',
-    desc: '3+ år i rad utanför pallen',
-    category: 'streaks',
-    rarity: 'common',
-    points: 5
-  },
-  {
-    id: 'consistent_competitor',
-    icon: '📅',
-    name: 'Konsistent Konkurrent',
-    desc: 'Topp 10 fem år i rad',
-    category: 'streaks',
-    rarity: 'rare',
-    points: 30
-  },
-  {
-    id: 'comeback_top3',
-    icon: '🔄',
-    name: 'Comeback Kid',
-    desc: 'Utanför topp 10 ett år, tillbaka på pallen nästa',
+    id: 'climb_3',
+    name: 'Stigande stjärna',
+    desc: 'Förbättra din placering tre upplagor i rad.',
     category: 'streaks',
     rarity: 'epic',
-    points: 60
-  },
-  {
-    id: 'slow_burner',
-    icon: '🐢',
-    name: 'Slow Burner',
-    desc: 'Förbättrat placeringen fyra år i rad',
-    category: 'streaks',
-    rarity: 'epic',
-    points: 65
-  },
-  {
-    id: 'iron_competitor',
-    icon: '🪨',
-    name: 'Järnkompassen',
-    desc: 'Deltagit tio år i rad utan avbrott',
-    category: 'streaks',
-    rarity: 'legendary',
-    points: 120
+    test: (p) => windowRun(p, 4, (w) => w[1].pos < w[0].pos && w[2].pos < w[1].pos && w[3].pos < w[2].pos)
   },
 
-  // ===== SPECIAL ACHIEVEMENTS =====
+  /* ===================== MILSTOLPAR ===================== */
   {
-    id: 'perfect_attendance',
-    icon: '💯',
-    name: 'Aldrig Frånvarande',
-    desc: 'Deltagit varje år sedan start',
-    category: 'special',
-    rarity: 'mythic',
-    points: 300
+    id: 'debut',
+    name: 'Debutanten',
+    desc: 'Gör din första start.',
+    category: 'milestones',
+    rarity: 'common',
+    test: (p) => p.starts >= 1
   },
   {
-    id: 'decade_champion',
-    icon: '🎯',
-    name: 'Decenniets Mästare',
-    desc: 'Flest vinster senaste 10 åren',
-    category: 'special',
-    rarity: 'legendary',
-    points: 180
+    id: 'starts_5',
+    name: 'Stammisen',
+    desc: 'Delta i fem upplagor.',
+    category: 'milestones',
+    rarity: 'common',
+    test: (p) => p.starts >= 5,
+    progress: (p) => [p.starts, 5]
   },
   {
-    id: 'host_hero',
-    icon: '🏠',
-    name: 'Värdmästaren',
-    desc: 'Arrangerat flest tävlingar',
-    category: 'special',
-    rarity: 'epic',
-    points: 90
-  },
-  {
-    id: 'arranger_bronze',
-    icon: '🥉',
-    name: 'Tredjeplatsarrangören',
-    desc: 'Arrangerar när man kom trea',
-    category: 'special',
-    rarity: 'rare',
-    points: 35
-  },
-  {
-    id: 'arranger_revenge',
-    icon: '😈',
-    name: 'Hämndarrangören',
-    desc: 'Vann året efter att ha arrangerat',
-    category: 'special',
-    rarity: 'epic',
-    points: 70
-  },
-  {
-    id: 'veteran',
-    icon: '🎖️',
+    id: 'starts_10',
     name: 'Veteranen',
-    desc: 'Deltagit i 10+ årliga tävlingar',
-    category: 'special',
+    desc: 'Delta i tio upplagor.',
+    category: 'milestones',
     rarity: 'rare',
-    points: 45
+    test: (p) => p.starts >= 10,
+    progress: (p) => [p.starts, 10]
   },
   {
-    id: 'rookie_winner',
-    icon: '🌟',
-    name: 'Rookiesensationen',
-    desc: 'Vann inom sina första 3 år',
-    category: 'special',
-    rarity: 'epic',
-    points: 85
+    id: 'starts_15',
+    name: 'Inventarium',
+    desc: 'Delta i femton upplagor.',
+    category: 'milestones',
+    rarity: 'legendary',
+    test: (p) => p.starts >= 15,
+    progress: (p) => [p.starts, 15]
   },
   {
-    id: 'family_rivalry',
-    icon: '👨‍👦',
-    name: 'Familjeduellen',
-    desc: 'Slagit sin familjemedlem 5+ gånger',
-    category: 'special',
-    rarity: 'rare',
-    points: 30
+    id: 'iron_man',
+    name: 'Järnmannen',
+    desc: 'Missa ingen upplaga efter din debut, och nå tolv starter.',
+    category: 'milestones',
+    rarity: 'legendary',
+    test: (p) => p.starts >= 12 && !p.missedSinceDebut,
+    progress: (p) => (p.missedSinceDebut ? null : [p.starts, 12])
   },
   {
-    id: 'rookie_sensation',
-    icon: '🚀',
-    name: 'Rookie Sensation',
-    desc: 'Topp 5 på första försöket',
-    category: 'special',
+    id: 'founder',
+    name: 'Grundaren',
+    desc: 'Var med i den allra första upplagan 2011.',
+    category: 'milestones',
     rarity: 'rare',
-    points: 30
+    historic: true,
+    test: (p) => p.res.length > 0 && p.res[0].year === 2011 && p.res[0].s === 'pos'
+  },
+  {
+    id: 'debut_podium',
+    name: 'Drömdebut',
+    desc: 'Ta pallplats i din första start.',
+    category: 'milestones',
+    rarity: 'rare',
+    test: (p) => p.known.length > 0 && p.known[0].pos <= 3
   },
   {
     id: 'late_bloomer',
-    icon: '🌸',
     name: 'Senblomman',
-    desc: 'Första medaljen efter minst fem år',
-    category: 'special',
+    desc: 'Ta din första pallplats i din femte start eller senare.',
+    category: 'milestones',
     rarity: 'epic',
-    points: 50
+    test: (p) => {
+      const i = p.known.findIndex((e) => e.pos <= 3);
+      return i >= 4;
+    }
   },
   {
-    id: 'dark_horse',
-    icon: '🐎',
-    name: 'Dark Horse',
-    desc: 'Från utanför topp 20 till topp 3 på ett år',
-    category: 'special',
+    id: 'comeback_5',
+    name: 'Comebacken',
+    desc: 'Vinn igen minst fem år efter din förra seger.',
+    category: 'milestones',
+    rarity: 'epic',
+    test: (p) => p.winYears.some((y, i) => i > 0 && y - p.winYears[i - 1] >= 5)
+  },
+  {
+    id: 'comeback_10',
+    name: 'Tio år senare',
+    desc: 'Vinn igen minst tio år efter din förra seger.',
+    category: 'milestones',
     rarity: 'legendary',
-    points: 150
+    test: (p) => p.winYears.some((y, i) => i > 0 && y - p.winYears[i - 1] >= 10)
   },
   {
-    id: 'tiebreaker',
-    icon: '🤝',
-    name: 'Delad Pott',
-    desc: 'Delat placering med annan spelare',
-    category: 'special',
-    rarity: 'common',
-    points: 10
-  },
-  {
-    id: 'passing_torch',
-    icon: '🕯️',
-    name: 'Fackelöverlämning',
-    desc: 'Familjemedlemmar topp 10 i följd',
-    category: 'special',
+    id: 'rocket',
+    name: 'Raketen',
+    desc: 'Klättra minst åtta placeringar från en upplaga till nästa.',
+    category: 'milestones',
     rarity: 'rare',
-    points: 35
-  },
-
-  // ===== FUN & FUNNY ACHIEVEMENTS =====
-  {
-    id: 'grace_to_grass',
-    icon: '📉',
-    name: 'Från Topp till Botten',
-    desc: 'Gick från 1:a till sist på ett år',
-    category: 'fun',
-    rarity: 'legendary',
-    points: 50
-  },
-  {
-    id: 'grass_to_grace',
-    icon: '📈',
-    name: 'Från Botten till Topp',
-    desc: 'Gick från sist till 1:a på ett år',
-    category: 'fun',
-    rarity: 'mythic',
-    points: 250
-  },
-  {
-    id: 'elevator',
-    icon: '🛗',
-    name: 'Hissen',
-    desc: 'Upp och ner minst 5 placeringar varje år',
-    category: 'fun',
-    rarity: 'epic',
-    points: 40
-  },
-  {
-    id: 'mr_average',
-    icon: '😐',
-    name: 'Herr Medel',
-    desc: 'Alltid placerad mitt i fältet (±1)',
-    category: 'fun',
-    rarity: 'rare',
-    points: 25
-  },
-  {
-    id: 'fourth_place',
-    icon: '4️⃣',
-    name: 'Fyrans Förbannelse',
-    desc: 'Kom 4:a minst 3 gånger - så nära!',
-    category: 'fun',
-    rarity: 'rare',
-    points: 20
-  },
-  {
-    id: 'lucky_seven',
-    icon: '7️⃣',
-    name: 'Lyckonummer 7',
-    desc: 'Kom 7:a minst 3 gånger',
-    category: 'fun',
-    rarity: 'rare',
-    points: 15
-  },
-  {
-    id: 'bridesmaid',
-    icon: '👰',
-    name: 'Alltid Tärna, Aldrig Brud',
-    desc: '5+ silvermedaljer utan guld',
-    category: 'fun',
-    rarity: 'epic',
-    points: 35
-  },
-  {
-    id: 'participation_trophy',
-    icon: '🏆',
-    name: 'Deltagarmedaljen',
-    desc: '10+ år utan pallplats - äran att delta!',
-    category: 'fun',
-    rarity: 'common',
-    points: 10
-  },
-  {
-    id: 'sandwich',
-    icon: '🥪',
-    name: 'Sandwichen',
-    desc: 'Klämd mellan samma två personer 3+ år',
-    category: 'fun',
-    rarity: 'rare',
-    points: 30
-  },
-  {
-    id: 'yo_yo',
-    icon: '🪀',
-    name: 'Jojo-effekten',
-    desc: 'Varannat år på pallen, varannat år utanför',
-    category: 'fun',
-    rarity: 'epic',
-    points: 45
-  },
-  {
-    id: 'consistent_chaos',
-    icon: '🎲',
-    name: 'Kaosagenten',
-    desc: 'Aldrig samma placering två år i rad',
-    category: 'fun',
-    rarity: 'rare',
-    points: 35
-  },
-  {
-    id: 'nemesis',
-    icon: '😤',
-    name: 'Ärkefienden',
-    desc: 'Placerat direkt efter samma person 4+ år',
-    category: 'fun',
-    rarity: 'epic',
-    points: 40
-  },
-  {
-    id: 'gatekeeper',
-    icon: '🚪',
-    name: 'Grindvakten',
-    desc: 'Alltid precis utanför pallen (4-5:a)',
-    category: 'fun',
-    rarity: 'common',
-    points: 15
-  },
-  {
-    id: 'odd_even',
-    icon: '🔢',
-    name: 'Udda-Jämn',
-    desc: 'Udda placering udda år, jämn placering jämna år',
-    category: 'fun',
-    rarity: 'legendary',
-    points: 80
-  },
-  {
-    id: 'same_spot',
-    icon: '📍',
-    name: 'Mr./Ms. Consistency',
-    desc: 'Samma placering tre år i rad',
-    category: 'fun',
-    rarity: 'rare',
-    points: 25
-  },
-  {
-    id: 'edge_of_glory',
-    icon: '🪙',
-    name: 'Edge of Glory',
-    desc: 'Två fjärdeplatser innan första medaljen',
-    category: 'fun',
-    rarity: 'rare',
-    points: 30
-  },
-  {
-    id: 'runner_up_specialist',
-    icon: '🥈',
-    name: 'Andraplatsproffset',
-    desc: 'Fyra silver utan guld',
-    category: 'fun',
-    rarity: 'epic',
-    points: 60
-  },
-  {
-    id: 'bounced_back',
-    icon: '🔁',
-    name: 'Bounced Back',
-    desc: 'Från sista plats till mitten året efter',
-    category: 'fun',
-    rarity: 'rare',
-    points: 30
-  },
-  {
-    id: 'lucky_seven_anniversary',
-    icon: '🎰',
-    name: 'Lyckotalet Sju',
-    desc: 'Sjua exakt sju år efter debut',
-    category: 'fun',
-    rarity: 'rare',
-    points: 25
-  },
-
-  // ===== LEGENDARY ACHIEVEMENTS =====
-  {
-    id: 'goat',
-    icon: '🐐',
-    name: 'The GOAT',
-    desc: 'Flest vinster genom tiderna',
-    category: 'legendary',
-    rarity: 'mythic',
-    points: 500
-  },
-  {
-    id: 'dynasty',
-    icon: '👑',
-    name: 'Dynastin',
-    desc: 'Dominerat ett helt decennium',
-    category: 'legendary',
-    rarity: 'legendary',
-    points: 400
+    test: (p) => pairs(p).some(([a, b]) => a.pos - b.pos >= 8)
   },
   {
     id: 'phoenix',
-    icon: '🔥',
     name: 'Fenixfågeln',
-    desc: 'Vann efter att ha kommit sist året innan',
-    category: 'legendary',
+    desc: 'Kom sist, och ta pallplats i nästa upplaga.',
+    category: 'milestones',
+    rarity: 'epic',
+    test: (p) => pairs(p).some(([a, b]) => a.last && b.pos <= 3)
+  },
+  {
+    id: 'bottom_to_top',
+    name: 'Från botten till toppen',
+    desc: 'Kom sist, och vinn nästa upplaga.',
+    category: 'milestones',
     rarity: 'legendary',
-    points: 200
-  },
-  {
-    id: 'untouchable',
-    icon: '🛡️',
-    name: 'Den Oberörbare',
-    desc: 'Aldrig placerat sämre än 3:a (5+ år)',
-    category: 'legendary',
-    rarity: 'mythic',
-    points: 350
-  },
-  {
-    id: 'triple_crown',
-    icon: '👸',
-    name: 'Trippelkronan',
-    desc: 'Vunnit 3 olika decennier',
-    category: 'legendary',
-    rarity: 'mythic',
-    points: 600
-  },
-  {
-    id: 'rivalry_winner',
-    icon: '⚔️',
-    name: 'Rivalitetsvinnaren',
-    desc: 'Vunnit flest head-to-heads totalt',
-    category: 'legendary',
-    rarity: 'legendary',
-    points: 300
-  },
-  {
-    id: 'decade_of_dominance',
-    icon: '🏅',
-    name: 'Decennium av Dominans',
-    desc: 'Topp 3 tio år i rad',
-    category: 'legendary',
-    rarity: 'legendary',
-    points: 300
-  },
-  {
-    id: 'record_breaker',
-    icon: '📈',
-    name: 'Record Breaker',
-    desc: 'Flest förstaplatser någonsin',
-    category: 'legendary',
-    rarity: 'mythic',
-    points: 400
-  },
-  {
-    id: 'pioneer',
-    icon: '🚩',
-    name: 'Pionjär',
-    desc: 'Vann första tävlingen och tävlar än 10 år senare',
-    category: 'legendary',
-    rarity: 'legendary',
-    points: 250
-  },
-  {
-    id: 'legacy_builder',
-    icon: '🏛️',
-    name: 'Legacy Builder',
-    desc: 'Pallen i tre olika decennier',
-    category: 'legendary',
-    rarity: 'legendary',
-    points: 260
-  },
-  {
-    id: 'two_time_champion',
-    icon: '2️⃣',
-    name: 'Tvåfaldig Mästare',
-    desc: 'Vinner igen efter minst fem års uppehåll',
-    category: 'legendary',
-    rarity: 'legendary',
-    points: 180
+    test: (p) => pairs(p).some(([a, b]) => a.last && b.pos === 1)
   },
 
-  // ===== MYTHIC ACHIEVEMENTS =====
+  /* ===================== ARRANGÖRER ===================== */
   {
-    id: 'founding_father',
-    icon: '🎩',
-    name: 'Grundaren',
-    desc: 'Med sedan första året 2011',
-    category: 'mythic',
-    rarity: 'mythic',
-    points: 1000
+    id: 'host_1',
+    name: 'Värden',
+    desc: 'Arrangera en upplaga.',
+    category: 'hosts',
+    rarity: 'common',
+    test: (p) => p.hosts >= 1
   },
   {
-    id: 'mr_consistent',
-    icon: '📊',
+    id: 'host_3',
+    name: 'Flitig värd',
+    desc: 'Arrangera tre upplagor.',
+    category: 'hosts',
+    rarity: 'rare',
+    test: (p) => p.hosts >= 3,
+    progress: (p) => [p.hosts, 3]
+  },
+  {
+    id: 'host_5',
+    name: 'Slottsherren',
+    desc: 'Arrangera fem upplagor.',
+    category: 'hosts',
+    rarity: 'epic',
+    test: (p) => p.hosts >= 5,
+    progress: (p) => [p.hosts, 5]
+  },
+  {
+    id: 'host_back_to_back',
+    name: 'Abonnemanget',
+    desc: 'Arrangera två upplagor i rad.',
+    category: 'hosts',
+    rarity: 'rare',
+    test: (p) => p.res.some((e, i) => i > 0 && e.host && p.res[i - 1].host)
+  },
+  {
+    id: 'home_win',
+    name: 'Hemmaplan',
+    desc: 'Vinn en upplaga som du själv arrangerar.',
+    category: 'hosts',
+    rarity: 'epic',
+    test: (p) => p.res.some((e) => e.host && e.s === 'pos' && e.pos === 1)
+  },
+
+  /* ===================== RIVALER ===================== */
+  {
+    id: 'upper_hand',
+    name: 'Övertaget',
+    desc: 'Placera dig före samma person sex gånger i rad, räknat på upplagorna där ni båda var med.',
+    category: 'rivals',
+    rarity: 'epic',
+    test: (p, ctx) =>
+      ctx.people.some((q) => {
+        if (q === p) return false;
+        let run = 0;
+        for (const [a, b] of shared(p, q)) {
+          run = a < b ? run + 1 : 0;
+          if (run >= 6) return true;
+        }
+        return false;
+      })
+  },
+  {
+    id: 'nemesis',
+    name: 'Ärkefienden',
+    desc: 'Sluta direkt bakom samma person tre gånger.',
+    category: 'rivals',
+    rarity: 'rare',
+    test: (p, ctx) => ctx.people.some((q) => q !== p && shared(p, q).filter(([a, b]) => a === b + 1).length >= 3)
+  },
+  {
+    id: 'dominance',
+    name: 'Herravälde',
+    desc: 'Ha plusfacit i inbördes möten mot alla du mött minst fem gånger (minst fem sådana).',
+    category: 'rivals',
+    rarity: 'legendary',
+    test: (p, ctx) => {
+      const rec = h2hRecords(p, ctx);
+      return rec.length >= 5 && rec.every(([w, l]) => w > l);
+    },
+    progress: (p, ctx) => {
+      const rec = h2hRecords(p, ctx);
+      return rec.length >= 5 ? [rec.filter(([w, l]) => w > l).length, rec.length] : null;
+    }
+  },
+
+  /* ===================== ROLIGA ===================== */
+  {
+    id: 'bridesmaid',
+    name: 'Alltid tärna',
+    desc: 'Kom tvåa två gånger utan att någonsin ha vunnit.',
+    category: 'fun',
+    rarity: 'rare',
+    test: (p) => p.silvers >= 2 && p.wins === 0
+  },
+  {
+    id: 'fourth_3',
+    name: 'Fyrans förbannelse',
+    desc: 'Kom fyra tre gånger.',
+    category: 'fun',
+    rarity: 'rare',
+    test: (p) => p.count(4) >= 3,
+    progress: (p) => [p.count(4), 3]
+  },
+  {
+    id: 'seven_3',
+    name: 'Lyckonummer sju',
+    desc: 'Kom sjua tre gånger.',
+    category: 'fun',
+    rarity: 'rare',
+    test: (p) => p.count(7) >= 3,
+    progress: (p) => [p.count(7), 3]
+  },
+  {
+    id: 'jumbo',
+    name: 'Jumbon',
+    desc: 'Kom sist i en upplaga.',
+    category: 'fun',
+    rarity: 'common',
+    test: (p) => p.known.some((e) => e.last)
+  },
+  {
+    id: 'same_spot',
+    name: 'Hängmattan',
+    desc: 'Få samma placering två upplagor i rad.',
+    category: 'fun',
+    rarity: 'common',
+    test: (p) => pairs(p).some(([a, b]) => a.pos === b.pos)
+  },
+  {
+    id: 'mr_middle',
+    name: 'Herr Medel',
+    desc: 'Hamna exakt i mitten av fältet tre gånger.',
+    category: 'fun',
+    rarity: 'rare',
+    test: (p) =>
+      p.known.filter((e) => e.complete && (e.pos === Math.ceil(e.field / 2) || e.pos === Math.floor(e.field / 2) + 1)).length >= 3,
+    progress: (p) => [
+      p.known.filter((e) => e.complete && (e.pos === Math.ceil(e.field / 2) || e.pos === Math.floor(e.field / 2) + 1)).length,
+      3
+    ]
+  },
+  {
+    id: 'yo_yo',
+    name: 'Jojo',
+    desc: 'Växla mellan pallen och utanför pallen fyra upplagor i rad.',
+    category: 'fun',
+    rarity: 'epic',
+    test: (p) => windowRun(p, 4, (w) => w.every((e, i) => i === 0 || (e.pos <= 3) !== (w[i - 1].pos <= 3)))
+  },
+  {
+    id: 'free_fall',
+    name: 'Fritt fall',
+    desc: 'Rasa minst åtta placeringar från en upplaga till nästa.',
+    category: 'fun',
+    rarity: 'common',
+    test: (p) => pairs(p).some(([a, b]) => b.pos - a.pos >= 8)
+  },
+  {
+    id: 'drought_5',
+    name: 'Formsvackan',
+    desc: 'Hamna utanför pallen fem upplagor i rad.',
+    category: 'fun',
+    rarity: 'common',
+    test: (p) => p.run((e) => e.pos > 3) >= 5
+  },
+  {
+    id: 'top_to_bottom',
+    name: 'Berg-och-dalbanan',
+    desc: 'Vinn en upplaga och kom sist i nästa.',
+    category: 'fun',
+    rarity: 'epic',
+    test: (p) => pairs(p).some(([a, b]) => a.pos === 1 && b.last)
+  },
+
+  /* ===================== TITLAR ===================== */
+  {
+    id: 't_goat',
+    name: 'The GOAT',
+    desc: 'Titel: flest segrar genom tiderna (minst två).',
+    category: 'titles',
+    rarity: 'legendary',
+    title: true,
+    score: (p) => (p.wins >= 2 ? p.wins : null)
+  },
+  {
+    id: 't_medals',
+    name: 'Medaljhamstraren',
+    desc: 'Titel: flest pallplatser genom tiderna (minst tre).',
+    category: 'titles',
+    rarity: 'legendary',
+    title: true,
+    score: (p) => (p.podiums >= 3 ? p.podiums : null)
+  },
+  {
+    id: 't_decade',
+    name: 'Decenniets mästare',
+    desc: 'Titel: flest segrar under de senaste tio upplagorna (minst två).',
+    category: 'titles',
+    rarity: 'legendary',
+    title: true,
+    score: (p) => {
+      const w = p.res.slice(-10).filter((e) => e.s === 'pos' && e.pos === 1).length;
+      return w >= 2 ? w : null;
+    }
+  },
+  {
+    id: 't_hosts',
+    name: 'Arrangörskungen',
+    desc: 'Titel: flest arrangerade upplagor (minst två).',
+    category: 'titles',
+    rarity: 'epic',
+    title: true,
+    score: (p) => (p.hosts >= 2 ? p.hosts : null)
+  },
+  {
+    id: 't_consistent',
     name: 'Mr. Consistent',
-    desc: 'Lägst standardavvikelse i placeringar (10+ år)',
-    category: 'mythic',
-    rarity: 'mythic',
-    points: 400
-  },
-  {
-    id: 'grand_master',
-    icon: '🏆',
-    name: 'Stormästaren',
-    desc: 'Vunnit minst 7 olika årliga tävlingar',
-    category: 'mythic',
-    rarity: 'mythic',
-    points: 750
-  },
-  {
-    id: 'perfect_podium',
-    icon: '✨',
-    name: 'Perfekta Pallen',
-    desc: 'Aldrig utanför pallen (minst 8 år)',
-    category: 'mythic',
-    rarity: 'mythic',
-    points: 800
-  },
-  {
-    id: 'the_closer',
-    icon: '🎯',
-    name: 'Avslutaren',
-    desc: 'Vunnit senaste 3 tävlingarna',
-    category: 'mythic',
-    rarity: 'mythic',
-    points: 500
-  },
-  {
-    id: 'immortal_champion',
-    icon: '🗿',
-    name: 'Odödlig Mästare',
-    desc: 'Vinner varje gång man deltar (minst 3 ggr)',
-    category: 'mythic',
-    rarity: 'mythic',
-    points: 700
-  },
-  {
-    id: 'first_place_five',
-    icon: '🔥',
-    name: 'Untouchable',
-    desc: 'Förstaplats fem år i rad',
-    category: 'mythic',
-    rarity: 'mythic',
-    points: 900
-  },
-  {
-    id: 'timeless_wonder',
-    icon: '⏳',
-    name: 'Tidlöst Under',
-    desc: 'Topp 10 i femton olika år',
-    category: 'mythic',
-    rarity: 'mythic',
-    points: 600
-  },
-  {
-    id: 'mythic_comeback',
-    icon: '🔁',
-    name: 'Mytisk Comeback',
-    desc: 'Vinner igen efter tio år utan seger',
-    category: 'mythic',
-    rarity: 'mythic',
-    points: 650
-  },
-  {
-    id: 'era_definer',
-    icon: '📜',
-    name: 'Eradefinierare',
-    desc: 'Fler titlar än någon annan genom historien',
-    category: 'mythic',
-    rarity: 'mythic',
-    points: 800
+    desc: 'Titel: jämnast placeringar, med minst åtta starter (lägst spridning i placering i förhållande till fältets storlek).',
+    category: 'titles',
+    rarity: 'epic',
+    title: true,
+    score: (p) => {
+      const rel = p.known.filter((e) => e.field > 1).map((e) => (e.pos - 1) / (e.field - 1));
+      if (rel.length < 8) return null;
+      const mean = rel.reduce((a, b) => a + b, 0) / rel.length;
+      const sd = Math.sqrt(rel.reduce((s, x) => s + (x - mean) ** 2, 0) / rel.length);
+      return -sd;
+    }
   }
 ];
 
-// Achievement categories with metadata
+ACHIEVEMENT_DEFINITIONS.forEach((d) => (d.points = POINTS[d.rarity]));
+
 const ACHIEVEMENT_CATEGORIES = {
-  all: {
-    name: 'Alla',
-    icon: '🏆',
-    description: 'Alla tillgängliga achievements'
-  },
-  medals: {
-    name: 'Medaljer',
-    icon: '🥇',
-    description: 'Achievements relaterade till medaljer och placeringar'
-  },
-  streaks: {
-    name: 'Streaks',
-    icon: '🔥',
-    description: 'Achievements för serier och konsekutiva prestationer'
-  },
-  special: {
-    name: 'Speciella',
-    icon: '⭐',
-    description: 'Unika achievements och milstolpar'
-  },
-  fun: {
-    name: 'Roliga',
-    icon: '🎉',
-    description: 'Humoristiska och ovanliga achievements'
-  },
-  legendary: {
-    name: 'Legendariska',
-    icon: '👑',
-    description: 'Mycket sällsynta och prestigefulla achievements'
-  },
-  mythic: {
-    name: 'Mytiska',
-    icon: '🌟',
-    description: 'De mest exklusiva achievements av alla'
-  }
+  medals: 'Medaljer',
+  streaks: 'Sviter',
+  milestones: 'Milstolpar',
+  hosts: 'Arrangörer',
+  rivals: 'Rivaler',
+  fun: 'Roliga',
+  titles: 'Titlar'
 };
 
-// Rarity system with point multipliers and visual effects
 const ACHIEVEMENT_RARITIES = {
-  common: {
-    name: 'Vanlig',
-    color: '#808080',
-    pointMultiplier: 1.0,
-    glowEffect: false
-  },
-  rare: {
-    name: 'Sällsynt',
-    color: '#0080FF',
-    pointMultiplier: 1.5,
-    glowEffect: false
-  },
-  epic: {
-    name: 'Episk',
-    color: '#8B00FF',
-    pointMultiplier: 2.0,
-    glowEffect: true
-  },
-  legendary: {
-    name: 'Legendarisk',
-    color: '#FFD700',
-    pointMultiplier: 3.0,
-    glowEffect: true,
-    animation: 'shimmer'
-  },
-  mythic: {
-    name: 'Mytisk',
-    color: '#FF00FF',
-    pointMultiplier: 5.0,
-    glowEffect: true,
-    animation: 'rainbow'
-  }
+  common: { name: 'Vanlig', points: POINTS.common },
+  rare: { name: 'Sällsynt', points: POINTS.rare },
+  epic: { name: 'Episk', points: POINTS.epic },
+  legendary: { name: 'Legendarisk', points: POINTS.legendary },
+  mythic: { name: 'Mytisk', points: POINTS.mythic }
 };
 
-// Achievement validation rules
-const ACHIEVEMENT_VALIDATION = {
-  // Required fields for each achievement
-  requiredFields: ['id', 'icon', 'name', 'desc', 'category', 'rarity'],
-
-  // Valid categories
-  validCategories: Object.keys(ACHIEVEMENT_CATEGORIES).filter(cat => cat !== 'all'),
-
-  // Valid rarities
-  validRarities: Object.keys(ACHIEVEMENT_RARITIES),
-
-  // Point ranges by rarity
-  pointRanges: {
-    common: [5, 25],
-    rare: [20, 50],
-    epic: [40, 100],
-    legendary: [80, 400],
-    mythic: [300, 1000]
-  }
-};
-
-// Helper functions for achievement system
-const AchievementHelpers = {
-  /**
-   * Get achievement by ID
-   */
-  getById(id) {
-    return ACHIEVEMENT_DEFINITIONS.find(ach => ach.id === id);
-  },
-
-  /**
-   * Get achievements by category
-   */
-  getByCategory(category) {
-    if (category === 'all') return ACHIEVEMENT_DEFINITIONS;
-    return ACHIEVEMENT_DEFINITIONS.filter(ach => ach.category === category);
-  },
-
-  /**
-   * Get achievements by rarity
-   */
-  getByRarity(rarity) {
-    return ACHIEVEMENT_DEFINITIONS.filter(ach => ach.rarity === rarity);
-  },
-
-  /**
-   * Calculate total possible points
-   */
-  getTotalPoints() {
-    return ACHIEVEMENT_DEFINITIONS.reduce((total, ach) => {
-      const multiplier = ACHIEVEMENT_RARITIES[ach.rarity].pointMultiplier;
-      return total + (ach.points * multiplier);
-    }, 0);
-  },
-
-  /**
-   * Get category stats
-   */
-  getCategoryStats() {
-    const stats = {};
-
-    Object.keys(ACHIEVEMENT_CATEGORIES).forEach(category => {
-      if (category === 'all') return;
-
-      const achievements = this.getByCategory(category);
-      stats[category] = {
-        count: achievements.length,
-        totalPoints: achievements.reduce((sum, ach) => {
-          const multiplier = ACHIEVEMENT_RARITIES[ach.rarity].pointMultiplier;
-          return sum + (ach.points * multiplier);
-        }, 0)
-      };
-    });
-
-    return stats;
-  },
-
-  /**
-   * Get rarity distribution
-   */
-  getRarityDistribution() {
-    const distribution = {};
-
-    Object.keys(ACHIEVEMENT_RARITIES).forEach(rarity => {
-      distribution[rarity] = this.getByRarity(rarity).length;
-    });
-
-    return distribution;
-  },
-
-  /**
-   * Validate achievement definition
-   */
-  validateAchievement(achievement) {
-    const errors = [];
-
-    // Check required fields
-    ACHIEVEMENT_VALIDATION.requiredFields.forEach(field => {
-      if (!achievement[field]) {
-        errors.push(`Missing required field: ${field}`);
-      }
-    });
-
-    // Check valid category
-    if (achievement.category && !ACHIEVEMENT_VALIDATION.validCategories.includes(achievement.category)) {
-      errors.push(`Invalid category: ${achievement.category}`);
-    }
-
-    // Check valid rarity
-    if (achievement.rarity && !ACHIEVEMENT_VALIDATION.validRarities.includes(achievement.rarity)) {
-      errors.push(`Invalid rarity: ${achievement.rarity}`);
-    }
-
-    // Check point range
-    if (achievement.points && achievement.rarity) {
-      const range = ACHIEVEMENT_VALIDATION.pointRanges[achievement.rarity];
-      if (achievement.points < range[0] || achievement.points > range[1]) {
-        errors.push(`Points ${achievement.points} out of range for ${achievement.rarity} (${range[0]}-${range[1]})`);
-      }
-    }
-
-    return errors;
-  }
-};
-
-// Export for global access
 window.ACHIEVEMENT_DEFINITIONS = ACHIEVEMENT_DEFINITIONS;
 window.ACHIEVEMENT_CATEGORIES = ACHIEVEMENT_CATEGORIES;
 window.ACHIEVEMENT_RARITIES = ACHIEVEMENT_RARITIES;
-window.AchievementHelpers = AchievementHelpers;

@@ -612,7 +612,7 @@ function drawSide(g, ox, oy, w, h, clip, front, k) {
   g.font = `700 ${Math.round(h * 0.045 * k)}px "Schibsted Grotesk", Inter, sans-serif`;
   g.letterSpacing = `${Math.round(10 * k)}px`;
   g.fillStyle = 'rgba(214,222,255,.85)';
-  g.fillText('FLIPPER · SEDAN 2012', X(0.69), oy + h * 0.6);
+  g.fillText('FLIPPER · SEDAN 2011', X(0.69), oy + h * 0.6);
   g.restore();
   drawCrest(g, X(0.88), oy + h * 0.27, h * 0.0024);
   drawTrophy(g, X(0.21), oy + h * 0.94, h * 0.0016, 0.8);

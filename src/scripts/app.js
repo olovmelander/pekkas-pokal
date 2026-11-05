@@ -333,12 +333,17 @@
 
       const isCovid = name.toLowerCase() === 'covid';
       const scores = {};
+      // Empty cells, kept apart from '-': where the list has gaps (2014 and
+      // 2015 only list the podium, 2023 lacks fifth and sixth) they are unknown
+      // placings rather than absences. AchievementEngine decides which.
+      const blank = [];
       let winner = null;
       let participantCount = 0;
 
       if (!isCovid) {
         participantNames.forEach((pName) => {
           const v = (row[pName] || '').trim();
+          if (!v) blank.push(idByName[pName]);
           if (v && v !== '-') {
             const pos = parseInt(v, 10);
             if (!isNaN(pos)) {
@@ -358,6 +363,7 @@
         location: (row['Plats'] || '').trim(),
         winner,
         scores,
+        blank,
         arranger3rd: (row['Arrangör 3:a'] || '').trim(),
         arrangerSecondLast: (row['Arrangör näst sist'] || '').trim(),
         participantCount,
@@ -2034,12 +2040,17 @@
     defs.forEach((d) => (defById[d.id] = d));
 
     let byName = {};
+    let details = {};
+    let closest = {};
     try {
       if (window.AchievementEngine) {
         const engine = new window.AchievementEngine();
         byName = engine.calculateAllAchievements(App.data.competitions, App.data.participants) || {};
+        details = engine.details || {};
+        closest = engine.closest || {};
       }
     } catch (e) {
+      console.error('Utmärkelserna kunde inte räknas fram', e);
       byName = {};
     }
 
@@ -2050,7 +2061,18 @@
         .filter((id) => id && defById[id]);
     });
 
-    App.achievements = { defs, defById, byName };
+    App.achievements = { defs, defById, byName, details, closest };
+  }
+
+  /** Pekkas own badge for an achievement (src/data/achievement-icons.js) */
+  function achBadge(d, opts) {
+    return window.ppAchBadge ? window.ppAchBadge(d, opts) : '';
+  }
+
+  /** The year a person unlocked an achievement (titles: since when they hold it) */
+  function achYear(name, id) {
+    const d = App.achievements.details[name];
+    return d && d[id] ? d[id].year : null;
   }
 
   function renderAchievements() {
@@ -2093,12 +2115,15 @@
 
     $('#participant-ach-grid').innerHTML = sorted
       .map((name, i) => {
-        const ids = byName[name];
+        const RARITY = { mythic: 0, legendary: 1, epic: 2, rare: 3, common: 4 };
+        const ids = [...byName[name]].sort((a, b) => RARITY[defById[a].rarity] - RARITY[defById[b].rarity]);
         const pts = pointsFor(name);
         const badges = ids
           .map((id) => {
             const d = defById[id];
-            return `<span class="badge rarity-${esc(d.rarity)}" title="${esc(d.name)} — ${esc(d.desc)}" tabindex="0" role="img" aria-label="${esc(d.name)}">${d.icon}</span>`;
+            const y = achYear(name, id);
+            const label = `${d.name}${y ? ` (${d.title ? 'sedan ' : ''}${y})` : ''} — ${d.desc}`;
+            return `<span class="badge rarity-${esc(d.rarity)}" title="${esc(label)}" tabindex="0" role="img" aria-label="${esc(label)}">${achBadge(d)}</span>`;
           })
           .join('');
         return `
@@ -2121,15 +2146,7 @@
       .join('');
 
     // Category chips
-    const catLabels = {
-      all: 'Alla',
-      medals: 'Medaljer',
-      streaks: 'Sviter',
-      special: 'Speciella',
-      fun: 'Roliga',
-      legendary: 'Legendariska',
-      mythic: 'Mytiska'
-    };
+    const catLabels = { all: 'Alla', ...(window.ACHIEVEMENT_CATEGORIES || {}) };
     const cats = ['all', ...new Set(defs.map((d) => d.category))];
     const countIn = (c) => defs.filter((d) => c === 'all' || d.category === c).length;
     $('#ach-category-filters').innerHTML = cats
@@ -2167,21 +2184,38 @@
       .filter((d) => App.achCategory === 'all' || d.category === App.achCategory)
       .sort((a, b) => rarityOrder[a.rarity] - rarityOrder[b.rarity]);
 
+    const { closest } = App.achievements;
     const card = (d, i) => {
-      const holders = holdersByAch[d.id];
+      const holders = [...holdersByAch[d.id]].sort((a, b) => (achYear(a, d.id) || 0) - (achYear(b, d.id) || 0));
       const unlocked = holders.length > 0;
-      const holderText = unlocked
-        ? `<strong>${holders.map(shortName).map(esc).join(', ')}</strong>`
-        : 'Ingen har låst upp denna än';
+      const who = (n) => {
+        const y = achYear(n, d.id);
+        return `<li><strong>${esc(shortName(n))}</strong>${y ? `<span class="ach-year">${d.title ? 'sedan ' : ''}${y}</span>` : ''}</li>`;
+      };
+      let holderHTML;
+      if (unlocked) {
+        holderHTML = `<ul class="ach-holders" aria-label="${d.title ? 'Innehavare' : 'Upplåst av'}">${d.title ? '<li class="ach-holders-lbl">Innehavare</li>' : ''}${holders.map(who).join('')}</ul>`;
+      } else if (closest[d.id]) {
+        const c = closest[d.id];
+        const pct = Math.round((c.cur / c.goal) * 100);
+        holderHTML = `
+          <div class="ach-closest">
+            <span>Närmast: <strong>${c.names.map(shortName).map(esc).join(', ')}</strong> · ${c.cur} av ${c.goal}</span>
+            <span class="ach-closest-bar" role="progressbar" aria-label="Närmast" aria-valuemin="0" aria-valuemax="${c.goal}" aria-valuenow="${c.cur}"><span style="width:${pct}%"></span></span>
+          </div>`;
+      } else {
+        holderHTML = `<div class="ach-holders-none">${d.title ? 'Ingen uppfyller kravet än' : 'Ingen har låst upp den än'}</div>`;
+      }
+      const tags = [d.title ? '<span class="ach-tag">Titel</span>' : '', d.historic ? '<span class="ach-tag">Historisk</span>' : ''].join('');
       return `
         <div class="ach-card rarity-${esc(d.rarity)} ${unlocked ? '' : 'locked'} stagger" style="--stagger-i:${Math.min(i % 12, 11)}">
-          <span class="ach-icon" aria-hidden="true">${unlocked ? d.icon : '🔒'}</span>
+          <span class="ach-icon" aria-hidden="true">${achBadge(d, { locked: !unlocked })}</span>
           <div class="ach-body">
             <div class="ach-name">${esc(d.name)}</div>
+            <div class="ach-meta"><span class="ach-rarity">${esc(rarityLabels[d.rarity] || d.rarity)}</span><span class="ach-pts">${d.points} p</span>${tags}</div>
             <div class="ach-desc">${esc(d.desc)}</div>
-            <div class="ach-holders">${holderText}</div>
+            ${holderHTML}
           </div>
-          <span class="ach-rarity">${esc(rarityLabels[d.rarity] || d.rarity)}</span>
         </div>`;
     };
 
@@ -3614,8 +3648,8 @@
         const d = defById[aid];
         return `
         <li class="prof-ach">
-          <span class="badge rarity-${esc(d.rarity)}" aria-hidden="true">${d.icon}</span>
-          <span class="prof-ach-text"><span class="prof-ach-name">${esc(d.name)}</span><span class="prof-ach-desc">${esc(d.desc)}</span></span>
+          <span class="badge rarity-${esc(d.rarity)}" aria-hidden="true">${achBadge(d)}</span>
+          <span class="prof-ach-text"><span class="prof-ach-name">${esc(d.name)}${achYear(p.name, aid) ? `<span class="prof-ach-year">${d.title ? 'sedan ' : ''}${achYear(p.name, aid)}</span>` : ''}</span><span class="prof-ach-desc">${esc(d.desc)}</span></span>
           <span class="prof-ach-pts">${formatNumber(d.points || 0)}<span class="visually-hidden"> poäng</span></span>
         </li>`;
       })
