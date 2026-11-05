@@ -30,6 +30,7 @@ export default async function createTriathlon(container) {
   camera.fov = 52; camera.near = 0.1; camera.far = 270; camera.updateProjectionMatrix();
   scene.fog = new game.THREE.Fog(0xabc7bc, 60, 215);
   const course = buildCourse(scene);
+  game.setShadowFocus(0, 0, -12);
   const athlete = createAthlete(scene, 'Viktor Jones', 0xd9ad4d, true);
   const rivals = [
     { name: 'Per Vikman', color: 0xc25856, duration: 89, lane: -2.4, strengths: [1.08, 0.98, 1] },

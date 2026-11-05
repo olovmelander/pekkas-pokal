@@ -185,7 +185,7 @@
       icon: '⚽',
       colors: ['#326d59', '#091e23'],
       cover: 'games/fantasy.webp',
-      coverBlur: 'data:image/webp;base64,UklGRowAAABXRUJQVlA4IIAAAADwBACdASoYABEAPw14rlAsJ6QisBgMAYAhiWYAnQAN0rBc9ZP0TmZ1zEyQ+1MhTUAA/ujxcbMtBgDVHZ09Kq/gTrkcm9YLjP9PNl1hHACZvrnADy5oCQ2w18OwJuH+CYs1+iMaRs92l9XZx5+0QGNFKb3bgsB0aRs8jPIy/i0AAA==',
+      coverBlur: 'data:image/webp;base64,UklGRooAAABXRUJQVlA4IH4AAABQBQCdASoYABEAPxFys1MsJiSisBgIAYAiCWQAnTMJwapl/oQV9BaJisuWhSqAxd13MAAA/uL0rOehvgDl3ksbsg3jNVDCvoHyCJzXTQV3ii51PyHXvYlOBPC6RGlydkYXZ0EbZdU0naHUPz/KWsB/kIThVtclcgVB9gcAAAA=',
       module: 'src/games/fantasy/index.js'
     },
     {
@@ -196,7 +196,7 @@
       icon: '🏎️',
       colors: ['#ad6335', '#17242b'],
       cover: 'games/kart.webp',
-      coverBlur: 'data:image/webp;base64,UklGRqYAAABXRUJQVlA4IJoAAAAQBQCdASoYABEAPxF8s1QsJ6QjKAqpgCIJZgCxDP8Bgz1+GQ31pLFE2rkzZN87OnhAAP6wXQ5OJqYPBeXXGuElm7xRFAKhoyEjHK/OQJvrqX6ombapO/eQJLSHTML+5n2GTlplIflgteSZI5Bp+XK4T1srYlu5zFEEto1krvVFtXTJUXoMeoOYqtn0y3wiR1BX3p3JFGTtQwAA',
+      coverBlur: 'data:image/webp;base64,UklGRnQAAABXRUJQVlA4IGgAAAAwBACdASoYABEAPxF6uFMsJ6WiqAqpgCIJQAAFzTSyWBM/Tl4uddbuRQAA/sMgnvmgytGrXxrz2zHN7Wx/zQ9YOl7GazpYKlafXGP9YsU8aVGG7Azwrgd/uBc8nMHFNqKuDRd9bYKAAA==',
       module: 'src/games/kart/index.js'
     },
     {
@@ -207,7 +207,7 @@
       icon: '🏅',
       colors: ['#6c8651', '#18291c'],
       cover: 'games/pentathlon.webp',
-      coverBlur: 'data:image/webp;base64,UklGRnwAAABXRUJQVlA4IHAAAADwAwCdASoYABEAPxF6uFMsJ6WiqAqpgCIJYwDNwAv19Reii3DV1yyAAPck4M7r5sGmhvlsFhZrskE32TAZC9yBjcPRJIn5a2xV8sBqgoFUH7VWnoH4Qt7BZOGT9+FVGKpCD2OZ3xX4TnnIY+Ac/GAA',
+      coverBlur: 'data:image/webp;base64,UklGRnoAAABXRUJQVlA4IG4AAAAwBACdASoYABEAPwVwrlArpqQisAwBcCCJQAFf/CMDoR0BrKbiNJXoCEAA/TsLSnsZJJSdbNJBD7SgRd2yTNvvps8n5foPo3MAcctLSx7H9GEIjsgksGM0sCc9R/uxnS/1iiGTrAe5ZpF7j8gAAA==',
       module: 'src/games/pentathlon/index.js'
     },
     {
@@ -218,7 +218,7 @@
       icon: '⛲',
       colors: ['#8a7950', '#183b34'],
       cover: 'games/uppsala.webp',
-      coverBlur: 'data:image/webp;base64,UklGRpQAAABXRUJQVlA4IIgAAACQBACdASoYABEAPxF6s1QsJ6QjKAqpgCIJQBZwAcljkFQP2xEbzwp5QUEGEqAA9yjoqrSMGOfYpYcJ0+9OG16qn1KaYCSOiYafOoFW5P7utTEt1yOwU35Awssz1qb1R55rc7kfNKNdfIGXTXuhTgOVzf0u4nDH9xL/a1QC3OvWNKq5AtF7olAA',
+      coverBlur: 'data:image/webp;base64,UklGRpoAAABXRUJQVlA4II4AAADQBACdASoYABEAPxFwslMsJaQisBgIAYAiCWI3AAOgrhACtofSW0AclmUUVdA4AAD2SqYouY+3yVODOrwnyh3dYkjLBG+hxGISi59phiE39SxFgcAt86yX+zLsgJTrxlUowSsGIYXMJVQ2gjSSmf9ETVZnMb4873egJzocYlAWfkICaIL9K50sL3DZiAAA',
       module: 'src/games/uppsala/index.js'
     },
     {
@@ -229,7 +229,7 @@
       icon: '🌾',
       colors: ['#ac7534', '#38251c'],
       cover: 'games/farm.webp',
-      coverBlur: 'data:image/webp;base64,UklGRpQAAABXRUJQVlA4IIgAAABwBACdASoYABEAPxF8s1QsJ6QxKAqqICIJZAAAL8HSoHkw8y9svCbJwwjcKAD8j87CqXS/gUELQQ8EYR1oskEmMjKVIAIf3WsGXgDrnwuymu5w3+B+4LP71qOHvThTo6iJAtOkPoNv5HeNEMg6CKh9r3xPjDhytzYaS2+bEBEtuos26I4lOcAA',
+      coverBlur: 'data:image/webp;base64,UklGRooAAABXRUJQVlA4IH4AAADQAwCdASoYABEAPxF4tlOsJyUiqAqpgCIJQBWAAN3R6zsPh7t+hAAA/rQOjiVfKK8AGTaQgRR9V0kwOLm1z0+Fc7OwJntEGA2SanOBvCQ7qvxGw6hyoFGcjxdjjqIjOFb58IFYmm2ppNGXKhH5l30Ozs7PA7wQZt5qMLgAAAA=',
       module: 'src/games/farm/index.js'
     },
     {
@@ -240,7 +240,7 @@
       icon: '🪵',
       colors: ['#4f827d', '#162b2a'],
       cover: 'games/lundqvist.webp',
-      coverBlur: 'data:image/webp;base64,UklGRoQAAABXRUJQVlA4IHgAAACwBACdASoYABEAPxF+t1WsJ6UjKAgBgCIJZAC2yA0kRUT1TGWY4IwtkvCRG2cAAPyOjAHJu2wE/lvzcZBGtsxxgt+OPxle34GEai9swsJy6glPpMl3nf/ALgM4cPhluudIvILiaoP+HUIDVAeB/5ZOLH3pmDYAAAA=',
+      coverBlur: 'data:image/webp;base64,UklGRoAAAABXRUJQVlA4IHQAAADQBACdASoYABEAPxF8slQsJ6QjKAqpgCIJQBlAAkckrbGGiw4UbZoDenAWIK56gAD+iTZu/IjARFS7QQmU+loW3khKyqecU3sYm5V1mbnpyPgD3Af3QtHeZ4ggyyQFtSQ1ZX5YbaO7vlIStGDJUKtsAAAAAA==',
       module: 'src/games/lundqvist/index.js'
     },
     {
@@ -251,7 +251,7 @@
       icon: '🏊',
       colors: ['#39818b', '#172e35'],
       cover: 'games/triathlon.webp',
-      coverBlur: 'data:image/webp;base64,UklGRmoAAABXRUJQVlA4IF4AAACQBACdASoYABEAPxF4s1IsJySisBgIAYAiCWQAtRuOwYfG82HxKEu4NJN/MgAA/tObOkmFHz3XmBEK8t7Xq8M1F2Ic09URoCsiasYkPMlfEmz9wAzoMuSsi8diIIAA',
+      coverBlur: 'data:image/webp;base64,UklGRmwAAABXRUJQVlA4IGAAAABQBACdASoYABEAPxF0rVAsJyQisBgMAYAiCWMAuwAQ71ROa8inzXk6pKGAAP7HKwF63uEdS6owfs8kjTikd1SgQ/xnENhZc+UHnc6uHqaS1EJxnjow0IwGYLZf1a96AAA=',
       module: 'src/games/triathlon/index.js'
     },
     {
@@ -262,7 +262,7 @@
       icon: '♠️',
       colors: ['#3d6e5c', '#171d22'],
       cover: 'games/ambition.webp',
-      coverBlur: 'data:image/webp;base64,UklGRnYAAABXRUJQVlA4IGoAAACwBACdASoYABEAPxFys1KsJiSisBgIAYAiCUAKtkB6IdfzWSTy+8i9WvP4dxvAAP7i+HVf0X1uDgXALj8iYzXZFBMwklyhJe8ECYd++POepZuvT19lR6K64iPNdTk64ncMPqkFHuHsAAAA',
+      coverBlur: 'data:image/webp;base64,UklGRnQAAABXRUJQVlA4IGgAAADQAwCdASoYABEAPxF8tFQsJ6SjKAqpgCIJQBf9gQJHgbUFqjGu2AAA/s3EiTu+VGIojn69032wHj0FLWKMePpp1LEGzPNb28o2tRJihXjOjO1I6QXdZ1r8hPTedsLrIxy+RV5OAgAAAA==',
       module: 'src/games/ambition/index.js'
     },
     {

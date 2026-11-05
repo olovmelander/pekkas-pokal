@@ -26,3 +26,10 @@ inte dokumenterade delgrenar från den verkliga tävlingen 2016.
 
 `tests/lundqvist.test.js` kontrollerar vindkurvans start och slut, fångst på
 korgens riktiga höjd och att träffgränsen stämmer med korgöppningen.
+
+Det senare grafikpasset använder gårdsvärldens förgrenade björkar/granar,
+levande himmel och detaljerade stuga/brygga. Grenarnas rekvisita har eget
+träarbete: mjukt fasade kubbar med ådring, skruvade banramar, kedjelänkar och
+nitar i korgen, bark och ändträ med årsringar i stocken samt lavfläckar och
+infästningar. Statiska delar av korg, ram och stockparti sammanfogas för att
+begränsa draw calls på telefon. Regler, träffgränser och poäng är oförändrade.

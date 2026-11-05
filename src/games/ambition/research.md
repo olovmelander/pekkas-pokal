@@ -79,3 +79,23 @@ De nya vyerna har därefter granskats med riktig rendering i 320 × 568 och
 Ett nytt omslag fångades i 1100 × 773 från den spelbara 3D-scenen. På större
 skärmar använder salongens tre personer nu högre detaljnivå; mobil behåller
 de lättare modellerna. Textilväv och solfjädrar av kort tillför bordsdetaljer.
+
+## Visuell fördjupning: kortsalongen
+
+Rummet följer samma material- och ljushierarki som de befintliga
+keramik- och fäktningsinteriörerna: en tydlig varm huvudbelysning,
+svalare fönsterljus, små praktiska lampor och miljöreflektioner som gör
+mässing, glas och porslin läsbara. Material och inredning genereras
+lokalt. Parkettens varierade träådring, vävd filt, läderkant, matta och
+mönstrad tapet får egna texturer; de dekorativa ytorna omger en lugn
+spelyta. Stockholmspanoramat, gardinernas veck, bokband, klocka,
+vinnarpokal och kaffe-/teservice ger platsen identitet utan att
+påverka kortens poäng eller dölja spelkontroller.
+
+Statisk geometri slås samman per material. Personer, stearinljusens
+lågor och poängmynt är separata för animation. Mobil får enklare
+figurdetaljer och en något vidare kamera; kort och beslut förblir
+vanliga DOM-kontroller med samma regler, förhandsvisning och
+bekräftelsesteg som tidigare. Normal WebGL-rendering har kontrollerats
+på dator, stående mobil och liggande mobil, utan shaderfel eller
+dokumentöverflöde.

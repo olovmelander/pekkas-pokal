@@ -1,9 +1,15 @@
 /** Assisted track-relative kart handling. Metres/seconds; no power-ups. */
 export const LAPS = 3;
-export const TRACK_HALF_WIDTH = 4.4;
+export const TRACK_HALF_WIDTH = 3.5;
+export const WALL_LANE = 4.35;
 export const GRIP_ACCELERATION = 12.5;
 export const TOP_SPEED = 18.3;
 export const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+/** Positive spline lane lies camera-left when looking along the track. */
+export function steeringFromButtons(left, right) {
+  return Number(left) - Number(right);
+}
 
 export function newDriver(distance = 0, lane = 0) {
   return { distance, lane, lateral: 0, speed: 0, grip: 1, skidding: false, slipstream: 0, hit: 0, wallContact: false, finishTime: null };
@@ -50,10 +56,10 @@ export function stepDriver(driver, input, curvature, dt) {
   driver.hit = Math.max(0, driver.hit - step);
   // Re-arm only after leaving the wall. Scraping is one incident, not a new
   // crash every cooldown tick; the grass already supplies continuous drag.
-  if (Math.abs(driver.lane) < 5.4) driver.wallContact = false;
+  if (Math.abs(driver.lane) < WALL_LANE - 0.55) driver.wallContact = false;
   const event = { barrier: false };
-  if (Math.abs(driver.lane) > 5.95) {
-    driver.lane = Math.sign(driver.lane) * 5.95;
+  if (Math.abs(driver.lane) > WALL_LANE) {
+    driver.lane = Math.sign(driver.lane) * WALL_LANE;
     driver.lateral = -Math.sign(driver.lane) * Math.max(0.7, Math.abs(driver.lateral) * 0.25);
     if (!driver.wallContact) {
       driver.speed *= 0.65;
@@ -75,8 +81,8 @@ export function resolveContact(a, b, length) {
   const overlap = 1.52 - Math.abs(a.lane - b.lane);
   if (Math.abs(gap) >= 2.05 || overlap <= 0 || a.hit > 0 || b.hit > 0) return false;
   const side = a.lane === b.lane ? (gap >= 0 ? -1 : 1) : Math.sign(a.lane - b.lane);
-  a.lane = clamp(a.lane + side * (overlap / 2 + 0.04), -5.9, 5.9);
-  b.lane = clamp(b.lane - side * (overlap / 2 + 0.04), -5.9, 5.9);
+  a.lane = clamp(a.lane + side * (overlap / 2 + 0.04), -WALL_LANE, WALL_LANE);
+  b.lane = clamp(b.lane - side * (overlap / 2 + 0.04), -WALL_LANE, WALL_LANE);
   const average = (a.speed + b.speed) / 2;
   a.speed = Math.min(a.speed, average) * 0.9;
   b.speed = Math.min(b.speed, average) * 0.9;
@@ -99,7 +105,7 @@ export function stepRival(driver, index, drivers, route, dt) {
       // the ideal line must wait until the overtaking kart has cleared us.
       const alongside = Math.abs(gap) < 3.2 && Math.abs(driver.lane - other.lane) > 0.12;
       const passingSide = alongside ? Math.sign(driver.lane - other.lane) : other.lane >= 0 ? -1 : 1;
-      lane = clamp(other.lane + passingSide * 2.05, -3.3, 3.3);
+      lane = clamp(other.lane + passingSide * 2.05, -2.45, 2.45);
       if (gap > 0 && gap < 3.2) target = Math.min(target, other.speed + 0.5);
     }
   }

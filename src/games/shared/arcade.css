@@ -3,7 +3,7 @@
 .arcade *, .arcade *::before, .arcade *::after { box-sizing: border-box; }
 .arcade [hidden] { display: none !important; }
 .arcade-canvas { display: block; width: 100%; height: 100%; touch-action: none; }
-.arcade-vignette { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, #08100eaa, transparent 23%, transparent 65%, #08100e77); }
+.arcade-vignette { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, #08100e70, transparent 18%, transparent 78%, #08100e55); }
 .arcade-ui { position: absolute; inset: 0; pointer-events: none; }
 .arcade button, .arcade input, .arcade select, .arcade a { pointer-events: auto; }
 .arcade button { font: inherit; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }

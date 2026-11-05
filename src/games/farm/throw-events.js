@@ -24,9 +24,19 @@ export function createThrowEvent(kind, ctx) {
       box(0.45, 0.35, 0.035, z % 10 ? 0x749c7a : 0xd6b766, 3.91, 0.7, z, group);
     }
   } else {
-    const u = mesh(new THREE.TorusGeometry(0.42, 0.095, 8, 32, Math.PI * 1.55), 0x919d9c, 0, 0, 0, projectile);
-    u.rotation.x = -Math.PI / 2; u.rotation.z = Math.PI * 0.22;
-    for (const x of [-0.34, 0.34]) box(0.16, 0.18, 0.2, 0xaab1a6, x, 0.03, 0.24, projectile);
+    const outline = new THREE.Shape();
+    outline.moveTo(-.32, .4); outline.lineTo(-.44, .15);
+    outline.quadraticCurveTo(-.5, -.35, -.24, -.48); outline.quadraticCurveTo(0, -.6, .24, -.48);
+    outline.quadraticCurveTo(.5, -.35, .44, .15); outline.lineTo(.32, .4); outline.lineTo(.18, .34); outline.lineTo(.28, .08);
+    outline.quadraticCurveTo(.34, -.25, .16, -.32); outline.quadraticCurveTo(0, -.4, -.16, -.32);
+    outline.quadraticCurveTo(-.34, -.25, -.28, .08); outline.lineTo(-.18, .34); outline.closePath();
+    for (const side of [-1, 1]) for (const y of [.16, -.05, -.22]) {
+      const hole = new THREE.Path(); hole.absellipse(side * .355, y, .027, .042, 0, Math.PI * 2, true); outline.holes.push(hole);
+    }
+    const shoe = mesh(new THREE.ExtrudeGeometry(outline, { depth: .09, bevelEnabled: true, bevelSize: .012, bevelThickness: .012, bevelSegments: 2, curveSegments: 12 }), 0x919d9c, 0, .05, 0, projectile);
+    shoe.rotation.x = Math.PI / 2;
+    shoe.material = ctx.material(0x919d9c, .72);
+
   }
   const stake = new THREE.Group(); group.add(stake);
   if (!boot) {

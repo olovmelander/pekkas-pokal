@@ -5,7 +5,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 export function mergeStaticMeshes(parent) {
   const batches = new Map();
   for (const child of [...parent.children]) {
-    if (!child.isMesh) continue;
+    if (!child.isMesh || child.isInstancedMesh) continue;
     child.updateMatrix();
     const geometry = child.geometry.clone().applyMatrix4(child.matrix);
     if (!batches.has(child.material)) batches.set(child.material, []);

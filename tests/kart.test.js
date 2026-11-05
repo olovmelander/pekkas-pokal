@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { LAPS, clamp, cornerSpeed, trackGap, slipstreamFactor, newDriver, stepDriver, racePosition, raceScore, stepRival, resolveContact, markFinish, raceStandings } from '../src/games/kart/physics.js';
-import { createRoute } from '../src/games/kart/world.js';
+import { Euler, Vector3, PerspectiveCamera } from 'three';
+import { LAPS, TRACK_HALF_WIDTH, WALL_LANE, steeringFromButtons, clamp, cornerSpeed, trackGap, slipstreamFactor, newDriver, stepDriver, racePosition, raceScore, stepRival, resolveContact, markFinish, raceStandings } from '../src/games/kart/physics.js';
+import { createRoute, TRACK_LENGTH, TRACK_PLAN, ROAD_HALF_WIDTH } from '../src/games/kart/route.js';
 
 const drive = (driver, input, curvature = 0, seconds = 1) => {
   for (let i = 0; i < seconds * 60; i++) stepDriver(driver, input, curvature, 1 / 60);
@@ -10,7 +11,53 @@ describe('gokart handling and race results', () => {
   it('keeps the ribbon smooth at the lap seam and wide enough for the barriers', () => {
     const route = createRoute();
     expect(route.sample(0).position.distanceTo(route.sample(route.length).position)).toBeLessThan(0.001);
-    for (let i = 0; i < 300; i++) expect(Math.abs(route.curvature(i / 300 * route.length)) * 6.7).toBeLessThan(1);
+    for (let i = 0; i < 300; i++) expect(Math.abs(route.curvature(i / 300 * route.length)) * 5.1).toBeLessThan(1);
+  });
+  it('matches the documented 665 m source and the photographed three-hairpin layout', () => {
+    const route = createRoute();
+    expect(route.length).toBeCloseTo(TRACK_LENGTH, 4);
+    expect(TRACK_LENGTH).toBe(665);
+    expect(TRACK_PLAN.length).toBeGreaterThan(60);
+    expect(route.sample(0).position.distanceTo(route.planToWorld(440, 294))).toBeLessThan(0.001);
+    const width = route.bounds.max.x - route.bounds.min.x;
+    const depth = route.bounds.max.z - route.bounds.min.z;
+    expect(width / depth).toBeGreaterThan(1.4); expect(width / depth).toBeLessThan(1.6);
+    expect(ROAD_HALF_WIDTH).toBe(TRACK_HALF_WIDTH);
+    const sampled = Array.from({ length: 665 }, (_, i) => ({ point: route.sample(i).position, curve: route.curvature(i) }));
+    expect(sampled.some(s => s.curve > 0.08)).toBe(true);
+    expect(sampled.some(s => s.curve < -0.08)).toBe(true);
+    // Non-neighbouring sections leave room for the full 7 m asphalt ribbon.
+    for (let a = 0; a < sampled.length; a += 3) for (let b = a + 20; b < sampled.length; b += 3) {
+      if (Math.min(b - a, 665 - (b - a)) < 20) continue;
+      const dx = sampled[a].point.x - sampled[b].point.x, dz = sampled[a].point.z - sampled[b].point.z;
+      expect(Math.hypot(dx, dz)).toBeGreaterThan(ROAD_HALF_WIDTH * 2);
+    }
+  });
+  it('keeps the four tyre contact points on the graded road in every heading', () => {
+    const route = createRoute();
+    for (let distance = 0; distance < route.length; distance += 2.5) {
+      const road = route.sample(distance);
+      const rotation = new Euler(road.pitch, road.angle, road.roll, 'YXZ');
+      for (const x of [-0.88, 0.88]) for (const z of [-0.78, 0.75]) {
+        const contact = new Vector3(x, 0, z).applyEuler(rotation).add(road.position);
+        expect(Math.abs(contact.y - route.terrainHeight(contact.x, contact.z))).toBeLessThan(0.004);
+      }
+    }
+  });
+  it('moves toward the pressed arrow in the chase camera at every course heading', () => {
+    const route = createRoute();
+    for (const distance of [0, 160, 310, 500]) {
+      const centre = route.sample(distance), camera = new PerspectiveCamera(58, 1.4, 0.1, 550);
+      camera.position.copy(centre.position).addScaledVector(centre.tangent, -12); camera.position.y += 6;
+      camera.lookAt(centre.position); camera.updateMatrixWorld();
+      const left = newDriver(distance), right = newDriver(distance); left.speed = right.speed = 10;
+      drive(left, { steer: steeringFromButtons(true, false), throttle: true }, 0, 0.2);
+      drive(right, { steer: steeringFromButtons(false, true), throttle: true }, 0, 0.2);
+      const leftOnScreen = route.sample(left.distance, left.lane).position.project(camera);
+      const rightOnScreen = route.sample(right.distance, right.lane).position.project(camera);
+      expect(rightOnScreen.x).toBeGreaterThan(leftOnScreen.x);
+    }
+    expect(steeringFromButtons(true, true)).toBe(0);
   });
   it('requires throttle to move, coasts on release and gives braking priority', () => {
     const driver = newDriver();
@@ -29,7 +76,7 @@ describe('gokart handling and race results', () => {
     const route = createRoute();
     const driver = newDriver();
     let seconds = 0;
-    while (driver.distance < route.length * LAPS && seconds < 90) {
+    while (driver.distance < route.length * LAPS && seconds < 180) {
       const curvature = route.curvature(driver.distance);
       const targetSpeed = cornerSpeed(route.curvature(driver.distance + 8)) * 0.98;
       const steer = clamp(curvature * driver.speed * driver.speed * 0.085 / 7.4 - driver.lane * 0.5, -1, 1);
@@ -38,20 +85,23 @@ describe('gokart handling and race results', () => {
       seconds += 1 / 60;
     }
     expect(driver.distance).toBeGreaterThanOrEqual(route.length * LAPS);
-    expect(seconds).toBeLessThan(70);
-    expect(Math.abs(driver.lane)).toBeLessThan(4.4);
+    expect(seconds).toBeLessThan(165);
+    expect(Math.abs(driver.lane)).toBeLessThan(TRACK_HALF_WIDTH);
   });
   it('lets ordinary digital steering and braking beat the complete field', () => {
-    const route = createRoute(), player = newDriver(0, -1.3);
-    const rivals = [16.15, 15.75, 15.3, 14.85, 14.45].map((pace, i) => ({ ...newDriver(4.5 + i * 3.4, i % 2 ? -1.5 : 1.5), pace }));
+    const route = createRoute(), player = newDriver(-19, -1.3);
+    const rivals = [16.15, 15.75, 15.3, 14.85, 14.45].map((pace, i) => ({ ...newDriver(-14.5 + i * 3.4, i % 2 ? -1.5 : 1.5), pace }));
     const drivers = [player, ...rivals];
     let seconds = 0, frame = 0, steer = 0, brake = false;
-    while (player.finishTime === null && seconds < 65) {
+    while (player.finishTime === null && seconds < 175) {
       const dt = 1 / 60; seconds += dt; frame++;
       // A keyboard player adjusts every 150 ms and leaves space to pass.
       if (frame % 9 === 0) {
-        steer = player.lane < -3.2 ? 1 : player.lane > -2.2 ? -1 : 0;
-        brake = player.speed > cornerSpeed(route.curvature(player.distance + 8)) + 0.7;
+        const bend = route.curvature(player.distance + 8);
+        const target = Math.abs(bend) > 0.012 ? Math.sign(bend) * 2.45 : 0;
+        const projection = player.lane + player.lateral * 0.15;
+        steer = projection < target - 0.35 ? 1 : projection > target + 0.35 ? -1 : 0;
+        brake = player.speed > Math.min(cornerSpeed(route.curvature(player.distance + 9)), cornerSpeed(route.curvature(player.distance + 14))) + 0.4;
       }
       const before = player.distance;
       stepDriver(player, { steer, brake, throttle: !brake }, route.curvature(player.distance), dt);
@@ -65,7 +115,8 @@ describe('gokart handling and race results', () => {
       }
       markFinish(player, before, route.length * LAPS, seconds, dt);
     }
-    expect(player.finishTime).toBeLessThan(60);
+    expect(player.finishTime).toBeGreaterThan(120);
+    expect(player.finishTime).toBeLessThan(150);
     expect(raceStandings(drivers)[0]).toBe(player);
   });
   it('loses grip when entering a bend too fast, while a slower entry keeps grip', () => {
@@ -95,13 +146,13 @@ describe('gokart handling and race results', () => {
     expect(following.speed).toBeLessThanOrEqual(19.3);
   });
   it('grass and barriers slow the kart but allow driving back onto the track', () => {
-    const driver = newDriver(0, 5.9);
+    const driver = newDriver(0, WALL_LANE - 0.05);
     driver.speed = 17;
     drive(driver, { steer: 1, throttle: true, brake: false });
-    expect(driver.lane).toBeLessThanOrEqual(5.95);
+    expect(driver.lane).toBeLessThanOrEqual(WALL_LANE);
     expect(driver.speed).toBeLessThan(10);
     drive(driver, { steer: -1, throttle: true, brake: false }, 0, 0.7);
-    expect(driver.lane).toBeLessThan(4.4);
+    expect(driver.lane).toBeLessThan(TRACK_HALF_WIDTH);
     expect(driver.distance).toBeGreaterThan(0);
   });
   it('clamps long frames and distinguishes on-track gaps from overall ranking', () => {
@@ -115,12 +166,12 @@ describe('gokart handling and race results', () => {
     expect(racePosition(610, [{ distance: 705 }, { distance: 609 }, { distance: 200 }])).toBe(2);
   });
   it('counts a continuous wall scrape once and re-arms after returning to asphalt', () => {
-    const driver = newDriver(0, 5.94); driver.speed = 14;
+    const driver = newDriver(0, WALL_LANE - 0.01); driver.speed = 14;
     let impacts = 0;
     for (let i = 0; i < 300; i++) impacts += Number(stepDriver(driver, { steer: 1, throttle: true }, 0, 1 / 60).barrier);
     expect(impacts).toBe(1);
     drive(driver, { steer: -1, throttle: true }, 0, 1);
-    expect(driver.lane).toBeLessThan(4.4);
+    expect(driver.lane).toBeLessThan(TRACK_HALF_WIDTH);
     for (let i = 0; i < 180; i++) impacts += Number(stepDriver(driver, { steer: 1, throttle: true }, 0, 1 / 60).barrier);
     expect(impacts).toBe(2);
   });

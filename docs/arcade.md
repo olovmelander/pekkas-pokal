@@ -79,6 +79,12 @@ och stänger av dem vid paus, tyst läge och avmontering.
 
 ## Historisk precision
 
+Gokartbanans plan följer nu centrumlinjen i [Varggropens egen flygbild](https://vkrc.se/klubben/banan/),
+skalad till klubbens uppgift om 665 meter. Samma bana styr vägmesh, rivaler,
+styrfysik och minikarta. Fotot belägger kurvföljden, men inte exakt hur banan
+såg ut 2012. Den mjuka höjdvariationen är en tolkning av klubbens beskrivning
+av kuperad terräng; någon inmätt höjdprofil har inte hittats.
+
 Källorna belägger spelens förlagor och grundregler, inte vad som hände under
 varje vänskapstävling. Bondespelens fem delgrenar och triathlons ordning bygger på användarens
 uppgifter. De övriga mångkampernas ursprungliga delgrenar och Ambitions
@@ -86,6 +92,37 @@ husregler är inte dokumenterade i repositoriet. Miljöerna är konstnärliga
 tolkningar. Fantasy använder påhittade fotbollsspelare och simulerade matcher,
 inte liveinformation eller en rekonstruktion av säsongen 2011.
 Respektive researchfil skiljer källunderlag från våra egna designbeslut.
+
+## Grafiklyft för 2011–2018
+
+De äldre spelens material, ljushierarki och detaljrika natur är riktmärket.
+`shared/scenic.js` återanvänder Måleriets grenade granar, björkstammar,
+bladkronor, färgskuggning och vindshader. Vegetation delas upp i lokala
+områden så att skog utanför kameran inte ritas. Gräs får inga dyra
+skuggpass, och avlägsna träd kan använda enklare geometri. Naturen är
+seedad, så samma plats återkommer efter omstart.
+
+`shared/arcade-lighting.js` bygger en liten förfiltrerad ljusmiljö en gång
+vid start. Metall, lack, glas och vatten får därmed reflektioner, tillsammans
+med varm huvudbelysning och sval fyllnad. Kortspelsrummet har en egen
+interiörprofil. Ingen extra reflektionsrendering eller efterbehandling körs
+per bildruta. Banornas skuggljus kan följa spelaren genom landskapet.
+
+| Spel | Miljö och material |
+| --- | --- |
+| Fantasy | Texturerad, sliten fotbollsplan, riktiga målnät, läktarstolar, publik, takstolar, lampmaster och arenans entréer |
+| Gokart | Varggropens kurvföljd, strukturerad asfalt, vägkanter, däckbarriärer, depå och omgivande skog |
+| Femkamp | Detaljerad gårdsstuga, veranda, redskap, stensatta gångar, perenner och naturligare trädgård |
+| Parkmästare | Orangeri, fontän, planteringar, murverk, fönsterdetaljer och sammanhängande parkmiljö |
+| Bondespel | Brädklädd lada, detaljerade portar och tak, hökärra, tunnor, ved, metallverktyg och frodigare gård |
+| Gårdskamp | Samma förbättrade landsbygd, stuga och brygga, ådrat kubbträ, kedjekorg och barkklädd stock |
+| Triathlon | Vattenreflektioner och korsande vågor, oregelbunden strand, skog i flera skikt, granit och texturerad grus-/landsväg |
+| Ambition | Valnöt, fiskbensparkett, vävd filt, mässing, veckade gardiner, bokhyllor och en mer detaljerad stadsutsikt |
+
+Statiska byggnadsdelar slås samman per material. De små detaljerna får
+därmed plats utan en renderingsoperation per bräda, sten eller stol.
+Växtrörelser och moln följer aktiv speltid och respekterar minskad rörelse.
+Omslagen tas från de färdiga spelmiljöerna med ordinarie grafik.
 
 ## Köra och kontrollera
 

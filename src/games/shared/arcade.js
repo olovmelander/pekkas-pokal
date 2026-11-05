@@ -4,9 +4,10 @@
  */
 import * as THREE from 'three';
 import { guardRenderer } from './gfx.js';
+import { arcadeEnvironment } from './arcade-lighting.js';
 
 export function createArcade(container, options = {}) {
-  const { id = 'arcade', title = 'Pekkas Pokal', subtitle = '', accent = '#e9bf5c', sky = 0x97b4be, fog = sky } = options;
+  const { id = 'arcade', title = 'Pekkas Pokal', subtitle = '', accent = '#e9bf5c', sky = 0x97b4be, fog = sky, lighting = 'outdoor' } = options;
   const root = document.createElement('div');
   root.className = 'arcade';
   root.tabIndex = -1;
@@ -54,7 +55,7 @@ export function createArcade(container, options = {}) {
   renderer.shadowMap.enabled = !safe;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.15;
+  renderer.toneMappingExposure = lighting === 'interior' ? 1.05 : 1.03;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.domElement.className = 'arcade-canvas';
   renderer.domElement.setAttribute('aria-label', `${title} — spelvärld i 3D`);
@@ -65,15 +66,35 @@ export function createArcade(container, options = {}) {
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 350);
   camera.position.set(0, 9, 16);
   camera.lookAt(0, 0, 0);
-  const ambient = new THREE.HemisphereLight(0xd8e9ff, 0x525343, 2.1);
-  const sun = new THREE.DirectionalLight(0xffe1ae, 3.2);
+  const ambient = new THREE.HemisphereLight(0xc9dcf0, 0x62583b, lighting === 'interior' ? 0.42 : 0.85);
+  const sun = new THREE.DirectionalLight(0xffdfb2, lighting === 'interior' ? 2.1 : 2.9);
   sun.position.set(-14, 24, 12);
   sun.castShadow = !safe;
   sun.shadow.mapSize.set(coarse ? 1024 : 2048, coarse ? 1024 : 2048);
   Object.assign(sun.shadow.camera, { left: -35, right: 35, top: 35, bottom: -35, near: 0.5, far: 110 });
   sun.shadow.bias = -0.0003;
   sun.shadow.normalBias = 0.04;
-  scene.add(ambient, sun);
+  const fill = new THREE.DirectionalLight(0xb8d0f4, lighting === 'interior' ? 0.16 : 0.35);
+  fill.position.set(18, 9, -18);
+  scene.add(ambient, sun, sun.target, fill);
+  let environment = null;
+  if (!safe) {
+    try {
+      environment = arcadeEnvironment(renderer, lighting === 'interior');
+      scene.environment = environment.texture;
+      scene.environmentIntensity = lighting === 'interior' ? 0.55 : 0.38;
+    } catch {
+      // Older WebGL devices retain a complete direct-light rendering path.
+      ambient.intensity += 0.3;
+    }
+  }
+  const shadowOffset = new THREE.Vector3();
+  function setShadowFocus(x, y, z) {
+    shadowOffset.copy(sun.position).sub(sun.target.position);
+    sun.target.position.set(x, y, z);
+    sun.position.copy(sun.target.position).add(shadowOffset);
+    sun.target.updateMatrixWorld();
+  }
   const profile = guardRenderer(renderer, root);
 
   function listen(target, event, fn, opts) {
@@ -331,6 +352,8 @@ export function createArcade(container, options = {}) {
     }
     geometries.forEach((geometry) => geometry.dispose());
     textures.forEach((texture) => texture.dispose());
+    scene.environment = null;
+    environment?.dispose();
     scene.clear();
     renderer.dispose();
     renderer.forceContextLoss();
@@ -341,8 +364,8 @@ export function createArcade(container, options = {}) {
   showPanel({ title, body: '', onStart: hidePanel });
   frame = requestAnimationFrame(tick);
   return {
-    THREE, scene, camera, renderer, root, ui, keys, sun, ambient, reducedMotion,
-    listen, showPanel, hidePanel, setHUD, toast, tone, createVoice, loadBest, saveBest, destroy, setPaused,
+    THREE, scene, camera, renderer, root, ui, keys, sun, ambient, fill, reducedMotion,
+    listen, showPanel, hidePanel, setHUD, toast, tone, createVoice, loadBest, saveBest, destroy, setPaused, setShadowFocus,
     onFrame(callback) { callbacks.add(callback); return () => callbacks.delete(callback); },
     get paused() { return paused; },
     get muted() { return muted; }

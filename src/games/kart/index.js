@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { createArcade } from '../shared/arcade.js';
 import { createCircuit, createKart } from './world.js';
-import { LAPS, clamp, cornerSpeed, slipstreamFactor, newDriver, stepDriver, stepRival, resolveContact, markFinish, raceStandings, raceScore } from './physics.js';
+import { LAPS, TRACK_HALF_WIDTH, steeringFromButtons, clamp, cornerSpeed, slipstreamFactor, newDriver, stepDriver, stepRival, resolveContact, markFinish, raceStandings, raceScore } from './physics.js';
 
 export const layout = 'full';
 const RIVALS = [
@@ -16,27 +16,28 @@ const RIVALS = [
 export default async function createGokart(container) {
   const game = createArcade(container, {
     id: 'kart-2012', title: 'Pekkas Gokart', subtitle: 'VARGGROPEN · 2012',
-    accent: '#f2c05c', sky: 0xd4bc90, fog: 0xd4bc90
+    accent: '#f2c05c', sky: 0xbacbc9, fog: 0xbacbc9
   });
   const { scene, camera, ui, keys } = game;
   game.root.classList.add('kart-game');
-  scene.fog = new THREE.Fog(0xd4bc90, 75, 210);
+  camera.far = 550;
+  scene.fog = new THREE.Fog(0xbacbc9, 105, 285);
   const sun = scene.children.find((object) => object.isDirectionalLight);
   if (sun) {
     sun.position.set(-40, 55, 30);
-    Object.assign(sun.shadow.camera, { left: -65, right: 65, top: 65, bottom: -65, far: 180 });
+    Object.assign(sun.shadow.camera, { left: -34, right: 34, top: 34, bottom: -34, far: 180 });
     sun.shadow.camera.updateProjectionMatrix();
   }
-  const track = createCircuit(scene);
-  const player = newDriver(0, -1.3);
-  const kart = createKart(0xe9b748, 6);
+  const track = createCircuit(scene, { reducedMotion: game.reducedMotion, anisotropy: Math.min(8, game.renderer.capabilities.getMaxAnisotropy()) });
+  const player = newDriver(-19, -1.3);
+  const kart = createKart(0xe9b748, 6, 'Viktor Jones');
   const engine = game.createVoice({ type: 'sawtooth', frequency: 55, gain: 0 });
   const tires = game.createVoice({ type: 'triangle', frequency: 185, gain: 0 });
   scene.add(kart.root);
   const opponents = RIVALS.map((rival, index) => {
-    const model = createKart(rival.color, index + 1);
+    const model = createKart(rival.color, index + 1, rival.full);
     scene.add(model.root);
-    return { ...rival, ...newDriver(4.5 + index * 3.4, index % 2 ? -1.5 : 1.5), model };
+    return { ...rival, ...newDriver(-14.5 + index * 3.4, index % 2 ? -1.5 : 1.5), model };
   });
   const interfaceEl = document.createElement('div');
   interfaceEl.className = 'kart-interface';
@@ -53,6 +54,8 @@ export default async function createGokart(container) {
   ui.appendChild(interfaceEl);
   const find = (selector) => interfaceEl.querySelector(selector);
   const map = find('.kart-map');
+  const { bounds } = track;
+  map.setAttribute('viewBox', `${bounds.min.x - 8} ${bounds.min.z - 8} ${bounds.max.x - bounds.min.x + 16} ${bounds.max.z - bounds.min.z + 16}`);
   map.querySelector('path').setAttribute('d', `${Array.from({ length: 101 }, (_, i) => {
     const point = track.sample(i / 100 * track.length).position;
     return `${i ? 'L' : 'M'}${point.x.toFixed(1)},${point.z.toFixed(1)}`;
@@ -129,12 +132,11 @@ export default async function createGokart(container) {
   let lastLap = null;
   let lapDelta = null;
   let skidClock = 0;
-  let portalOpacity = 1;
   const positionOfPlayer = () => raceStandings([player, ...opponents]).indexOf(player) + 1;
 
   function start() {
-    Object.assign(player, newDriver(0, -1.3));
-    opponents.forEach((opponent, i) => Object.assign(opponent, newDriver(4.5 + i * 3.4, i % 2 ? -1.5 : 1.5)));
+    Object.assign(player, newDriver(-19, -1.3));
+    opponents.forEach((opponent, i) => Object.assign(opponent, newDriver(-14.5 + i * 3.4, i % 2 ? -1.5 : 1.5)));
     state = 'countdown';
     elapsed = 0;
     countdown = 3;
@@ -160,7 +162,7 @@ export default async function createGokart(container) {
     const position = positionOfPlayer();
     elapsed = player.finishTime ?? elapsed;
     bestLap = Math.min(bestLap, elapsed - lapStarted);
-    finishedScore = raceScore(position, elapsed, incidents);
+    finishedScore = raceScore(position, elapsed * 260 / track.length, incidents);
     const best = game.loadBest();
     game.saveBest(finishedScore);
     const rankings = raceStandings([player, ...opponents]);
@@ -175,9 +177,12 @@ export default async function createGokart(container) {
 
   function positionModel(model, driver, steering = 0) {
     const s = track.sample(driver.distance, driver.lane);
-    model.root.position.copy(s.position).setY(0.08);
+    model.root.position.copy(s.position);
+    model.root.position.y += 0.04;
+    model.root.rotation.order = 'YXZ';
+    model.root.rotation.x = s.pitch;
     model.root.rotation.y = s.angle + steering * 0.065 - driver.lateral * (driver.skidding ? 0.035 : 0.012);
-    model.root.rotation.z = -steering * 0.035;
+    model.root.rotation.z = s.roll - steering * 0.035;
     model.steering.rotation.z = -steering * 0.3;
     model.wheels.forEach(wheel => { wheel.rotation.x = driver.distance / 0.31; });
     model.frontPivots.forEach(pivot => { pivot.rotation.y = steering * 0.23 + driver.lateral * 0.018; });
@@ -189,13 +194,13 @@ export default async function createGokart(container) {
     const s = track.sample(player.distance, player.lane * 0.45);
     if (state === 'menu') {
       const a = game.reducedMotion ? 0 : time * 0.06;
-      wishPosition.set(s.position.x - 13 * Math.cos(a), 8.5, s.position.z + 15 * Math.sin(a) - 10);
-      wishTarget.copy(s.position).setY(0.6);
+      wishPosition.copy(s.position).addScaledVector(s.tangent, -11).addScaledVector(s.right, -8 + Math.sin(a) * 3); wishPosition.y += 7;
+      wishTarget.copy(s.position); wishTarget.y += 0.6;
     } else {
       wishPosition.copy(s.position).addScaledVector(s.tangent, portrait ? -15.5 : -11.5);
-      wishPosition.y = portrait ? 11.6 : 7.1;
+      wishPosition.y += portrait ? 9.5 : 6.2;
       wishTarget.copy(track.sample(player.distance + (portrait ? 8 : 11), player.lane * 0.3).position);
-      wishTarget.y = 0.45;
+      wishTarget.y += 0.45;
     }
     const smoothing = state === 'menu' ? 0.04 : 1 - Math.exp(-dt * 5);
     cameraPosition.lerp(wishPosition, smoothing);
@@ -204,10 +209,11 @@ export default async function createGokart(container) {
     camera.lookAt(cameraTarget);
     camera.fov = (portrait ? 55 : 58) + (game.reducedMotion ? 0 : player.speed * 0.12);
     camera.updateProjectionMatrix();
+    game.setShadowFocus(s.position.x, s.position.y, s.position.z);
   }
 
-  const initial = track.sample(0);
-  cameraPosition.copy(initial.position).addScaledVector(initial.tangent, -13).setY(9);
+  const initial = track.sample(player.distance);
+  cameraPosition.copy(initial.position).addScaledVector(initial.tangent, -13); cameraPosition.y += 9;
   cameraTarget.copy(initial.position);
   positionModel(kart, player);
   opponents.forEach((opponent) => positionModel(opponent.model, opponent));
@@ -215,7 +221,7 @@ export default async function createGokart(container) {
   game.setHUD('VARGGROPEN · 2012', 'Pekkas Gokart', 'Tre varv. Fem rivaler. En pokal.');
   game.showPanel({
     eyebrow: '2012 · VARGGROPEN', title: 'Pekkas Gokart',
-    body: '<p>Solnedgång, varm asfalt och fem hungriga rivaler. Kör tre varv och utmana Jonas, Erik och Viktor från 2012 års pall.</p><p><strong>Styr ← → / A D. Håll ↑ / W för gas.</strong> Bromsa med ↓ / S / mellanslag före en snäv kurva. På telefon håller du GAS och styr med pilknapparna.</p><p><strong>Linjen vinner loppet.</strong> För hög fart i kurvan tappar grepp. Gå in brett, hitta innerkanten och gasa ut. Bakom en rival minskar luftmotståndet en aning.</p><p>Tre varv med gas, broms och omkörningar. Gräset och däckvallen kostar tid.</p>',
+    body: '<p>Varggropens 665 meter långa bana, varm asfalt och fem hungriga rivaler. Kör tre varv och utmana Jonas, Erik och Viktor från 2012 års pall.</p><p><strong>Styr ← → / A D. Håll ↑ / W för gas.</strong> Bromsa med ↓ / S / mellanslag före en snäv kurva. På telefon håller du GAS och styr med pilknapparna.</p><p><strong>Linjen vinner loppet.</strong> För hög fart i kurvan tappar grepp. Gå in brett, hitta innerkanten och gasa ut. Bakom en rival minskar luftmotståndet en aning.</p><p>Tre varv med gas, broms och omkörningar. Gräset och däckvallen kostar tid.</p><p><small>Bansträckningen följer klubbens flygfoto. Exakta höjder och 2012 års markeringar är tolkade.</small></p>',
     button: 'Till startlinjen', onStart: start
   });
 
@@ -235,7 +241,7 @@ export default async function createGokart(container) {
     if (state === 'racing') {
       elapsed += dt;
       if (elapsed > 0.75) find('.kart-countdown').textContent = '';
-      steer = Number(held.has('right') || keys.has('ArrowRight') || keys.has('KeyD')) - Number(held.has('left') || keys.has('ArrowLeft') || keys.has('KeyA'));
+      steer = steeringFromButtons(held.has('left') || keys.has('ArrowLeft') || keys.has('KeyA'), held.has('right') || keys.has('ArrowRight') || keys.has('KeyD'));
       const throttle = held.has('throttle') || keys.has('ArrowUp') || keys.has('KeyW');
       const brake = held.has('brake') || keys.has('ArrowDown') || keys.has('KeyS') || keys.has('Space');
       const slipstream = slipstreamFactor(player, opponents, track.length);
@@ -263,7 +269,7 @@ export default async function createGokart(container) {
         }
       }
       markFinish(player, previousDistance, track.length * LAPS, elapsed, dt);
-      const newLap = Math.min(LAPS, Math.floor(player.distance / track.length) + 1);
+      const newLap = Math.max(1, Math.min(LAPS, Math.floor(player.distance / track.length) + 1));
       if (newLap > lap) {
         const crossedAt = elapsed - dt + dt * clamp((lap * track.length - previousDistance) / Math.max(0.001, player.distance - previousDistance), 0, 1);
         lastLap = crossedAt - lapStarted;
@@ -286,13 +292,10 @@ export default async function createGokart(container) {
     }
     engine.set(48 + player.speed * 6.5, state === 'racing' ? 0.012 + player.speed * 0.0004 : 0);
     tires.set(170 + player.speed * 8, state === 'racing' && player.skidding ? 0.009 : 0);
-    const sinceLine = ((player.distance % track.length) + track.length) % track.length;
-    const targetOpacity = state === 'racing' ? 1 - Math.min(clamp((sinceLine - 1) / 3, 0, 1), clamp((26 - sinceLine) / 5, 0, 1)) : 1;
-    portalOpacity += (targetOpacity - portalOpacity) * (1 - Math.exp(-dt * 12));
-    track.fadePortal(portalOpacity > 0.995 ? 1 : portalOpacity < 0.005 ? 0 : portalOpacity);
     track.update(dt, time);
     positionModel(kart, player, steer);
-    opponents.forEach((opponent) => positionModel(opponent.model, opponent));
+    kart.update(dt, time);
+    opponents.forEach((opponent) => { positionModel(opponent.model, opponent); opponent.model.update(dt, time); });
     updateCamera(dt, time);
     if (hudClock > 0.08) {
       hudClock = 0;
@@ -307,7 +310,7 @@ export default async function createGokart(container) {
       find('.kart-grip').setAttribute('aria-valuenow', String(Math.round(player.grip * 100)));
       find('.kart-grip').classList.toggle('sliding', player.skidding);
       const upcoming = cornerSpeed(track.curvature(player.distance + 10));
-      find('.kart-tip').textContent = player.speed < 1 ? 'HÅLL GAS ELLER ↑ / W FÖR ATT KÖRA' : Math.abs(player.lane) > 4.4 ? 'GRÄS BROMSAR · TILLBAKA TILL ASFALTEN' : player.skidding ? 'GREPPET SLÄPPER · LÄTTA PÅ GASEN' : player.speed > upcoming * 1.12 ? 'BROMSA INFÖR KURVAN' : player.slipstream > 0.2 ? 'I SUGET · VÄLJ LÄGE FÖR OMKÖRNING' : 'BRA GREPP · HITTA DIN LINJE';
+      find('.kart-tip').textContent = player.speed < 1 ? 'HÅLL GAS ELLER ↑ / W FÖR ATT KÖRA' : Math.abs(player.lane) > TRACK_HALF_WIDTH ? 'GRÄS BROMSAR · TILLBAKA TILL ASFALTEN' : player.skidding ? 'GREPPET SLÄPPER · LÄTTA PÅ GASEN' : player.speed > upcoming * 1.12 ? 'BROMSA INFÖR KURVAN' : player.slipstream > 0.2 ? 'I SUGET · VÄLJ LÄGE FÖR OMKÖRNING' : 'BRA GREPP · HITTA DIN LINJE';
       [...opponents, player].forEach((driver, i) => {
         const point = track.sample(driver.distance).position;
         dots[i].setAttribute('cx', String(point.x));
@@ -317,7 +320,7 @@ export default async function createGokart(container) {
     }
   });
 
-  return { destroy() { clearControls(); engine.stop(); tires.stop(); track.dispose(); game.destroy(); } };
+  return { destroy() { clearControls(); engine.stop(); tires.stop(); track.dispose(); kart.dispose(); opponents.forEach(opponent => opponent.model.dispose()); game.destroy(); } };
 }
 
 function formatTime(seconds) {

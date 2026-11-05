@@ -7,7 +7,7 @@
 .kart-race-meta strong small { font-size: 1rem; color: #e8d9bb; }
 .kart-race-meta span { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; }
 .kart-map { position: absolute; right: 20px; top: 100px; width: 145px; height: 118px; background: #121b1ac4; border: 1px solid #f8c96930; border-radius: 14px; backdrop-filter: blur(8px); }
-.kart-map path { fill: none; stroke: #e7d8b74a; stroke-width: 11; stroke-linecap: round; stroke-linejoin: round; }
+.kart-map path { fill: none; stroke: #e7d8b74a; stroke-width: 7.5; stroke-linecap: round; stroke-linejoin: round; }
 .kart-map circle { stroke: #182421; stroke-width: 2; }
 .kart-dashboard { position: absolute; bottom: calc(100px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); width: min(280px, 55vw); text-align: center; text-shadow: 0 2px 8px #000; }
 .kart-speed { font-size: 1.8rem; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; }

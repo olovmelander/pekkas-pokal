@@ -57,3 +57,41 @@ resultatpanelen separat rullbar och hålla knappen synlig; riktig browserklick
 verifierade nästa omgång. Matchkameran flyttades in över planen så att
 läktartaket inte skymmer spelet. Ett nytt omslag fångades i 1100 × 773 från
 den spelbara scenen med strålkastare och matchannons.
+
+## Stadionens andra grafikpass
+
+Jämförelsen med de äldre spelens miljöer visade framför allt en skillnad i
+material, mänsklig skala och byggda detaljer. Målningens gräsmatta och
+skogsvegetation samt de äldre spelens detaljerade figurer blev referenser.
+Arenan behåller sin översiktskamera för managerspelet, men ytor och inventarier
+ska tåla en närmare blick.
+
+Planen har nu en egen 1024 × 1536-textur med klippriktning, varierad gräston,
+enskilda strån, slitage framför målen och målade linjer. Målens runda stolpar
+har ett sammanhängande nät över rygg, tak och båda sidor. Läktarna har
+720 formade säten och 240 detaljerade instansierade åskådare, med räcken,
+trappsektioner, bärande takstolar, plåtsömmar och avbytarbås. En belyst
+resultattavla reagerar på matchhändelser. Fackverksmaster med tolv lampor
+vardera ger fyra riktiga riktade ljuskällor och en återhållsam ljusgloria.
+
+Omgivningen är sammanhängande: gångvägar, entréer, belysta trapphusfönster
+och en yttre krans av granar och björkar med samma detaljerade vegetationsmodell
+som de äldre spelen. En mörk kvällshimmel, kallt matchljus, metallreflektioner
+och mjuka kontaktskuggor ersätter den tidigare platta bakgrunden. Spelarnas
+hemma-, borta- och målvaktsdräkter skiljer sig tydligt, och bollen är rund med
+femkantspaneler i stället för synliga geometrikanter.
+
+Statisk arkitektur slås samman per material; stolar, publik och vegetation
+renderas i grupper. Resurserna tillhör spelinstansen och frigörs vid stängning.
+Den första normala bildkontrollen passerade dator, stående telefon och
+liggande telefon utan JavaScriptfel eller sidöverflöd; den visade cirka
+96–99 draw calls och 748 000 trianglar före den sista yttre inramningen.
+Samtliga nio fantasytester och ESLint passerade. Budget, roller, kapten,
+transferregler, fem omgångar och gränssnittets placering har behållits.
+
+Det avslutande normala grafikpasset verifierade den färdiga arenan utan
+shader- eller JavaScriptfel. Omslaget i 1100 × 773 kommer från denna scen.
+Slutbilden använde 120 draw calls, 781 764 trianglar, 61 geometrier och
+25 texturer inklusive den gemensamma miljöreflektionen. Den sista inramningen
+med entréer och träd tillförde cirka 33 000 trianglar. De siffrorna är
+renderingskostnad, inte ett uppmätt löfte om bildfrekvens på telefon.

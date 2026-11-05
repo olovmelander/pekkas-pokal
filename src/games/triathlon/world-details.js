@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { createCrowd } from '../shared/people.js';
+import { shoreAt } from './landscape.js';
+import { mergeStaticMeshes } from './mesh-batch.js';
+import { buildNature } from '../shared/scenic.js';
 
 /** Three recognisable settings share one continuous route through Lomsjön. */
 export function addCourseDetails(world) {
@@ -26,30 +29,46 @@ export function addCourseDetails(world) {
   swim.add(buoys);
   const boats = [];
   for (const [x, z] of [[-9, -55], [10.5, -155], [-11, -227]]) {
-    const boat = new THREE.Group(); boat.position.set(x, 0, z); boat.rotation.y = 0.25; swim.add(boat); boats.push(boat);
-    const shape = new THREE.Shape(); shape.moveTo(-0.65, -1.7); shape.lineTo(0.65, -1.7); shape.quadraticCurveTo(1.05, 0.6, 0, 2); shape.quadraticCurveTo(-1.05, 0.6, -0.65, -1.7);
-    const hull = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: 0.33, bevelEnabled: true, bevelSize: 0.08, bevelThickness: 0.07, bevelSegments: 1, steps: 1 }), material(0x9c6446));
-    hull.rotation.x = -Math.PI / 2; hull.position.y = -0.12; boat.add(hull);
-    for (const seat of [-0.9, 0.3]) box(boat, 0xd6b47b, 0, 0.27, seat, 1.2, 0.09, 0.27);
-    const oar = box(boat, 0x654b33, 0, 0.4, -0.5, 2.4, 0.055, 0.1); oar.rotation.y = 0.4;
+    const boat = new THREE.Group(); boat.position.set(Math.sign(x) * (shoreAt(z, Math.sign(x)) - 3), 0, z); boat.rotation.y = 0.25; swim.add(boat); boats.push(boat);
+    const vertices = [], indices = [], rim = [];
+    for (let i = 0; i <= 32; i++) {
+      const a = i / 32 * Math.PI * 2;
+      const px = Math.sin(a) * .82 * (.83 - Math.cos(a) * .17), pz = Math.cos(a) * 1.85;
+      vertices.push(px, .32, pz, px * .6, -.12, pz * .84);
+      rim.push(new THREE.Vector3(px, .34, pz));
+      if (i < 32) { const n = i * 2; indices.push(n, n + 1, n + 2, n + 1, n + 3, n + 2); }
+    }
+    const hullGeometry = new THREE.BufferGeometry();
+    hullGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3)); hullGeometry.setIndex(indices); hullGeometry.computeVertexNormals();
+    const hullMaterial = material(0x856348).clone(); hullMaterial.side = THREE.DoubleSide;
+    boat.add(new THREE.Mesh(hullGeometry, hullMaterial));
+    const rail = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(rim), 40, .034, 5, true), material(0xc2a171)); boat.add(rail);
+    box(boat, 0x654c34, 0, -.04, -.1, .7, .075, 2.75);
+    for (const seat of [-.9, .3]) box(boat, 0xc6a172, 0, .27, seat, 1.2, .075, .27);
+    const oar = box(boat, 0x654b33, 0, .4, -.5, 2.4, .045, .065); oar.rotation.y = .4;
+    box(boat, 0xa78657, 1.18, .4, -.98, .45, .045, .16);
+    const rope = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, .3, 1.8), new THREE.Vector3(Math.sign(x) * 2.8, .1, 3.6)]), new THREE.LineBasicMaterial({ color: 0xb6aa84 })); boat.add(rope);
   }
   for (const z of [-68, -190]) {
-    for (let i = 0; i < 12; i++) box(swim, 0xa68960, 11.7, 0.04, z + i * 0.38, 7.4, 0.13, 0.33);
-    for (const dx of [-3, 3]) for (const dz of [0, 4]) box(swim, 0x5b5b42, 11.7 + dx, 0, z + dz, 0.17, 1.4, 0.17);
-  }
-  // The forest trail has a close birch canopy and a softer, littered verge.
-  const count = 160;
-  const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.09, 0.16, 1, 6), material(0xe8e3c9), count);
-  const leaves = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), material(0xffffff), count * 2);
-  for (let i = 0; i < count; i++) {
-    const x = (i % 2 ? -1 : 1) * (7.7 + random() * 7), z = 15 - random() * 720, h = 4 + random() * 3;
-    dummy.position.set(x, h / 2, z); dummy.rotation.set(0, random() * 3, 0.04 * Math.sin(i)); dummy.scale.set(1, h, 1); dummy.updateMatrix(); trunks.setMatrixAt(i, dummy.matrix);
-    for (let j = 0; j < 2; j++) {
-      dummy.position.set(x + (j ? 0.5 : -0.5), h * (0.8 + j * 0.16), z); dummy.scale.set(2.1, 1.9, 1.8); dummy.updateMatrix(); leaves.setMatrixAt(i * 2 + j, dummy.matrix);
-      leaves.setColorAt(i * 2 + j, new THREE.Color().setHSL(0.23 + random() * 0.04, 0.28, 0.32 + random() * 0.11));
+    const x = shoreAt(z, 1) - 1.3;
+    for (let i = 0; i < 12; i++) box(swim, 0x9c815a, x, .04, z + i * .38, 7.4, .13, .33);
+    for (const dx of [-3, 3]) for (const dz of [0, 4]) {
+      box(swim, 0x555a43, x + dx, -.1, z + dz, .17, 1.6, .17);
+      box(swim, 0xb0a285, x + dx, .72, z + dz, .21, .08, .21);
     }
+    box(swim, 0xb5aa88, x - 3.6, -.3, z + 1.8, .06, 1.2, .06);
+    box(swim, 0xb5aa88, x - 3.6, -.3, z + 2.5, .06, 1.2, .06);
+    for (let i = 0; i < 4; i++) box(swim, 0xb5aa88, x - 3.6, -.5 + i * .22, z + 2.15, .06, .05, .76);
   }
-  trunks.castShadow = leaves.castShadow = true; run.add(trunks, leaves);
+  // The detailed tree canopy and windblown verges live in landscape.js.
+  const canopy = buildNature({
+    trees: Array.from({ length: 38 }, (_, i) => ({
+      x: (i % 2 ? -1 : 1) * (7.8 + random() * 2.5), y: .15, z: 8 - i * 9,
+      height: 6 + random() * 2.5, type: 'birch', details: { clumps: 18, clumpScale: .85 }
+    })),
+    seed: 817, sunDirection: new THREE.Vector3(-24, 19, -40), reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches
+  });
+  run.add(canopy.group);
   const litter = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), material(0xc6b17a), 250);
   for (let i = 0; i < 250; i++) {
     dummy.position.set((i % 2 ? -1 : 1) * (4.8 + random() * 2), -0.02, 10 - random() * 710);
@@ -88,6 +107,7 @@ export function addCourseDetails(world) {
     seats.push({ position: [-7.4, 0, z - 4], rotationY: Math.PI / 2, pose: 'stand' });
   }
   const crowd = createCrowd({ seats, seed: 2017, hats: 0.35 }); world.add(crowd.root); crowd.setMood('clap');
+  mergeStaticMeshes(swim); mergeStaticMeshes(run); mergeStaticMeshes(aid);
   return {
     update(discipline, time) {
       swim.visible = discipline === 'swim'; run.visible = discipline === 'run'; bike.visible = discipline === 'bike';
@@ -95,6 +115,7 @@ export function addCourseDetails(world) {
       crowd.root.visible = aid.visible = discipline !== 'swim';
       boats.forEach((boat, i) => { boat.position.y = Math.sin(time * 1.3 + i) * 0.04; boat.rotation.z = Math.sin(time + i) * 0.025; });
       buoys.position.y = Math.sin(time * 1.5) * 0.025;
+      if (discipline === 'run') canopy.update(time);
       crowd.update(1 / 60, time);
     },
     dispose() { crowd.dispose(); }

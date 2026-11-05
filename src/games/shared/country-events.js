@@ -5,6 +5,7 @@ import { createPerson, appearanceFor, POSES } from './people.js';
 import { buildCountryWorld } from '../farm/world.js';
 import { clamp, landing, precisionScore, advanceBalance, kubbHit, medal } from '../farm/rules.js';
 import { discPosition, throwIsCaught } from '../lundqvist/rules.js';
+import { createCountryEquipment } from './country-equipment.js';
 
 /** Reusable country events used by the 2016 arcade interpretation. */
 export async function createCountryGames(container, config) {
@@ -15,7 +16,9 @@ export async function createCountryGames(container, config) {
   game.root.classList.add('country-game', `country-${config.id}`);
   const { scene, camera } = game;
   scene.fog = new THREE.Fog(scene.background || 0xc8c7a4, 38, 115);
-  const { mesh, box, cylinder, material, disposeMaterials } = buildCountryWorld(scene, config.theme === 'lake');
+  const countryWorld = buildCountryWorld(scene, config.theme === 'lake', { reducedMotion: game.reducedMotion, sunDirection: game.sun?.position });
+  const { mesh, box, cylinder, material, disposeMaterials } = countryWorld;
+  const equipment = createCountryEquipment({ THREE, mesh, box, cylinder, material });
   const actor = createPerson(appearanceFor(config.champion, {
     detail: 'low', outfit: { top: 'shirt', topColor: config.theme === 'lake' ? 0x8cbaac : 0xc79a57, bottom: 'jeans', bottomColor: 0x405361, shoes: 'boots' }
   }));
@@ -207,6 +210,7 @@ export async function createCountryGames(container, config) {
       grass.repeat.set(2.2, 5.8); grass.needsUpdate = true;
       court.material = new THREE.MeshStandardMaterial({ color: kind === 'kubb' ? 0x8da768 : 0x91ab71, map: grass, bumpMap: grass, bumpScale: 0.025, roughness: 1 });
       court.material.userData.transient = true;
+      const courtFrame = new THREE.Group(); props.add(courtFrame); equipment.court(courtFrame); equipment.batch(courtFrame);
       for (const x of [-3.75, 3.75]) box(0.035, 0.035, 19.5, 0xe2d4ad, x, 0.06, -1.7, props);
       box(7.5, 0.035, 0.07, 0xf2dfac, 0, 0.06, 6.55, props);
       const line = ring(0, 7, 0.55, 0xeed8a3); line.scale.z = 0.7;
@@ -225,6 +229,7 @@ export async function createCountryGames(container, config) {
         blocks.forEach((b, i) => {
           b.down = false;
           b.mesh = box(b.king ? 0.5 : 0.36, b.king ? 1.25 : 0.85, 0.4, b.king ? 0xd9b758 : 0xe4c493, b.x, b.king ? 0.625 : 0.425, b.z, props);
+          equipment.kubb(b.mesh, b.king);
           if (b.king) for (let i = -1; i <= 1; i++) box(0.12, 0.18, 0.4, 0xd9b758, i * 0.17, 0.71, 0, b.mesh);
           else {
             for (const y of [-0.2, 0.15]) box(0.37, 0.018, 0.41, 0xc49e66, 0, y, 0, b.mesh);
@@ -243,6 +248,7 @@ export async function createCountryGames(container, config) {
           basket(targetProp);
           ring(0, 0, 0.85, 0xc1d0a2, targetProp);
           plaque('KORG', 0, 2.5, 0, 0.85, targetProp);
+          equipment.basket(targetProp);
           cylinder(0.04, 2.6, 0xd6c59b, 3.25, 1.3, -4.5, props);
           windFlag = new THREE.Group(); windFlag.position.set(3.25, 2.4, -4.5); props.add(windFlag);
           const flag = mesh(new THREE.PlaneGeometry(0.9, 0.4, 6, 2), 0xd99b6b, 0.46, 0, 0, windFlag);
@@ -277,6 +283,7 @@ export async function createCountryGames(container, config) {
         handle.rotation.z = 0;
       } else {
         const log = cylinder(0.48, 15, 0x775b3b, 0, 0.25, -1, props);
+        log.geometry.dispose(); log.geometry = new THREE.CylinderGeometry(0.48, 0.46, 15, 32, 8);
         log.rotation.x = Math.PI / 2;
         for (const z of [-8.5, 6.5]) {
           const end = cylinder(0.47, 0.02, 0xb49462, 0, 0.25, z, props);
@@ -297,9 +304,10 @@ export async function createCountryGames(container, config) {
           }
         }
         for (const r of [1.1, 1.8, 2.5]) {
-          const ripple = ring(2.2, 1.1, r, 0x86a5a0); ripple.scale.z = 0.55;
+          const ripple = mesh(new THREE.TorusGeometry(r, 0.012, 5, 56), 0x86a5a0, 2.2, 0.035, 1.1, props);
+          ripple.rotation.x = -Math.PI / 2; ripple.scale.z = 0.55; ripple.castShadow = false;
         }
-        for (let i = 0; i < 7; i++) box(0.025, 0.018, 14.8, 0x9c7a49, -0.35 + i * 0.115, 0.61 + Math.sin(i / 6 * Math.PI) * 0.11, -1, props);
+        equipment.log(props);
         plaque('ANDRA SIDAN VÄNTAR', 0, 1.5, -10.5, 3.3);
         // The bridge, pond edge and reeds never move; keep their rich detail cheap on phones.
         batchStaticProps();
@@ -526,6 +534,8 @@ export async function createCountryGames(container, config) {
     }
   }
   game.onFrame((dt, time) => {
+    countryWorld.update?.(time);
+    if (!game.reducedMotion) equipment.update(time);
     clock = time;
     const narrow = camera.aspect < 0.85;
     const currentKind = config.events[eventIndex].kind;
@@ -564,6 +574,7 @@ export async function createCountryGames(container, config) {
     clearInput();
     for (const person of [actor, ...spectators]) { scene.remove(person.root); person.dispose(); }
     game.destroy();
+    equipment.dispose();
     disposeMaterials();
   } };
 }

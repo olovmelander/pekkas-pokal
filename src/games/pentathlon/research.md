@@ -86,3 +86,11 @@ Resultatvyerna visar separata grenrader och medaljgränser. Delade
 marktexturer behålls mellan grenarna; endast grenens egna skylttexturer
 städas vid grenbyte. Regeltesterna täcker också riktningsstabil krocket,
 att alla tre bågar kan nås och att redovisad hopplängd stämmer med landningen.
+
+Grafikpasset efter den första kvalitetsgranskningen återanvänder Måleriets
+förgrenade björkar/granar, lövljus och vind via `shared/scenic.js`. Rabatterna
+har instansierade stjälkar, blad och blomkransar; låg blomning vid spelplanens
+kant syns även på telefon. Trädgården kompletteras av oregelbunden sten,
+väderbitna gångkanter, veranda med räcke och luckor, redskapsställ, handpump
+och träpergola. Byggnadsdelar och rabatternas kanter sammanfogas per material.
+Detta är scenografiska val för arkadtolkningen, inte historiska källuppgifter.

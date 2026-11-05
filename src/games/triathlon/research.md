@@ -79,3 +79,28 @@ Rena simringar i följd och omkörningar ger tydlig återkoppling. Kontrollerna
 benämns efter aktuell aktivitet: kraftiga tag, öka steget och trampa hårdare.
 Resultatet visar fortsatt alla tre splittar i den användarbekräftade ordningen
 simning, löpning, cykling samt längsta obrutna sviten av simringar.
+
+## Grafiskt miljöpass
+
+Miljön jämfördes med `fishing/world.js` och `fishing/scenery.js` för sjöns
+reflexer och granitstrand, `shooting/grass.js` för växtlighetens ljus och
+`painting/forest.js` för grenverk, björkbark och genomlysta lövkronor.
+Scenen använder nu samma detaljerade växtfamilj genom `shared/scenic.js`,
+med förenklade bakre trädrader och separata 32-metersgrupper för synlighetsurval.
+Löparsträckan får en extra nära björkkrona; cyklingen öppnar mot staket och äng.
+
+Sjön har en bredare, oregelbunden och höjdsatt strand. Vattenytan kombinerar
+små korsande vågor, flera skalor av brus, betraktningsberoende himmelsreflex,
+bruten solglitter och ljusare grunt vatten. Reflektionen är en billig analytisk
+tolkning av himmel och skog, inte en andra rendering av hela världen. Den
+upprepade randningen i den tidigare ytan är borttagen. Granitblock, växande
+gräsfläckar, öppna träekor, förtöjningar, bryggstolpar och badstege ger skala.
+Stugorna har stående panel, spröjs, fönsterbleck, grundsten och skorsten.
+
+Landsväg och grusled använder korniga material med större fukt-/färgvariation
+på banans koordinater. De är sammanhängande genom samma 800-metersvärld som
+rivaler och banföremål; ingen dekor hoppar tillbaka nära spelaren. Moln,
+dimma och tre bakre åsryggar bygger djup. Solriktningen delas av himlen,
+vattenreflexen, vegetationen och den riktiga skuggljuskällan. Art direction är
+en svensk sensommarsjö, inte ett påstående om Lomsjöns dokumenterade strand
+eller bebyggelse. Regler, lokala grenordningen och kollisionsytor är bevarade.

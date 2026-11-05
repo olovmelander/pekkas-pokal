@@ -11,11 +11,18 @@ const ROUNDS = 3;
 export default async function createAmbition(container) {
   const app = createArcade(container, {
     id: 'ambition', title: 'Pekkas Ambition', subtitle: 'Kungsholmen · 2018',
-    accent: '#d7b772', sky: '#172b35', fog: '#172b35'
+    accent: '#d7b772', sky: '#172b35', fog: false, lighting: 'interior'
   });
   app.root.classList.add('ambition-game');
-  app.camera.position.set(0, 6.6, 6.7);
-  app.camera.lookAt(0, 1, -0.5);
+  app.camera.position.set(0, 5.8, 8.2);
+  app.camera.lookAt(0, 1.2, -0.8);
+  app.sun.position.set(-3.5, 6.5, 3.2);
+  app.sun.color.set('#ffddb0');
+  app.sun.intensity = 1.35;
+  app.ambient.intensity = .34;
+  app.setShadowFocus(0, 1, -1);
+  Object.assign(app.sun.shadow.camera, { left: -7, right: 7, top: 7, bottom: -7 });
+  app.sun.shadow.camera.updateProjectionMatrix();
   const room = buildRoom(app.scene, { reducedMotion: app.reducedMotion });
   const shell = document.createElement('div');
   shell.className = 'amb-shell';
@@ -283,8 +290,10 @@ export default async function createAmbition(container) {
     if (app.camera.aspect !== lastAspect) {
       lastAspect = app.camera.aspect;
       const portrait = lastAspect < 0.85;
-      app.camera.position.set(0, portrait ? 8 : 6.6, portrait ? 8.4 : 6.7);
-      app.camera.lookAt(0, 1, -0.45);
+      app.camera.position.set(0, portrait ? 8.2 : 5.8, portrait ? 9.7 : 8.2);
+      app.camera.lookAt(0, portrait ? 1.5 : 1.2, portrait ? -0.5 : -0.8);
+      app.camera.fov = portrait ? 49 : 45;
+      app.camera.updateProjectionMatrix();
     }
     if (state.help || state.phase === 'intro') return;
     state.wait = Math.max(0, state.wait - dt);

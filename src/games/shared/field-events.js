@@ -1,6 +1,8 @@
 import { createArcade } from './arcade.js';
 import { createPerson, appearanceFor, POSES } from './people.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { buildNature, buildScenicSky } from './scenic.js';
+import { buildFieldGarden, buildFlowerBorders } from './field-garden.js';
 import { clamp, precisionScore, jumpScore, hoopCrossing, medalFor, chargePower, croquetEnd, fieldThrowScore } from '../pentathlon/rules.js';
 
 const EVENTS = {
@@ -44,7 +46,7 @@ export async function createFieldGames(container, config) {
     }
     for (let i = 0; i < 7500; i++) {
       const x = random() * 512, y = random() * 512, shade = Math.round(140 + random() * 105);
-      ctx.strokeStyle = `rgba(${shade},${shade},${Math.max(0, shade - 12)},${type === 'leaves' ? 0.4 : 0.27})`;
+      ctx.strokeStyle = `rgba(${shade},${shade},${Math.max(0, shade - 12)},0.27)`;
       ctx.fillStyle = ctx.strokeStyle;
       if (type === 'gravel') {
         ctx.beginPath(); ctx.ellipse(x, y, 0.7 + random() * 2.1, 0.7 + random() * 1.1, random() * 3, 0, Math.PI * 2); ctx.fill();
@@ -61,33 +63,12 @@ export async function createFieldGames(container, config) {
     return texture;
   }
   const grassTexture = surfaceTexture('grass'), gravelTexture = surfaceTexture('gravel');
-  const woodTexture = surfaceTexture('wood'), leafTexture = surfaceTexture('leaves');
+  const woodTexture = surfaceTexture('wood');
   ['#83976a', '#a5a879', '#7b9562'].forEach((color) => { mat(color).map = grassTexture; });
   ['#b5ae8a', '#c1b08c', '#d7bc7f'].forEach((color) => { mat(color).map = gravelTexture; });
   ['#8b6a49', '#a38050', '#d5c39c', '#a77745'].forEach((color) => { mat(color).map = woodTexture; });
-  ['#637b54', '#779260', '#8c9e6c', '#66895e', '#536f49'].forEach((color) => { mat(color).map = leafTexture; });
-  const skyDome = new THREE.Mesh(new THREE.SphereGeometry(220, 24, 16), new THREE.ShaderMaterial({
-    side: THREE.BackSide, depthWrite: false,
-    uniforms: {
-      horizon: { value: new THREE.Color('#eadbc1') }, zenith: { value: new THREE.Color('#91afbb') },
-      sunDirection: { value: new THREE.Vector3(-0.4, 0.2, -0.9).normalize() }
-    },
-    vertexShader: 'varying vec3 skyDirection; void main(){ skyDirection = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: `varying vec3 skyDirection;
-      uniform vec3 horizon; uniform vec3 zenith; uniform vec3 sunDirection;
-      void main(){
-        vec3 direction = normalize(skyDirection);
-        float height = smoothstep(-0.08, 0.75, direction.y);
-        vec3 color = mix(horizon, zenith, height);
-        float alignment = max(0.0, dot(direction, sunDirection));
-        color += vec3(0.24, 0.13, 0.04) * pow(alignment, 28.0);
-        color = mix(color, vec3(1.0, 0.88, 0.62), smoothstep(0.9991, 0.9995, alignment));
-        gl_FragColor = vec4(color, 1.0);
-        #include <tonemapping_fragment>
-        #include <colorspace_fragment>
-      }`
-  }));
-  skyDome.renderOrder = -10; scene.add(skyDome);
+  const sky = buildScenicSky({ horizon: '#eadbc1', zenith: '#91afbb', cloudiness: 0.36, reducedMotion: a.reducedMotion, sunDirection: a.sun?.position });
+  scene.add(sky.mesh);
   const world = new THREE.Group();
   const eventWorld = new THREE.Group();
   scene.add(world, eventWorld);
@@ -111,23 +92,6 @@ export async function createFieldGames(container, config) {
     sign.material.userData.fieldTransient = true;
     sign.position.set(x, y, z); parent.add(sign); return sign;
   }
-  function tree(x, z, scale = 1) {
-    const g = new THREE.Group(); g.position.set(x, 0, z); g.scale.setScalar(scale); world.add(g);
-    pole(0.16, 3.5, '#786c4f', 0, 1.75, 0, g);
-    for (let i = 0; i < 8; i++) {
-      const angle = i * 2.399, spread = i < 6 ? 1.15 : 0.4;
-      const branch = pole(0.065, 1.8, '#786c4f', Math.sin(angle) * 0.45, 2.7, Math.cos(angle) * 0.45, g);
-      branch.rotation.z = Math.sin(angle) * 0.65; branch.rotation.x = Math.cos(angle) * 0.65;
-      const geometry = new THREE.IcosahedronGeometry(1.2, 2), positions = geometry.attributes.position;
-      for (let v = 0; v < positions.count; v++) {
-        const factor = 0.89 + Math.sin(positions.getX(v) * 7 + positions.getY(v) * 5 + i) * 0.08;
-        positions.setXYZ(v, positions.getX(v) * factor, positions.getY(v) * factor, positions.getZ(v) * factor);
-      }
-      geometry.computeVertexNormals();
-      const leaf = mesh(geometry, ['#637b54', '#779260', '#8c9e6c', '#66895e'][i % 4], Math.sin(angle) * spread, 3.25 + (i > 5 ? 1.1 : Math.sin(i) * 0.3), Math.cos(angle) * spread, g);
-      leaf.scale.set(1, 0.8 + random() * 0.3, 0.85 + random() * 0.25);
-    }
-  }
   const groundGeometry = new THREE.PlaneGeometry(180, 180, 48, 48);
   const groundVertices = groundGeometry.attributes.position;
   for (let v = 0; v < groundVertices.count; v++) {
@@ -142,28 +106,11 @@ export async function createFieldGames(container, config) {
     const hill = ball(8 + random() * 5, i % 2 ? '#81987c' : '#94a588', -65 + i * 10, 1.6, -55 - (i % 3) * 6);
     hill.scale.set(1.8, 0.3, 1.3); hill.castShadow = false;
   }
-  for (let i = 0; i < 28; i++) {
-    const side = i % 2 ? -1 : 1;
-    tree(side * (10 + random() * 5), 15 - Math.floor(i / 2) * 4.1 + random(), 0.75 + random() * 0.35);
-  }
   for (const x of [-7.5, 7.5]) {
     for (let z = 12; z >= -24; z -= 4) {
       pole(0.07, 1.1, '#d7d1a6', x, 0.55, z);
       box(0.06, 0.1, 4.1, '#c7c6a0', x, 0.65, z - 2);
-      if (config.theme === 'park') {
-        box(1.5, 0.7, 2.4, '#536f49', x + Math.sign(x) * 0.7, 0.35, z - 1.6);
-      }
-    }
-  }
-  for (let i = 0; i < 100; i++) {
-    const x = (i % 2 ? -1 : 1) * (6.8 + random() * 2.4);
-    const z = 12 - random() * 35;
-    pole(0.018, 0.36, '#657b49', x, 0.18, z);
-    const flower = mesh(new THREE.IcosahedronGeometry(0.09, 0), ['#ead784', '#e7c3bd', '#e9e3c1'][i % 3], x, 0.4, z);
-    flower.scale.y = 0.4;
-    for (let blade = 0; blade < 3; blade++) {
-      const grass = box(0.024, 0.18 + random() * 0.2, 0.015, blade % 2 ? '#859360' : '#627e50', x + Math.sin(blade * 2) * 0.15, 0.14, z + Math.cos(blade * 2) * 0.12);
-      grass.rotation.z = Math.sin(i + blade) * 0.25;
+
     }
   }
   // A restrained skyline identifies the setting without pretending to reproduce the historic venue.
@@ -219,6 +166,7 @@ export async function createFieldGames(container, config) {
   mesh(new THREE.CylinderGeometry(0.42, 0.15, 0.6, 24), '#d9b462', 5.6, 1.5, -8, world, 0.75);
   pole(0.06, 0.3, '#c5a15a', 5.6, 1.15, -8); pole(0.25, 0.08, '#c5a15a', 5.6, 1.05, -8);
   for (const side of [-1, 1]) { const handle = mesh(new THREE.TorusGeometry(0.22, 0.045, 8, 18), '#d9b462', 5.6 + side * 0.36, 1.55, -8, world, 0.75); handle.scale.y = 1.2; }
+  const garden = buildFieldGarden({ THREE, world, mesh, box, pole, ball, mat, random, theme: config.theme });
   // The park has hundreds of small shapes, but a phone should draw only a few
   // material batches. Bake static transforms once; keep gameplay meshes separate.
   world.updateMatrixWorld(true);
@@ -238,6 +186,29 @@ export async function createFieldGames(container, config) {
     world.add(combined); batch.geometries.forEach((geometry) => geometry.dispose());
   }
   originals.forEach((object) => { object.removeFromParent(); object.geometry.dispose(); });
+  const trees = [], bushes = [], grasses = [];
+  const terrainHeight = (x, z) => {
+    const localZ = -z - 4;
+    const outside = Math.min(1, Math.max(0, Math.abs(x) - 8) / 14 + Math.max(0, localZ - 22) / 20);
+    return outside * (1.4 + Math.sin(x * 0.12 + localZ * 0.09) * 1.2) - 0.035;
+  };
+  for (let i = 0; i < 30; i++) {
+    const side = i % 2 ? -1 : 1, x = side * (13 + random() * 7), z = 12 - Math.floor(i / 2) * 4.2 + random() * 2;
+    trees.push({ x, y: terrainHeight(x, z), z, height: 7 + random() * 4.5, type: i % 4 ? 'birch' : 'spruce', haze: z < -30 ? 0.1 : 0 });
+  }
+  for (let i = 0; i < 17; i++) {
+    const x = -35 + i * 4.5, z = -53 - random() * 8;
+    trees.push({ x, y: terrainHeight(x, z), z, height: 10 + random() * 6, type: 'spruce', haze: 0.28 });
+  }
+  for (const side of [-1, 1]) for (let i = 0; i < 20; i++) {
+    const x = side * (8.9 + random() * 1.4), z = 11 - i * 1.8;
+    bushes.push({ x, y: terrainHeight(x, z), z, radius: 0.6 + random() * 0.45, color: config.theme === 'park' ? '#496f47' : '#69834e' });
+    grasses.push({ x: side * (6.1 + random() * 0.2), z, radius: 0.32, height: 0.22, count: 22 });
+    grasses.push({ x: side * (10.2 + random() * 2), y: terrainHeight(side * 11, z), z, radius: 1.2, height: 0.42, count: 35 });
+  }
+  const nature = buildNature({ trees, bushes, grass: grasses, seed: config.year, reducedMotion: a.reducedMotion, sunDirection: a.sun?.position });
+  const flowers = buildFlowerBorders(THREE, { seed: config.year, park: config.theme === 'park' });
+  scene.add(nature.group, flowers.group);
   const people = [];
   const athlete = createPerson(appearanceFor('Mikael Hägglund', { detail: 'low', outfit: { top: 'jersey', topColor: 0xd8b35f, bottom: 'shorts', bottomColor: 0x35555b } }));
   athlete.root.rotation.y = Math.PI; scene.add(athlete.root); people.push(athlete);
@@ -524,6 +495,7 @@ export async function createFieldGames(container, config) {
     camera.lookAt(cameraLook);
   }
   a.onFrame((dt, t) => {
+    nature.update(t); sky.update(t); if (!a.reducedMotion) flowers.update(t);
     updateCamera(dt);
     eventSign?.lookAt(camera.position.x, 1.5, camera.position.z);
     for (let i = 1; i < people.length; i++) {
@@ -640,7 +612,8 @@ export async function createFieldGames(container, config) {
   updateCamera(); intro();
   return { destroy() {
     cancelInput(); people.forEach((p) => { scene.remove(p.root); p.dispose(); }); a.destroy();
+    garden.dispose();
     materials.forEach((material) => material.dispose());
-    [grassTexture, gravelTexture, woodTexture, leafTexture].forEach((texture) => texture.dispose());
+    [grassTexture, gravelTexture, woodTexture].forEach((texture) => texture.dispose());
   } };
 }

@@ -119,15 +119,15 @@ function createHammer(ctx) {
   // Iron nail heads are deliberately oversized so strike depth reads on a phone.
   const nails = Array.from({ length: 5 }, (_, i) => {
     const nail = new THREE.Group(); nail.position.set(-2.4 + i * 1.2, 1.7, -1.7); group.add(nail);
-    cylinder(0.055, 0.95, 0xaeb7b3, 0, 0.43, 0, nail);
-    cylinder(0.19, 0.08, 0xe2e5d9, 0, 0.93, 0, nail);
+    cylinder(0.055, 0.95, 0xaeb7b3, 0, 0.43, 0, nail).material = ctx.material(0xaeb7b3, .72);
+    cylinder(0.19, 0.08, 0xe2e5d9, 0, 0.93, 0, nail).material = ctx.material(0xe2e5d9, .66);
     box(0.21, 0.006, 0.025, 0x81918e, 0, 0.974, 0, nail);
     return nail;
   });
   const mallet = new THREE.Group(); group.add(mallet);
   cylinder(0.065, 1.6, 0xaf8252, 0, 0.8, 0, mallet);
-  box(0.78, 0.36, 0.38, 0x596360, 0, 1.65, 0, mallet);
-  box(0.18, 0.39, 0.41, 0xb8beba, -0.36, 1.65, 0, mallet);
+  box(0.78, 0.36, 0.38, 0x596360, 0, 1.65, 0, mallet).material = ctx.material(0x596360, .64);
+  box(0.18, 0.39, 0.41, 0xb8beba, -0.36, 1.65, 0, mallet).material = ctx.material(0xb8beba, .8);
   box(0.075, 0.5, 0.22, 0xd3bc8b, 0, 0.45, 0.001, mallet);
   const ring = mesh(new THREE.TorusGeometry(0.4, 0.045, 8, 36), 0xefcf70, -2.4, 1.74, -1.7);
   ring.rotation.x = -Math.PI / 2;

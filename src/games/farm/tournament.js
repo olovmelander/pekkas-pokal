@@ -20,10 +20,10 @@ export async function createFarmTournament(container) {
   game.root.classList.add('farm-tournament');
   const { scene, camera } = game;
   game.sun.position.set(-12, 24, 10); game.sun.intensity = 3;
-  game.ambient.intensity = 2.1;
+  game.ambient.intensity = .92;
   game.renderer.toneMappingExposure = 1.15;
   scene.fog = new THREE.Fog('#c0d1ca', 40, 115);
-  const world = buildCountryWorld(scene, false);
+  const world = buildCountryWorld(scene, false, { reducedMotion: game.reducedMotion, sunDirection: game.sun.position });
   const props = new THREE.Group(); scene.add(props);
   const person = createPerson(appearanceFor('Per Vikman', { detail: 'low', outfit: { top: 'shirt', topColor: 0xc79a57, bottom: 'jeans', bottomColor: 0x405361, shoes: 'boots' } }));
   person.root.position.set(-2, 0, 6); person.root.rotation.y = Math.PI; scene.add(person.root);
@@ -46,7 +46,7 @@ export async function createFarmTournament(container) {
     dragging = false; event?.cancel?.();
   };
   const ctx = {
-    THREE, group: props,
+    THREE, group: props, material: world.material,
     mesh: (geometry, color, x = 0, y = 0, z = 0, parent = props) => world.mesh(geometry, color, x, y, z, parent),
     box: (w, h, d, color, x = 0, y = 0, z = 0, parent = props) => world.box(w, h, d, color, x, y, z, parent),
     cylinder: (r, h, color, x = 0, y = 0, z = 0, parent = props, rt = r) => world.cylinder(r, h, color, x, y, z, parent, rt),
@@ -147,6 +147,7 @@ export async function createFarmTournament(container) {
   game.listen(game.renderer.domElement, 'pointerup', () => { dragging = false; });
   game.listen(game.renderer.domElement, 'pointercancel', clearInput);
   game.onFrame((dt, time) => {
+    world.update(time);
     if (mode === 'playing') {
       elapsed += dt;
       const direction = Number(held.right || game.keys.has('ArrowRight') || game.keys.has('KeyD')) - Number(held.left || game.keys.has('ArrowLeft') || game.keys.has('KeyA'));
