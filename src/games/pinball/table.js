@@ -716,9 +716,25 @@ export function createPlayfieldCanvas(_participants = [], logo = null) {
   g.fillText('UT', toU(mirrorX(-8.05)), toV(10.6));
   g.letterSpacing = '0px';
 
-  /* ---- Shooter lane ---- */
+  /* ---- Shooter lane: a gold runway with arrows up it ---- */
   g.fillStyle = 'rgba(242,193,78,.14)';
   g.fillRect(toU(L.laneX), toV(L.domeY), toU(L.outerX) - toU(L.laneX), toV(2) - toV(L.domeY));
+  g.save();
+  for (let i = 0; i < 7; i++) {
+    const y = 4.2 + i * 1.7;
+    const a = 0.22 + (i / 7) * 0.35;
+    g.fillStyle = `rgba(255,214,120,${a.toFixed(2)})`;
+    g.beginPath();
+    g.moveTo(toU(L.laneBallX - 0.55), toV(y));
+    g.lineTo(toU(L.laneBallX), toV(y + 0.6));
+    g.lineTo(toU(L.laneBallX + 0.55), toV(y));
+    g.lineTo(toU(L.laneBallX + 0.55), toV(y - 0.32));
+    g.lineTo(toU(L.laneBallX), toV(y + 0.28));
+    g.lineTo(toU(L.laneBallX - 0.55), toV(y - 0.32));
+    g.closePath();
+    g.fill();
+  }
+  g.restore();
 
   /* ---- Ball-save lamp label, just above the apron ---- */
   g.fillStyle = 'rgba(90,240,150,.8)';

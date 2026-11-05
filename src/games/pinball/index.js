@@ -21,7 +21,8 @@ import { guardRenderer, postTarget, addSanitize, RenderWatchdog, gfxNotice, prec
 import { World, Ball, clamp } from './physics.js';
 import { L, buildColliders, createPlayfieldCanvas } from './table.js';
 import {
-  CAB, headTop, buildTable, buildCabinet, buildGlass, createMaterials, machineEnvironment, bakeStatic
+  CAB, headTop, buildTable, buildCabinet, buildGlass, createMaterials, machineEnvironment, bakeStatic,
+  ballEnvironment
 } from './meshes.js';
 import { Dmd, fmtScore } from './dmd.js';
 import { Sfx } from './audio.js';
@@ -173,6 +174,11 @@ export async function createPinball(container, opts = {}) {
   const materials = createMaterials(THREE, pfTexture);
   const { group: tableGroup, refs } = buildTable(THREE, mergeGeometries, materials);
   scene.add(tableGroup);
+  // The ball mirrors a room made for it (see ballEnvironment)
+  const ballEnvSource = ballEnvironment(THREE);
+  const ballEnvRT = pmrem.fromEquirectangular(ballEnvSource);
+  ballEnvSource.dispose();
+  materials.ball.envMap = ballEnvRT.texture;
 
   // Ball mesh pool for multiball, plus parked meshes for locked balls
   const ballMeshes = [refs.ball];
@@ -198,7 +204,7 @@ export async function createPinball(container, opts = {}) {
         polygonOffsetUnits: -4
       })
     );
-    m.scale.setScalar(L.ballRadius * 4.2);
+    m.scale.setScalar(L.ballRadius * 3.3);
     m.visible = false;
     m.renderOrder = 1;
     tableGroup.add(m);
@@ -2044,6 +2050,8 @@ export async function createPinball(container, opts = {}) {
       });
       // The last two seconds of ball save hurry, as on a real machine
       if (lit.save && saveLeft < 2000) level.save = Math.floor(now / 90) % 2 ? 1 : null;
+      // An extra ball in hand: the same lamp burns steady (SHOOT AGAIN)
+      else if (!lit.save && state.extraBalls > 0 && state.phase !== 'over') level.save = 0.75 + 0.25 * Math.sin(now / 420);
     }
 
     // Lamp show on top
@@ -2230,6 +2238,7 @@ export async function createPinball(container, opts = {}) {
     else if (state.multiball) [status, hot] = [state.jackpotLit ? 'JACKPOT TÄND' : 'TÄND JACKPOT', state.jackpotLit];
     else if (state.lockLit) [status, hot] = ['LÅS TÄNT', true];
     else if (state.modeStartLit) [status, hot] = ['GREN TÄND', true];
+    else if (state.extraBalls > 0) status = 'EXTRA BOLL';
     else status = `LÅS ${'●'.repeat(state.locked)}${'○'.repeat(Math.max(0, 2 - state.locked))}`;
     d.play({ score: scoreShown, ball: state.ballNo, mult: state.mult, mode, status, hot }, t);
   };
@@ -2563,8 +2572,9 @@ export async function createPinball(container, opts = {}) {
       sh.visible = mesh.visible;
       if (!mesh.visible) return;
       const lift = Math.max(0, mesh.position.y - L.ballRadius - 0.04);
-      sh.position.set(mesh.position.x, 0.03, mesh.position.z);
-      sh.scale.setScalar(L.ballRadius * (4.2 + lift * 1.1));
+      // Nudged a touch away from the key light (up and to the right)
+      sh.position.set(mesh.position.x - 0.08 - lift * 0.3, 0.03, mesh.position.z + 0.06 + lift * 0.2);
+      sh.scale.setScalar(L.ballRadius * (3.3 + lift * 1.3));
       sh.material.opacity = Math.max(0, 1 - lift * 0.42);
     });
 
@@ -2583,6 +2593,8 @@ export async function createPinball(container, opts = {}) {
     if (refs.plunger) {
       const back = state.phase === 'launch' ? state.power * 1.5 : 0;
       refs.plunger.position.z = -L.laneBottomY + 0.6 + back;
+      // From the lane wall to the front of the knob (rod centre + 1.5 − 0.42)
+      if (refs.spring) refs.spring.scale.z = Math.max(0.2, refs.plunger.position.z + 1.08 - refs.spring.position.z);
     }
 
     // Drop target animation
@@ -2841,6 +2853,7 @@ export async function createPinball(container, opts = {}) {
     fx.dispose();
     room.dispose();
     envRT.dispose();
+    ballEnvRT.dispose();
     pmrem.dispose();
     // Passes own their materials and targets; the composer only its two
     composer.passes.forEach((pass) => pass.dispose());

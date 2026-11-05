@@ -287,7 +287,7 @@ export async function createShooting(container) {
   const shooter = createPerson({
     name: 'Skytten', height: 2.6, build: 'average', skin: SKIN_TONES.light,
     hair: { style: 'buzz' },
-    outfit: { top: 'jacket', topColor: 0x46533a, bottom: 'trousers', bottomColor: 0x3b3a34 },
+    outfit: { top: 'jacket', topColor: 0x6f7a55, bottom: 'trousers', bottomColor: 0x3b3a34 },
     gloves: { side: 'both', color: 0xdcc093, cuff: false }
   });
   shooter.root.rotation.y = Math.PI; // face down the barrels (−z)

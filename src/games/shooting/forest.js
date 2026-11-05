@@ -307,7 +307,7 @@ export function addBirch(G, rand, x, y0, z, h, o = {}) {
     const [sx, sy, sz] = at(Math.min(1, f));
     const a = rand() * Math.PI * 2;
     const out = cw * (0.45 + rand() * 0.6) * Math.sin(Math.PI * Math.min(0.95, f * 0.95));
-    const rr = cw * (0.22 + rand() * 0.14) * (1 - Math.abs(f - 0.7) * 0.6);
+    const rr = cw * (0.22 + rand() * 0.14) * (1 - Math.abs(f - 0.7) * 0.6) * (o.clumpScale || 1);
     const tint = leaf.clone().offsetHSL((rand() - 0.5) * 0.04, (rand() - 0.5) * 0.1, (rand() - 0.5) * 0.12);
     addClump(G, rand, sx + Math.cos(a) * out, sy - rr * 0.15, sz + Math.sin(a) * out, rr, {
       tint, haze, centre: crownC, squash: 1.5, droop: 0.5, shade: 0.4, tipK: 0.4, lift: 0.9, detail: o.detail
@@ -565,7 +565,7 @@ export function buildForest(rand, { lite = false } = {}) {
   const field = new Growth();
   // A big old birch pair by the barn, a spruce group on the right
   [[-41, -58, 1.35], [-37, -61, 1.1], [24, -60, 1.2], [29, -66, 1], [55, -64, 1.15]].forEach(([bx, bz, s]) => {
-    addBirch(field, rand, bx, -0.2, bz, (9 + rand() * 3) * s, { haze: 0.04, clumps: lite ? 10 : 20 });
+    addBirch(field, rand, bx, -0.2, bz, (9 + rand() * 3) * s, { haze: 0.04, clumps: lite ? 12 : 30, clumpScale: lite ? 0.85 : 0.72 });
   });
   [[36, -74, 12], [40, -78, 15], [33, -80, 9], [-58, -76, 13], [-62, -72, 10], [70, -86, 14]].forEach(([sx, sz, h]) => {
     addSpruce(field, rand, sx, -0.3, sz, h, {

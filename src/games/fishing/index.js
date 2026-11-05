@@ -306,10 +306,10 @@ export async function createFishing(container) {
 
   /* ---- Shoal ---------------------------------------------------------- */
 
-  const assets = fishAssets();
+  const assets = fishAssets(LITE);
   const DECO = LITE ? 3 : 5;
   const shoal = new Shoal(assets, [42, 24, 26, 16, 16, 2]);
-  shoal.meshes.forEach((m) => scene.add(m));
+  shoal.objects.forEach((m) => scene.add(m));
 
   const fishes = [];
   const schools = [];
@@ -2084,7 +2084,7 @@ export async function createFishing(container) {
       if (!hold) return null;
       const a = hold.getWorldPosition(new THREE.Vector3());
       const b = angler.knob.getWorldPosition(new THREE.Vector3());
-      return a.distanceTo(b);
+      return { gap: a.distanceTo(b), ...angler.dbg };
     },
     /** Pin the camera (world position and look-at point, arrays); null releases. */
     pinCamera(pos, look) {

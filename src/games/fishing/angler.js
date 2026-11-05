@@ -179,6 +179,8 @@ export function createAngler(boat) {
     outP.copy(anchor.position).applyQuaternion(outQ);
     outP.subVectors(point, outP);
   }
+  /** What the left hand did last frame (for the test hook). */
+  const dbg = { lead: 'fore', wc: 0, short: 0 };
   /** Blend accumulator for the left hand. */
   const acc = { w: 0 };
   const hP = new THREE.Vector3();
@@ -408,8 +410,10 @@ export function createAngler(boat) {
       tgtL.multiplyScalar(1 / acc.w);
       person.bones.upperArmL.getWorldPosition(pole);
       pole.add(dirW(0.5 + wfi * 0.4 + wcap * 0.5, -0.6 + wfi * 0.4 + wcap * 0.1, -0.9 + wfi * 0.9 + wcap * 0.6, v).multiplyScalar(s));
-      person.ikArm('L', tgtL, pole, qL);
+      dbg.short = person.ikArm('L', tgtL, pole, qL);
     }
+    dbg.lead = lead;
+    dbg.wc = wc;
 
     /* Face and gaze */
     if (look) person.lookAt(lookV.copy(look), 0.9);
@@ -423,6 +427,7 @@ export function createAngler(boat) {
     person,
     rod,
     knob,
+    dbg,
     update,
     trigger,
     /** World position of the rod tip (where the line leaves). */

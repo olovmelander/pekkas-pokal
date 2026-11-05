@@ -151,6 +151,73 @@ export function machineEnvironment(THREE) {
 }
 
 /**
+ * The ball's own reflection map. A steel ball is a convex mirror of
+ * everything round it, and what makes it read as steel (rather than a grey
+ * marble) is that it shows the room crisply: the fixtures overhead, the
+ * backbox up the table, a ring of warm GI at its equator and the blue
+ * playfield underneath. Values are kept moderate; the ball shader caps the
+ * result under the bloom threshold anyway.
+ */
+export function ballEnvironment(THREE) {
+  const W = 1024;
+  const H = 512;
+  const cv = document.createElement('canvas');
+  cv.width = W;
+  cv.height = H;
+  const g = cv.getContext('2d');
+  // Sky: dark room. Ground: the playfield, lit near the ball, darker far off.
+  const sky = g.createLinearGradient(0, 0, 0, H / 2);
+  sky.addColorStop(0, '#1a2038');
+  sky.addColorStop(1, '#0b0e1c');
+  g.fillStyle = sky;
+  g.fillRect(0, 0, W, H / 2);
+  const ground = g.createLinearGradient(0, H / 2, 0, H);
+  ground.addColorStop(0, '#1d2a66');
+  ground.addColorStop(0.35, '#2f45a8');
+  ground.addColorStop(1, '#3a52c0');
+  g.fillStyle = ground;
+  g.fillRect(0, H / 2, W, H / 2);
+  const soft = (x, y, w, h, color, blur) => {
+    g.save();
+    g.shadowColor = color;
+    g.shadowBlur = blur;
+    g.fillStyle = color;
+    g.fillRect(x, y, w, h);
+    g.restore();
+  };
+  // Two long ceiling fixtures, crisp-edged with a little bloom of their own,
+  // and a dimmer row further off: highlights that slide over the ball
+  soft(W * 0.12, H * 0.1, W * 0.2, H * 0.05, '#e9eefc', 18);
+  soft(W * 0.58, H * 0.12, W * 0.22, H * 0.045, '#e9eefc', 18);
+  soft(W * 0.36, H * 0.22, W * 0.12, H * 0.03, '#a9b4d8', 10);
+  soft(W * 0.86, H * 0.25, W * 0.08, H * 0.025, '#a9b4d8', 10);
+  // The backbox, amber, standing up the table (−z sits at u ≈ 0.25)
+  soft(W * 0.19, H * 0.3, W * 0.12, H * 0.14, '#d98b3a', 26);
+  soft(W * 0.21, H * 0.33, W * 0.08, H * 0.05, '#ffbf73', 10);
+  // GI ring at the horizon: warm blobs all the way round
+  for (let i = 0; i < 18; i++) {
+    const x = (i / 18) * W + (i % 2) * 14;
+    const grad = g.createRadialGradient(x, H * 0.5, 0, x, H * 0.5, 26);
+    grad.addColorStop(0, 'rgba(255,214,150,.85)');
+    grad.addColorStop(1, 'rgba(255,214,150,0)');
+    g.fillStyle = grad;
+    g.fillRect(x - 26, H * 0.5 - 26, 52, 52);
+  }
+  // Lit inserts and the lane guides in the playfield below
+  [[0.1, 0.66, '#f2c14e'], [0.3, 0.72, '#f26d8d'], [0.52, 0.64, '#7c8cf8'], [0.7, 0.7, '#5eead4'], [0.9, 0.67, '#f2c14e']].forEach(([u, v, c]) => {
+    const grad = g.createRadialGradient(u * W, v * H, 0, u * W, v * H, 34);
+    grad.addColorStop(0, c);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = grad;
+    g.fillRect(u * W - 34, v * H - 34, 68, 68);
+  });
+  const tex = new THREE.CanvasTexture(cv);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/**
  * Micro-variation for the playfield clearcoat: ink irregularity plus the fine
  * swirl a coated playfield picks up from years of balls and cloths. A coat of
  * perfectly uniform gloss is the tell-tale CG-plastic look.
@@ -2424,12 +2491,35 @@ export function buildTable(THREE, mergeGeometries, materials) {
   /* ---- Ball ---- */
   // A near-mirror with a strong environment: the ball must pick up the
   // ceiling strips hard enough to stay findable against a dark playfield.
+  // Polished steel. It reflects its own environment (index.js hands it one
+  // made for it: ceiling fixtures, the backbox, the GI ring at the horizon,
+  // the blue playfield below), and every term is held under the bloom
+  // threshold — a near-mirror ball sparkling in and out of a third-res bloom
+  // is a firefly. The direct-light highlight is allowed to be the hottest
+  // thing on it, so it still reads as a small hard glint.
   materials.ball = new THREE.MeshStandardMaterial({
     color: 0xffffff,
-    roughness: 0.09,
+    roughness: 0.07,
     metalness: 1,
-    envMapIntensity: 2
+    envMapIntensity: 1.45
   });
+  materials.ball.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <lights_fragment_end>',
+      `#include <lights_fragment_end>
+      {
+        vec3 is = reflectedLight.indirectSpecular;
+        is *= min(1.0, 0.64 / max(max(max(is.r, is.g), is.b), 1e-4));
+        vec3 ds = reflectedLight.directSpecular;
+        ds *= min(1.0, 0.62 / max(max(max(ds.r, ds.g), ds.b), 1e-4));
+        vec3 sum = is + ds;
+        float k = min(1.0, 0.9 / max(max(max(sum.r, sum.g), sum.b), 1e-4));
+        reflectedLight.indirectSpecular = is * k;
+        reflectedLight.directSpecular = ds * k;
+      }`
+    );
+  };
+  materials.ball.customProgramCacheKey = () => 'pb-ball-steel';
   const ball = new THREE.Mesh(
     new THREE.SphereGeometry(L.ballRadius, 40, 28),
     materials.ball
@@ -2442,9 +2532,12 @@ export function buildTable(THREE, mergeGeometries, materials) {
   // Contact shadow. The shadow map covers the whole table, so its softest
   // penumbra is wider than the ball itself and the ball reads as hovering.
   // A tight dark blob pinned under it is what puts it back on the wood.
+  // Tight and dark at the core (the contact), soft at the edge (the
+  // occlusion round it): what keeps a small ball on the wood in portrait
   refs.contactTexture = radialTexture(THREE, 0, [
-    [0, 'rgba(0,0,0,0.62)'],
-    [0.45, 'rgba(0,0,0,0.3)'],
+    [0, 'rgba(0,0,0,0.82)'],
+    [0.28, 'rgba(0,0,0,0.6)'],
+    [0.6, 'rgba(0,0,0,0.18)'],
     [1, 'rgba(0,0,0,0)']
   ]);
   refs.contactGeometry = flatten(new THREE.PlaneGeometry(1, 1));
@@ -2465,6 +2558,25 @@ export function buildTable(THREE, mergeGeometries, materials) {
     plunger.userData.keep = true;
     group.add(plunger);
     refs.plunger = plunger;
+
+    // The shooter spring: a steel coil round the rod from the lane wall to
+    // the knob, built one unit long and stretched to fit every frame, so it
+    // visibly loads up as the plunger is drawn back
+    const turns = 9;
+    const pts = [];
+    for (let i = 0; i <= turns * 14; i++) {
+      const t = i / (turns * 14);
+      const a = t * turns * Math.PI * 2;
+      pts.push(new THREE.Vector3(Math.cos(a) * 0.27, Math.sin(a) * 0.27, t));
+    }
+    const coil = new THREE.Mesh(
+      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), turns * 18, 0.034, 5, false),
+      materials.chrome
+    );
+    coil.position.set(L.laneBallX, 0.55, -L.laneBottomY + L.laneWallR);
+    coil.userData.keep = true;
+    group.add(coil);
+    refs.spring = coil;
   }
 
   /* ---- Plastics, GI bulbs, flashers and the lamp matrix ---- */

@@ -553,139 +553,218 @@ export const JUNK = [
 
 const EYE_DARK = C(0x05080f);
 
+/** Tail fins: lobe length and height, how deep the fork, how the edge bows. */
+const TAILS = {
+  fork: { len: 0.6, h: 0.5, notch: 0.24, bow: 0.05 },
+  forkDeep: { len: 0.64, h: 0.52, notch: 0.15, bow: 0.07 },
+  fan: { len: 0.47, h: 0.42, notch: 0.4, bow: -0.03 }
+};
+
 /** Tail tip in the fish's own frame — where the bend wave peaks. */
 function tailTip(sp) {
-  return sp.profile.x(1) - (sp.tail === 'fork' ? 0.62 : 0.5);
+  return sp.profile.x(1) - TAILS[sp.fins.tail].len;
 }
 
-function tailBlade(kind) {
-  if (kind === 'fork') {
-    return [
-      blade([[0, 0], [-0.5, 0.52], [-0.62, 0.3], [-0.2, 0.02]], 0.05),
-      blade([[0, 0], [-0.2, -0.02], [-0.62, -0.3], [-0.5, -0.52]], 0.05)
-    ];
+const smoothK = (e0, e1, x) => {
+  const k = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)));
+  return k * k * (3 - 2 * k);
+};
+
+/**
+ * Every fin of a species as a thin membrane (see finMembrane): the tail,
+ * one or two dorsals, the anal fin, and a pair each of pectorals and
+ * pelvics splayed out from the flanks.
+ */
+function buildFins(sp, backY, sideZ, lite) {
+  const { profile, fins: F } = sp;
+  const out = [];
+  const rays = (n) => (lite ? Math.max(3, Math.round(n * 0.7)) : n);
+  const finC = sp.fin;
+  const dorC = sp.finD ?? sp.fin;
+  const tailC = sp.finT ?? sp.fin;
+
+  /* Tail: rays fan from the root to a concave, forked trailing edge */
+  const tx = profile.x(1);
+  const rh = profile.radius(1) * profile.height * profile.hK(1) * 0.92;
+  const T = TAILS[F.tail];
+  const tailTipAt = (t) => {
+    const top = t < 0.5;
+    const k = top ? t * 2 : (1 - t) * 2; // 0 at a lobe tip, 1 at the fork
+    const sg = top ? 1 : -1;
+    const p0x = tx - T.len;
+    const p0y = sg * T.h;
+    const p1x = tx - (T.len + T.notch) / 2 + T.bow;
+    const p1y = sg * T.h * 0.35;
+    const p2x = tx - T.notch;
+    const q = 1 - k;
+    return [q * q * p0x + 2 * q * k * p1x + k * k * p2x, q * q * p0y + 2 * q * k * p1y];
+  };
+  out.push(finMembrane(rays(8), (t) => [tx + 0.035, rh * (1 - 2 * t)], tailTipAt,
+    { color: tailC, aMem: [0.85, 0.6, 0.36, 0.08] }));
+
+  /* Dorsal fins along the back, raked back */
+  F.dorsal.forEach((d) => {
+    const xf = profile.x(d.from);
+    const xb = profile.x(d.to);
+    const root = (t) => {
+      const x = xf + (xb - xf) * t;
+      return [x, backY(x) - 0.025];
+    };
+    const lean = d.lean ?? 0.42;
+    const ht = (t) => {
+      if (d.shape === 'round') return d.h * (0.55 + 0.45 * Math.sin(Math.PI * (0.12 + 0.76 * t)));
+      if (d.shape === 'spiny') return d.h * (0.82 + 0.18 * Math.sin(Math.PI * Math.min(1, t * 1.4))) * (1 - 0.42 * t);
+      return d.h * (1 - 0.72 * t) ** 0.85;
+    };
+    const tip = (t) => {
+      const r = root(t);
+      const hh = ht(t);
+      return [r[0] - hh * lean, r[1] + hh];
+    };
+    const spiny = d.shape === 'spiny';
+    out.push(finMembrane(rays(d.rays || 7), root, tip, {
+      color: dorC,
+      notch: spiny ? 0.6 : 0.95,
+      aRay: spiny ? [0.98, 0.96, 0.92, 0.86] : undefined,
+      // The perch's black spot at the back of its spiny dorsal
+      spot: d.spot ? (t, r) => smoothK(0.6, 0.78, t) * smoothK(0.15, 0.45, r) * 0.95 : null
+    }));
+  });
+
+  /* Anal fin under the rear of the belly */
+  if (F.anal) {
+    const xf = profile.x(F.anal.from);
+    const xb = profile.x(F.anal.to);
+    const root = (t) => {
+      const x = xf + (xb - xf) * t;
+      return [x, -backY(x) + 0.025];
+    };
+    const tip = (t) => {
+      const r = root(t);
+      const hh = F.anal.h * (1 - 0.6 * t) ** 0.8;
+      return [r[0] - hh * 0.45, r[1] - hh];
+    };
+    out.push(finMembrane(rays(6), root, tip, { color: finC }));
   }
-  return [blade([[0, 0.04], [-0.34, 0.42], [-0.5, 0], [-0.34, -0.42], [0, -0.04]], 0.05)];
+
+  /* Pectorals behind the gill cover and pelvics under the belly, a pair
+     each, splayed out from the body */
+  const side = (u, len, yK, splay, zK, pelvic) => {
+    const x = profile.x(u);
+    const y = -profile.radius(u) * profile.height * profile.hK(u) * yK;
+    const zs = sideZ(u) * zK;
+    const root = pelvic ? (t) => [x - t * 0.08, y] : (t) => [x - t * 0.03, y + 0.045 - t * 0.09];
+    const tip = pelvic
+      ? (t) => [x - 0.06 - len * (0.85 - 0.15 * t), y - len * 0.45 + t * len * 0.2]
+      : (t) => [x - len * (1 - 0.25 * t) - 0.03, y - 0.02 - t * 0.12 - len * 0.16];
+    [1, -1].forEach((sd) => {
+      const m = new THREE.Matrix4().makeTranslation(0, y, sd * zs)
+        .multiply(new THREE.Matrix4().makeRotationX(-sd * splay))
+        .multiply(new THREE.Matrix4().makeTranslation(0, -y, 0));
+      out.push(finMembrane(rays(5), root, tip, { color: finC, pale: 0.28, aMem: [0.75, 0.5, 0.28, 0.05] }, m));
+    });
+  };
+  if (F.pectoral) side(F.pectoral.at, F.pectoral.len, 0.35, 0.6, 0.92, false);
+  if (F.pelvic) side(F.pelvic.at, F.pelvic.len, 0.86, 0.8, 0.42, true);
+  return out;
 }
 
-function dorsalBlades(d, baseY) {
-  if (!d) return [];
-  if (d.spiny) {
-    const out = [];
-    const n = 5;
-    for (let i = 0; i < n; i++) {
-      const x = d.at - (i / n) * d.w;
-      const h = d.h * (1 - Math.abs(i - 1.2) / (n * 1.6));
-      out.push(blade([[x, baseY(x) - 0.04], [x - 0.09, baseY(x) + h], [x - 0.15, baseY(x) - 0.04]], 0.04));
-    }
-    return out;
-  }
-  const y0 = baseY(d.at) - 0.04;
-  return [blade([[d.at, y0], [d.at - d.w * 0.35, y0 + d.h], [d.at - d.w, y0 + d.h * 0.25], [d.at - d.w, y0]], 0.045)];
-}
-
-function buildSpecies(sp) {
+function buildSpecies(sp, lite) {
   const { profile } = sp;
   const paint = painter(sp);
   sp.paint = paint;
-  const finC = C(sp.fin);
   // Where the back is, in x — so fins sit on the body instead of floating
   const uOf = (x) => (profile.x(0) - x) / (profile.x(0) - profile.x(1));
-  const backY = (x) => profile.radius(uOf(x)) * profile.height;
-  const sideZ = (u) => profile.radius(u) * profile.width;
+  const backY = (x) => {
+    const u = uOf(x);
+    return profile.radius(u) * profile.height * profile.hK(u);
+  };
+  const sideZ = (u) => profile.radius(u) * profile.width * profile.wK(u);
 
-  const parts = [{ geometry: bodyGeometry(profile, 18, 10, paint) }];
+  const parts = [{ geometry: bodyGeometry(profile, lite ? 22 : 30, lite ? 12 : 16, paint) }];
 
-  if (sp.snout) {
-    // A pike's duck-bill: a flattened wedge grafted onto the nose
-    const nx = profile.x(0);
+  // The adipose fin of salmon and whitefish: small, fleshy, opaque
+  if (sp.fins.adipose) {
+    const ax = profile.x(sp.fins.adipose);
+    const y = backY(ax) - 0.03;
     parts.push({
-      geometry: blade([[nx + 0.3, 0.03], [nx + 0.3, -0.05], [nx - 0.18, -0.14], [nx - 0.18, 0.12]], 0.2),
-      color: paint(0.05, 0, 0.2, nx)
+      geometry: blade([[ax + 0.03, y], [ax - 0.03, y + 0.11], [ax - 0.12, y + 0.07], [ax - 0.13, y]], 0.025),
+      color: C(sp.back).lerp(C(sp.fin), 0.35)
     });
   }
 
-  const finDC = sp.finD ? C(sp.finD) : finC;
-  dorsalBlades(sp.dorsal, backY).forEach((g) => parts.push({ geometry: g, color: finDC }));
-  dorsalBlades(sp.dorsal2, backY).forEach((g) => parts.push({ geometry: g, color: finDC }));
-
-  // Pectorals and pelvics, one each side, swept back
-  [1, -1].forEach((s) => {
-    parts.push({
-      geometry: blade([[0.25, 0], [0.02, -0.16], [0.06, -0.3], [0.3, -0.1]], 0.035,
-        M(0, -0.06, s * sideZ(0.35) * 0.85)),
-      color: finC
-    });
-    const px = profile.x(0.55);
-    parts.push({
-      geometry: blade([[px, 0], [px - 0.2, -0.16], [px - 0.1, -0.02]], 0.03,
-        M(0, -backY(px) * 0.75, s * sideZ(0.55) * 0.5)),
-      color: finC
-    });
-  });
-
-  // Anal fin under the belly
-  const ax = profile.x(0.66);
-  parts.push({
-    geometry: blade([[ax, -backY(ax) + 0.04], [profile.x(0.72), -backY(ax) - 0.24],
-      [profile.x(0.8), -backY(profile.x(0.8)) + 0.02]], 0.04),
-    color: finC
-  });
-  if (sp.adipose) {
-    const y = backY(sp.adipose) - 0.03;
-    parts.push({
-      geometry: blade([[sp.adipose, y], [sp.adipose - 0.05, y + 0.13], [sp.adipose - 0.12, y]], 0.035),
-      color: finC
-    });
-  }
-
-  tailBlade(sp.tail).forEach((g) => {
-    g.translate(profile.x(1) + 0.02, 0, 0);
-    parts.push({ geometry: g, color: finC });
-  });
-
-  // Eyes: dark pupil on a coloured iris so they read at any depth
+  // Eyes: dark pupil on a coloured iris, set flush into the head
   const eu = sp.snout ? 0.2 : 0.13;
   const ex = profile.x(eu);
-  const ey = profile.radius(0.15) * profile.height * 0.32;
+  const ey = profile.radius(0.15) * profile.height * profile.hK(eu) * 0.34;
   const ez = sideZ(eu);
   [1, -1].forEach((s) => {
-    // Flattened into the head, as a fish's eye sits — not a bead on top
-    const iris = new THREE.SphereGeometry(sp.eye * 0.82, 9, 6);
+    const iris = new THREE.SphereGeometry(sp.eye * 0.82, 10, 7);
     iris.applyMatrix4(M(ex, ey, s * ez * 0.86, 0, 1, 1, 0.42));
     parts.push({ geometry: iris, color: C(sp.iris) });
-    const pupil = new THREE.SphereGeometry(sp.eye * 0.5, 7, 4);
+    const pupil = new THREE.SphereGeometry(sp.eye * 0.5, 8, 5);
     pupil.applyMatrix4(M(ex + 0.015, ey, s * (ez * 0.86 + sp.eye * 0.22), 0, 1, 1, 0.4));
     parts.push({ geometry: pupil, color: EYE_DARK });
   });
 
+  // The Pekkagädda's crown: a small gold circlet sitting on her head,
+  // five points and three red stones — not a row of spikes down the back
   if (sp.crown) {
-    const top = profile.radius(0.32) * profile.height;
-    const crown = new THREE.CylinderGeometry(0.19, 0.15, 0.2, 7, 1, true);
-    crown.applyMatrix4(M(0.32, top + 0.08, 0));
-    parts.push({ geometry: crown, color: C(0xffe08a) });
+    const cu = 0.27;
+    const cx = profile.x(cu);
+    const top = profile.radius(cu) * profile.height * profile.hK(cu);
+    const gold = C(0xffd34d);
+    const band = new THREE.CylinderGeometry(0.105, 0.088, 0.075, 14, 1, false);
+    band.applyMatrix4(M(cx, top + 0.01, 0, -0.1));
+    parts.push({ geometry: band, color: gold });
     for (let i = 0; i < 5; i++) {
-      const spike = new THREE.ConeGeometry(0.055, 0.18, 5);
-      const a = (i / 5) * Math.PI * 2;
-      spike.applyMatrix4(M(0.32 + Math.cos(a) * 0.16, top + 0.26, Math.sin(a) * 0.16));
-      parts.push({ geometry: spike, color: C(0xfff3cf) });
+      const a = (i / 5) * Math.PI * 2 + 0.3;
+      const pt = new THREE.ConeGeometry(0.024, 0.075, 5);
+      pt.applyMatrix4(M(cx + Math.cos(a) * 0.098, top + 0.075 - Math.cos(a) * 0.01, Math.sin(a) * 0.098));
+      parts.push({ geometry: pt, color: C(0xffe69a) });
+      const ball = new THREE.SphereGeometry(0.014, 5, 4);
+      ball.applyMatrix4(M(cx + Math.cos(a) * 0.098, top + 0.118 - Math.cos(a) * 0.01, Math.sin(a) * 0.098));
+      parts.push({ geometry: ball, color: C(0xfff3cf) });
     }
+    [0, 2.1, -2.1].forEach((a) => {
+      const gem = new THREE.SphereGeometry(0.019, 6, 4);
+      gem.applyMatrix4(M(cx + Math.cos(a) * 0.1, top + 0.01, Math.sin(a) * 0.1));
+      parts.push({ geometry: gem, color: C(0xd8304a) });
+    });
   }
 
   const geometry = mergeParts(parts);
   geometry.computeBoundingSphere();
+  const finGeometry = mergeFins(buildFins(sp, backY, sideZ, lite));
+  finGeometry.computeBoundingSphere();
 
-  const material = new THREE.MeshStandardMaterial({
+  const opts = {
     vertexColors: true,
     roughness: sp.rough ?? 0.36,
     metalness: sp.metal ?? 0.18,
     emissive: sp.rare ? 0x8a5c00 : 0x000000,
-    emissiveIntensity: sp.rare ? 0.7 : 0
+    emissiveIntensity: sp.rare ? 0.6 : 0
+  };
+  // Silver species get a faint thin-film shimmer on their flanks — the
+  // rainbow sheen a fresh roach or whitefish has as it turns
+  const material = sp.irid
+    ? new THREE.MeshPhysicalMaterial({ ...opts, iridescence: 0.5, iridescenceIOR: 1.35, iridescenceThicknessRange: [180, 420] })
+    : new THREE.MeshStandardMaterial(opts);
+  const nose = profile.x(0) + 0.035;
+  swimShader(material, nose, nose - tailTip(sp), sp.irid ? 'fiske-fish-irid' : 'fiske-fish-v3');
+  // Fins: thin, half-clear membranes drawn after the bodies
+  const finMaterial = new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    roughness: 0.55,
+    metalness: 0,
+    emissive: sp.rare ? 0x6a4400 : 0x000000,
+    emissiveIntensity: sp.rare ? 0.5 : 0
   });
-  const nose = profile.x(0) + (sp.snout ? 0.3 : 0.04);
-  swimShader(material, nose, nose - tailTip(sp));
-
-  return { sp, geometry, material, nose };
+  swimShader(finMaterial, nose, nose - tailTip(sp), 'fiske-fin-v1');
+  return { sp, geometry, material, finGeometry, finMaterial, nose };
 }
 
 /**
@@ -695,7 +774,7 @@ function buildSpecies(sp) {
  * grows with s², and the normal is bent by the same derivative so the
  * flank highlights slide along the body as it flexes.
  */
-function swimShader(material, nose, len) {
+function swimShader(material, nose, len, key) {
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uNose = { value: nose };
     shader.uniforms.uLen = { value: len };
@@ -726,7 +805,7 @@ function swimShader(material, nose, len) {
         totalEmissiveRadiance += vec3(1.0, 0.93, 0.78) * vFlash;`);
     patchWaterFog(shader);
   };
-  material.customProgramCacheKey = () => 'fiske-fish-v2';
+  material.customProgramCacheKey = () => key;
 }
 
 function buildJunk(j) {
@@ -772,10 +851,13 @@ function buildJunk(j) {
 
 let ASSETS = null;
 
-export function fishAssets() {
-  if (!ASSETS) {
+/** Every species' meshes, built once (a lighter body on the phone tier). */
+export function fishAssets(lite = false) {
+  if (!ASSETS || ASSETS.lite !== lite) {
+    if (ASSETS) disposeAssets();
     ASSETS = {
-      species: SPECIES.map(buildSpecies),
+      lite,
+      species: SPECIES.map((sp) => buildSpecies(sp, lite)),
       junk: JUNK.map(buildJunk)
     };
   }
@@ -786,14 +868,18 @@ const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
 const TAU = Math.PI * 2;
 
 /**
- * Every swimmer in the lake, one InstancedMesh per species. A fish is a
- * plain record with a `mesh` proxy (an Object3D that is never added to
- * the scene) — game code moves the proxy exactly as it used to move a
- * real mesh, and sync() copies the proxies into the instance buffers.
+ * Every swimmer in the lake, two InstancedMeshes per species: the bodies
+ * (opaque) and their fins (half-clear membranes, drawn after). Both share
+ * ONE instance-matrix buffer and ONE swim-stroke stream, so the fins move
+ * exactly with their fish and nothing is uploaded twice. A fish is a plain
+ * record with a `mesh` proxy (an Object3D that is never added to the
+ * scene) — game code moves the proxy exactly as it used to move a real
+ * mesh, and sync() copies the proxies into the instance buffers.
  */
 export class Shoal {
   constructor(assets, capacity) {
     this.lists = assets.species.map(() => []);
+    this.fins = [];
     this.meshes = assets.species.map((asset, i) => {
       const cap = capacity[i];
       const mesh = new THREE.InstancedMesh(asset.geometry, asset.material, cap);
@@ -807,8 +893,16 @@ export class Shoal {
       mesh.count = 0;
       mesh.frustumCulled = false;
       mesh.userData.cap = cap;
+      const fins = new THREE.InstancedMesh(asset.finGeometry.clone(), asset.finMaterial, cap);
+      fins.instanceMatrix = mesh.instanceMatrix;
+      fins.geometry.setAttribute('aSwim', swimAttr);
+      fins.count = 0;
+      fins.frustumCulled = false;
+      this.fins.push(fins);
       return mesh;
     });
+    /** Everything to add to the scene. */
+    this.objects = [...this.meshes, ...this.fins];
     this.assets = assets;
   }
 
@@ -851,13 +945,14 @@ export class Shoal {
         arr[k * 4 + 2] = f.flash;
       }
       mesh.count = list.length;
+      this.fins[i].count = list.length;
       mesh.instanceMatrix.needsUpdate = true;
       swim.needsUpdate = true;
     });
   }
 
   dispose() {
-    this.meshes.forEach((m) => {
+    this.objects.forEach((m) => {
       m.geometry.dispose();
       m.dispose();
     });
@@ -876,6 +971,8 @@ export function disposeAssets() {
   ASSETS.species.forEach((a) => {
     a.geometry.dispose();
     a.material.dispose();
+    a.finGeometry.dispose();
+    a.finMaterial.dispose();
   });
   ASSETS.junk.forEach((a) => {
     a.geometry.dispose();
@@ -901,18 +998,20 @@ export function speciesSvg(sp, known = true) {
   for (let i = 0; i <= 16; i++) {
     const u = i / 16;
     const x = p.x(u);
-    const r = p.radius(u) * p.height;
+    const r = p.radius(u) * p.height * p.hK(u);
     top.push(`${x.toFixed(3)},${(-r).toFixed(3)}`);
     bot.unshift(`${x.toFixed(3)},${r.toFixed(3)}`);
   }
-  const nose = p.x(0) + (sp.snout ? 0.3 : 0.05);
+  const nose = p.x(0) + 0.05;
   const tx = p.x(1);
-  const tail = sp.tail === 'fork'
-    ? `${tx},0 ${tx - 0.5},-0.52 ${tx - 0.62},-0.3 ${tx - 0.2},0 ${tx - 0.62},0.3 ${tx - 0.5},0.52`
-    : `${tx},-0.04 ${tx - 0.34},-0.42 ${tx - 0.5},0 ${tx - 0.34},0.42 ${tx},0.04`;
-  const d = sp.dorsal;
-  const by = -p.radius((p.x(0) - d.at) / (p.x(0) - p.x(1))) * p.height + 0.04;
-  const dorsal = `${d.at},${by} ${d.at - d.w * 0.35},${by - d.h} ${d.at - d.w},${by - d.h * 0.25} ${d.at - d.w},${by}`;
+  const T = TAILS[sp.fins.tail];
+  const rr = p.radius(1) * p.height * 0.9;
+  const tail = `${tx + 0.02},${-rr} ${tx - T.len},${-T.h} ${tx - T.notch},0 ${tx - T.len},${T.h} ${tx + 0.02},${rr}`;
+  const d = sp.fins.dorsal[0];
+  const dx0 = p.x(d.from);
+  const dx1 = p.x(d.to);
+  const by = -p.radius(d.from) * p.height * p.hK(d.from) + 0.04;
+  const dorsal = `${dx0},${by} ${dx0 - d.h * 0.4},${by - d.h} ${dx1},${by - d.h * 0.3} ${dx1},${by}`;
   const id = `fi-g${++svgSeq}`; // unique: the same fish is drawn in several panels
   const back = known ? hex(sp.back) : '#1a3142';
   const belly = known ? hex(sp.belly) : '#2a4a5e';
