@@ -70,9 +70,6 @@ const SCORER = {
 
 const LUDVIG = 'Ludvig Ulenius';
 
-/** A resting hand's fingers drape over the knee like round a 13 cm cylinder. */
-const KNEE = { diameter: 0.13, blend: 0 };
-
 /* ------------------------------------------------------------- props */
 
 function paint(geo, color) {
@@ -272,16 +269,15 @@ export function buildGang({ rand }) {
       m.pencil.add(pencil);
       person.hold(m.pencil, 'R', 'pinch', { diameter: 0.009 });
     }
-    // Free hands rest cupped over the knee (the fingers close round a
-    // knee-sized cylinder, so they drape instead of lying flat), clench in a
-    // cheer and go back to the pose for clapping or folded arms. Every grip
-    // used is solved once here, while loading.
+    // Free hands: the pose drives them (resting on the knee they drape in
+    // the people system's natural cascade); in a cheer they clench. The fist
+    // is solved once here, while loading, then handed back to the pose.
     m.freeSides = seated ? (def.cup ? ['L'] : ['L', 'R']) : [];
     m.freeSides.forEach((side) => {
       person.setGrip(side, 'fist', { blend: 0 });
-      person.setGrip(side, 'cup', KNEE);
+      person.setGrip(side, null, { blend: 0 });
     });
-    m.freeGrip = 'rest';
+    m.freeGrip = null;
     members.push(m);
     return m;
   }
@@ -354,13 +350,10 @@ export function buildGang({ rand }) {
   }
 
   function freeHands(m, mode) {
-    const want = mode === 'cheer' || mode === 'gold' ? 'fist' : mode === 'clap' || mode === 'crossed' ? null : 'rest';
+    const want = mode === 'cheer' || mode === 'gold' ? 'fist' : null;
     if (m.freeGrip === want) return;
     m.freeGrip = want;
-    m.freeSides.forEach((side) => {
-      if (want === 'rest') m.person.setGrip(side, 'cup', { ...KNEE, blend: 0.3 });
-      else m.person.setGrip(side, want, { blend: 0.25 });
-    });
+    m.freeSides.forEach((side) => m.person.setGrip(side, want, { blend: 0.25 }));
   }
 
   function expressionFor(m, mode) {

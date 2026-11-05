@@ -33,8 +33,9 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { guardRenderer, postTarget, addSanitize, RenderWatchdog, gfxNotice, precompile } from '../shared/gfx.js';
 import { Sfx } from './audio.js';
-import { N, H, R_MIN, R_MAX, ClayBody, ringMaps, glazeMaps, clayMaterial, glazeMaterial } from './clay.js';
-import { mulberry, buildStudio, buildWheel, buildHand, buildSponge, buildEnvScene, disposeScene } from './studio.js';
+import { N, H, R_MIN, R_MAX, WALL, ClayBody, ringMaps, glazeMaps, clayMaterial, glazeMaterial } from './clay.js';
+import { mulberry, buildStudio, buildWheel, buildSponge, buildEnvScene, disposeScene } from './studio.js';
+import { buildPotterHand } from './hand.js';
 import { buildFx, HeatHazeShader } from './fx.js';
 import { buildGuide } from './guide.js';
 import { buildHud, drawDiff, silhouetteSvg, starsHtml } from './hud.js';
@@ -407,7 +408,8 @@ export async function createClay(container) {
   guide.group.position.y = wheel.headY;
   scene.add(guide.group);
   clayGroup.add(guide.ring);
-  const hand = buildHand();
+  const potter = buildPotterHand();
+  const hand = potter.group;
   hand.visible = false;
   guide.group.add(hand);
   const sponge = buildSponge();
@@ -416,7 +418,7 @@ export async function createClay(container) {
   // The guide draws without depth test, over everything; the hand and the
   // sponge are IN FRONT of it, so they join the transparent pass (fully
   // opaque, still depth-tested against the clay) and draw after it
-  [hand, sponge].forEach((m) => {
+  [potter.mesh, sponge].forEach((m) => {
     m.material.transparent = true;
     m.renderOrder = 40;
   });
@@ -1229,6 +1231,11 @@ export async function createClay(container) {
         body.ring[j] += (1.15 - body.ring[j]) * Math.min(1, w * dt * 3);
         body.wet[j] += (1 - body.wet[j]) * Math.min(1, w * dt * 2.5);
       }
+      // ...and a fresh film of slip right where the fingers ride: the band
+      // they have just passed over shines wettest
+      for (let j = Math.max(0, brush.j - 2); j <= Math.min(N - 1, brush.j + 2); j++) {
+        body.wet[j] += (1 - body.wet[j]) * Math.min(1, dt * 7);
+      }
       // Yanking far from the wall throws the clay off-centre
       const pressure = Math.abs(brush.targetR - r[brush.j]);
       if (pressure > 0.5) state.wobble = Math.min(1, state.wobble + (pressure - 0.5) * dt * 2.4);
@@ -1265,6 +1272,42 @@ export async function createClay(container) {
     // Clay slowly dries between touches
     for (let j = 0; j < N; j++) body.wet[j] = Math.max(0.3, body.wet[j] - dt * 0.012);
     return moved;
+  }
+
+  /*
+   * The clay gives under the hand. The simulation's profile r is the
+   * clay's settled shape; what is drawn adds the live deformation at the
+   * fingers: pressing in, a dent at the pads and the displaced clay rising
+   * as a ridge just above them (a little below too); pulling out from
+   * inside, a bulge travelling up with the fingertips. It eases in and out
+   * and rides along with the hand.
+   */
+  const rShow = new Float32Array(N);
+  const touch = { k: 0, j: 0, sign: 1, amp: 0 };
+  function shownProfile(dt) {
+    const b = brush && dragging ? brush : null;
+    const goal = b ? 1 : 0;
+    touch.k += (goal - touch.k) * Math.min(1, dt * (goal ? 10 : 5));
+    if (b) {
+      touch.j += (b.j - touch.j) * Math.min(1, dt * 16);
+      touch.sign = b.targetR < r[b.j] ? 1 : -1;
+      touch.amp = 0.016 + Math.min(0.03, Math.abs(b.targetR - r[b.j]) * 0.08);
+    }
+    if (touch.k < 0.003) return r;
+    const a = touch.amp * touch.k;
+    for (let j = 0; j < N; j++) {
+      const d = j - touch.j;
+      let off;
+      if (touch.sign > 0) {
+        // pressed in: dent under the pads, the ridge pushed up ahead of them
+        off = -a * Math.exp(-(d * d) / 3) + a * 0.75 * Math.exp(-((d - 3.2) ** 2) / 2.2) + a * 0.25 * Math.exp(-((d + 3) ** 2) / 2.5);
+      } else {
+        // pushed out from inside: a bulge, the wall above drawn a touch thinner
+        off = a * Math.exp(-(d * d) / 3.5) - a * 0.3 * Math.exp(-((d - 3.5) ** 2) / 3);
+      }
+      rShow[j] = Math.max(R_MIN, r[j] + off * (j > 2 ? 1 : 0));
+    }
+    return rShow;
   }
 
   function updateIntro(dt) {
@@ -1326,8 +1369,9 @@ export async function createClay(container) {
     }
     shapingEnergy += (Math.min(1, moved * 26) - shapingEnergy) * Math.min(1, dt * 9);
     sfx.setShaping(working || smoothing || keySmooth ? 0.15 + shapingEnergy : 0, state.wobble);
-    // Rings and wetness change continuously, so the mesh is rebuilt every frame
-    body.update(r);
+    // Rings and wetness change continuously, so the mesh is rebuilt every
+    // frame — from the profile as the hand deforms it right now
+    body.update(shownProfile(dt));
     matchThrottle -= dt;
     if (matchThrottle <= 0 && (moved > 0.0005 || smoothing || keySmooth)) {
       matchThrottle = 0.12;
@@ -1357,6 +1401,40 @@ export async function createClay(container) {
     guide.updateHints(r, t, show);
   }
 
+  /** The wall's slope dr/dy and profile curvature at row j (for the hand to follow it). */
+  function wallShape(j) {
+    const h = H / (N - 1);
+    const j0 = Math.max(0, j - 2);
+    const j1 = Math.min(N - 1, j + 2);
+    const slope = (r[j1] - r[j0]) / ((j1 - j0) * h || 1);
+    const k0 = Math.max(0, j - 3);
+    const k1 = Math.min(N - 1, j + 3);
+    const curv = (r[k1] + r[k0] - 2 * r[j]) / ((3 * h) ** 2);
+    return { slope: Math.max(-2, Math.min(2, slope)), curv: Math.max(-3, Math.min(3, curv)) };
+  }
+
+  /** The wall as drawn this frame (the hand's live dent included). */
+  const shownR = (j) => (touch.k >= 0.003 ? rShow[j] : r[j]);
+  /** Inner radius of the wall at row j (as clay.js builds it). */
+  const innerR = (j) => shownR(j) - Math.min(WALL, r[N - 1] * 0.7);
+
+  /**
+   * Put the hand at a point (in the guide plane) and pose it. It eases to
+   * its mark (and grows in the first moment it appears) so it never pops.
+   */
+  function placeHand(pos, side, o, dt) {
+    if (!hand.visible) {
+      hand.position.copy(pos);
+      hand.visible = true;
+      hand.userData.k = 0;
+    }
+    hand.position.lerp(pos, Math.min(1, dt * 22));
+    hand.userData.k = Math.min(1, (hand.userData.k || 0) + dt * 8);
+    const s = 0.86 + 0.14 * hand.userData.k;
+    hand.scale.set(side * s, s, s);
+    potter.pose(o);
+  }
+
   /** Hand at the contact point, sponge while smoothing, slip thrown off. */
   function updateHands(dt, t) {
     const b = brush && dragging ? brush : null;
@@ -1370,20 +1448,25 @@ export async function createClay(container) {
     if (b) {
       const wall = r[b.j];
       const shake = state.wobble * 0.03 * Math.sin(t * 40);
-      handPos.set(b.side * (wall + 0.015) + shake, b.y, 0.08);
-      if (!hand.visible) {
-        hand.position.copy(handPos);
-        hand.visible = true;
-        hand.userData.k = 0;
+      const pull = b.targetR > wall;
+      const press = Math.min(1, Math.abs(b.targetR - wall) * 3);
+      const ws = wallShape(b.j);
+      if (pull) {
+        // Pulling out works from INSIDE the pot: fingers down the inner
+        // wall, pads pressing outward, the forearm over the rim
+        handPos.set(b.side * (innerR(b.j) - 0.012) + shake, b.y, -0.12);
+        placeHand(handPos, b.side, {
+          inside: true, slope: ws.slope, curv: -ws.curv, press, t, lift: Math.max(0, H + 0.3 - b.y - 1.25)
+        }, dt);
+      } else {
+        // Pushing in: palm and finger pads on the outer wall
+        handPos.set(b.side * (shownR(b.j) + 0.01) + shake, b.y, 0.06);
+        placeHand(handPos, b.side, { inside: false, slope: ws.slope, curv: ws.curv, press, t }, dt);
       }
-      hand.position.lerp(handPos, Math.min(1, dt * 22));
-      hand.userData.k = Math.min(1, (hand.userData.k || 0) + dt * 8);
-      const press = b.targetR < wall ? 1 : -1;
-      hand.rotation.z = press * 0.08 * b.side;
-      const s = 0.85 + 0.15 * hand.userData.k;
-      hand.scale.set(b.side * s, s, s);
-      // Slip flies off the spinning wall, tangent to the rotation
-      if (shapingEnergy > 0.12 && rand() < dt * 34 * shapingEnergy) {
+      // Slip flies off the spinning wall, tangent to the rotation — always a
+      // few at full speed, more the harder the clay is worked
+      const rate = (shapingEnergy > 0.12 ? 34 * shapingEnergy : 0) + (state.wheelSpeed > 0.8 ? 5 : 0);
+      if (rand() < dt * rate) {
         guide.group.localToWorld(work.set(b.side * wall, b.y, 0));
         const w = 3.1 * state.wheelSpeed;
         const vx = work.z * w * 0.45 + work.x * 0.9;
@@ -1400,33 +1483,28 @@ export async function createClay(container) {
       const squeeze = 0.86 + Math.sin(t * 9) * 0.05;
       sponge.position.set(r[j] + 0.1 * squeeze, u * H, 0.1);
       sponge.scale.set(squeeze, 1, 1);
-      // ...and held there by the hand, fingertips on its back
+      // ...and held there by the hand, fingers closed round its back
       if (!b) {
-        handPos.set(r[j] + 0.2 * squeeze + 0.01, u * H + 0.02, 0.06);
-        if (!hand.visible) {
-          hand.position.copy(handPos);
-          hand.visible = true;
-          hand.userData.k = 0;
-        }
-        hand.position.lerp(handPos, Math.min(1, dt * 22));
-        hand.userData.k = Math.min(1, (hand.userData.k || 0) + dt * 8);
-        hand.rotation.z = 0;
-        const s = 0.85 + 0.15 * hand.userData.k;
-        hand.scale.set(s, s, s);
+        const ws = wallShape(j);
+        handPos.set(r[j] + 0.19 * squeeze, u * H - 0.05, 0.05);
+        placeHand(handPos, 1, { inside: false, slope: ws.slope, curv: ws.curv, press: 0.3, grip: 1, t }, dt);
       }
     } else if (!b && state.coached < 1.2 && state.phase === 'throw' && guide.worst.d > 0.11) {
       // First time at the wheel: until you have worked the clay for a moment,
       // a hand shows the move at the spot that needs it most — in to push,
-      // out to pull — and lifts away between goes
+      // out (from inside) to pull — and lifts away between goes
       const { j } = guide.worst;
       const cyc = (t * 0.7) % 1;
       const reach = Math.sin(Math.min(1, cyc / 0.7) * Math.PI);
-      const dir = guide.worst.sign > 0 ? -1 : 1;
-      handPos.set(r[j] + 0.015 + (1 - reach) * 0.35 + dir * reach * 0.06, (j / (N - 1)) * H, 0.08);
+      const pull = guide.worst.sign < 0;
+      const ws = wallShape(j);
+      const y = (j / (N - 1)) * H;
+      if (pull) handPos.set(innerR(j) - 0.012 - reach * 0.02, y + (1 - reach) * 0.5, -0.12);
+      else handPos.set(r[j] + 0.01 + (1 - reach) * 0.35, y, 0.06);
       hand.position.copy(handPos);
-      hand.rotation.z = 0;
       const s = 0.6 + 0.4 * reach;
       hand.scale.set(s, s, s);
+      potter.pose({ inside: pull, slope: ws.slope, curv: pull ? -ws.curv : ws.curv, press: reach * 0.6, t, lift: Math.max(0, H + 0.3 - y - 1.25) });
       hand.visible = reach > 0.05;
     } else if (!b) {
       hand.visible = false;
@@ -1898,6 +1976,7 @@ export async function createClay(container) {
     guide.dispose();
     fx.dispose();
     keramiker.dispose();
+    potter.mesh.skeleton.dispose();
     scene.traverse((o) => {
       if (o.geometry) o.geometry.dispose();
       if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(disposeMaterial);

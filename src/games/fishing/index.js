@@ -30,7 +30,7 @@ import { SPECIES, JUNK, fishAssets, Shoal, spawnJunk, disposeAssets, speciesSvg 
 import {
   BOTTOM, causticTexture, noiseTexture, particleAtlas, buildSky, buildWater, buildVolume,
   makeEnvironment, buildBasin, buildKelp, buildSeabed, buildShafts, buildLilies,
-  buildLure, buildLine, waveHeight, WATER_FOG, SUN_DIR
+  buildLure, buildLine, waveHeight, WATER_FOG, SUN_DIR, SUN_UNDER
 } from './world.js';
 import { buildShore } from './scenery.js';
 import { buildBoat, BARREL, WATERLINE } from './boat.js';
@@ -202,11 +202,25 @@ export async function createFishing(container) {
   const camera = new THREE.PerspectiveCamera(56, 1, 0.4, 900);
   camera.position.set(-3.2, 3.0, 13.5);
 
-  const hemi = new THREE.HemisphereLight(0xfff0d2, 0x0a2434, 1.15);
+  /*
+   * Lighting follows the midnight sun. The key light comes FROM the sun in
+   * the sky — low, behind the scene and a little right — so it rims Erik,
+   * the eka and the headland in warm gold instead of lighting them from a
+   * direction where there is no sun. A soft, cool fill from the camera's
+   * side (the bright northern sky behind the viewer) keeps faces and the
+   * hull readable, and the hemisphere adds sky above and lake below.
+   * Under the water the key turns to the refracted sun, high overhead.
+   * The light count never changes (no shader recompiles mid-game): the
+   * fill only fades.
+   */
+  const hemi = new THREE.HemisphereLight(0xe4dcec, 0x0a2434, 1.05);
   scene.add(hemi);
-  const sun = new THREE.DirectionalLight(0xffe3b6, 1.7);
-  sun.position.set(-30, 40, -20);
+  const sun = new THREE.DirectionalLight(0xffc68c, 2.4);
+  sun.position.copy(SUN_DIR).multiplyScalar(60);
   scene.add(sun);
+  const fill = new THREE.DirectionalLight(0xb4c4ec, 0.85);
+  fill.position.set(-14, 22, 50);
+  scene.add(fill);
 
   /* ---- World ---- */
   const caustics = causticTexture();
@@ -1467,13 +1481,16 @@ export async function createFishing(container) {
     water.uniforms.uDeepTint.value.copy(under ? WATER_FOG.uFogDown.value : tmpColor.set(0x0b4658));
     water.uniforms.uCausticStrength.value = 1 - k * 0.55;
 
-    hemi.intensity = 1.15 + envBoost - ke * 0.78;
-    sun.intensity = 1.7 - ke * 1.45;
+    hemi.intensity = (under ? 1.15 : 1.05) + envBoost - ke * 0.78;
+    sun.intensity = under ? 1.7 - ke * 1.45 : 2.4;
+    sun.position.copy(under ? SUN_UNDER : SUN_DIR).multiplyScalar(60);
+    sun.color.set(under ? 0xffe3b6 : 0xffc68c);
+    fill.intensity = under ? 0 : 0.85;
     if (under) {
       hemi.color.copy(gradient(UP_STOPS, eyeD, tmpColor)).lerp(tmpColor2.set(0xffffff), 0.5);
       hemi.groundColor.copy(WATER_FOG.uFogDown.value);
     } else {
-      hemi.color.set(0xfff0d2);
+      hemi.color.set(0xe4dcec);
       hemi.groundColor.set(0x22404c);
     }
     scene.environmentIntensity = under ? 0.9 - ke * 0.6 : 1;

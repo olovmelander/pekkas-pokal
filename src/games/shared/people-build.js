@@ -653,6 +653,18 @@ export function buildArm(b, ctx, side) {
   } else {
     bands.push({ from: -0.047, to: 0.583, region: REGION.SKIN, mat: MAT.SKIN, off: 0 });
   }
+  // A glove covers the wrist: the skin from just above it down is the glove's colour
+  const wristGlove = gloveFor(ctx.look, S);
+  if (wristGlove) {
+    const last = bands[bands.length - 1];
+    if (last.region === REGION.SKIN && last.to > 0.53 && last.from < 0.53) {
+      last.to = 0.53;
+      bands.push({ from: 0.53, to: 0.583, region: REGION.FIXED, mat: MAT.CLOTH, off: 0, tint: wristGlove.tint, lip: false });
+    } else if (last.region === REGION.SKIN && last.from >= 0.53) {
+      // A long sleeve ends below the cut: the bare wrist that is left is all glove
+      Object.assign(last, { region: REGION.FIXED, mat: MAT.CLOTH, tint: wristGlove.tint });
+    }
+  }
   const rings = ringsFromBands(ds, bands, { lipW: 0.007, simple: !res.high });
   const cols = res.high ? 9 : 5;
   const pts = [];
@@ -852,39 +864,53 @@ export function buildCuff(b, ctx, side, prof, J) {
   const glove = gloveFor(ctx.look, S);
   if (!glove || !glove.cuff) return;
   const hi = ctx.res.high;
-  const cols = hi ? 12 : 6;
-  // [d along the arm, gap off the skin]: outer face up to the rolled lip, then the inner face back down
-  const rows = hi
-    ? [[0.566, 0.0035], [0.548, 0.004], [0.522, 0.0062], [0.497, 0.0092], [0.482, 0.0112], [0.477, 0.0115], [0.48, 0.008], [0.494, 0.006], [0.53, 0.003]]
-    : [[0.566, 0.0035], [0.51, 0.008], [0.478, 0.0112], [0.486, 0.006], [0.53, 0.003]];
+  const cols = hi ? 16 : 6;
+  // Clear the sleeve: where the jacket's sleeve (with its cuff and hem) reaches under the
+  // gauntlet, the gauntlet stands off it, so the two never cut through each other
+  const top = ctx.outfit.topDef;
+  const sleeveEnd = top.sleeve || 0;
+  const over = (top.sleeveOff ?? top.off ?? 0) + 0.004 * (top.sleeveLoose ?? 1) + (top.cuff ? 0.0015 : 0) + 0.0022 + 0.0025;
+  const base = (d) => {
+    if (sleeveEnd <= 0.4) return 0.0035;
+    const k = sstep(sleeveEnd + 0.004, sleeveEnd + 0.016, d);
+    return over + (0.0035 - over) * k;
+  };
+  // [d along the arm, flare, inner?]: outer face up to a rolled rim, then the inner face back down
+  const rows = (hi
+    ? [[0.566, 0], [0.556, 0.0004], [0.545, 0.001], [0.522, 0.0027], [0.5, 0.0052], [0.486, 0.0072], [0.479, 0.0082],
+      [0.477, 0.0068, 1], [0.481, 0.0048, 1], [0.494, 0.0026, 1], [0.53, 0, 1]]
+    : [[0.566, 0], [0.51, 0.004], [0.48, 0.0078], [0.484, 0.003, 1], [0.53, 0, 1]])
+    .map(([d, fl, inner]) => [d, base(d) + fl - (inner ? 0.0008 : 0), !!inner]);
   const pts = [];
-  rows.forEach(([d, gap], i) => {
+  rows.forEach(([d, gap, inner], i) => {
     const [rr, fx, fz] = prof(d);
     for (let j = 0; j < cols; j++) {
       const th = (j / cols) * Math.PI * 2;
       const R = rr + gap;
-      const lip = i >= rows.length - 4 && i <= rows.length - 3;
-      const k = lip ? 0.93 : 1;
+      // The rolled rim reads a touch darker, the inside more so
+      const rim = i >= rows.length - 5 && i <= rows.length - 3;
+      const k = inner ? 0.8 : rim ? 0.92 : 1;
       pts.push({
         p: [J.x + Math.sin(th) * R * fx, J.y - d, J.z + Math.cos(th) * R * fz], region: REGION.FIXED,
-        tint: glove.tint.map((v) => v * k), mat: MAT.CLOTH, d
+        tint: glove.tint.map((v) => v * k), mat: MAT.CLOTH, d, inner
       });
     }
   });
   emitGrid(b, {
     pts, rows: rows.length, cols, center: new THREE.Vector3(J.x, J.y - 0.4, J.z),
     normalFn: (p, q, out) => {
-      const i = Math.floor(pts.indexOf(q) / cols);
-      const inner = i >= rows.length - 3;
-      const sg = inner ? -1 : 1;
+      const sg = q.inner ? -1 : 1;
       out[0] = (p[0] - J.x) * sg;
       out[1] = 0;
       out[2] = (p[2] - J.z) * sg;
       return out;
     },
+    // Exactly the arm's own skinning, so the gauntlet turns with the wrist it covers
     weight: (p, q) => {
-      const h = sstep(0.528, 0.572, q.d) * 0.6;
-      return [[`forearmTwist${S}`, 1 - h], [`hand${S}`, h]];
+      const { d } = q;
+      const hand = sstep(0.528, 0.572, d);
+      const tw = sstep(0.33, 0.53, d);
+      return [[`forearm${S}`, (1 - hand) * (1 - tw)], [`forearmTwist${S}`, (1 - hand) * tw], [`hand${S}`, hand]];
     }
   });
 }
@@ -896,7 +922,7 @@ export function buildCuff(b, ctx, side, prof, J) {
  * and dorsal axis V; `shape(t, a)` adds a radial offset (knuckles, pads,
  * creases), `weight(t)` returns the bone weights.
  */
-function digitTube(b, { o, axis, U, V, rings, cols, tint, shape, weight, glove = null, pad = 0 }) {
+function digitTube(b, { o, axis, U, V, rings, cols, tint, shape, weight, glove = null, pad = 0, crease = null }) {
   const pts = [];
   for (const [t, r, th] of rings) {
     for (let j = 0; j < cols; j++) {
@@ -907,13 +933,15 @@ function digitTube(b, { o, axis, U, V, rings, cols, tint, shape, weight, glove =
       const e = 2 / 2.1;
       const cx = Math.sign(ca) * Math.pow(Math.abs(ca), e);
       const sy = Math.sign(sa) * Math.pow(Math.abs(sa), e);
-      const extra = r > 0 ? (shape ? shape(t, sa, ca) : 0) + pad : 0;
-      const w = r > 0 ? r + extra : 0;
-      const h = r > 0 ? r * th + extra : 0;
+      const extra = r > 0 ? (shape ? shape(t, sa, ca) : 0) : 0;
+      // A glove pads the backs and fronts of the fingers, not their sides: they stay apart
+      const w = r > 0 ? r * (glove ? 0.97 : 1) + extra : 0;
+      const h = r > 0 ? r * th + extra + pad : 0;
       const p = [0, 1, 2].map((i) => o[i] + axis[i] * t + U[i] * cx * w + V[i] * sy * h);
       const tn = typeof tint === 'function' ? tint(t, sa) : tint;
+      const cr = glove && crease ? crease(t, sa, ca) : 1;
       pts.push(glove
-        ? { p, region: REGION.FIXED, tint: glove.tint.map((v, k) => v * (0.9 + 0.1 * tn[k])), mat: MAT.CLOTH, t }
+        ? { p, region: REGION.FIXED, tint: glove.tint.map((v, k) => v * (0.9 + 0.1 * tn[k]) * cr), mat: MAT.CLOTH, t }
         : { p, region: REGION.SKIN, tint: tn, mat: MAT.SKIN, t });
     }
   }
@@ -936,8 +964,9 @@ function digitTube(b, { o, axis, U, V, rings, cols, tint, shape, weight, glove =
     const e = 2 / 2.1;
     const cx = Math.sign(ca) * Math.pow(Math.abs(ca), e);
     const sy = Math.sign(sa) * Math.pow(Math.abs(sa), e);
-    const extra = (shape ? shape(t, sa, ca) : 0) + pad;
-    return [0, 1, 2].map((m) => o[m] + axis[m] * t + U[m] * cx * (r + extra + lift) + V[m] * sy * (r * th + extra + lift));
+    const extra = shape ? shape(t, sa, ca) : 0;
+    return [0, 1, 2].map((m) => o[m] + axis[m] * t + U[m] * cx * (r * (glove ? 0.97 : 1) + extra + lift) +
+      V[m] * sy * (r * th + extra + pad + lift));
   };
 }
 
@@ -991,7 +1020,7 @@ export function buildHand(b, ctx, side) {
   const H = (d, y, f) => [W.x + s * d * hs, W.y + y * hs, W.z + f * hs];
   const Hv = (d, y, f) => [s * d, y, f];
   const tintSkin = [1.0, 0.96, 0.94];
-  const palmTint = [1.02, 0.95, 0.94];
+  const palmTint = [1.1, 1.02, 0.98];
   const fingerBone = (f, k) => `${f}${['', 'Mid', 'Tip'][k]}${S}`;
   const baseBone = (f) => (f === 'ring' || f === 'pinky' ? `palm${S}` : `hand${S}`);
   // Gloved hands: the glove's colour on a cloth region, a touch fuller, no nails
@@ -1068,9 +1097,10 @@ export function buildHand(b, ctx, side) {
       const dc = d - PC[0];
       const fc = f - PC[2];
       // Taper towards the wrist (narrower and thinner)
-      const wk = sstep(0.42, 0.0, v);
-      f = PC[2] + fc * (1 - 0.24 * wk);
-      d = PC[0] + dc * (1 - 0.12 * wk);
+      // Narrower and thinner towards the wrist (a gentle trapezoid seen from above)
+      const wk = sstep(0.55, 0.0, v);
+      f = PC[2] + fc * (1 - 0.3 * wk);
+      d = PC[0] + dc * (1 - 0.14 * wk);
       // Distal edge along the knuckle arc
       const end = sstep(0.55, 1.0, v);
       y += end * (arcY(f) - 0.0015 - (PC[1] - PH[1]));
@@ -1078,10 +1108,11 @@ export function buildHand(b, ctx, side) {
       const fn = THREE.MathUtils.clamp(fc / PH[2], -1, 1);
       if (dc > 0) d += 0.0034 * (1 - fn * fn) - 0.0016;
       else {
-        d += 0.0016 * fn * fn - 0.0012 * gauss(y + 0.06, 0.02) * (1 - fn * fn);
-        // Hypothenar pad (little finger side, near the wrist) and the pads under the knuckles
-        d -= 0.0026 * gauss(y + 0.045, 0.022) * sstep(-0.005, -0.03, fc);
-        d -= 0.0013 * gauss(y - arcY(f) - 0.006, 0.006);
+        // A soft, slightly full pad (never a hollow), the hypothenar bulge on the
+        // little-finger side and the pads under the knuckles
+        d += 0.0014 * fn * fn - 0.0026 * gauss(y + 0.055, 0.028) * (1 - fn * fn);
+        d -= 0.0034 * gauss(y + 0.045, 0.024) * sstep(-0.004, -0.028, fc);
+        d -= 0.0028 * gauss(y - arcY(f) - 0.008, 0.01);
       }
       if (dc > 0) {
         // Knuckle heads and the tendons that fan out to them from the wrist
@@ -1096,9 +1127,23 @@ export function buildHand(b, ctx, side) {
     tint: (p) => {
       const d = (p[0] - W.x) * s / hs;
       const y = (p[1] - W.y) / hs;
-      if (d < PC[0] - 0.004) return gt(palmTint);
+      if (d < PC[0] - 0.004) {
+        // The middle of the palm a shade lighter: it reads as a soft pad, not a hollow
+        const yy = y + 0.055;
+        const fz = (p[2] - W.z) / hs;
+        const lift = 1 + 0.07 * gauss(yy, 0.03) * gauss(fz, 0.025);
+        return gt(palmTint.map((v) => v * lift));
+      }
       let k = 1;
-      for (const kn of knuckles) k -= 0.05 * gauss((p[2] - W.z) / hs - kn[2], 0.006) * gauss(y - kn[1], 0.008);
+      const fz = (p[2] - W.z) / hs;
+      for (const kn of knuckles) k -= 0.05 * gauss(fz - kn[2], 0.006) * gauss(y - kn[1], 0.008);
+      if (glove) {
+        // Three stitched seams down the back of the glove, between the knuckles
+        for (let i = 0; i < 3; i++) {
+          const fs = (knuckles[i][2] + knuckles[i + 1][2]) / 2;
+          k -= 0.24 * gauss(fz - fs, 0.0024) * sstep(-0.012, -0.04, y) * sstep(-0.1, -0.08, y);
+        }
+      }
       return gt([tintSkin[0] * k, tintSkin[1] * k, tintSkin[2] * k]);
     },
     weight: (p) => {
@@ -1166,8 +1211,16 @@ export function buildHand(b, ctx, side) {
       return [tintSkin[0] * kn, tintSkin[1] * kn, tintSkin[2] * kn];
     };
     const base = baseBone(f);
+    // Gloves: darker where the fingers meet and in the joint creases, so they read apart
+    const crease = (tt, sa, ca) => {
+      const t = tt / hs;
+      let c = 1 - 0.16 * Math.abs(ca) ** 3 * sstep(l0 * 0.9, 0, t);
+      if (sa < -0.3) c -= 0.1 * (gauss(t - j1, 0.0022) + gauss(t - j2, 0.002));
+      if (sa > 0.3) c -= 0.06 * (gauss(t - j1, 0.003) + gauss(t - j2, 0.0025));
+      return c;
+    };
     const surf = digitTube(b, {
-      o, axis: [0, -1, 0], U: [0, 0, 1], V: Hv(1, 0, 0), rings, cols: 7, tint, shape, glove, pad: gpad,
+      o, axis: [0, -1, 0], U: [0, 0, 1], V: Hv(1, 0, 0), rings, cols: 7, tint, shape, glove, pad: gpad, crease,
       weight: (tt) => {
         const t = tt / hs;
         const k1 = sstep(-0.006, 0.003, t);
@@ -1221,9 +1274,9 @@ export function buildHand(b, ctx, side) {
     const cmc = new THREE.Vector3(...T.cmc);
     const bz = new THREE.Vector3(0, 0, 1).addScaledVector(ax, -ax.z).normalize();
     const bx = new THREE.Vector3().crossVectors(ax, bz).negate();
-    const ballC = cmc.clone().addScaledVector(ax, 0.02).addScaledVector(new THREE.Vector3(...T.pad), 0.003).add(new THREE.Vector3(0.0045, 0, -0.009));
+    const ballC = cmc.clone().addScaledVector(ax, 0.02).addScaledVector(new THREE.Vector3(...T.pad), 0.002).add(new THREE.Vector3(0.0075, 0, -0.009));
     blob(b, {
-      c: H(ballC.x, ballC.y, ballC.z), r: [0.0172 * hs + gpad, 0.0305 * hs, 0.0188 * hs + gpad], n: [2, 2], cols: 6, rows: 4,
+      c: H(ballC.x, ballC.y, ballC.z), r: [0.0128 * hs + gpad, 0.0305 * hs, 0.0188 * hs + gpad], n: [2, 2], cols: 7, rows: 4,
       region: REG, mat: MT, tint: gt(palmTint),
       warp: (p) => {
         // Lay the ball's long axis along the metacarpal
@@ -1243,12 +1296,12 @@ export function buildHand(b, ctx, side) {
     // The web between thumb and index: thin, tapering, stretched between the two
     const mcpT = cmc.clone().addScaledVector(ax, l0 * 0.92);
     const idx = new THREE.Vector3(DIGITS.index.mcp[0] - 0.003, DIGITS.index.mcp[1] + 0.012, DIGITS.index.mcp[2] + 0.004);
-    const webC = mcpT.clone().lerp(idx, 0.5);
+    const webC = mcpT.clone().lerp(idx, 0.5).add(new THREE.Vector3(-0.0015, -0.0035, 0));
     const webDir = idx.clone().sub(mcpT);
     const webLen = webDir.length();
     webDir.normalize();
     blob(b, {
-      c: H(webC.x, webC.y, webC.z), r: [0.0068 * hs + gpad, 0.0125 * hs, (webLen * 0.5 + 0.005) * hs], n: [2.2, 2], cols: 6, rows: 3,
+      c: H(webC.x, webC.y, webC.z), r: [0.0082 * hs + gpad, 0.0185 * hs, (webLen * 0.5 + 0.007) * hs], n: [2, 2], cols: 8, rows: 4,
       region: REG, mat: MT, tint: gt(tintSkin),
       warp: (p) => {
         // Turn the blob's z axis onto the thumb→index line, thinning towards the free edge

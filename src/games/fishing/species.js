@@ -172,10 +172,10 @@ function bodyGeometry(profile, rings, radial, paint) {
 function finMembrane(rays, root, tip, look, matrix) {
   const cols = rays * 2 + 1;
   const rows = [0, 0.45, 0.8, 1];
-  const ray = new THREE.Color(look.color).multiplyScalar(look.rayDark ?? 0.72);
-  const mem = new THREE.Color(look.color).lerp(new THREE.Color(0xffffff), look.pale ?? 0.18);
-  const aRay = look.aRay || [0.95, 0.88, 0.78, 0.55];
-  const aMem = look.aMem || [0.8, 0.55, 0.32, 0.06];
+  const ray = new THREE.Color(look.color).multiplyScalar(look.rayDark ?? 0.62);
+  const mem = new THREE.Color(look.color).lerp(new THREE.Color(0xffffff), look.pale ?? 0.1);
+  const aRay = look.aRay || [1, 0.97, 0.92, 0.75];
+  const aMem = look.aMem || [0.9, 0.74, 0.52, 0.16];
   const pos = [];
   const col = [];
   const idx = [];
@@ -423,7 +423,7 @@ export const SPECIES = [
     speed: 3.4,
     kg: [0.4, 1.9],
     blurb: 'Silverblank och skygg — simmar djupare än man tror. Röks vid bryggan.',
-    profile: makeProfile([[0, 0.04], [0.18, 0.27], [0.42, 0.32], [0.72, 0.15], [0.86, 0.085], [0.96, 0.068], [1, 0.074]],
+    profile: makeProfile([[0, 0.035], [0.08, 0.15], [0.22, 0.27], [0.42, 0.32], [0.72, 0.15], [0.86, 0.085], [0.96, 0.068], [1, 0.074]],
       { height: 1.25, width: 0.64, nose: 1.05, tail: -0.78 }),
     back: 0x4f6f88,
     flank: 0xd4e0ea,
@@ -486,7 +486,7 @@ export const SPECIES = [
     speed: 4.6,
     kg: [2, 11],
     blurb: 'Insjölaxen i det kalla djupvattnet. Snabbast av dem alla.',
-    profile: makeProfile([[0, 0.05], [0.16, 0.3], [0.4, 0.37], [0.72, 0.17], [0.86, 0.09], [0.96, 0.074], [1, 0.08]],
+    profile: makeProfile([[0, 0.04], [0.08, 0.17], [0.22, 0.31], [0.42, 0.37], [0.72, 0.17], [0.86, 0.09], [0.96, 0.074], [1, 0.08]],
       { height: 1.3, width: 0.66, nose: 1.15, tail: -0.82 }),
     back: 0x2e4a74,
     flank: 0xc8d4e2,
@@ -600,7 +600,7 @@ function buildFins(sp, backY, sideZ, lite) {
     return [q * q * p0x + 2 * q * k * p1x + k * k * p2x, q * q * p0y + 2 * q * k * p1y];
   };
   out.push(finMembrane(rays(8), (t) => [tx + 0.035, rh * (1 - 2 * t)], tailTipAt,
-    { color: tailC, aMem: [0.85, 0.6, 0.36, 0.08] }));
+    { color: tailC, aMem: [0.92, 0.76, 0.54, 0.16] }));
 
   /* Dorsal fins along the back, raked back */
   F.dorsal.forEach((d) => {
@@ -661,7 +661,7 @@ function buildFins(sp, backY, sideZ, lite) {
       const m = new THREE.Matrix4().makeTranslation(0, y, sd * zs)
         .multiply(new THREE.Matrix4().makeRotationX(-sd * splay))
         .multiply(new THREE.Matrix4().makeTranslation(0, -y, 0));
-      out.push(finMembrane(rays(5), root, tip, { color: finC, pale: 0.28, aMem: [0.75, 0.5, 0.28, 0.05] }, m));
+      out.push(finMembrane(rays(5), root, tip, { color: finC, pale: 0.16, aMem: [0.85, 0.66, 0.44, 0.12] }, m));
     });
   };
   if (F.pectoral) side(F.pectoral.at, F.pectoral.len, 0.35, 0.6, 0.92, false);

@@ -166,9 +166,12 @@ export function ballEnvironment(THREE) {
   cv.height = H;
   const g = cv.getContext('2d');
   // Sky: dark room. Ground: the playfield, lit near the ball, darker far off.
+  // Not black: a steel ball in a lit arcade is silver, its darks are the
+  // room's mid-tones, not a void
   const sky = g.createLinearGradient(0, 0, 0, H / 2);
-  sky.addColorStop(0, '#1a2038');
-  sky.addColorStop(1, '#0b0e1c');
+  sky.addColorStop(0, '#68739a');
+  sky.addColorStop(0.6, '#3c4468');
+  sky.addColorStop(1, '#262c4a');
   g.fillStyle = sky;
   g.fillRect(0, 0, W, H / 2);
   const ground = g.createLinearGradient(0, H / 2, 0, H);
@@ -187,10 +190,11 @@ export function ballEnvironment(THREE) {
   };
   // Two long ceiling fixtures, crisp-edged with a little bloom of their own,
   // and a dimmer row further off: highlights that slide over the ball
-  soft(W * 0.12, H * 0.1, W * 0.2, H * 0.05, '#e9eefc', 18);
-  soft(W * 0.58, H * 0.12, W * 0.22, H * 0.045, '#e9eefc', 18);
-  soft(W * 0.36, H * 0.22, W * 0.12, H * 0.03, '#a9b4d8', 10);
-  soft(W * 0.86, H * 0.25, W * 0.08, H * 0.025, '#a9b4d8', 10);
+  soft(W * 0.1, H * 0.08, W * 0.24, H * 0.07, '#f4f6ff', 20);
+  soft(W * 0.56, H * 0.1, W * 0.26, H * 0.065, '#f4f6ff', 20);
+  soft(W * 0.62, H * 0.2, W * 0.14, H * 0.04, '#cfd6f0', 12);
+  soft(W * 0.36, H * 0.22, W * 0.12, H * 0.035, '#cfd6f0', 12);
+  soft(W * 0.86, H * 0.25, W * 0.1, H * 0.03, '#b8c2e6', 10);
   // The backbox, amber, standing up the table (−z sits at u ≈ 0.25)
   soft(W * 0.19, H * 0.3, W * 0.12, H * 0.14, '#d98b3a', 26);
   soft(W * 0.21, H * 0.33, W * 0.08, H * 0.05, '#ffbf73', 10);
@@ -2033,7 +2037,7 @@ export function buildTable(THREE, mergeGeometries, materials) {
   const PLATE_W = L.targets[0].half * 2;
   const PLATE_TOP = 1.12;
   const PLATE_LOW = -0.3; // hidden in the slot while up
-  const PLATE_D = 0.14; // + 2 × 0.025 bevel ≈ 0.19 ≈ 4.75 mm
+  const PLATE_D = 0.11; // + 2 × 0.025 bevel ≈ 0.16 ≈ 4 mm
   const PLATE_Z = 0.25 - (PLATE_D + 0.025); // front face at +0.25
   const plateShape = new THREE.Shape();
   {
@@ -2501,7 +2505,7 @@ export function buildTable(THREE, mergeGeometries, materials) {
     color: 0xffffff,
     roughness: 0.07,
     metalness: 1,
-    envMapIntensity: 1.45
+    envMapIntensity: 1.7
   });
   materials.ball.onBeforeCompile = (shader) => {
     shader.fragmentShader = shader.fragmentShader.replace(

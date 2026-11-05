@@ -1327,6 +1327,17 @@ export function buildCast({ lowTier = false, safe = false, reduced = false, home
       }
       crowd.update(dt, t);
     },
+    /** Where things stand on the lawn, for its soft contact shade. */
+    lawnSpots() {
+      const out = [];
+      painters.forEach((p) => {
+        out.push({ x: p.easel.x, z: p.easel.z, r: 0.75, k: 0.5 }, { x: p.home.x, z: p.home.z, r: 0.6, k: 0.35 });
+      });
+      backEasels.forEach((e) => out.push({ x: e.x, z: e.z, r: 0.7, k: 0.45 }));
+      seats.forEach((st) => out.push({ x: st.position.x, z: st.position.z, r: 0.55, k: 0.3 }));
+      out.push({ x: home.x, z: home.z, r: 0.6, k: 0.25 });
+      return out;
+    },
     /** People, draw calls and triangles, for the test hook. */
     stats() {
       return {

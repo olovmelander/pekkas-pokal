@@ -237,6 +237,9 @@ function buildMask(mats) {
   }
   bib.scale(R[0] * er * 1.02, 1, R[2] * er * 1.02);
   bib.computeVertexNormals();
+  // The bib wears the fencer's lamé, which reads vertex colours: give it
+  // the lamé's own grey (without them it would draw black)
+  bib.setAttribute('color', new THREE.Float32BufferAttribute(new Array(pos.count * 3).fill(0.6), 3));
   bib.translate(C[0], ey - 0.05, C[2]);
   const bibMat = mats.pad;
   const bibMesh = add(bib, bibMat);
@@ -292,6 +295,127 @@ function buildFoil(mats) {
   const button = new THREE.Mesh(new THREE.SphereGeometry(0.009, 6, 4), mats.button);
   g.add(button);
   return { group: g, blade, rest, button };
+}
+
+/* ---- Fabric: the whites and the lamé read as cloth -------------------- */
+
+/*
+ * A small layer on the fencer's own cloth and lamé materials (people
+ * createPerson({ ownMaterials: true }), so the referee and the benches are
+ * untouched). Everything is computed from the BIND-pose position and normal
+ * (the skinned mesh's raw attributes), so seams and folds stick to the
+ * cloth as it moves. Safe on real GPUs: every fine detail fades out by its
+ * own screen footprint (fwidth), so nothing sub-pixel can crawl or blink;
+ * no divisions by ~0, no sine hashes, no reversed smoothstep edges.
+ *
+ *  - side seams on the jacket and the breeches (where the cloth faces
+ *    straight out to the side), the jacket's collar line and the piping
+ *    along the top of the lamé: stitched lines a shade darker;
+ *  - soft folds as a derivative bump (no tangents needed);
+ *  - the lamé only (FAB_LAME): a coarse woven-metal sparkle that is only
+ *    there when the camera is close enough to resolve it.
+ */
+const FAB_VERT_PARS = /* glsl */ `
+varying vec3 vFabP;
+varying vec3 vFabN;`;
+const FAB_VERT = /* glsl */ `
+vFabP = position;
+vFabN = normal;`;
+const FAB_FRAG_PARS = /* glsl */ `
+varying vec3 vFabP;
+varying vec3 vFabN;
+uniform float uFabScale;
+float fabHash(vec2 c) {
+  vec3 p3 = fract(vec3(c.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+// A line of width L at distance d, antialiased by its footprint f
+float fabLine(float d, float L) {
+  float f = max(fwidth(d), 1e-5);
+  return clamp(0.5 + (L * 0.5 - d) / f, 0.0, 1.0) * min(1.0, L / f);
+}
+vec3 fabPerturb(vec3 surfPos, vec3 surfNorm, vec2 dHdxy, float faceDir) {
+  vec3 dx = dFdx(surfPos);
+  vec3 dy = dFdy(surfPos);
+  if (dot(dx, dx) < 1e-20 || dot(dy, dy) < 1e-20) return surfNorm;
+  vec3 sx = normalize(dx);
+  vec3 sy = normalize(dy);
+  vec3 r1 = cross(sy, surfNorm);
+  vec3 r2 = cross(surfNorm, sx);
+  float det = dot(sx, r1) * faceDir;
+  vec3 grad = sign(det) * (dHdxy.x * r1 + dHdxy.y * r2);
+  vec3 n = abs(det) * surfNorm - grad;
+  float l = length(n);
+  return l > 1e-6 ? n / l : surfNorm;
+}`;
+const FAB_COLOR = /* glsl */ `
+vec3 fabP = vFabP / max(uFabScale, 0.1);
+vec3 fabN = vFabN;
+// Around the body: arc length (u) and height (v), in metres
+float fabU = atan(fabP.x, fabP.z - 0.02 + 1e-4) * 0.15;
+float fabV = fabP.y;
+float fabOut = step(0.0, fabP.x * fabN.x);
+// Side seams: where the cloth turns from facing front to facing back
+// (the horizontal normal's front/back component crosses zero)
+float fabPhi = abs(atan(fabN.z, abs(fabN.x) + 1e-5));
+float fabTorso = step(0.93, fabP.y) * step(fabP.y, 1.31) * step(abs(fabP.x), 0.2);
+float fabLeg = step(0.47, fabP.y) * step(fabP.y, 0.88) * step(abs(fabP.x), 0.22);
+float fabSeam = fabLine(fabPhi * (fabP.y > 0.9 ? 0.15 : 0.07), 0.0035) * max(fabTorso, fabLeg) * fabOut;
+// The collar line and the piping along the top of the lamé
+float fabNeck = step(abs(fabP.x), 0.12) * step(1.47, fabP.y);
+fabSeam = max(fabSeam, fabLine(abs(fabP.y - 1.522), 0.003) * fabNeck);
+fabSeam = max(fabSeam, fabLine(abs(fabP.y - 1.441), 0.004) * step(abs(fabP.x), 0.19));
+#ifdef FAB_LAME
+  // Woven metal: cells of a few millimetres, each catching the light a
+  // little differently; gone as soon as a cell is smaller than a pixel
+  vec2 fabCellC = vec2(fabU, fabV) * 560.0;
+  float fabFade = 1.0 - smoothstep(0.3, 0.9, max(fwidth(fabCellC.x), fwidth(fabCellC.y)));
+  float fabR = fabHash(floor(fabCellC));
+  float fabGlint = step(0.9, fabR) * fabFade;
+  diffuseColor.rgb *= 1.0 + (fabR - 0.5) * 0.1 * fabFade;
+  diffuseColor.rgb *= 1.0 - 0.22 * fabSeam;
+#else
+  float fabGlint = 0.0;
+  diffuseColor.rgb *= 1.0 - 0.2 * fabSeam;
+#endif`;
+const FAB_ROUGH = /* glsl */ `
+roughnessFactor = clamp(roughnessFactor + 0.12 * fabSeam - 0.14 * fabGlint, 0.32, 1.0);`;
+const FAB_NORMAL = /* glsl */ `
+{
+  // Soft folds: shallow, irregular ridges, deeper round the waist
+  float fabWaist = 1.0 - 0.55 * smoothstep(1.0, 1.4, fabV);
+  #ifdef FAB_LAME
+    float fabA = 0.0019 * fabWaist;
+  #else
+    float fabA = 0.0011 * fabWaist;
+  #endif
+  float fabH = fabA * (sin(fabV * 47.0 + 1.7 * sin(fabU * 19.0)) + 0.55 * sin(fabU * 33.0 - fabV * 11.0));
+  normal = fabPerturb(-vViewPosition, normal, vec2(dFdx(fabH), dFdy(fabH)), faceDirection);
+}`;
+
+function fabricCompile(shader) {
+  shader.uniforms.uFabScale = this.userData.fabScale;
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', `#include <common>${FAB_VERT_PARS}`)
+    .replace('#include <begin_vertex>', `#include <begin_vertex>${FAB_VERT}`);
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', `#include <common>${FAB_FRAG_PARS}`)
+    .replace('#include <color_fragment>', `#include <color_fragment>${FAB_COLOR}`)
+    .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>${FAB_ROUGH}`)
+    .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>${FAB_NORMAL}`);
+}
+
+/** Turn one of the fencer's own materials into fabric (cloth or lamé). */
+function makeFabric(mat, scale, lame) {
+  if (!mat || mat.userData.fabScale) {
+    if (mat && mat.userData.fabScale) mat.userData.fabScale.value = scale;
+    return;
+  }
+  mat.userData.fabScale = { value: scale };
+  mat.onBeforeCompile = fabricCompile;
+  if (lame) mat.defines = { ...(mat.defines || {}), FAB_LAME: '' };
+  mat.needsUpdate = true;
 }
 
 /* ---- The fencer ------------------------------------------------------- */
@@ -364,7 +488,9 @@ export class Fencer {
         color: 0x9aa2ae, map: gridTexture(), roughness: 0.42, metalness: 0.7, transparent: true, opacity: 0.84
       }),
       pad: new THREE.MeshStandardMaterial({ color: 0xf1efe8, roughness: 0.7 }),
-      steel: new THREE.MeshStandardMaterial({ color: 0xdfe4ec, roughness: 0.3, metalness: 0.95 }),
+      // Satin steel: a polished mirror only shows the dark panelling and
+      // reads black up close; a little roughness keeps the bell silver
+      steel: new THREE.MeshStandardMaterial({ color: 0xdfe4ec, roughness: 0.38, metalness: 0.88 }),
       grip: new THREE.MeshStandardMaterial({ color: 0x2a2422, roughness: 0.7 }),
       // The point's button: a warm pin of light that bloom can catch
       button: new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 1.4, 1.0) })
@@ -408,10 +534,17 @@ export class Fencer {
     // Faces, hair and glasses are the person's own (appearanceFor); the kit
     // is the salle's: whites, lamé, socks in their colour, and the white
     // glove with its gauntlet cuff on the weapon hand only
-    const p = createPerson(appearanceFor(name, {
-      outfit: { top: 'fencing', bottom: 'knickers', accent: sock, shoes: 'sneakers', shoeColor: 0xe9e7e2 },
-      gloves: { side: this.hand, color: 0xf1efe8, cuff: true }
-    }));
+    // (off-white whites and creamy breeches, never paper white: under the
+    // evening sun pure white clips flat and reads as plastic)
+    const p = createPerson({
+      ...appearanceFor(name, {
+        outfit: {
+          top: 'fencing', topColor: 0xeeebe3, bottom: 'knickers', bottomColor: 0xe9dfca, accent: sock, shoes: 'sneakers', shoeColor: 0xe9e7e2
+        },
+        gloves: { side: this.hand, color: 0xf1efe8, cuff: true }
+      }),
+      ownMaterials: true
+    });
     if (this.person) this.person.dispose();
     this.person = p;
     this.s = p.scale;
@@ -421,12 +554,16 @@ export class Fencer {
     // A new person between bouts: their grips are solved here, on the
     // bracket screen, never mid-phrase
     this.warmGrips();
+    makeFabric(p.materials.cloth, p.scale, false);
     const { lame } = p.materials;
     if (lame) {
-      // Lamé is woven metal: duller than a mirror, so the sun leaves a sheen
-      // rather than a hot glint that bloom would turn into a firefly
-      lame.roughness = 0.46;
-      lame.metalness = 0.62;
+      // Lamé is woven metal thread, not plate: mid-grey silver with a soft
+      // sheen, the room only faintly mirrored in it
+      lame.roughness = 0.56;
+      lame.metalness = 0.55;
+      lame.envMapIntensity = 0.42;
+      lame.color.setRGB(0.9, 0.91, 0.93);
+      makeFabric(lame, p.scale, true);
       lame.emissive.copy(this.flashColor);
       lame.emissiveIntensity = 0;
       this.bib.material = lame;

@@ -344,6 +344,7 @@ function buildHeadland(lite) {
   const trees = [];
   const spruceC = col(0x122419);
   const spruceTip = col(0x24402a);
+  const sprRim = col(0x6e7a3c);
   const spruce = (x, z, H) => {
     const g = G(x, z) - 0.2;
     const W = H * (0.2 + r() * 0.05);
@@ -355,7 +356,9 @@ function buildHeadland(lite) {
       const cone = new THREE.ConeGeometry(rad, hh, 7, 1);
       cone.rotateY(r() * 3);
       cone.translate(x + (r() - 0.5) * 0.2, g + y0 + hh / 2, z);
-      kit.add(cone, (v) => tmp.copy(spruceC).lerp(spruceTip, smooth(g + y0, g + y0 + hh, v.y) * 0.45 + r() * 0.08));
+      // The drooping tips of each tier catch the low sun through the needles
+      kit.add(cone, (v) => tmp.copy(spruceC).lerp(spruceTip, smooth(g + y0, g + y0 + hh, v.y) * 0.45 + r() * 0.08)
+        .lerp(sprRim, (1 - smooth(g + y0, g + y0 + hh * 0.25, v.y)) * 0.28));
     }
     const trunk = new THREE.CylinderGeometry(0.12, 0.2, H * 0.3, 5);
     trunk.translate(x, g + H * 0.15, z);
@@ -365,23 +368,60 @@ function buildHeadland(lite) {
   const birchLeaf = [col(0x3e5424), col(0x4b5c28), col(0x384d22)];
   const bark = col(0xe8e4da);
   const barkDark = col(0x2a2622);
+  const rimC = col(0xc8c25a);  // leaves lit through from behind by the low sun
+  const yAxis = new THREE.Vector3(0, 1, 0);
+  const qLimb = new THREE.Quaternion();
+  const dLimb = new THREE.Vector3();
+  /**
+   * A birch: a slim white trunk with black marks, a few limbs reaching up
+   * and out, and an airy crown of small leaf clusters on a loose shell —
+   * gaps you can see the sky through, outer sprays hanging lower (the
+   * weeping habit of a Nordic birch), and the clusters round the edge of
+   * the crown lit through from behind, warm yellow-green, by the sun.
+   */
   const birch = (x, z, H) => {
     const g = G(x, z) - 0.2;
-    const lean = (r() - 0.5) * 0.12;
-    const trunk = new THREE.CylinderGeometry(0.1, 0.17, H * 0.75, 6, 6);
+    const lean = (r() - 0.5) * 0.14;
+    const topX = x - lean * H * 0.75;
+    const trunk = new THREE.CylinderGeometry(0.07, 0.16, H * 0.82, 6, 8);
     trunk.rotateZ(lean);
-    trunk.translate(x - lean * H * 0.37, g + H * 0.37, z);
+    trunk.translate(x - lean * H * 0.41, g + H * 0.41, z);
     kit.add(trunk, (v) => (Math.sin(v.y * 7.3 + x) > 0.72 || v.y < g + 0.6 ? barkDark : bark));
-    const W = H * 0.26;
-    const leaf = birchLeaf[Math.floor(r() * 3)];
+    const W = H * 0.25;
+    const cy = g + H * 0.66;
     for (let k = 0; k < 4; k++) {
-      const s = W * (0.55 + r() * 0.35);
-      const blob = new THREE.IcosahedronGeometry(1, 0);
-      blob.scale(s, s * 1.15, s);
-      blob.translate(x - lean * H * 0.8 + (r() - 0.5) * W, g + H * (0.6 + r() * 0.25), z + (r() - 0.5) * W);
-      kit.add(blob, () => tmp.copy(leaf).multiplyScalar(0.85 + r() * 0.3));
+      const a = (k / 4) * Math.PI * 2 + r();
+      const len = W * (0.75 + r() * 0.4);
+      dLimb.set(Math.cos(a), 0.75, Math.sin(a) * 0.7).normalize();
+      const limb = new THREE.CylinderGeometry(0.022, 0.05, len, 4);
+      limb.translate(0, len / 2, 0);
+      limb.applyQuaternion(qLimb.setFromUnitVectors(yAxis, dLimb));
+      limb.translate(x - lean * H * (0.45 + k * 0.06), g + H * (0.46 + k * 0.06), z);
+      kit.add(limb, bark);
     }
-    trees.push({ x, z, g, H, W: W * 1.4, birch: true });
+    const leaf = birchLeaf[Math.floor(r() * 3)];
+    const n = lite ? 16 : 26;
+    for (let i = 0; i < n; i++) {
+      const u = r() * Math.PI * 2;
+      const v = Math.acos(2 * r() - 1);
+      const shell = 0.6 + 0.4 * r();
+      const px = Math.sin(v) * Math.cos(u) * W * shell;
+      const pz = Math.sin(v) * Math.sin(u) * W * 0.8 * shell;
+      const out = Math.hypot(px / W, pz / (W * 0.8));
+      const py = Math.cos(v) * H * 0.3 * shell - out * out * H * 0.09;
+      const sz = W * (0.2 + r() * 0.16);
+      const blob = new THREE.IcosahedronGeometry(1, 0);
+      blob.scale(sz * 1.2, sz * 0.72, sz);
+      blob.rotateY(r() * 3);
+      blob.translate(topX + px, cy + py, z + pz);
+      // The rim: clusters out at the crown's edge (as the lake sees it) and
+      // on top, more so on the far side where the light comes through
+      const edge = Math.max(Math.abs(px) / W, (py + H * 0.08) / (H * 0.3));
+      const rim = smooth(0.5, 0.95, edge) * (pz < 0 ? 0.75 : 0.45);
+      const shade = 0.72 + r() * 0.32;
+      kit.add(blob, () => tmp.copy(leaf).multiplyScalar(shade).lerp(rimC, rim));
+    }
+    trees.push({ x: topX, z, g, H, W: W * 1.3, birch: true });
   };
   // A stand of spruce behind the stuga and along the ridge; birches by the water
   [[33, -60, 15], [37, -63, 18], [21, -63, 13], [44, -58, 12], [49, -66, 19], [55, -61, 14],

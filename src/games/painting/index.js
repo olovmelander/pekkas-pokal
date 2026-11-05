@@ -354,6 +354,8 @@ export async function createPainting(container) {
     lowTier, safe: gfx.safe, reduced, home: JUDGE_HOME, spot: JUDGE_SPOT, canvasC: CANVAS_C, seed: 2021
   });
   scene.add(cast.group);
+  // Soft contact shade on the lawn under every easel and everyone at one
+  garden.refs.macro.shade([{ x: 0, z: EASEL_Z, r: 0.85, k: 0.55 }, { x: 0, z: EASEL_Z + 0.9, r: 0.7, k: 0.25 }, ...cast.lawnSpots()]);
 
   /*
    * A sunny garden is never dark. If the picture comes out (nearly) black on

@@ -206,7 +206,7 @@ export const SUN_DIR = new THREE.Vector3(0.16, 0.125, -0.978).normalize();
  * Refracted into the water (Snell: sin θt = sin θi / 1.33), the same sun
  * comes from much higher — this is where the underwater rays fan from.
  */
-const SUN_UNDER = (() => {
+export const SUN_UNDER = (() => {
   const h = new THREE.Vector2(SUN_DIR.x, SUN_DIR.z).normalize();
   const st = Math.sqrt(1 - SUN_DIR.y * SUN_DIR.y) / 1.333;
   return new THREE.Vector3(h.x * st, Math.sqrt(1 - st * st), h.y * st);

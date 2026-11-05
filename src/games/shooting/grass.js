@@ -139,7 +139,7 @@ function meadowShader(material, uniforms, key) {
         varying float vTrans;
       `)
       .replace('#include <opaque_fragment>', `
-        outgoingLight += (diffuseColor.rgb * 1.7 + vec3(0.05, 0.04, 0.0)) * uSunColor * vTrans;
+        outgoingLight += (diffuseColor.rgb * 1.35 + vec3(0.03, 0.025, 0.0)) * uSunColor * vTrans;
         #include <opaque_fragment>
       `);
   };
@@ -234,7 +234,7 @@ export function buildGrass(rand, { count = 23000, inner = 0.3, outer = 30, sunDi
 
     const k = rand();
     colour.copy(GREEN_DARK).lerp(GREEN_LIGHT, rand());
-    if (k > 0.7) colour.lerp(STRAW, 0.35 + rand() * 0.5);
+    if (k > 0.74) colour.lerp(STRAW, 0.3 + rand() * 0.45);
     else if (k < 0.03) colour.lerp(SORREL, 0.6); // a rust-red sorrel blade here and there
     // Slight darkening far out helps the aerial perspective read
     colour.multiplyScalar(0.88 + rand() * 0.26);
