@@ -758,10 +758,12 @@ sitt.
 | Nudga | Knappen NUDGA | N |
 | Strategikort | ?-knappen uppe till höger | ? — Esc stänger kortet |
 
-Släpp avfyraren när mätaren står i det turkosa fältet för en **skill shot** —
-och skjut vänster orbit inom tre sekunder för en **super skill shot** (15 000).
-Fyra nudgar för snabbt ger TILT: flipprarna dör för den bollen och dess bonus
-går förlorad.
+Släpp avfyraren när mätaren står i det turkosa fältet för en **skill shot**.
+Fältet flyttar sig för varje boll: lågt ger 5 000, mitten 7 500 och högt
+10 000. Skjut sedan vänster orbit inom tre sekunder för en **super skill shot**
+(15 000). Nudgeknappen blir gul och sedan röd när maskinen gungar, och fyra
+snabba nudgar i rad ger TILT: flipprarna dör för den bollen och dess bonus går
+förlorad.
 
 **Bordet**
 
@@ -777,13 +779,13 @@ maskinen upp den — först med en skakning, sedan genom att servera om den.
 
 | Moment | Så funkar det |
 | --- | --- |
-| **Porten** | Tre smällar på borgporten fäller vindbryggan i 9 sekunder. Porten öppnas också av tänt lås, tänd jackpot, FISKE och FINALEN. |
-| **Grenar** | Fäll hela POKAL-banken (P-O-K till vänster, A-L till höger) → skjut vänster orbit för att starta en gren på tid: Gokart '12 (varv: orbit/ramp), Femkamp '13, Pingis '19, Skytte '22 (i ordning!), Fiske '24 (pokalen i borgen). Klarad gren = 15 000 och en tänd årsbricka. |
-| **FINALEN** | Klara alla fem grenar → wizard mode: 60 sekunder multiball där **allt räknas ×5**. |
-| **Multiball** | Bumperträffar laddar låset — då öppnas porten och pokalen låser bollar i borgen. Två låsta bollar startar multiball med jackpot (25 000) i pokalen; orbits och ramper tänder om jackpotten. |
+| **Porten** | Tre smällar på borgporten fäller vindbryggan i 12 sekunder. Skjut pokalen medan bryggan ligger nere för att **storma borgen**: 10 000 första gången och 5 000 mer för varje ny stormning, upp till 30 000. Två stormningar tänder en extra boll på Kungsvägen. Porten öppnas också av tänt lås, tänd jackpot, tänd gren, FISKE och FINALEN. |
+| **Grenar** | Fäll hela POKAL-banken (P-O-K till vänster, A-L till höger) och skjut in i borgen (eller vänster orbit). Bollen väntar i borgen medan du väljer gren med flipperknapparna: Gokart '12 (varv: orbit/ramp), Femkamp '13, Pingis '19, Skytte '22 (i ordning!), Fiske '24 (pokalen i borgen). Klarad gren = 15 000 plus 250 per sekund som är kvar, och en tänd årsbricka. |
+| **FINALEN** | Klara alla fem grenar så tänds Finalen direkt → skjut in i borgen för wizard mode: 60 sekunder multiball där **allt räknas ×5**. |
+| **Multiball** | Bumperträffar laddar låset — då öppnas porten och pokalen låser bollar i borgen. Två låsta bollar startar multiball. Jackpotten i pokalen ger 25 000 och 10 000 mer för varje ny; orbits och ramper tänder om den. Första jackpotten tänder add-a-ball på Vallgraven, och efter två jackpottar kan en orbit eller ramp tända **superjackpotten** på 100 000. |
 | **Kombo** | Träffar inom 3,5 sekunder kedjar: 1 000 × 2 per steg, upp till ×16. |
 | **Snurran** | Vänster orbit går genom en snurra — varje varv ger poäng, och ju hårdare skott desto fler varv. |
-| **Trollen** | När en gren startar reser sig två troll ur borggången och blockerar borgen. Slå ner dem för 3 000 — de reser sig igen efter en stund så länge grenen pågår. |
+| **Knektarna** | När en gren (utom Fiske) eller Finalen startar reser sig två knektar ur borggången och blockerar borgen. Slå ner dem för 3 000 — de reser sig igen efter en stund så länge grenen pågår. |
 | **Kickback** | Vänster utbana har en kickback som skjuter tillbaka bollen — tänd vid varje ny boll, tänds om när båda inbanorna rullats. |
 | **Ny boll** | Lampan vid avloppet lyser de första nio sekunderna: dräneras bollen då serveras den om — en gång per boll. |
 | **Bonus** | Inbanorna höjer bonusmultiplikatorn (upp till ×6) som multiplicerar slutbonusen per boll. |
@@ -862,6 +864,45 @@ som pekar på rätt skott under de första omgångarna, nudgen knuffar nu alltid
 bollen mot mitten i stället för åt ett slumpat håll, och på mobilen vibrerar
 telefonen vid flipper, bumprar och stora händelser. Trots allt nytt ritar
 bordet färre anrop än förut, så det håller mobilens prestandabudget.
+
+**Skåpet och borgen.** Flipperspelet har fått ett riktigt skåp, inspirerat av
+sena 90-talets medeltidsbord och dagens moderna flipperskåp men med egen konst
+rakt igenom. Maskinen står på fyra ben av borstat stål med nivåskruvar, och
+spelplanen lutar 6,5 grader mot golvet som på en riktig maskin. Skåpets sidor
+har en borg i månsken, riddare, heraldiska fanor, älgvapnet och texten PEKKAS
+POKAL. På fronten sitter en myntdörr med upplyst prisskylt (1 krona = 1 spel),
+en startknapp och en avfyrare i krom som dras tillbaka när man laddar skottet.
+Flipperknapparna sitter på sidorna och en röd knapp på låsbalken. Toppboxen är
+en låda med djup och kromram, med en bakbelyst bild över punktmatrisen och två
+högtalargaller. Innan man trycker på Start på en bred skärm åker kameran
+långsamt runt maskinen i arkadhallen och flyger sedan in till spelvyn. På mobil
+i stående läge är spelvyn som förut, och den som har valt reducerad rörelse får
+en stillbild. Hallen har fått en bakvägg med varma vägglampor och en neonskylt,
+och grannmaskinerna lyser upp mattan framför sig.
+
+Borgen har fått en riktig port: en ekdörr med järnband som spricker lite mer
+för varje smäll, skakar på gångjärnen och sprutar flisor, och som vid tredje
+smällen faller framåt som en vindbrygga. Skjuter du pokalen medan bryggan
+ligger nere stormar du borgen, och det ger mer för varje gång. När en gren är
+tänd öppnas porten, bollen väntar i borgen och du väljer själv gren med
+flipperknapparna. Varje gren har en egen inledningsmelodi, egna små scener på
+punktmatrisen, steg som ger mer och mer och tidsbonus för sekunderna som är
+kvar. I multiball blir varje jackpot värd mer än den förra, och slutbonusen
+räknas upp rad för rad. Trollen har blivit **knektar**: två vakter i röd
+vapenrock och stålhjälm med lysande visir, som reser sig ur borggången med en
+hornstöt och klingar till när de slås ner.
+
+Flipperns fysik är omgjord efter mätningar i en testrigg. Flipprarna slår som
+riktiga solenoider: snabbt upp, hårdare ytterst och mjukare vid basen. En
+uppfälld flipper ger efter lite när bollen träffar, så det går att fånga och
+vagga bollen. Bollen kan inte längre passera rakt igenom flippern, och den
+rullar fritt längs flipprar och skenor i stället för att bromsas.
+Slangbellorna sitter högre och båda målbankarna har flyttats upp, så vänster
+orbit, båda ramperna och borgen går att träffa med rätt timing även när målen
+står uppe. Popbumprarna och slangbellorna sparkar aktivt med lite slump, ringen
+dras ner och gummit slår ut. Ramperna är byggda av fyra ståltrådar med byglar
+och stöd, och bollens fart och rullljud följer backarna. Bollsök pulserar
+maskinens spolar en i taget, och ljuden kommer från det håll där de händer.
 
 **Personerna i spelen**
 
@@ -955,7 +996,7 @@ får rätt titel och bild i förhandsvisningen och sedan leder vidare till sidan
 | `src/data/achievements.js` | Definitioner av alla utmärkelser |
 | `src/styles/` | `main` (tokens/teman), `layout`, `components`, `pages` (års- och profilsidorna), `animations`, `games` (arkaden och spelscenen), `game-hud` (spelens delade HUD), `responsive` |
 | `src/games/shared/` | Delat av alla spel: `gfx` (grafikvakten: tålig efterbehandling, NaN-skydd, svart-bild-vakt, förkompilering, `?gfx=safe`), `people` med `people-*` (personsystemet: skelett, händer och grepp, ansikten, utseenden, poser, gång, publik) |
-| `src/games/pinball/` | Flipperspelet: `physics` (2D-kollision), `table` (layout + banans grafik), `meshes` (3D), `room` (arkadhallen), `dmd` (punktmatrisen), `fx` (gnistor, bollspår), `audio` (syntetiskt ljud), `hud` (paneler), `scores` (topplistan), `index` (spelloop) |
+| `src/games/pinball/` | Flipperspelet: `physics` (2D-kollision), `table` (layout + banans grafik), `meshes` (3D), `cabinet` (skåpet, toppboxen och glaset), `room` (arkadhallen), `showcase` (kameraturen före start), `dmd` (punktmatrisen), `fx` (gnistor, bollspår), `audio` (syntetiskt ljud), `hud` (paneler), `scores` (topplistan), `index` (spelloop) |
 | `src/games/fishing/` | Fiskespelet: `species` (procedurella fiskar), `world` (sjö, vattenshader), `scenery` (stranden, udden, speglingarna), `boat` (klinkbyggda ekan), `angler` (Erik i ekan, IK mot spöet), `fx` (stänk, bubblor, glimtar), `hud` (paneler, fångstdagbok), `progress` (uppdrag och rekord), `audio` (syntetiskt ljud), `index` (spelloop) |
 | `src/games/clay/` | Drejspelet: `studio` (ateljé, ugn, drejskiva), `hand` (spelarens hand på leran), `clay` (krukans nät och material), `keramiker` (keramikern och domen), `guide` (målets guider i 3D), `fx` (stänk, glöd, värmedaller), `hud` (paneler, dom, kvällens utställning), `audio` (syntetiskt ljud), `index` (lerfysik + spelloop) |
 | `src/games/fencing/` | Fäktspelet: `salle` (fäktsal, ljusvolymer, publik), `fencer` (fäktarna, domaren och masken på personsystemet), `fx` (gnistor, klingspår, konfetti), `hud` (paneler, slutspelsträd), `audio` (syntetiskt ljud), `index` (duell-AI + spelloop) |

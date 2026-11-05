@@ -1002,7 +1002,7 @@ export async function createPinball(container, opts = {}) {
       fx.spark(p.x, 1.2, -p.y, 0x9be37a, 16, 10, 6);
       comboShot();
       modeEvent('troll');
-      say(['TROLL NERE!', '+3 000'], { prio: 2 });
+      say(['KNEKT NERE!', '+3 000'], { prio: 2 });
     },
     onGate(v, _b) {
       if (v < 1.2) return;
@@ -1639,7 +1639,7 @@ export async function createPinball(container, opts = {}) {
     });
     if (any && state.phase === 'play') {
       sfx.trollUp();
-      say(['TROLLEN', 'VAKNAR!'], { prio: 2, dur: 1.4 });
+      say(['KNEKTARNA', 'PÅ VAKT!'], { prio: 2, dur: 1.4 });
     }
   }
 
@@ -1840,7 +1840,7 @@ export async function createPinball(container, opts = {}) {
       ['MÅL', pb.targets, 300],
       ['ORBITS', pb.orbits, 500],
       ['RAMPER', pb.ramps, 400],
-      ['TROLL', pb.trolls, 600],
+      ['KNEKTAR', pb.trolls, 600],
       ['PORTSLAG', pb.gates, 250],
       ['KOMBOS', pb.combos, 750],
       ['BORGEN STORMAD', pb.storms, 5000]
@@ -2837,6 +2837,8 @@ export async function createPinball(container, opts = {}) {
       // Time on the strategy card is not play time: the save timers wait
       if (state.ballSaveUntil > now) state.ballSaveUntil += real * 1000;
       if (state.mbSaveUntil > now) state.mbSaveUntil += real * 1000;
+      // …and neither does the fallen drawbridge
+      if (state.gate.until > now) state.gate.until += real * 1000;
       return;
     }
     if (root.dataset.phase !== state.phase) root.dataset.phase = state.phase;
@@ -3337,6 +3339,7 @@ export async function createPinball(container, opts = {}) {
       const away = last - hiddenAt;
       if (state.ballSaveUntil > hiddenAt) state.ballSaveUntil += away;
       if (state.mbSaveUntil > hiddenAt) state.mbSaveUntil += away;
+      if (state.gate.until > hiddenAt) state.gate.until += away;
       hiddenAt = 0;
     }
     if (document.hidden) {

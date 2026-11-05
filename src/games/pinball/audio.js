@@ -285,15 +285,18 @@ export class Sfx {
     this.tone(660, 0.2, { type: 'triangle', gain: 0.3, sweep: 220, at: 0.18, wet: 0.4 });
   }
 
+  /** The castle guards rise: a short call on a guard's horn */
   trollUp() {
-    this.tone(70, 0.42, { type: 'sawtooth', gain: 0.4, sweep: 40, wet: 0.35 });
-    this.tone(150, 0.3, { type: 'square', gain: 0.24, sweep: -60, at: 0.16, wet: 0.35 });
+    this.tone(196, 0.16, { type: 'square', gain: 0.2, wet: 0.4 });
+    this.tone(294, 0.34, { type: 'square', gain: 0.22, sweep: 6, at: 0.15, wet: 0.45 });
+    this.thump(110, 60, 0.3, 0.35);
   }
 
+  /** A guard knocked down: a clang off the helm and a thud */
   trollHit() {
     this.noise(0.12, { gain: 0.5, freq: 420, wet: 0.2 });
     this.thump(190, 70, 0.26, 0.6);
-    this.tone(120, 0.3, { type: 'sawtooth', gain: 0.2, sweep: -60, at: 0.05, wet: 0.3 });
+    this.tone(1180, 0.22, { type: 'triangle', gain: 0.16, sweep: -240, wet: 0.35 });
   }
 
   lock() {

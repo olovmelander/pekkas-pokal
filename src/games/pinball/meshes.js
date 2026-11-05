@@ -535,10 +535,12 @@ export function createMaterials(THREE, playfieldTexture) {
       emissive: 0x7c8cf8,
       emissiveIntensity: 0.8
     }),
+    // The castle guards (knektar): a red tabard under a steel great helm
+    // whose visor slit glows like the castle windows
     troll: new THREE.MeshStandardMaterial({
-      color: 0x6f9b5a,
-      roughness: 0.72,
-      metalness: 0.08,
+      color: 0x8e2a30,
+      roughness: 0.78,
+      metalness: 0.04,
       envMapIntensity: 0.3
     }),
     trollEye: new THREE.MeshStandardMaterial({
@@ -2360,7 +2362,7 @@ export function buildTable(THREE, mergeGeometries, materials) {
       { id: 'leftRamp', x: -6.2, y: 15.2, a: 0.18, color: 0xf2c14e },
       { id: 'castle', x: L.centerX, y: 19.4, a: 0, color: 0x7c8cf8 },
       { id: 'rightRamp', x: 5.5, y: 15.0, a: -0.18, color: 0xf2c14e },
-      { id: 'trolls', x: L.centerX, y: 22.6, a: 0, color: 0x6f9b5a }
+      { id: 'trolls', x: L.centerX, y: 22.6, a: 0, color: 0xe8643c }
     ];
     const discGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.07, 22);
     // The routed pocket the insert drops into
@@ -2478,7 +2480,7 @@ export function buildTable(THREE, mergeGeometries, materials) {
     refs.spinner = { group: g, blade, spin: 0 };
   }
 
-  /* ---- Trolls: pop-up beasts in the castle corridor ---- */
+  /* ---- Knektar (`trolls` in code): pop-up guards in the castle corridor ---- */
   refs.trolls = L.trolls.map((t) => {
     const g = new THREE.Group();
     g.position.set(t.x, 0, -t.y);
@@ -2491,14 +2493,17 @@ export function buildTable(THREE, mergeGeometries, materials) {
     body.castShadow = true;
     g.add(body);
 
-    // Eyes so it reads as a creature, not a peg, and club-like horns —
-    // each pair one mesh (a troll is drawn every frame of a gren)
-    const eyes = mergeGeometries([-1, 1].map((side) =>
-      new THREE.SphereGeometry(0.13, 12, 8).translate(side * 0.24, 1.42, t.r * 0.72)), false);
-    g.add(new THREE.Mesh(eyes, materials.trollEye));
-    const horns = mergeGeometries([-1, 1].map((side) =>
-      new THREE.ConeGeometry(0.11, 0.42, 8).rotateZ(side * 0.4).translate(side * 0.36, 1.78, 0)), false);
-    g.add(new THREE.Mesh(horns, materials.stoneDark));
+    // A glowing T-shaped visor slit so it reads as a guard, not a peg, under
+    // a flat-topped great helm. Each part is one mesh (a guard is drawn every
+    // frame of a gren). The helm flares at the bottom so its wall stays well
+    // clear of the body's curve: no near-coplanar surfaces to fight.
+    const slit = mergeGeometries([
+      new THREE.BoxGeometry(t.r * 0.74, 0.075, 0.08).translate(0, 1.7, t.r * 0.89),
+      new THREE.BoxGeometry(0.075, 0.24, 0.08).translate(0, 1.55, t.r * 0.92)
+    ], false);
+    g.add(new THREE.Mesh(slit, materials.trollEye));
+    const helm = new THREE.CylinderGeometry(t.r * 0.84, t.r * 0.98, 0.62, 18).translate(0, 1.62, 0);
+    g.add(new THREE.Mesh(helm, materials.armour));
 
     // Retracted below the playfield until the mode raises them
     g.position.y = -2.2;
