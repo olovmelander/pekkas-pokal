@@ -1043,7 +1043,7 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1, profile = null 
     box.rotation.y = -0.35;
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.44, 0.26), clubRed);
     body.position.y = 0.22;
-    body.castShadow = true;
+    body.castShadow = tier === 'high'; // a phone's shadow pass skips the small props
     box.add(body);
     const top = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.03, 0.3), towel);
     top.position.y = 0.455;
@@ -1059,9 +1059,9 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1, profile = null 
     bucket.position.set(-2.45, 0, -3.1);
     const pail = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.14, 0.3, 18, 1, true), lambert(0x2a4a6e, { side: THREE.DoubleSide }));
     pail.position.y = 0.15;
-    pail.castShadow = true;
+    pail.castShadow = tier === 'high';
     bucket.add(pail);
-    const ballMat = standard(0xfbf6ec, 0.45);
+    const ballMat = towel; // spare balls bake in with the towels: one draw less
     const brand = mulberry(53);
     for (let i = 0; i < 22; i++) {
       const a = brand() * Math.PI * 2;
@@ -1273,7 +1273,7 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1, profile = null 
     const skirt = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, 0.02), clubRed);
     skirt.position.set(0, 0.45, 0.225);
     desk.add(skirt);
-    const counterMat = lambert(0x17140f);
+    const counterMat = footMat; // the barriers' feet: same dark, no extra draw
     [[-0.36, -0.19], [0.36, -0.19], [-0.36, 0.19], [0.36, 0.19]].forEach(([x, z]) => {
       const leg = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.7, 0.03), counterMat);
       leg.position.set(x, 0.35, z);

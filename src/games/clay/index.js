@@ -8,7 +8,9 @@
  *   1. The keramikern shows a form — its ghost silhouette hangs over the
  *      wheel, and a coloured band shows the live difference to your wall.
  *   2. You THROW: the wheel spins, and dragging against the clay pushes
- *      it in or pulls it out at that height, like a palm and a rib tool.
+ *      it in or pulls it out at that height — your hand (hand.js) presses
+ *      the outside wall, or reaches in over the rim to pull from inside,
+ *      and the clay gives under the fingers as they work.
  *      Yank too hard and the clay goes off-centre. A likeness meter with
  *      star marks answers the only question that matters — "is this
  *      starting to look like it?"
@@ -1499,7 +1501,7 @@ export async function createClay(container) {
       } else {
         // Pushing in: palm and finger pads on the outer wall
         contactAt(handPos, b.side, shownR(b.j) + 0.01, b.y, OUT_YAW).x += shake;
-        placeHand(handPos, b.side, { inside: false, slope: ws.slope, curv: ws.curv, press, t, yaw: OUT_YAW, low: smooth(0.6, 0.12, b.y) }, dt);
+        placeHand(handPos, b.side, { inside: false, slope: ws.slope, curv: ws.curv, press, t, yaw: OUT_YAW, low: smooth(0.95, 0.2, b.y) }, dt);
       }
       // Slip flies off the spinning wall, tangent to the rotation — always a
       // few at full speed, more the harder the clay is worked
@@ -1525,7 +1527,7 @@ export async function createClay(container) {
       if (!b) {
         const ws = wallShape(j);
         handPos.set(r[j] + 0.19 * squeeze, u * H - 0.05, 0.05);
-        placeHand(handPos, 1, { inside: false, slope: ws.slope, curv: ws.curv, press: 0.3, grip: 1, t, yaw: 0.25, low: smooth(0.6, 0.12, u * H) }, dt);
+        placeHand(handPos, 1, { inside: false, slope: ws.slope, curv: ws.curv, press: 0.3, grip: 1, t, yaw: 0.25, low: smooth(0.95, 0.2, u * H) }, dt);
       }
     } else if (!b && state.coached < 1.2 && state.phase === 'throw' && guide.worst.d > 0.11) {
       // First time at the wheel: until you have worked the clay for a moment,
@@ -1544,7 +1546,7 @@ export async function createClay(container) {
       hand.scale.set(s, s, s);
       potter.pose({
         inside: pull, slope: pull ? insideSlope(j, ws.slope) : ws.slope, curv: pull ? -ws.curv : ws.curv, press: reach * 0.6, t,
-        yaw: pull ? IN_YAW : OUT_YAW, reach: pull ? reachOf(1, s) : null, low: smooth(0.6, 0.12, y)
+        yaw: pull ? IN_YAW : OUT_YAW, reach: pull ? reachOf(1, s) : null, low: smooth(0.95, 0.2, y)
       });
       hand.visible = pull || reach > 0.05;
     } else if (!b) {

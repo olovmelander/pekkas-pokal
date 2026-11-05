@@ -1143,10 +1143,20 @@ export function buildGarden({ lowTier = false } = {}) {
     const windGrass = grassMat.onBeforeCompile;
     grassMat.onBeforeCompile = (shader) => {
       windGrass(shader);
-      shader.fragmentShader = shader.fragmentShader.replace(
-        '#include <normal_fragment_begin>',
-        '#include <normal_fragment_begin>\n  normal = normalize( vNormal );'
-      );
+      // The blades take the lawn's own variation under them: dry patches,
+      // lanes and shade, so they stand IN the lawn rather than on top of it
+      shader.uniforms.uMacro = { value: macro.tex };
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec2 vMacroUv;')
+        .replace('#include <fog_vertex>', `#include <fog_vertex>
+          vMacroUv = vec2((wOrigin.x - ${MACRO.x0.toFixed(1)}) / ${MACRO.size.toFixed(1)}, 1.0 - (wOrigin.z - ${MACRO.z0.toFixed(1)}) / ${MACRO.size.toFixed(1)});`);
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform sampler2D uMacro;\nvarying vec2 vMacroUv;')
+        .replace('#include <color_fragment>', '#include <color_fragment>\n  diffuseColor.rgb *= texture2D( uMacro, vMacroUv ).rgb * 1.176;')
+        .replace(
+          '#include <normal_fragment_begin>',
+          '#include <normal_fragment_begin>\n  normal = normalize( vNormal );'
+        );
     };
     const grass = instanced(bladeGeometry(), blades, grassMat);
     grass.receiveShadow = true;
