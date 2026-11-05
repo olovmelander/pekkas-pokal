@@ -390,52 +390,6 @@
     max-height: none;
   }
 
-  /* Modalen blir ett ark nerifrån på telefoner */
-  .modal-backdrop {
-    padding: 0;
-    align-items: flex-end;
-  }
-
-  .modal-panel {
-    width: 100%;
-    max-height: 92dvh;
-    padding: var(--sp-5) var(--sp-4) calc(var(--sp-6) + env(safe-area-inset-bottom));
-    border-radius: var(--r-xl) var(--r-xl) 0 0;
-    transform: translateY(100%);
-  }
-
-  .modal-panel::before {
-    content: '';
-    display: block;
-    width: 40px;
-    height: 4px;
-    margin: -6px auto var(--sp-3);
-    border-radius: 2px;
-    background: var(--border-strong);
-  }
-
-  .pf-avatar {
-    width: 54px;
-    height: 54px;
-  }
-
-  .pf-stats {
-    grid-template-columns: repeat(3, 1fr);
-  }
-
-  .pf-stats .pf-stat:nth-child(4) {
-    border-left: none;
-  }
-
-  .pf-stats .pf-stat:nth-child(n + 4) {
-    border-top: 1px solid var(--border);
-  }
-
-  .pf-rivals {
-    grid-template-columns: 1fr;
-    gap: var(--sp-4);
-  }
-
   .song-sheet {
     transform: none;
   }
