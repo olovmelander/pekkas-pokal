@@ -997,6 +997,7 @@ får rätt titel och bild i förhandsvisningen och sedan leder vidare till sidan
 | `src/scripts/trophy.js` | Pokalen i 3D på översikten |
 | `src/scripts/achievement-engine.js` | Kör utmärkelsernas regler: vem som har vad, vilket år den låstes upp och vem som är närmast |
 | `src/data/achievements.js` | Alla utmärkelser: beskrivning, sällsynthet, poäng och regeln i kod |
+| `src/data/achievement-icons.js` | Pekkas egna ikoner för utmärkelserna: en ram per sällsynthet och en ritad symbol per utmärkelse |
 | `tests/achievements.test.js` | Tester för utmärkelserna mot de riktiga resultaten (`npx vitest run`) |
 | `src/styles/` | `main` (tokens/teman), `layout`, `components`, `pages` (års- och profilsidorna), `animations`, `games` (arkaden och spelscenen), `game-hud` (spelens delade HUD), `responsive` |
 | `src/games/shared/` | Delat av alla spel: `gfx` (grafikvakten: tålig efterbehandling, NaN-skydd, svart-bild-vakt, förkompilering, `?gfx=safe`), `people` med `people-*` (personsystemet: skelett, händer och grepp, ansikten, utseenden, poser, gång, publik) |
@@ -1033,6 +1034,16 @@ där regeln i koden gör exakt det som beskrivningen säger, och
   (vinn 1, 3, 5, 7 upplagor) i stället för flera namn för samma sak.
 - **Poängen följer sällsyntheten:** Vanlig 10, Sällsynt 25, Episk 50,
   Legendarisk 100, Mytisk 250. Poängligan på sidan är summan.
+- **Egna ikoner** i stället för emojier, ritade för sajten i
+  [`src/data/achievement-icons.js`](src/data/achievement-icons.js):
+  - **Ramens form visar sällsyntheten**, så den syns även utan färg: cirkel
+    (Vanlig), sköld (Sällsynt), hexagon (Episk), rosett (Legendarisk) och
+    åttauddig stjärna (Mytisk).
+  - **Symbolen** är en guldlinje på ett rutnät på 24×24. Pokalen har samma
+    form som 3D-pokalen, Grundaren är en graverad plåt som på sockeln, och
+    siffrorna är satta i Fraunces.
+  - **Låsta utmärkelser** visas grå med streckad ram, så man ser vad man
+    siktar på.
 - **Titlar** (The GOAT, Medaljhamstraren, Decenniets mästare, Arrangörskungen
   och Mr. Consistent) har en innehavare åt gången, delas vid lika och kan byta
   ägare efter nästa tävling.

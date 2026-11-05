@@ -67,6 +67,21 @@ describe('definitionerna', () => {
   });
 });
 
+describe('ikonerna', () => {
+  it('har en egen ritad symbol för varje utmärkelse och en ram per sällsynthet', () => {
+    const ctx = { window: {} };
+    vm.createContext(ctx);
+    vm.runInContext(read('src/data/achievement-icons.js'), ctx);
+    for (const d of defs) {
+      expect(ctx.window.PP_ACH_ICONS[d.id], d.id).toBeTruthy();
+      const svg = ctx.window.ppAchBadge(d);
+      expect(svg, d.id).toMatch(/^<svg class="pp-badge"/);
+      expect(svg, d.id).not.toMatch(/NaN|undefined/);
+    }
+    expect(ctx.window.ppAchBadge(defs[0], { locked: true })).toMatch(/is-locked/);
+  });
+});
+
 function loadCategories() {
   const ctx = { window: {} };
   vm.createContext(ctx);

@@ -2064,6 +2064,11 @@
     App.achievements = { defs, defById, byName, details, closest };
   }
 
+  /** Pekkas own badge for an achievement (src/data/achievement-icons.js) */
+  function achBadge(d, opts) {
+    return window.ppAchBadge ? window.ppAchBadge(d, opts) : '';
+  }
+
   /** The year a person unlocked an achievement (titles: since when they hold it) */
   function achYear(name, id) {
     const d = App.achievements.details[name];
@@ -2118,7 +2123,7 @@
             const d = defById[id];
             const y = achYear(name, id);
             const label = `${d.name}${y ? ` (${d.title ? 'sedan ' : ''}${y})` : ''} — ${d.desc}`;
-            return `<span class="badge rarity-${esc(d.rarity)}" title="${esc(label)}" tabindex="0" role="img" aria-label="${esc(label)}">${d.icon}</span>`;
+            return `<span class="badge rarity-${esc(d.rarity)}" title="${esc(label)}" tabindex="0" role="img" aria-label="${esc(label)}">${achBadge(d)}</span>`;
           })
           .join('');
         return `
@@ -2204,7 +2209,7 @@
       const tags = [d.title ? '<span class="ach-tag">Titel</span>' : '', d.historic ? '<span class="ach-tag">Historisk</span>' : ''].join('');
       return `
         <div class="ach-card rarity-${esc(d.rarity)} ${unlocked ? '' : 'locked'} stagger" style="--stagger-i:${Math.min(i % 12, 11)}">
-          <span class="ach-icon" aria-hidden="true">${unlocked ? d.icon : '🔒'}</span>
+          <span class="ach-icon" aria-hidden="true">${achBadge(d, { locked: !unlocked })}</span>
           <div class="ach-body">
             <div class="ach-name">${esc(d.name)}</div>
             <div class="ach-meta"><span class="ach-rarity">${esc(rarityLabels[d.rarity] || d.rarity)}</span><span class="ach-pts">${d.points} p</span>${tags}</div>
@@ -3643,7 +3648,7 @@
         const d = defById[aid];
         return `
         <li class="prof-ach">
-          <span class="badge rarity-${esc(d.rarity)}" aria-hidden="true">${d.icon}</span>
+          <span class="badge rarity-${esc(d.rarity)}" aria-hidden="true">${achBadge(d)}</span>
           <span class="prof-ach-text"><span class="prof-ach-name">${esc(d.name)}${achYear(p.name, aid) ? `<span class="prof-ach-year">${d.title ? 'sedan ' : ''}${achYear(p.name, aid)}</span>` : ''}</span><span class="prof-ach-desc">${esc(d.desc)}</span></span>
           <span class="prof-ach-pts">${formatNumber(d.points || 0)}<span class="visually-hidden"> poäng</span></span>
         </li>`;

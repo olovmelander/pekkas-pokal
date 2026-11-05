@@ -22,7 +22,7 @@
  *   ägare när nya resultat kommer in.
  *
  * Fält:
- *   id, icon, name, desc, category, rarity
+ *   id, name, desc, category, rarity (ikonen ritas i achievement-icons.js)
  *   test(p, ctx)      → true om personen p har utmärkelsen
  *   progress(p, ctx)  → [nu, mål] för ”närmast”-raden (valfri)
  *   title: true       → titel; score(p, ctx) ger ett tal (högst vinner), eller null
@@ -82,7 +82,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   /* ===================== MEDALJER ===================== */
   {
     id: 'podium_1',
-    icon: '🎉',
     name: 'Första pallplatsen',
     desc: 'Ta en pallplats (topp 3) i en upplaga.',
     category: 'medals',
@@ -91,7 +90,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'win_1',
-    icon: '🥇',
     name: 'Första segern',
     desc: 'Vinn en upplaga.',
     category: 'medals',
@@ -100,7 +98,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'win_3',
-    icon: '🏆',
     name: 'Trefaldig mästare',
     desc: 'Vinn tre upplagor.',
     category: 'medals',
@@ -110,7 +107,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'win_5',
-    icon: '👑',
     name: 'Guldkungen',
     desc: 'Vinn fem upplagor.',
     category: 'medals',
@@ -120,7 +116,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'win_7',
-    icon: '🌟',
     name: 'Pokalens regent',
     desc: 'Vinn sju upplagor.',
     category: 'medals',
@@ -130,7 +125,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'podium_5',
-    icon: '🏅',
     name: 'Medaljsamlaren',
     desc: 'Ta fem pallplatser.',
     category: 'medals',
@@ -140,7 +134,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'podium_10',
-    icon: '🧲',
     name: 'Medaljmagneten',
     desc: 'Ta tio pallplatser.',
     category: 'medals',
@@ -150,7 +143,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'silver_3',
-    icon: '🥈',
     name: 'Eviga tvåan',
     desc: 'Kom tvåa tre gånger.',
     category: 'medals',
@@ -160,7 +152,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'bronze_3',
-    icon: '🥉',
     name: 'Bronsbaronen',
     desc: 'Kom trea tre gånger.',
     category: 'medals',
@@ -170,7 +161,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'full_set',
-    icon: '🌈',
     name: 'Hela setet',
     desc: 'Ta guld, silver och brons, i vilken ordning som helst.',
     category: 'medals',
@@ -182,7 +172,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   /* ===================== SVITER ===================== */
   {
     id: 'podium_streak_2',
-    icon: '🔁',
     name: 'Pallen igen',
     desc: 'Ta pallplats två upplagor i rad.',
     category: 'streaks',
@@ -192,7 +181,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'podium_streak_3',
-    icon: '🔥',
     name: 'Pallkonsistens',
     desc: 'Ta pallplats tre upplagor i rad.',
     category: 'streaks',
@@ -202,7 +190,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'podium_streak_5',
-    icon: '⭐',
     name: 'Pallplatsmästaren',
     desc: 'Ta pallplats fem upplagor i rad.',
     category: 'streaks',
@@ -212,7 +199,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'win_streak_2',
-    icon: '⚡',
     name: 'Dubbelmästare',
     desc: 'Vinn två upplagor i rad.',
     category: 'streaks',
@@ -222,7 +208,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'win_streak_3',
-    icon: '🎩',
     name: 'Hattrick',
     desc: 'Vinn tre upplagor i rad.',
     category: 'streaks',
@@ -232,7 +217,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'top_half_5',
-    icon: '📈',
     name: 'Stabil',
     desc: 'Placera dig i övre halvan av fältet fem upplagor i rad.',
     category: 'streaks',
@@ -242,7 +226,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'climb_3',
-    icon: '🌠',
     name: 'Stigande stjärna',
     desc: 'Förbättra din placering tre upplagor i rad.',
     category: 'streaks',
@@ -253,7 +236,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   /* ===================== MILSTOLPAR ===================== */
   {
     id: 'debut',
-    icon: '👋',
     name: 'Debutanten',
     desc: 'Gör din första start.',
     category: 'milestones',
@@ -262,7 +244,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'starts_5',
-    icon: '🎟️',
     name: 'Stammisen',
     desc: 'Delta i fem upplagor.',
     category: 'milestones',
@@ -272,7 +253,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'starts_10',
-    icon: '🎖️',
     name: 'Veteranen',
     desc: 'Delta i tio upplagor.',
     category: 'milestones',
@@ -282,7 +262,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'starts_15',
-    icon: '🗿',
     name: 'Inventarium',
     desc: 'Delta i femton upplagor.',
     category: 'milestones',
@@ -292,7 +271,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'iron_man',
-    icon: '🏃',
     name: 'Järnmannen',
     desc: 'Missa ingen upplaga efter din debut, och nå tolv starter.',
     category: 'milestones',
@@ -302,7 +280,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'founder',
-    icon: '🎩',
     name: 'Grundaren',
     desc: 'Var med i den allra första upplagan 2011.',
     category: 'milestones',
@@ -312,7 +289,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'debut_podium',
-    icon: '🚀',
     name: 'Drömdebut',
     desc: 'Ta pallplats i din första start.',
     category: 'milestones',
@@ -321,7 +297,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'late_bloomer',
-    icon: '🌸',
     name: 'Senblomman',
     desc: 'Ta din första pallplats i din femte start eller senare.',
     category: 'milestones',
@@ -333,7 +308,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'comeback_5',
-    icon: '💪',
     name: 'Comebacken',
     desc: 'Vinn igen minst fem år efter din förra seger.',
     category: 'milestones',
@@ -342,7 +316,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'comeback_10',
-    icon: '⏳',
     name: 'Tio år senare',
     desc: 'Vinn igen minst tio år efter din förra seger.',
     category: 'milestones',
@@ -351,7 +324,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'rocket',
-    icon: '🛫',
     name: 'Raketen',
     desc: 'Klättra minst åtta placeringar från en upplaga till nästa.',
     category: 'milestones',
@@ -360,7 +332,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'phoenix',
-    icon: '🌅',
     name: 'Fenixfågeln',
     desc: 'Kom sist, och ta pallplats i nästa upplaga.',
     category: 'milestones',
@@ -369,7 +340,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'bottom_to_top',
-    icon: '📈',
     name: 'Från botten till toppen',
     desc: 'Kom sist, och vinn nästa upplaga.',
     category: 'milestones',
@@ -380,7 +350,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   /* ===================== ARRANGÖRER ===================== */
   {
     id: 'host_1',
-    icon: '🏠',
     name: 'Värden',
     desc: 'Arrangera en upplaga.',
     category: 'hosts',
@@ -389,7 +358,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'host_3',
-    icon: '🏡',
     name: 'Flitig värd',
     desc: 'Arrangera tre upplagor.',
     category: 'hosts',
@@ -399,7 +367,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'host_5',
-    icon: '🏰',
     name: 'Slottsherren',
     desc: 'Arrangera fem upplagor.',
     category: 'hosts',
@@ -409,7 +376,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'host_back_to_back',
-    icon: '🔂',
     name: 'Abonnemanget',
     desc: 'Arrangera två upplagor i rad.',
     category: 'hosts',
@@ -418,7 +384,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'home_win',
-    icon: '🏟️',
     name: 'Hemmaplan',
     desc: 'Vinn en upplaga som du själv arrangerar.',
     category: 'hosts',
@@ -429,7 +394,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   /* ===================== RIVALER ===================== */
   {
     id: 'upper_hand',
-    icon: '⚔️',
     name: 'Övertaget',
     desc: 'Placera dig före samma person sex gånger i rad, räknat på upplagorna där ni båda var med.',
     category: 'rivals',
@@ -447,7 +411,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'nemesis',
-    icon: '😤',
     name: 'Ärkefienden',
     desc: 'Sluta direkt bakom samma person tre gånger.',
     category: 'rivals',
@@ -456,7 +419,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'dominance',
-    icon: '🛡️',
     name: 'Herravälde',
     desc: 'Ha plusfacit i inbördes möten mot alla du mött minst fem gånger (minst fem sådana).',
     category: 'rivals',
@@ -474,7 +436,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   /* ===================== ROLIGA ===================== */
   {
     id: 'bridesmaid',
-    icon: '👰',
     name: 'Alltid tärna',
     desc: 'Kom tvåa två gånger utan att någonsin ha vunnit.',
     category: 'fun',
@@ -483,7 +444,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'fourth_3',
-    icon: '4️⃣',
     name: 'Fyrans förbannelse',
     desc: 'Kom fyra tre gånger.',
     category: 'fun',
@@ -493,7 +453,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'seven_3',
-    icon: '7️⃣',
     name: 'Lyckonummer sju',
     desc: 'Kom sjua tre gånger.',
     category: 'fun',
@@ -503,7 +462,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'jumbo',
-    icon: '🐌',
     name: 'Jumbon',
     desc: 'Kom sist i en upplaga.',
     category: 'fun',
@@ -512,7 +470,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'same_spot',
-    icon: '📍',
     name: 'Hängmattan',
     desc: 'Få samma placering två upplagor i rad.',
     category: 'fun',
@@ -521,7 +478,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'mr_middle',
-    icon: '😐',
     name: 'Herr Medel',
     desc: 'Hamna exakt i mitten av fältet tre gånger.',
     category: 'fun',
@@ -535,7 +491,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'yo_yo',
-    icon: '🪀',
     name: 'Jojo',
     desc: 'Växla mellan pallen och utanför pallen fyra upplagor i rad.',
     category: 'fun',
@@ -544,7 +499,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'free_fall',
-    icon: '🪂',
     name: 'Fritt fall',
     desc: 'Rasa minst åtta placeringar från en upplaga till nästa.',
     category: 'fun',
@@ -553,7 +507,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'drought_5',
-    icon: '🏜️',
     name: 'Formsvackan',
     desc: 'Hamna utanför pallen fem upplagor i rad.',
     category: 'fun',
@@ -562,7 +515,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 'top_to_bottom',
-    icon: '🎢',
     name: 'Berg-och-dalbanan',
     desc: 'Vinn en upplaga och kom sist i nästa.',
     category: 'fun',
@@ -573,7 +525,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   /* ===================== TITLAR ===================== */
   {
     id: 't_goat',
-    icon: '🐐',
     name: 'The GOAT',
     desc: 'Titel: flest segrar genom tiderna (minst två).',
     category: 'titles',
@@ -583,7 +534,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 't_medals',
-    icon: '💰',
     name: 'Medaljhamstraren',
     desc: 'Titel: flest pallplatser genom tiderna (minst tre).',
     category: 'titles',
@@ -593,7 +543,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 't_decade',
-    icon: '🎯',
     name: 'Decenniets mästare',
     desc: 'Titel: flest segrar under de senaste tio upplagorna (minst två).',
     category: 'titles',
@@ -606,7 +555,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 't_hosts',
-    icon: '🗝️',
     name: 'Arrangörskungen',
     desc: 'Titel: flest arrangerade upplagor (minst två).',
     category: 'titles',
@@ -616,7 +564,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   },
   {
     id: 't_consistent',
-    icon: '📊',
     name: 'Mr. Consistent',
     desc: 'Titel: jämnast placeringar, med minst åtta starter (lägst spridning i placering i förhållande till fältets storlek).',
     category: 'titles',
