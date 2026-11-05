@@ -310,6 +310,9 @@ export async function createPingis(container) {
   const hall = buildHall(glow, { tier, pixelRatio, profile: gfx });
   scene.add(hall.group);
   hall.refs.dust.layers.set(NO_MIRROR);
+  // Floor paint, scuffs and the little counter: a draw each that the
+  // mirror pass does not need
+  hall.refs.noMirror.forEach((o) => o.layers.set(NO_MIRROR));
   if (hall.refs.reflector) hall.refs.reflector.getReflectionCamera(camera).layers.disable(NO_MIRROR);
 
   /* Shaders are compiled before anything is drawn, off the main thread

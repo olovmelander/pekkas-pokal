@@ -1034,6 +1034,8 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1, profile = null 
     scuffs.renderOrder = 1;
     scuffs.userData.keep = true;
     group.add(scuffs);
+    // Flat on the floor: the floor's mirror would only clip them anyway
+    refs.noMirror = [lines, scuffs];
 
     // The towel box in the back right corner of the court, a towel over it
     const clubRed = lambert(0xa8202c);
@@ -1293,6 +1295,7 @@ export function buildHall(glow, { tier = 'high', pixelRatio = 1, profile = null 
     miniHolder.rotation.copy(desk.rotation);
     miniHolder.add(mini);
     group.add(miniHolder);
+    refs.noMirror.push(mini);
   }
 
   /* Prize table on stage right: the cups for the night, under a spot */

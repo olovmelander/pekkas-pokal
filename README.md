@@ -202,6 +202,19 @@ om varje timme så att våg- och simshadrarna aldrig tappar precision, och en
 vakt förenklar vattnet om bilden skulle bli svart (`?gfx=safe` börjar där).
 
 
+**Nattens uppgradering.** Pekkas Fiske fick en ny strand: fjäll, skogsklädda
+åsar och granskog i flera led som bleknar i midnattsdiset, en holme och en udde
+med röd stuga, brygga, flaggstång och luftiga björkar. Sjön speglar stranden på
+riktigt, ett glitterstråk leder från solen fram till ekan, och ljuset kommer nu
+från den låga solen bakom udden, med ett mjukt motljus i Eriks båt. Fiskarna är
+omgjorda: mjuka kroppar, tunna genomskinliga fenor med strålar och varje arts
+egna kännetecken, som abborrens taggiga ryggfena med svart fläck, gäddans långa
+nos och laxens fettfena. Pekkagäddan bär nu en liten guldkrona på huvudet. Erik
+håller spöet med ett riktigt grepp, högerhanden runt rullfästet och
+vänsterhanden på veven, och båten gungar till när fisken hugger och när
+fångsten landar i tunnan. Tre nya uppdrag och en kort paus i tiden vid snäva
+passeringar gör nedfärden roligare.
+
 **Pekkas Lerskulptur (2026)**
 
 Kvällen i keramikateljén, som i Barcelona: keramikern visar en form, du
@@ -338,6 +351,24 @@ nära varandra flimrar inte längre, och en vakt förenklar grafiken om bilden
 skulle bli svart.
 
 
+**Nattens uppgradering.** Pekkas Fäktning fick mer verklig fäktning. Fäktarna
+håller floretten i ett riktigt franskt grepp med vit handske, kliver med en fot
+i taget utan att glida, parerar i rätt linje (sixte, quarte, octave) och
+saluterar före och efter varje match med masken i handen innan den sätts på och
+tas av. Domaren följer FIE:s tecken: armarna ut vid ”En garde”, ett hugg vid
+”Allez”, handen upp vid ”Halte” och sedan armen mot den som fick tuschen, med
+paradtecken när det var en ripost, och han sänker armen efter varje tecken.
+Publiken lutar sig fram, stönar och applåderar artigt, och mästaren lyfter
+Pekkas Pokal vid prisutdelningen.
+
+Dräkterna ser nu ut som tyg: lamén är en matt, silvergrå metallväv med mjuk
+lyster, veck och sömmar i stället för en blank krompansar, med en grå krage
+runt halsen, och jackan är benvit och byxorna gräddvita med sömmar och
+dragkedja i ryggen. Salen fick vägglampetter med levande ljus och sladdar från
+fäktarna till rullarna, och pisten blänker mindre i motljuset. Skärmarna mellan
+matcherna visar personen de handlar om bredvid panelen, både på dator och
+mobil, och i säkert grafikläge (?gfx=safe) är kantutjämningen nu på.
+
 **Pekkas Lerduvor (2022)**
 
 Arnäsvall i augustikväll: sädesfält, granskog, ladugården med vita knutar
@@ -408,6 +439,23 @@ shaders kompileras i förväg för rätt väg, himlen kan inte längre ge svarta
 pixlar, och skulle bilden ändå bli mörk trappar spelet själv ner grafiken
 tills fältet syns.
 
+
+**Nattens uppgradering.** Lerduvor fick en ny skogsbryn: granar med hängande
+grenvarv i olika höjder och tydliga lager, björkar med vita stammar och luftiga
+kronor, sly, enar och mjölkört längs kanten och stenblock med lav. Kvällssolen
+lyser in mellan träden i svaga ljusstrimmor, ängen har fått gräsvippor av
+timotej och tuvtåtel som fångar solen, ladan har fått locklistpanel och
+spröjsade fönster, och på åkern ligger ensilagebalar. Kastgraven är nu en
+betongbunker i en gräsvall, och vid skogskanten står ett kasttorn som skickar
+två inkommare i serie 2 och en i serie 3.
+
+Gänget håller kaffemuggarna i handtaget med två fingrar igenom och tummen
+ovanpå, tar en klunk då och då och höjer dem när någon skjuter bra, och Henrik
+håller protokollet plant med tummen ovanpå och skriver med blyerts. Skytten har
+fått egna armar med ljusa skinnhandskar som håller i geväret. En träff mitt i
+svärmen blir en rökboll, en kantträff slår bara av några bitar, och ett skott
+som nästan träffar visar ”Nära!”. På mobilen sitter siktet nu en bit ovanför
+fingret, så att man ser duvan man följer.
 
 **Pekkas Pingis (2019)**
 
@@ -750,6 +798,23 @@ hål i fogarna, flipprarna har fått riktiga rundade ändar, och förklädet öv
 avloppet har fått ett tryckt märke.
 
 
+**Nattens uppgradering.** Flipperbordet har fått en ordentlig uppfräschning av
+spelplanen. Slingshots och banguider har plastskivor med tryckt sköldkonst,
+stolparna har vita gummiringar, väggarna har rundade kanter och fällmålen är
+tunna plattor i rött och guld som fälls rakt ner i en stålkantad springa. En
+rad med små lampor ovanför flipprarna visar grenarna och bonus ×, borgen har
+fått stenmurar, upplysta fönster och vimplar, och två blixtlampor smäller till
+vid jackpot, grenstart och multiball. Varje gren färgar om bordets belysning
+och displayen visar en liten animation när en gren startar.
+
+Kulan speglar rummet runt sig och syns som blank stål även på en liten
+mobilskärm, ramperna börjar med en genomskinlig plastränna, och avfyrarstången
+har fått en fjäder som spänns när du drar. Nya spelare får korta pratbubblor
+som pekar på rätt skott under de första omgångarna, nudgen knuffar nu alltid
+bollen mot mitten i stället för åt ett slumpat håll, och på mobilen vibrerar
+telefonen vid flipper, bumprar och stora händelser. Trots allt nytt ritar
+bordet färre anrop än förut, så det håller mobilens prestandabudget.
+
 **Personerna i spelen**
 
 Alla figurer i spelen kommer från ett gemensamt personsystem i
@@ -830,12 +895,12 @@ stänger dem.
 | `src/styles/` | `main` (tokens/teman), `layout`, `components`, `animations`, `games` (arkaden och spelscenen), `game-hud` (spelens delade HUD), `responsive` |
 | `src/games/shared/` | Delat av alla spel: `gfx` (grafikvakten: tålig efterbehandling, NaN-skydd, svart-bild-vakt, förkompilering, `?gfx=safe`), `people` med `people-*` (personsystemet: skelett, händer och grepp, ansikten, utseenden, poser, gång, publik) |
 | `src/games/pinball/` | Flipperspelet: `physics` (2D-kollision), `table` (layout + banans grafik), `meshes` (3D), `room` (arkadhallen), `dmd` (punktmatrisen), `fx` (gnistor, bollspår), `audio` (syntetiskt ljud), `hud` (paneler), `scores` (topplistan), `index` (spelloop) |
-| `src/games/fishing/` | Fiskespelet: `species` (procedurella fiskar), `world` (sjö, vattenshader), `boat` (klinkbyggda ekan), `angler` (Erik i ekan, IK mot spöet), `fx` (stänk, bubblor, glimtar), `hud` (paneler, fångstdagbok), `progress` (uppdrag och rekord), `audio` (syntetiskt ljud), `index` (spelloop) |
-| `src/games/clay/` | Drejspelet: `studio` (ateljé, ugn, drejskiva), `clay` (krukans nät och material), `keramiker` (keramikern och domen), `guide` (målets guider i 3D), `fx` (stänk, glöd, värmedaller), `hud` (paneler, dom, kvällens utställning), `audio` (syntetiskt ljud), `index` (lerfysik + spelloop) |
+| `src/games/fishing/` | Fiskespelet: `species` (procedurella fiskar), `world` (sjö, vattenshader), `scenery` (stranden, udden, speglingarna), `boat` (klinkbyggda ekan), `angler` (Erik i ekan, IK mot spöet), `fx` (stänk, bubblor, glimtar), `hud` (paneler, fångstdagbok), `progress` (uppdrag och rekord), `audio` (syntetiskt ljud), `index` (spelloop) |
+| `src/games/clay/` | Drejspelet: `studio` (ateljé, ugn, drejskiva), `hand` (spelarens hand på leran), `clay` (krukans nät och material), `keramiker` (keramikern och domen), `guide` (målets guider i 3D), `fx` (stänk, glöd, värmedaller), `hud` (paneler, dom, kvällens utställning), `audio` (syntetiskt ljud), `index` (lerfysik + spelloop) |
 | `src/games/fencing/` | Fäktspelet: `salle` (fäktsal, ljusvolymer, publik), `fencer` (fäktarna, domaren och masken på personsystemet), `fx` (gnistor, klingspår, konfetti), `hud` (paneler, slutspelsträd), `audio` (syntetiskt ljud), `index` (duell-AI + spelloop) |
-| `src/games/shooting/` | Skyttespelet: `range` (fält, lerduvor), `gang` (2022 års gäng på fikastolarna), `sky` (himmelsshader och moln), `gun` (bockbössan i PBR), `grass` (instansierad äng med vind), `fx` (skärvor, damm, haglsvärm), `hud` (25-kortet, spökstapeln, slutkortet), `audio` (syntetiskt ljud), `index` (banor + spelloop) |
+| `src/games/shooting/` | Skyttespelet: `range` (fält, lerduvor), `forest` (skogsbrynet), `gang` (2022 års gäng på fikastolarna), `sky` (himmelsshader och moln), `gun` (bockbössan i PBR), `grass` (instansierad äng med vind), `fx` (skärvor, damm, haglsvärm), `hud` (25-kortet, spökstapeln, slutkortet), `audio` (syntetiskt ljud), `index` (banor + spelloop) |
 | `src/games/pingis/` | Pingisspelet: `hall` (bygdegård, bord), `foe` (motståndaren och racketen), `crowd` (publiken på personsystemet), `scoreboard` (fällbara siffror), `fx` (bollspår, ringar, gnistor), `post` (bloom, gradering, spegelgolv), `hud` (paneler, scoutingkort), `audio` (syntetiskt ljud), `index` (fysik, AI och spelloop) |
-| `src/games/painting/` | Målerispelet: `artworks` (motiven + färgblandning i RYB och Lab), `canvasart` (penseldrag och dukens höjdkarta), `palette` (paletten i 3D), `garden` (trädgården, stafflier), `cast` (Hägglund och 2021 års målare), `hud` (paneler, dom, galleri), `audio` (syntetiskt ljud), `index` (spelloop och dom) |
+| `src/games/painting/` | Målerispelet: `artworks` (motiven + färgblandning i RYB och Lab), `canvasart` (penseldrag och dukens höjdkarta), `palette` (paletten i 3D), `garden` (trädgården, stafflier), `cast` (Hägglund och 2021 års målare), `gait` (fötter som står kvar), `hud` (paneler, dom, galleri), `audio` (syntetiskt ljud), `index` (spelloop och dom) |
 | `public/` | Statiska filer: `event.json`, `manifest.json`, ikoner, `brand/` (älgen), `og-image.png`, `games/` (affischbilder), `photos/` |
 
 Data hämtas från `competition-data.csv` vid sidladdning. Om filen inte går att
