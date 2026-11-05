@@ -1605,6 +1605,7 @@
 }
 
 .ach-body {
+  flex: 1;
   min-width: 0;
 }
 
@@ -1613,7 +1614,30 @@
   font-weight: 600;
   font-size: 1rem;
   line-height: 1.25;
-  padding-right: 70px;
+}
+
+.ach-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+}
+
+.ach-pts {
+  font-family: var(--ff-mono);
+  font-size: 0.6875rem;
+  color: var(--text-2);
+}
+
+.ach-tag {
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
 }
 
 .ach-desc {
@@ -1624,9 +1648,20 @@
 }
 
 .ach-holders {
-  margin-top: var(--sp-2);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: var(--sp-2) 0 0;
+  padding: 0;
+  list-style: none;
   font-size: var(--text-xs);
   color: var(--text-3);
+}
+
+.ach-holders li {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
 }
 
 .ach-holders strong {
@@ -1634,10 +1669,69 @@
   font-weight: 600;
 }
 
+.ach-holders .ach-holders-lbl {
+  color: var(--text-3);
+}
+
+.ach-year {
+  font-family: var(--ff-mono);
+  font-size: 0.6875rem;
+  color: var(--text-3);
+}
+
+.ach-holders-none {
+  margin-top: var(--sp-2);
+  font-size: var(--text-xs);
+  color: var(--text-3);
+}
+
+.ach-closest {
+  margin-top: var(--sp-2);
+  font-size: var(--text-xs);
+  color: var(--text-2);
+}
+
+.ach-closest strong {
+  color: var(--text-1);
+  font-weight: 600;
+}
+
+.ach-closest-bar {
+  display: block;
+  height: 3px;
+  margin-top: 6px;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.ach-closest-bar span {
+  display: block;
+  height: 100%;
+  background: var(--metal-gold);
+}
+
+.ach-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: calc(-1 * var(--sp-2)) 0 var(--sp-5);
+  font-size: var(--text-xs);
+  color: var(--text-2);
+}
+
+.ach-legend-r {
+  color: var(--rc, var(--rarity-common));
+  font-weight: 600;
+}
+
+.ach-legend-note {
+  flex-basis: 100%;
+  color: var(--text-3);
+}
+
 .ach-rarity {
-  position: absolute;
-  top: var(--sp-3);
-  right: var(--sp-3);
   padding: 1px 8px;
   border-radius: var(--r-pill);
   font-size: 0.6875rem;

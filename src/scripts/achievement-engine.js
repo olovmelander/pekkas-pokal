@@ -1,803 +1,182 @@
 /**
- * Achievement Engine - Calculates participant achievements
+ * AchievementEngine: räknar fram utmärkelserna ur resultaten.
+ *
+ * Reglerna finns i src/data/achievements.js. Engine bygger en tidslinje per
+ * person (en post per upplaga, Covid-året borttaget) och kör varje regel på:
+ * - hela historiken: vem som har utmärkelsen nu;
+ * - historiken fram till och med varje år: vilket år den låstes upp, och för
+ *   titlar sedan när innehavaren har haft den;
+ * - `progress` för de som inte har den: hur nära den som är närmast är.
+ *
+ * API (oförändrat för app.js):
+ *   const engine = new AchievementEngine();
+ *   const byName = engine.calculateAllAchievements(competitions, participants);
+ *   // byName: { 'Viktor Jones': ['win_1', ...], ... }
+ *   engine.details  // { [name]: { [id]: { year } } }
+ *   engine.closest  // { [id]: { names: [...], cur, goal } } för låsta utmärkelser
+ *
+ * `competitions` kommer från processData i app.js: { year, name, scores,
+ * blank, arranger3rd, arrangerSecondLast, isCovid }. `scores` har kända
+ * placeringar och `blank` id:n med tom ruta. En tom ruta är frånvaro, utom i
+ * en upplaga vars resultatlista har luckor eller bara har pallen ifylld: där
+ * är de tomma rutorna okända placeringar.
  */
 
 class AchievementEngine {
-  constructor() {
-    this.achievements = window.ACHIEVEMENT_DEFINITIONS || [];
-    this.cache = new Map();
-    this.calculationStats = {
-      totalCalculations: 0,
-      cacheHits: 0,
-      calculationTime: 0
-    };
+  constructor(defs) {
+    this.defs = defs || window.ACHIEVEMENT_DEFINITIONS || [];
+    this.details = {};
+    this.closest = {};
   }
 
-  /**
-   * Calculate all achievements for all participants
-   */
-  calculateAllAchievements(competitions, participants) {
-    const startTime = performance.now();
-    console.log('🏆 Calculating achievements...');
-
-    const participantAchievements = {};
-
-    // Initialize achievements for all participants
-    participants.forEach(participant => {
-      participantAchievements[participant.name] = [];
-    });
-
-    // Calculate achievements for each participant
-    participants.forEach(participant => {
-      const achievements = this.calculateParticipantAchievements(
-        participant,
-        competitions,
-        participants
-      );
-      participantAchievements[participant.name] = achievements;
-      this.calculationStats.totalCalculations++;
-    });
-
-    // Calculate comparative achievements (achievements that depend on comparison with others)
-    this.calculateComparativeAchievements(participantAchievements, competitions, participants);
-
-    const endTime = performance.now();
-    this.calculationStats.calculationTime = endTime - startTime;
-
-    console.log(`✅ Achievement calculation complete in ${this.calculationStats.calculationTime.toFixed(2)}ms`);
-    console.log(`📊 Calculated achievements for ${participants.length} participants`);
-
-    return participantAchievements;
-  }
-
-  /**
-   * Calculate achievements for a single participant
-   */
-  calculateParticipantAchievements(participant, competitions, participants) {
-    const cacheKey = `${participant.id}-${competitions.length}`;
-
-    if (this.cache.has(cacheKey)) {
-      this.calculationStats.cacheHits++;
-      return this.cache.get(cacheKey);
-    }
-
-    const achievements = [];
-    const stats = this.calculateParticipantStats(participant, competitions, participants);
-
-    // Medal Achievements
-    achievements.push(...this.checkMedalAchievements(stats));
-
-    // Streak Achievements
-    achievements.push(...this.checkStreakAchievements(stats, competitions, participant));
-
-    // Special Achievements
-    achievements.push(...this.checkSpecialAchievements(stats, competitions, participant));
-
-    // Fun Achievements
-    achievements.push(...this.checkFunAchievements(stats, competitions, participant));
-
-    // Cache the result
-    this.cache.set(cacheKey, achievements);
-
-    return achievements;
-  }
-
-  /**
-   * Calculate comprehensive stats for a participant
-   */
-  calculateParticipantStats(participant, competitions, _participants) {
-    const stats = {
-      participations: 0,
-      gold: 0,
-      silver: 0,
-      bronze: 0,
-      totalMedals: 0,
-      positions: [],
-      yearPositions: {},
-      yearsParticipated: [],
-      winYears: [],
-      podiumYears: [],
-      competitions: [],
-      arrangementCount: 0
-    };
-
-    const sortedComps = [...competitions].sort((a, b) => a.year - b.year);
-
-    sortedComps.forEach(comp => {
-      const position = comp.scores[participant.id];
-
-      if (position) {
-        stats.participations++;
-        stats.positions.push(position);
-        stats.yearPositions[comp.year] = position;
-        stats.yearsParticipated.push(comp.year);
-        stats.competitions.push(comp);
-
-        // Medal counting
-        if (position === 1) {
-          stats.gold++;
-          stats.totalMedals++;
-          stats.winYears.push(comp.year);
-          stats.podiumYears.push(comp.year);
-        } else if (position === 2) {
-          stats.silver++;
-          stats.totalMedals++;
-          stats.podiumYears.push(comp.year);
-        } else if (position === 3) {
-          stats.bronze++;
-          stats.totalMedals++;
-          stats.podiumYears.push(comp.year);
-        }
-      }
-
-      // Check if participant arranged this competition
-      if (comp.arranger3rd === participant.name || comp.arrangerSecondLast === participant.name) {
-        stats.arrangementCount++;
-      }
-    });
-
-    // Calculate additional statistics
-    stats.avgPosition = stats.positions.length > 0 ?
-      stats.positions.reduce((a, b) => a + b, 0) / stats.positions.length : 0;
-
-    stats.standardDeviation = this.calculateStandardDeviation(stats.positions);
-
-    stats.bestPosition = stats.positions.length > 0 ? Math.min(...stats.positions) : null;
-    stats.worstPosition = stats.positions.length > 0 ? Math.max(...stats.positions) : null;
-
-    return stats;
-  }
-
-  /**
-   * Check medal-based achievements
-   */
-  checkMedalAchievements(stats) {
-    const achievements = [];
-
-    // First win
-    if (stats.gold >= 1) {
-      achievements.push('first_win');
-    }
-
-    // Gold achievements
-    if (stats.gold >= 5) {
-      achievements.push('gold_king');
-    } else if (stats.gold >= 3) {
-      achievements.push('gold_collector');
-    }
-
-    // Silver achievements
-    if (stats.silver >= 3) {
-      achievements.push('silver_specialist');
-    }
-
-    // Bronze achievements
-    if (stats.bronze >= 3) {
-      achievements.push('bronze_collector');
-    }
-
-    // Medal collection achievements
-    if (stats.totalMedals >= 10) {
-      achievements.push('medal_magnet');
-    }
-
-    // Rainbow medals (at least one of each)
-    if (stats.gold > 0 && stats.silver > 0 && stats.bronze > 0) {
-      achievements.push('rainbow_medals');
-    }
-
-    // Bridesmaid (many silvers without gold)
-    if (stats.silver >= 5 && stats.gold === 0) {
-      achievements.push('bridesmaid');
-    }
-
-    return achievements;
-  }
-
-  /**
-   * Check streak-based achievements
-   */
-  checkStreakAchievements(stats, competitions, _participant) {
-    const achievements = [];
-
-    // Win streaks
-    const winStreak = this.calculateMaxStreak(stats.winYears);
-    if (winStreak >= 3) {
-      achievements.push('win_streak_3');
-    } else if (winStreak >= 2) {
-      achievements.push('win_streak_2');
-    }
-
-    // Podium streaks
-    const podiumStreak = this.calculateMaxStreak(stats.podiumYears);
-    if (podiumStreak >= 5) {
-      achievements.push('podium_streak_5');
-    } else if (podiumStreak >= 3) {
-      achievements.push('podium_streak_3');
-    }
-
-    // Perfect attendance
-    const totalCompetitions = competitions.filter(c => c.name !== 'Covid').length;
-    if (stats.participations === totalCompetitions) {
-      achievements.push('never_missed');
-      achievements.push('perfect_attendance');
-    }
-
-    // Comeback kid (win after long gap)
-    if (this.checkComebackPattern(stats.winYears)) {
-      achievements.push('comeback_kid');
-    }
-
-    // Losing streak
-    if (this.checkLosingStreak(stats, competitions)) {
-      achievements.push('losing_streak');
-    }
-
-    return achievements;
-  }
-
-  /**
-   * Check special achievements
-   */
-  checkSpecialAchievements(stats, _competitions, _participant) {
-    const achievements = [];
-
-    // Veteran
-    if (stats.participations >= 10) {
-      achievements.push('veteran');
-    }
-
-    // Founding father
-    if (stats.yearsParticipated.includes(2011)) {
-      achievements.push('founding_father');
-    }
-
-    // Rookie winner
-    if (stats.gold > 0 && stats.yearsParticipated.length <= 3) {
-      achievements.push('rookie_winner');
-    }
-
-    // Participation trophy
-    if (stats.participations >= 10 && stats.totalMedals === 0) {
-      achievements.push('participation_trophy');
-    }
-
-    // Arranger achievements
-    if (stats.arrangementCount >= 1) {
-      achievements.push('arranger_bronze');
-    }
-
-    // Untouchable (never worse than 3rd with 5+ participations)
-    if (stats.participations >= 5 && stats.positions.every(p => p <= 3)) {
-      achievements.push('untouchable');
-    }
-
-    // Perfect podium (8+ years always on podium)
-    if (stats.participations >= 8 && stats.positions.every(p => p <= 3)) {
-      achievements.push('perfect_podium');
-    }
-
-    return achievements;
-  }
-
-  /**
-   * Check fun/humorous achievements
-   */
-  checkFunAchievements(stats, competitions, participant) {
-    const achievements = [];
-
-    // Position-based fun achievements
-    const positionCounts = this.countPositions(stats.positions);
-
-    // Fourth place curse
-    if (positionCounts[4] >= 3) {
-      achievements.push('fourth_place');
-    }
-
-    // Lucky seven
-    if (positionCounts[7] >= 3) {
-      achievements.push('lucky_seven');
-    }
-
-    // Mr Average (consistently middle positions)
-    if (this.checkMiddlePositionPattern(stats, competitions)) {
-      achievements.push('mr_average');
-    }
-
-    // Gatekeeper (always 4th or 5th)
-    if (this.checkGatekeeperPattern(stats.positions)) {
-      achievements.push('gatekeeper');
-    }
-
-    // Pattern-based achievements
-    if (this.checkGraceToGrassPattern(stats.positions, competitions, participant)) {
-      achievements.push('grace_to_grass');
-    }
-
-    if (this.checkGrassToGracePattern(stats.positions, competitions, participant)) {
-      achievements.push('grass_to_grace');
-      achievements.push('phoenix');
-    }
-
-    if (this.checkElevatorPattern(stats.positions)) {
-      achievements.push('elevator');
-    }
-
-    if (this.checkYoYoPattern(stats.positions)) {
-      achievements.push('yo_yo');
-    }
-
-    if (this.checkConsistentChaosPattern(stats.positions)) {
-      achievements.push('consistent_chaos');
-    }
-
-    if (this.checkOddEvenPattern(stats.yearPositions)) {
-      achievements.push('odd_even');
-    }
-
-    // Sandwich achievement
-    if (this.checkSandwichPattern(stats, competitions, participant)) {
-      achievements.push('sandwich');
-    }
-
-    return achievements;
-  }
-
-  /**
-   * Calculate comparative achievements (requires comparison between all participants)
-   */
-  calculateComparativeAchievements(participantAchievements, competitions, participants) {
-    // Medal hoarder (most total medals)
-    const medalCounts = this.calculateTotalMedalsForAll(participants, competitions);
-    const medalLeader = this.findLeader(medalCounts);
-    if (medalLeader) {
-      participantAchievements[medalLeader].push('medal_hoarder');
-    }
-
-    // GOAT (most wins)
-    const winCounts = this.calculateWinCountsForAll(participants, competitions);
-    const winLeader = this.findLeader(winCounts);
-    if (winLeader && winCounts[winLeader] >= 5) {
-      participantAchievements[winLeader].push('goat');
-    }
-
-    // Mr. Consistent (lowest standard deviation)
-    const consistencyStats = this.calculateConsistencyForAll(participants, competitions);
-    const mostConsistent = this.findMostConsistent(consistencyStats);
-    if (mostConsistent) {
-      participantAchievements[mostConsistent].push('mr_consistent');
-    }
-
-    // Decade champion
-    const decadeChampion = this.findDecadeChampion(participants, competitions);
-    if (decadeChampion) {
-      participantAchievements[decadeChampion].push('decade_champion');
-    }
-
-    // Host hero (most arrangements)
-    const hostCounts = this.calculateHostCounts(participants, competitions);
-    const hostLeader = this.findLeader(hostCounts);
-    if (hostLeader) {
-      participantAchievements[hostLeader].push('host_hero');
-    }
-
-    // The Closer (won last 3 competitions)
-    const closer = this.findTheCloser(participants, competitions);
-    if (closer) {
-      participantAchievements[closer].push('the_closer');
-    }
-
-    // Family rivalry
-    this.checkFamilyRivalries(participantAchievements, participants, competitions);
-  }
-
-  // ===== HELPER METHODS =====
-
-  /**
-   * Calculate maximum consecutive streak from array of years
-   */
-  calculateMaxStreak(years) {
-    if (years.length === 0) return 0;
-
-    const sortedYears = [...years].sort((a, b) => a - b);
-    let maxStreak = 1;
-    let currentStreak = 1;
-
-    for (let i = 1; i < sortedYears.length; i++) {
-      if (sortedYears[i] === sortedYears[i - 1] + 1) {
-        currentStreak++;
-        maxStreak = Math.max(maxStreak, currentStreak);
-      } else {
-        currentStreak = 1;
-      }
-    }
-
-    return maxStreak;
-  }
-
-  /**
-   * Calculate standard deviation of positions
-   */
-  calculateStandardDeviation(positions) {
-    if (positions.length === 0) return 0;
-
-    const mean = positions.reduce((a, b) => a + b, 0) / positions.length;
-    const variance = positions.reduce((sum, pos) => sum + Math.pow(pos - mean, 2), 0) / positions.length;
-    return Math.sqrt(variance);
-  }
-
-  /**
-   * Count occurrences of each position
-   */
-  countPositions(positions) {
-    const counts = {};
-    positions.forEach(pos => {
-      counts[pos] = (counts[pos] || 0) + 1;
-    });
-    return counts;
-  }
-
-  /**
-   * Check comeback pattern (win after 3+ years without win)
-   */
-  checkComebackPattern(winYears) {
-    if (winYears.length < 2) return false;
-
-    const sortedWins = [...winYears].sort((a, b) => a - b);
-    for (let i = 1; i < sortedWins.length; i++) {
-      if (sortedWins[i] - sortedWins[i - 1] >= 3) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /**
-   * Check losing streak pattern
-   */
-  checkLosingStreak(stats, competitions) {
-    const lastThreeComps = competitions.slice(0, 3);
-    let consecutiveOffPodium = 0;
-
-    for (const comp of lastThreeComps) {
-      const position = comp.scores[stats.participantId];
-      if (position && position > 3) {
-        consecutiveOffPodium++;
-      } else {
-        break;
-      }
-    }
-
-    return consecutiveOffPodium >= 3;
-  }
-
-  /**
-   * Check middle position pattern
-   */
-  checkMiddlePositionPattern(stats, _competitions) {
-    let middleCount = 0;
-
-    stats.competitions.forEach(comp => {
-      const totalParticipants = Object.keys(comp.scores).length;
-      const middle = Math.ceil(totalParticipants / 2);
-      const position = comp.scores[stats.participantId];
-
-      if (Math.abs(position - middle) <= 1) {
-        middleCount++;
-      }
-    });
-
-    return middleCount >= 3 && middleCount >= stats.participations * 0.6;
-  }
-
-  /**
-   * Check gatekeeper pattern (always 4th or 5th)
-   */
-  checkGatekeeperPattern(positions) {
-    if (positions.length < 5) return false;
-
-    const gatekeeperPositions = positions.filter(pos => pos === 4 || pos === 5);
-    return gatekeeperPositions.length >= positions.length * 0.6;
-  }
-
-  /**
-   * Check grace to grass pattern
-   */
-  checkGraceToGrassPattern(positions, competitions, _participant) {
-    for (let i = 1; i < positions.length; i++) {
-      const currentComp = competitions[i];
-
-      if (positions[i - 1] === 1 &&
-          positions[i] === Object.keys(currentComp.scores).length) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /**
-   * Check grass to grace pattern
-   */
-  checkGrassToGracePattern(positions, competitions, _participant) {
-    for (let i = 1; i < positions.length; i++) {
-      const prevComp = competitions[i - 1];
-
-      if (positions[i - 1] === Object.keys(prevComp.scores).length &&
-          positions[i] === 1) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /**
-   * Check elevator pattern (big position swings)
-   */
-  checkElevatorPattern(positions) {
-    if (positions.length < 3) return false;
-
-    let bigSwings = 0;
-    for (let i = 1; i < positions.length; i++) {
-      if (Math.abs(positions[i] - positions[i - 1]) >= 5) {
-        bigSwings++;
-      }
-    }
-
-    return bigSwings >= positions.length * 0.5;
-  }
-
-  /**
-   * Check yo-yo pattern (alternating podium/non-podium)
-   */
-  checkYoYoPattern(positions) {
-    if (positions.length < 4) return false;
-
-    let alternatingCount = 0;
-    for (let i = 1; i < positions.length; i++) {
-      const prevOnPodium = positions[i - 1] <= 3;
-      const currentOnPodium = positions[i] <= 3;
-
-      if (prevOnPodium !== currentOnPodium) {
-        alternatingCount++;
-      }
-    }
-
-    return alternatingCount >= positions.length - 1;
-  }
-
-  /**
-   * Check consistent chaos pattern (never same position twice)
-   */
-  checkConsistentChaosPattern(positions) {
-    if (positions.length < 5) return false;
-
-    const uniquePositions = new Set(positions);
-    return uniquePositions.size === positions.length;
-  }
-
-  /**
-   * Check odd-even pattern
-   */
-  checkOddEvenPattern(yearPositions) {
-    const years = Object.keys(yearPositions).map(Number).sort();
-    if (years.length < 4) return false;
-
-    let matches = 0;
-    years.forEach(year => {
-      const position = yearPositions[year];
-      const yearIsOdd = year % 2 === 1;
-      const positionIsOdd = position % 2 === 1;
-
-      if (yearIsOdd === positionIsOdd) {
-        matches++;
-      }
-    });
-
-    return matches >= years.length * 0.8;
-  }
-
-  /**
-   * Check sandwich pattern
-   */
-  checkSandwichPattern(_stats, _competitions, _participant) {
-    // This is complex and would need detailed implementation
-    // For now, return false
-    return false;
-  }
-
-  /**
-   * Find leader in a counts object
-   */
-  findLeader(counts) {
-    const entries = Object.entries(counts);
-    if (entries.length === 0) return null;
-
-    const sorted = entries.sort((a, b) => b[1] - a[1]);
-    return sorted[0][0];
-  }
-
-  /**
-   * Find most consistent player
-   */
-  findMostConsistent(consistencyStats) {
-    const entries = Object.entries(consistencyStats);
-    if (entries.length === 0) return null;
-
-    const sorted = entries.sort((a, b) => a[1] - b[1]); // Lower is better
-    return sorted[0][0];
-  }
-
-  /**
-   * Calculate total medals for all participants
-   */
-  calculateTotalMedalsForAll(participants, competitions) {
-    const medalCounts = {};
-
-    participants.forEach(p => {
-      medalCounts[p.name] = 0;
-      competitions.forEach(comp => {
-        const position = comp.scores[p.id];
-        if (position && position <= 3) {
-          medalCounts[p.name]++;
-        }
+  /** One timeline entry per edition, oldest first, for every participant */
+  buildPeople(editions, participants) {
+    const people = participants.map((pt) => {
+      const res = editions.map((ed) => {
+        const pos = ed.scores[pt.id];
+        const host = [ed.arranger3rd, ed.arrangerSecondLast].some((h) => (h || '').trim() === pt.name.trim());
+        const base = { year: ed.year, field: ed.field, complete: ed.complete, host };
+        if (pos != null) return { ...base, s: 'pos', pos, last: ed.lastPos != null && pos === ed.lastPos };
+        if ((ed.unknown || []).includes(pt.id)) return { ...base, s: 'unk', pos: null, last: false };
+        return { ...base, s: 'abs', pos: null, last: false };
       });
-    });
-
-    return medalCounts;
-  }
-
-  /**
-   * Calculate win counts for all participants
-   */
-  calculateWinCountsForAll(participants, competitions) {
-    const winCounts = {};
-
-    participants.forEach(p => {
-      winCounts[p.name] = 0;
-      competitions.forEach(comp => {
-        if (comp.scores[p.id] === 1) {
-          winCounts[p.name]++;
-        }
-      });
-    });
-
-    return winCounts;
-  }
-
-  /**
-   * Calculate consistency stats for all participants
-   */
-  calculateConsistencyForAll(participants, competitions) {
-    const consistencyStats = {};
-
-    participants.forEach(p => {
-      const positions = [];
-      competitions.forEach(comp => {
-        if (comp.scores[p.id]) {
-          positions.push(comp.scores[p.id]);
-        }
-      });
-
-      if (positions.length >= 10) {
-        consistencyStats[p.name] = this.calculateStandardDeviation(positions);
-      }
-    });
-
-    return consistencyStats;
-  }
-
-  /**
-   * Find decade champion
-   */
-  findDecadeChampion(participants, competitions) {
-    const last10Years = competitions.filter(c => c.year >= 2016);
-    const winCounts = {};
-
-    participants.forEach(p => {
-      winCounts[p.name] = 0;
-      last10Years.forEach(comp => {
-        if (comp.scores[p.id] === 1) {
-          winCounts[p.name]++;
-        }
-      });
-    });
-
-    const leader = this.findLeader(winCounts);
-    return winCounts[leader] >= 3 ? leader : null;
-  }
-
-  /**
-   * Calculate host counts
-   */
-  calculateHostCounts(participants, competitions) {
-    const hostCounts = {};
-
-    participants.forEach(p => {
-      hostCounts[p.name] = 0;
-      competitions.forEach(comp => {
-        if (comp.arranger3rd === p.name || comp.arrangerSecondLast === p.name) {
-          hostCounts[p.name]++;
-        }
-      });
-    });
-
-    return hostCounts;
-  }
-
-  /**
-   * Find "The Closer" (won last 3 competitions)
-   */
-  findTheCloser(participants, competitions) {
-    const last3Comps = competitions.slice(0, 3);
-    if (last3Comps.length !== 3) return null;
-
-    for (const participant of participants) {
-      let wonAll = true;
-      for (const comp of last3Comps) {
-        if (comp.scores[participant.id] !== 1) {
-          wonAll = false;
-          break;
-        }
-      }
-      if (wonAll) {
-        return participant.name;
-      }
-    }
-
-    return null;
-  }
-
-  /**
-   * Check family rivalries
-   */
-  checkFamilyRivalries(participantAchievements, participants, competitions) {
-    // Find family members (same last name)
-    const families = {};
-    participants.forEach(p => {
-      const lastName = p.name.split(' ').pop();
-      if (!families[lastName]) families[lastName] = [];
-      families[lastName].push(p);
-    });
-
-    // Check rivalries within families
-    Object.values(families).forEach(family => {
-      if (family.length > 1) {
-        family.forEach(p1 => {
-          let totalWins = 0;
-          family.forEach(p2 => {
-            if (p1.id !== p2.id) {
-              competitions.forEach(comp => {
-                if (comp.scores[p1.id] && comp.scores[p2.id]) {
-                  if (comp.scores[p1.id] < comp.scores[p2.id]) {
-                    totalWins++;
-                  }
-                }
-              });
-            }
-          });
-
-          if (totalWins >= 5) {
-            participantAchievements[p1.name].push('family_rivalry');
+      const known = res.filter((e) => e.s === 'pos');
+      const count = (n) => known.filter((e) => e.pos === n).length;
+      const debut = res.findIndex((e) => e.s !== 'abs');
+      return {
+        id: pt.id,
+        name: pt.name,
+        res,
+        known,
+        starts: known.length,
+        wins: count(1),
+        silvers: count(2),
+        bronzes: count(3),
+        podiums: known.filter((e) => e.pos <= 3).length,
+        hosts: res.filter((e) => e.host).length,
+        winYears: known.filter((e) => e.pos === 1).map((e) => e.year),
+        missedSinceDebut: debut >= 0 && res.slice(debut).some((e) => e.s === 'abs'),
+        count,
+        /** Run of consecutive known placings matching pred that is still going */
+        current(pred) {
+          let cur = 0;
+          for (let i = res.length - 1; i >= 0 && res[i].s === 'pos' && pred(res[i]); i--) cur++;
+          return cur;
+        },
+        /** Longest run of consecutive editions with a known placing matching pred */
+        run(pred) {
+          let best = 0;
+          let cur = 0;
+          for (const e of res) {
+            cur = e.s === 'pos' && pred(e) ? cur + 1 : 0;
+            best = Math.max(best, cur);
           }
+          return best;
+        }
+      };
+    });
+    return people;
+  }
+
+  /** Editions oldest first, without the Covid year, with field size and last place */
+  normalise(competitions) {
+    return competitions
+      .filter((c) => !c.isCovid && c.name !== 'Covid')
+      .slice()
+      .sort((a, b) => a.year - b.year)
+      .map((c) => {
+        const positions = Object.values(c.scores);
+        // An empty cell means "not there" (as the README says), unless the
+        // results have gaps or only the podium is filled in: then the empty
+        // cells are unknown placings, neither starts nor absences
+        const blank = c.blank || [];
+        const partial = blank.length > 0 && (AchievementEngine.hasGaps(positions) || Math.max(0, ...positions) <= 3);
+        const unknown = partial ? blank : [];
+        const field = positions.length + unknown.length;
+        const maxPos = positions.length ? Math.max(...positions) : null;
+        const complete = unknown.length === 0;
+        // Last place is only known when the whole list is (or the worst known
+        // placing is the field size, so nobody unknown can be behind it), and
+        // only counts in a field of five or more: third of three is a medal
+        const lastPos = maxPos != null && (complete || maxPos === field) && field >= 5 ? maxPos : null;
+        return { ...c, unknown, field, complete, lastPos };
+      });
+  }
+
+  /**
+   * True when known placings can't be a full ranking: some placing p has
+   * fewer than p people at or ahead of it (ties like 1, 2, 2 or 1, 3, 3 are fine)
+   */
+  static hasGaps(positions) {
+    return [...new Set(positions)].some((v) => positions.filter((x) => x <= v).length < v);
+  }
+
+  /** Evaluates every rule for one slice of history */
+  evaluate(editions, participants) {
+    const people = this.buildPeople(editions, participants);
+    const ctx = { people, editions };
+    const has = {};
+    people.forEach((p) => (has[p.name] = new Set()));
+    this.defs.forEach((d) => {
+      if (d.title) {
+        const scored = people.map((p) => [p, d.score(p, ctx)]).filter(([, s]) => s != null && Number.isFinite(s));
+        if (!scored.length) return;
+        const best = Math.max(...scored.map(([, s]) => s));
+        scored.filter(([, s]) => Math.abs(s - best) < 1e-9).forEach(([p]) => has[p.name].add(d.id));
+      } else {
+        people.forEach((p) => {
+          if (d.test(p, ctx)) has[p.name].add(d.id);
         });
       }
     });
+    return { has, people, ctx };
   }
 
-  /**
-   * Clear achievement cache
-   */
-  clearCache() {
-    this.cache.clear();
-  }
+  calculateAllAchievements(competitions, participants) {
+    const editions = this.normalise(competitions);
+    const now = this.evaluate(editions, participants);
 
-  /**
-   * Get calculation statistics
-   */
-  getStats() {
-    return { ...this.calculationStats };
+    // Unlock year: the first year from which the person has kept it to today.
+    // Walk back one edition at a time while they still had it.
+    const details = {};
+    participants.forEach((pt) => (details[pt.name] = {}));
+    const prefixes = editions.map((_, i) => this.evaluate(editions.slice(0, i + 1), participants).has);
+    participants.forEach((pt) => {
+      now.has[pt.name].forEach((id) => {
+        let i = editions.length - 1;
+        while (i > 0 && prefixes[i - 1][pt.name].has(id)) i--;
+        details[pt.name][id] = { year: editions[i].year };
+      });
+    });
+
+    // Closest to each locked achievement
+    const closest = {};
+    this.defs.forEach((d) => {
+      if (!d.progress) return;
+      if (participants.some((pt) => now.has[pt.name].has(d.id))) return;
+      let best = null;
+      now.people.forEach((p) => {
+        if (p.starts === 0) return;
+        const pr = d.progress(p, now.ctx);
+        if (!pr || pr[0] <= 0) return;
+        const [cur, goal] = pr;
+        if (!best || cur > best.cur) best = { names: [p.name], cur: Math.min(cur, goal), goal };
+        else if (cur === best.cur) best.names.push(p.name);
+      });
+      if (best) closest[d.id] = best;
+    });
+
+    this.details = details;
+    this.closest = closest;
+    this.editions = editions;
+
+    const byName = {};
+    participants.forEach((pt) => {
+      // Definition order, so the lists read the same everywhere
+      byName[pt.name] = this.defs.filter((d) => now.has[pt.name].has(d.id)).map((d) => d.id);
+    });
+    return byName;
   }
 }
 
-// Export for global access
 window.AchievementEngine = AchievementEngine;
