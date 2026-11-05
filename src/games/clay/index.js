@@ -1453,7 +1453,7 @@ export async function createClay(container) {
    * inside, on the far wall (IN_YAW), seen through the mouth, its arm
    * crossing the rim.
    */
-  const OUT_YAW = 0.78;
+  const OUT_YAW = 1.0;
   const IN_YAW = -0.55;
   function contactAt(out, side, rad, y, yaw) {
     return out.set(side * rad * Math.cos(yaw), y, rad * Math.sin(yaw));

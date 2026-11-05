@@ -905,7 +905,9 @@ class Judge {
     this.pen = new THREE.Mesh(penGeometry(), mat);
     this.book.castShadow = true;
     // The book by its bottom edge, thumb on the pages; the pen like a pen
-    this.bookGrip = holdIn(p, this.book, 'L', 'flat', { thickness: 0.01 });
+    // (nudged 3.5 cm down into the hand, so the fingers are behind the
+    // cover rather than spread below its edge)
+    this.bookGrip = holdIn(p, this.book, 'L', 'flat', { thickness: 0.01, offset: { position: [0, 0, -0.035] } });
     this.penGrip = holdIn(p, this.pen, 'R', 'pinch', { diameter: 0.009 });
     return [this.book, this.pen];
   }

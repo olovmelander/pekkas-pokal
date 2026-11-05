@@ -108,6 +108,16 @@ function bake(root, { skip = [], castShadow = true, receiveShadow = false, grain
   };
   root.children.forEach(walk);
   if (!geos.length) return null;
+  // Mixed indexed and non-indexed parts (an extrusion among boxes) merge flat
+  if (geos.some((g) => !g.index) && geos.some((g) => g.index)) {
+    for (let i = 0; i < geos.length; i++) {
+      if (geos[i].index) {
+        const flat = geos[i].toNonIndexed();
+        geos[i].dispose();
+        geos[i] = flat;
+      }
+    }
+  }
   const merged = mergeGeometries(geos);
   geos.forEach((g) => g.dispose());
   sources.forEach((o) => {
@@ -863,16 +873,52 @@ export function buildGarden({ lowTier = false } = {}) {
     const body = new THREE.Mesh(new THREE.BoxGeometry(10, 3.6, 6.5), lambert(0x8c3126));
     body.position.y = 1.8;
     house.add(body);
-    const roof = new THREE.Mesh(new THREE.ConeGeometry(7.2, 2.3, 4), lambert(0x4a4348));
-    roof.position.y = 4.72;
-    roof.rotation.y = Math.PI / 4;
-    roof.scale.z = 0.66;
-    house.add(roof);
+    // A gable roof (sadeltak) with an overhang, falu-red gables and white
+    // barge boards — the shape every Norrland house has
+    const slope = Math.atan2(2.35, 3.65);
+    const slopeLen = Math.hypot(3.65, 2.35);
+    [1, -1].forEach((side) => {
+      const plane = new THREE.Mesh(new THREE.BoxGeometry(10.7, 0.12, slopeLen + 0.08), lambert(0x433e44));
+      plane.position.set(0, 4.625, side * 1.825);
+      plane.rotation.x = side * slope;
+      house.add(plane);
+      const fascia = new THREE.Mesh(new THREE.BoxGeometry(10.72, 0.16, 0.06), lambert(0xf2efe6));
+      fascia.position.set(0, 3.43, side * 3.7);
+      house.add(fascia);
+      [-5.37, 5.37].forEach((bx) => {
+        const barge = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.18, slopeLen + 0.1), lambert(0xf2efe6));
+        barge.position.set(bx, 4.6, side * 1.825);
+        barge.rotation.x = side * slope;
+        house.add(barge);
+      });
+    });
+    const ridge = new THREE.Mesh(new THREE.BoxGeometry(10.74, 0.14, 0.26), lambert(0x353136));
+    ridge.position.set(0, 5.83, 0);
+    house.add(ridge);
+    const gableShape = new THREE.Shape([new THREE.Vector2(-3.25, 3.6), new THREE.Vector2(3.25, 3.6), new THREE.Vector2(0, 5.66)]);
+    const gable = new THREE.ExtrudeGeometry(gableShape, { depth: 9.98, bevelEnabled: false });
+    gable.rotateY(Math.PI / 2);
+    gable.translate(-4.99, 0, 0);
+    house.add(new THREE.Mesh(gable, lambert(0x8c3126)));
     // White corner boards: the knots that make it a falu-red house
     [-4.98, 4.98].forEach((x) => {
-      const knot = new THREE.Mesh(new THREE.BoxGeometry(0.16, 3.6, 0.16), lambert(0xf2efe6));
-      knot.position.set(x, 1.8, 3.2);
-      house.add(knot);
+      [3.2, -3.2].forEach((z) => {
+        const knot = new THREE.Mesh(new THREE.BoxGeometry(0.16, 3.6, 0.16), lambert(0xf2efe6));
+        knot.position.set(x, 1.8, z);
+        house.add(knot);
+      });
+      // A window in each gable end, under the roof's peak (frame, then glass
+      // centimetres out from it, as on the front)
+      const sx = Math.sign(x);
+      const fr = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.1, 0.95), lambert(0xf2efe6));
+      fr.position.set(x + sx * 0.06, 2.3, 0);
+      house.add(fr);
+      const glass = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.88, 0.74), lambert(0x2a3a44));
+      glass.position.set(x + sx * 0.11, 2.3, 0);
+      house.add(glass);
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.05, 0.76), lambert(0xf2efe6));
+      bar.position.set(x + sx * 0.13, 2.3, 0);
+      house.add(bar);
     });
     // Windows: dark glass inside a white frame. A white pane on a white
     // frame is what turned these into blank patches the first time round.
@@ -924,11 +970,11 @@ export function buildGarden({ lowTier = false } = {}) {
       post.position.set(px, 1.25, 4.25);
       house.add(post);
     });
-    const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.62, 1.7, 0.62), lambert(0xe6e1d6));
-    chimney.position.set(2.2, 5.2, -0.9);
+    const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.62, 2.2, 0.62), lambert(0xe6e1d6));
+    chimney.position.set(2.2, 5.3, -0.9);
     house.add(chimney);
     const cap = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.12, 0.76), lambert(0x3a3a3e));
-    cap.position.set(2.2, 6.1, -0.9);
+    cap.position.set(2.2, 6.45, -0.9);
     house.add(cap);
     bake(house);
     group.add(house);
