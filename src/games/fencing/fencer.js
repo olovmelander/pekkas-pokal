@@ -365,7 +365,9 @@ const FAB_COLOR = /* glsl */ `
 vec3 fabP = vFabP / max(uFabScale, 0.1);
 vec3 fabN = vFabN;
 // Around the body: arc length (u) and height (v), in metres
-float fabU = atan(fabP.x, fabP.z - 0.02 + 1e-4) * 0.15;
+float fabZ = fabP.z - 0.02;
+fabZ = abs(fabZ) < 1e-4 ? 1e-4 : fabZ; // atan(0, 0) is undefined
+float fabU = atan(fabP.x, fabZ) * 0.15;
 float fabV = fabP.y;
 float fabOut = step(0.0, fabP.x * fabN.x);
 // Side seams: where the cloth turns from facing front to facing back
@@ -377,7 +379,7 @@ float fabSeam = fabLine(fabPhi * (fabP.y > 0.9 ? 0.15 : 0.07), 0.0035) * max(fab
 // The sleeves set into the body, and the zip down the back
 fabSeam = max(fabSeam, max(fabArmRing(fabP, uFabShL, uFabAxL), fabArmRing(fabP, uFabShR, uFabAxR)));
 float fabBack = step(fabN.z, 0.0) * step(0.95, fabP.y) * step(fabP.y, 1.5) * step(abs(fabP.x), 0.12);
-fabSeam = max(fabSeam, fabLine(abs(atan(fabN.x, -fabN.z + 1e-5)) * 0.15, 0.004) * fabBack);
+fabSeam = max(fabSeam, fabLine(abs(atan(fabN.x, max(-fabN.z, 0.0) + 1e-5)) * 0.15, 0.004) * fabBack);
 // The collar line and the piping along the top of the lamé
 float fabNeck = step(abs(fabP.x), 0.12) * step(1.47, fabP.y);
 fabSeam = max(fabSeam, fabLine(abs(fabP.y - 1.522), 0.003) * fabNeck);
