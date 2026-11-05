@@ -748,7 +748,7 @@ function buildSpecies(sp, lite) {
   // Silver species get a faint thin-film shimmer on their flanks — the
   // rainbow sheen a fresh roach or whitefish has as it turns
   const material = sp.irid
-    ? new THREE.MeshPhysicalMaterial({ ...opts, iridescence: 0.5, iridescenceIOR: 1.35, iridescenceThicknessRange: [180, 420] })
+    ? new THREE.MeshPhysicalMaterial({ ...opts, iridescence: 0.5, iridescenceIOR: 1.35, iridescenceThicknessMinimum: 180, iridescenceThicknessMaximum: 380 })
     : new THREE.MeshStandardMaterial(opts);
   const nose = profile.x(0) + 0.035;
   swimShader(material, nose, nose - tailTip(sp), sp.irid ? 'fiske-fish-irid' : 'fiske-fish-v3');
