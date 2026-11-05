@@ -95,8 +95,32 @@ export class Sfx {
   }
 
   /** Routes a voice to the dry bus and, optionally, the room. */
+  /**
+   * Places the next sound on the playfield: `sfx.at(x).bumper()` pans the
+   * whole recipe by the table x it happened at (−10 … 9), so a sling on the
+   * left is heard on the left. It lasts for the synchronous recipe only.
+   */
+  at(x) {
+    this.pan = Math.max(-0.75, Math.min(0.75, ((x || 0) + 0.6) / 11));
+    if (!this.panReset) {
+      this.panReset = true;
+      queueMicrotask(() => {
+        this.pan = 0;
+        this.panReset = false;
+      });
+    }
+    return this;
+  }
+
   out(node, wet) {
-    node.connect(this.master);
+    let dry = node;
+    if (this.pan && this.ctx.createStereoPanner) {
+      const p = this.ctx.createStereoPanner();
+      p.pan.value = this.pan;
+      node.connect(p);
+      dry = p;
+    }
+    dry.connect(this.master);
     if (wet > 0) {
       const g = this.ctx.createGain();
       g.gain.value = wet;
@@ -172,7 +196,28 @@ export class Sfx {
     if (k > 0.5) this.thump(200, 120, 0.05, 0.12 * k);
   }
 
+  /** A coil pulse with nothing much to hit: ball search, a soft clack */
+  coil(k = 1) {
+    this.thump(150, 70, 0.08, 0.4 * k);
+    this.noise(0.03, { gain: 0.25 * k, freq: 1800, q: 1.1, wet: 0.05 });
+  }
+
+  /** The ramp's entry flap slapping as a ball rolls over it onto the wire */
+  flap() {
+    this.noise(0.025, { gain: 0.3, freq: 2400, q: 1.6, wet: 0.08 });
+    this.tone(880, 0.05, { type: 'square', gain: 0.05, sweep: -300, wet: 0.05, at: 0.012 });
+  }
+
+  /** The cabinet shoved on its legs: a deep wooden knock and the bob ringing */
+  nudge() {
+    this.thump(70, 38, 0.22, 0.75);
+    this.noise(0.08, { gain: 0.32, freq: 220, type: 'lowpass', wet: 0.25 });
+    this.tone(2100, 0.25, { type: 'sine', gain: 0.025, wet: 0.2, at: 0.03 });
+  }
+
   bumper() {
+    // The solenoid's body, the ring's steel clack, and the lit-cap ding
+    this.noise(0.012, { gain: 0.5, freq: 4200, q: 0.9, wet: 0.04 });
     this.thump(175, 68, 0.15, 0.7);
     this.noise(0.06, { gain: 0.42, freq: 1300, q: 1.2, wet: 0.15 });
     this.tone(1046, 0.18, { type: 'square', gain: 0.045, wet: 0.35 });
@@ -180,6 +225,8 @@ export class Sfx {
   }
 
   sling() {
+    // The arm's sharp snap on the rubber first, then the body below
+    this.noise(0.018, { gain: 0.42, freq: 3000, q: 1.3, wet: 0.04 });
     this.thump(240, 105, 0.08, 0.5);
     this.noise(0.05, { gain: 0.3, freq: 760, wet: 0.1 });
   }
@@ -428,13 +475,17 @@ export class Sfx {
    * Called every frame with the fastest ball on the wood and whether a ball
    * is riding a wireform (a brighter, rattling roll).
    */
-  roll(speed, onWire) {
+  roll(speed, onWire, wireSpeed = 0) {
     if (!this.ctx || !this.rollGain) return;
     const t = this.ctx.currentTime;
-    const k = clamp01(speed / 55);
-    const g = this.muted ? 0 : (onWire ? 0.12 : 0.17) * Math.sqrt(k);
+    // On a wireform the bright rattle follows the RIDER's pace, which
+    // slows on the climb and picks up on the way down
+    const sp = onWire ? Math.max(speed, wireSpeed) : speed;
+    const k = clamp01(sp / 55);
+    const g = this.muted ? 0 : (onWire ? 0.14 : 0.17) * Math.sqrt(k);
     this.rollGain.gain.setTargetAtTime(g, t, 0.06);
-    this.rollFilter.frequency.setTargetAtTime(onWire ? 2600 + k * 1800 : 170 + k * 560, t, 0.06);
+    this.rollFilter.frequency.setTargetAtTime(onWire ? 1900 + k * 2600 : 170 + k * 560, t, 0.06);
+    this.rollFilter.Q.setTargetAtTime(onWire ? 2.2 + k * 2 : 0.8, t, 0.08);
   }
 
   close() {

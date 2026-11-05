@@ -133,7 +133,7 @@ L.lockSlots = [
  */
 L.ramps = {
   left: {
-    capture: [-6.9, 18.0, -5.5, 18.0],
+    capture: [-7.25, 18.0, -5.0, 18.0],
     minVy: 5.0,
     exit: { x: 3.73, y: 12.2, vx: -1.2, vy: -7 },
     path: [

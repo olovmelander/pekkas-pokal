@@ -1306,8 +1306,23 @@
     font-size: 0.74rem;
   }
 
+  /* A phone on its side still always shows the next objective: a small
+     two-line card in the free corner under the panel, off the table */
   .pbf[data-orient='land'] .pbf-goal {
-    display: none;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    padding: 7px 10px;
+    border-radius: 10px;
+    font-size: 0.72rem;
+    line-height: 1.3;
+    gap: 7px;
+    background: rgba(10, 13, 28, 0.66);
+  }
+
+  .pbf[data-orient='land'] .pbf-goal span {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 }
 

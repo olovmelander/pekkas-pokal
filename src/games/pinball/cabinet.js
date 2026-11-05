@@ -726,6 +726,22 @@ function drawFront(g, ox, oy, w, h, k) {
   drawBanner(g, ox + w * 0.87, oy + 22 * k, w * 0.12, h * 0.48, ['#2c3d9e', '#121b55'], 'cup');
 }
 
+/** Brushed steel for the legs: a lit edge, fine grain along the length */
+function drawSteel(g, ox, oy, w, h, k) {
+  const grad = g.createLinearGradient(ox, 0, ox + w, 0);
+  grad.addColorStop(0, '#5d6478');
+  grad.addColorStop(0.3, '#c9cfdc');
+  grad.addColorStop(0.5, '#8e95a8');
+  grad.addColorStop(0.75, '#d9dee8');
+  grad.addColorStop(1, '#5d6478');
+  g.fillStyle = grad;
+  g.fillRect(ox, oy, w, h);
+  for (let i = 0; i < 90; i++) {
+    g.fillStyle = `rgba(${i % 2 ? '255,255,255' : '20,24,36'},.08)`;
+    g.fillRect(ox + ((i * 37) % w), oy, 1.5 * k, h);
+  }
+}
+
 /** The backbox sides: a tower and a banner */
 function drawHeadSide(g, ox, oy, w, h, front, k) {
   const bg = g.createLinearGradient(0, oy, 0, oy + h);
@@ -798,7 +814,7 @@ function faceTexture(THREE, logo, scale) {
   }
   g.lineTo(W, tlBot);
   g.fill();
-  drawCastle(g, W / 2, tlBot - tlBot * 0.16, tlBot / 300);
+  drawCastle(g, W / 2, tlBot - tlBot * 0.16, tlBot / 380);
   // Knights either side, facing the castle
   drawKnight(g, W * 0.16, tlBot - 6 * k, tlBot / 260, 1, '#d1344b');
   drawKnight(g, W * 0.25, tlBot - 4 * k, tlBot / 300, 1, '#4b5fd1');
@@ -807,14 +823,14 @@ function faceTexture(THREE, logo, scale) {
   // The trophy in front of the gate, the brightest thing on the glass
   drawTrophy(g, W / 2, tlBot - 8 * k, tlBot / 300, 1.3);
   // Title across the top, with the crest and the logo in the corners
-  title(g, 'PEKKAS POKAL', W / 2, tlBot * 0.2, tlBot * 0.2, { spacing: 10 * k });
+  title(g, 'PEKKAS POKAL', W / 2, tlBot * 0.17, tlBot * 0.19, { spacing: 10 * k });
   g.save();
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.font = `700 ${Math.round(tlBot * 0.06)}px "Schibsted Grotesk", Inter, sans-serif`;
   g.letterSpacing = `${Math.round(16 * k)}px`;
   g.fillStyle = 'rgba(224,230,255,.9)';
-  g.fillText('FLIPPER · 2025', W / 2, tlBot * 0.34);
+  g.fillText('FLIPPER · 2025', W / 2, tlBot * 0.3);
   g.restore();
   drawCrest(g, W * 0.07, tlBot * 0.26, tlBot / 420);
   if (logo && logo.width) {
@@ -1025,10 +1041,13 @@ export function buildCabinet(THREE, materials, logo, dmdMaterial, opts = {}) {
   // bloom threshold and glows softly; the rest stays under it.
   const face = new THREE.MeshBasicMaterial({ map: faceTex, color: new THREE.Color(1.12, 1.12, 1.12) });
   const FT = faceTex.userData;
+  // The coin door's lit parts share the face texture but dim on their own
+  const doorLit = new THREE.MeshBasicMaterial({ map: faceTex });
+  refs.doorLit = doorLit;
   refs.face = face;
   refs.printed = printed;
   refs.textures = [art, faceTex];
-  refs.materials = [printed, powder, face];
+  refs.materials = [printed, powder, face, doorLit];
 
   /* ---- Profiles (world z, y) ---- */
   const fb = roomPoint(CAB.legH, 0);
@@ -1071,7 +1090,8 @@ export function buildCabinet(THREE, materials, logo, dmdMaterial, opts = {}) {
     blade: { x: 0, y: SIDE_H * 2, w: AW, h: 128 * k },
     front: { x: 0, y: SIDE_H * 2 + 128 * k, w: 426 * k, h: 388 * k },
     headL: { x: 436 * k, y: SIDE_H * 2 + 128 * k, w: 380 * k, h: 388 * k },
-    headR: { x: 826 * k, y: SIDE_H * 2 + 128 * k, w: 380 * k, h: 388 * k }
+    headR: { x: 826 * k, y: SIDE_H * 2 + 128 * k, w: 380 * k, h: 388 * k },
+    steel: { x: 1216 * k, y: SIDE_H * 2 + 128 * k, w: 256 * k, h: 388 * k }
   };
   const uvIn = (r, fu, fv) => [(r.x + fu * r.w) / AW, 1 - (r.y + fv * r.h) / AH];
   const sideUV = (front) => (z, y) => {
@@ -1095,6 +1115,7 @@ export function buildCabinet(THREE, materials, logo, dmdMaterial, opts = {}) {
     drawFront(ag, R.front.x, R.front.y, R.front.w, R.front.h, k);
     drawHeadSide(ag, R.headL.x, R.headL.y, R.headL.w, R.headL.h, 1, k);
     drawHeadSide(ag, R.headR.x, R.headR.y, R.headR.w, R.headR.h, -1, k);
+    drawSteel(ag, R.steel.x, R.steel.y, R.steel.w, R.steel.h, k);
   }
 
   const add = (geo, mat, { cast = false, keep = false } = {}) => {
@@ -1164,7 +1185,7 @@ export function buildCabinet(THREE, materials, logo, dmdMaterial, opts = {}) {
       FT.plate.v0 + v * (FT.plate.v1 - FT.plate.v0)
     ]);
     plate.translate(0, -1.55, 0.4);
-    door.add(new THREE.Mesh(plate, face));
+    door.add(new THREE.Mesh(plate, doorLit));
     const plateRim = new THREE.Mesh(new THREE.BoxGeometry(6.8, 2.0, 0.08), materials.armour);
     plateRim.position.set(0, -1.55, 0.36);
     door.add(plateRim);
@@ -1177,11 +1198,11 @@ export function buildCabinet(THREE, materials, logo, dmdMaterial, opts = {}) {
         FT.insert.v0 + v * (FT.insert.v1 - FT.insert.v0)
       ]);
       ins.translate(mx, -4.9, 0.57);
-      door.add(new THREE.Mesh(ins, face));
+      door.add(new THREE.Mesh(ins, doorLit));
       const ret = buttonGeo(THREE, 0.42, 0.25, FT.swatch(SW.red), null, 10);
       ret.rotateX(Math.PI / 2);
       ret.translate(mx, -7.0, 0.56);
-      door.add(new THREE.Mesh(ret, face));
+      door.add(new THREE.Mesh(ret, doorLit));
     });
     const lock = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.3, 14), materials.armour);
     lock.rotation.x = Math.PI / 2;
@@ -1192,7 +1213,7 @@ export function buildCabinet(THREE, materials, logo, dmdMaterial, opts = {}) {
     const start = buttonGeo(THREE, 0.8, 0.5, FT.swatch(SW.gold), FT.dome(0), 18);
     start.rotateX(Math.PI / 2);
     start.translate(-8.2, -2.4, 0.25);
-    frontGroup.add(new THREE.Mesh(start, face));
+    frontGroup.add(new THREE.Mesh(start, doorLit));
     const startRing = new THREE.Mesh(new THREE.TorusGeometry(0.92, 0.16, 8, 22), materials.armour);
     startRing.position.set(-8.2, -2.4, 0.06);
     frontGroup.add(startRing);
@@ -1299,10 +1320,11 @@ export function buildCabinet(THREE, materials, logo, dmdMaterial, opts = {}) {
     });
   }
 
-  /* ---- Legs: powder-coat, chrome plates and bolts, levellers ---- */
+  /* ---- Legs: polished steel with bolts and levellers on black feet ---- */
   {
     const legs = [];
     const chrome = [];
+    const feet = [];
     const half = 1.35;
     const legTop = CAB.legH + 6.5;
     const legBot = 1.7;
@@ -1325,6 +1347,8 @@ export function buildCabinet(THREE, materials, logo, dmdMaterial, opts = {}) {
       const leg = legSrc.toNonIndexed();
       legSrc.dispose();
       leg.computeVertexNormals(); // flat: a square leg, not a rounded one
+      // Each face takes its own quarter of the gradient: four shades of steel
+      remapUV(leg, (u, vv) => uvIn(regions.steel, u, 1 - vv));
       legs.push(place(leg, rx, legBot + h / 2, rd));
       // Chrome leg plate on the outer face, two bolts through it
       const plate = new THREE.BoxGeometry(0.1, 5.4, 2.3);
@@ -1341,10 +1365,15 @@ export function buildCabinet(THREE, materials, logo, dmdMaterial, opts = {}) {
       // Leveller: threaded stem, hex nut, a foot
       chrome.push(place(new THREE.CylinderGeometry(0.3, 0.3, 1.4, 10), rx, 1.1, rd));
       chrome.push(place(new THREE.CylinderGeometry(0.62, 0.62, 0.4, 6), rx, 1.55, rd));
-      legs.push(place(new THREE.CylinderGeometry(0.95, 1.1, 0.5, 16), rx, 0.25, rd));
+      feet.push(place(new THREE.CylinderGeometry(0.95, 1.1, 0.5, 16), rx, 0.25, rd));
+      // Black powder-coat leg plate inside the bolts, as on the real thing
+      feet.push(place(new THREE.BoxGeometry(0.06, 6.2, 2.7), rx + side * (half + 0.03), CAB.legH + 3.4, rd));
     });
-    add(mergeSimple(THREE, legs), powder);
+    // Brushed steel legs, printed into the art atlas so they glow a little:
+    // in a dark arcade a black or mirror leg simply vanishes
+    add(mergeSimple(THREE, legs), printed);
     add(mergeSimple(THREE, chrome), materials.armour);
+    add(mergeSimple(THREE, feet), powder);
   }
 
   /* ---- Backbox: a real box, the face recessed in a chrome frame ---- */

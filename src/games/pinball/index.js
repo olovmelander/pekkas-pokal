@@ -18,7 +18,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { guardRenderer, postTarget, addSanitize, RenderWatchdog, gfxNotice, precompile } from '../shared/gfx.js';
 
-import { World, Ball, clamp } from './physics.js';
+import { World, Ball, clamp, closestOnSegment } from './physics.js';
 import { L, buildColliders, createPlayfieldCanvas } from './table.js';
 import { buildTable, createMaterials, machineEnvironment, bakeStatic, ballEnvironment } from './meshes.js';
 import { CAB, ROOM, headTop, buildCabinet, buildGlass } from './cabinet.js';
@@ -51,6 +51,8 @@ const LAMP = 16;
 
 const BALLS_PER_GAME = 3;
 const BALL_SAVE_MS = 9000;
+// Hidden grace after the save lamp goes out (ms)
+const BALL_SAVE_GRACE = 1200;
 // Skill shot: three plunger-strength lanes, one lit per ball. Each is as
 // wide as the old single band, so it is no harder to hit, and the further
 // the lane reaches the more it pays.
@@ -942,16 +944,26 @@ export async function createPinball(container, opts = {}) {
   }
 
   const hooks = {
-    onBumper(i, v) {
-      if (v < 0.6) return;
+    onBumper(i, v, ball, fired) {
+      // Only a coil firing scores: a ball still touching the skirt while
+      // the coil recharges is not another hit
+      if (fired === false || v < 0.6) return;
       const b = refs.bumpers[i];
       const p = L.bumpers[i];
       award(150, p.x, p.y, 'sm');
       state.perBall.bumps++;
-      sfx.bumper();
+      sfx.at(p.x).bumper();
       buzz(12);
       flash(b.trophy, b.light, 4.6, b.base);
-      b.group.scale.setScalar(1.18);
+      // The ring yanks down and the skirt dips toward the ball (tick)
+      b.fire = 1;
+      if (ball) {
+        const dx = ball.x - p.x;
+        const dy = ball.y - p.y;
+        const dl = Math.hypot(dx, dy) || 1;
+        b.tiltX = (-dy / dl) * 0.09;
+        b.tiltZ = (-dx / dl) * 0.09;
+      }
       fx.flash(p.x, 1.3, -p.y, 0xffd27a, 5.5, 0.2);
       fx.spark(p.x, 0.9, -p.y, 0xffc35a, 7, 9, 3);
 
@@ -1006,17 +1018,18 @@ export async function createPinball(container, opts = {}) {
       if (n >= 3) breakGate();
       else dmd.castleHit(n, 3);
     },
-    onSling(side, v, ball) {
-      if (v < 1) return;
+    onSling(side, v, ball, fired) {
+      // The kicker only counts when it fires (the scatter is in physics.js)
+      if (fired === false || v < 1) return;
       addScore(60);
-      sfx.sling();
+      sfx.at(side === 'left' ? -4.7 : 2.3).sling();
       buzz(9);
-      // Real sling rubber never throws twice the same way
-      if (ball) ball.vx += (Math.random() - 0.5) * 2.5;
       const mesh = side === 'left' ? refs.leftSling : refs.rightSling;
       if (mesh) {
         mesh.material.emissiveIntensity = 4;
         flashes.push({ mat: mesh.material, base: 1.4, t: 0 });
+        // The arm punches the rubber out along the face (tick springs it back)
+        mesh.userData.fire = 1;
       }
       if (ball) {
         fx.flash(ball.x, 0.9, -ball.y, 0x8f9cff, 3.2, 0.16);
@@ -1284,7 +1297,7 @@ export async function createPinball(container, opts = {}) {
       if (v > 9) sfx.wall(v);
     },
     onFlipper(side, v, b) {
-      if (v > 3) sfx.ballHit(v);
+      if (v > 3) sfx.at(b ? b.x : 0).ballHit(v);
       // A hard flip throws a spark off the rubber where it met the ball
       if (v > 22 && b) fx.spark(b.x, 0.6, -b.y, 0xfff1cf, 4, 5, 2);
     }
@@ -1544,7 +1557,7 @@ export async function createPinball(container, opts = {}) {
   /**
    * Lifts a ball out of the 2D world and rides it along the wireform.
    * The mesh follows the 3D curve; on arrival the ball rejoins the
-   * simulation at the opposite inlane, Medieval Madness style.
+   * simulation at the opposite inlane, the classic crossed-ramp layout.
    */
   function captureRamp(side, b) {
     const idx = state.balls.indexOf(b);
@@ -1554,7 +1567,15 @@ export async function createPinball(container, opts = {}) {
     // A hard shot rides the wireform visibly faster than a clean minimum
     const base = side === 'left' ? 22 : 27;
     const dur = clamp(base / Math.max(9, b.speed), 0.9, 2.1);
-    state.riders.push({ ball: b, side, t: 0, dur });
+    state.riders.push({
+      ball: b, side, t: 0, dur,
+      v: clamp(b.speed * 0.8, 20, 36),
+      len: refs.rampCurves[side].getLength()
+    });
+    const flap = refs.rampFlaps && refs.rampFlaps[side];
+    if (flap) flap.userData.fire = 1;
+    sfx.at(b.x).flap();
+    buzz([6, 26, 6]);
     const arch = refs.rampArches && refs.rampArches[side];
     if (arch) {
       arch.material.emissiveIntensity = 3.2;
@@ -1593,7 +1614,9 @@ export async function createPinball(container, opts = {}) {
 
   function releaseRider(r) {
     const ex = L.ramps[r.side].exit;
-    r.ball.place(ex.x, ex.y, ex.vx || 0, ex.vy);
+    // A ball that came down the wire fast leaves it a little faster
+    const k = clamp((r.v || 22) / 22, 0.85, 1.2);
+    r.ball.place(ex.x, ex.y, (ex.vx || 0) * k, ex.vy * k);
     r.ball.live = true;
     state.balls.push(r.ball);
   }
@@ -1765,8 +1788,9 @@ export async function createPinball(container, opts = {}) {
       return;
     }
 
-    // Last ball gone
-    if (performance.now() < state.ballSaveUntil) {
+    // Last ball gone. The save has a short hidden grace after its lamp goes
+    // out, as on a real machine: a drain a heartbeat late is still saved.
+    if (performance.now() < state.ballSaveUntil + BALL_SAVE_GRACE) {
       state.saveUsed = true;
       state.ballSaveUntil = 0;
       sfx.save();
@@ -2004,11 +2028,18 @@ export async function createPinball(container, opts = {}) {
       // The half of the glass under the thumb answers, like a lit button
       if (touch) hud.zones.children[side === 'left' ? 0 : 1].classList.toggle('press', pressed);
       if (pressed) {
-        sfx.flipperUp();
+        // A flip is never held back by a hit-stop or a slow-motion beat:
+        // the bat answers at full speed on the very next physics step
+        time.stop = 0;
+        if (time.scale < 1) {
+          time.hold = 0;
+          time.scale = 1;
+        }
+        sfx.at(side === 'left' ? -4 : 1.6).flipperUp();
         buzz(7);
         hud.zones.classList.remove('show');
       } else {
-        sfx.flipperDown();
+        sfx.at(side === 'left' ? -4 : 1.6).flipperDown();
       }
     }
   }
@@ -2122,9 +2153,63 @@ export async function createPinball(container, opts = {}) {
     }
   }
 
+  /**
+   * Ball search: a real machine pulses its coils one by one to shake a lost
+   * ball free. Every pop and sling fires in turn (lit and heard, so the
+   * player sees the machine working); one the ball is resting against
+   * actually throws it, and only when nothing is in reach does the cabinet
+   * give a gentle, escalating shove.
+   */
+  function ballSearch(b, n) {
+    let freed = false;
+    L.bumpers.forEach((p, i) => {
+      later(() => {
+        const rb = refs.bumpers[i];
+        if (rb) {
+          rb.fire = 1;
+          flash(null, rb.light, 2.4, rb.base);
+        }
+        sfx.at(p.x).coil(0.55);
+      }, i * 110);
+      const dx = b.x - p.x;
+      const dy = b.y - p.y;
+      const d = Math.hypot(dx, dy);
+      if (!freed && d < L.bumperR + L.ballRadius + 0.5 && d > 1e-3) {
+        b.vx += (dx / d) * 16;
+        b.vy += (dy / d) * 16;
+        freed = true;
+      }
+    });
+    [[L.leftSlingPts, refs.leftSling], [L.rightSlingPts, refs.rightSling]].forEach(([P, mesh], k) => {
+      later(() => {
+        if (mesh) mesh.userData.fire = 1;
+        sfx.at(P.T[0]).coil(0.4);
+      }, 330 + k * 110);
+      const [qx, qy] = closestOnSegment(b.x, b.y, P.T[0], P.T[1], P.BI[0], P.BI[1]);
+      const dx = b.x - qx;
+      const dy = b.y - qy;
+      const d = Math.hypot(dx, dy);
+      if (!freed && d < 0.28 + L.ballRadius + 0.45 && d > 1e-3) {
+        b.vx += (dx / d) * 14;
+        b.vy += (dy / d) * 14;
+        freed = true;
+      }
+    });
+    if (!freed) {
+      const power = 0.6 + n * 0.5;
+      b.vx += clamp((L.centerX - b.x) * 0.6, -5, 5) * power + (Math.random() - 0.5) * 3 * power;
+      // High up a ball needs a shove to come back down; low down a nudge
+      b.vy += (b.y > 20 ? -6 : 4) * power;
+      jolt(0.3 + n * 0.12, 0);
+    }
+  }
+
   function doNudge() {
     if (state.phase !== 'play' || state.tilted) return;
     const now = performance.now();
+    // A cabinet can't be shoved again while it is still rocking back
+    if (now - (state.lastNudge || 0) < 320) return;
+    state.lastNudge = now;
     state.nudges = state.nudges.filter((t) => now - t < 3200);
     state.nudges.push(now);
 
@@ -2156,19 +2241,13 @@ export async function createPinball(container, opts = {}) {
     });
     const off = low ? L.centerX - low.x : 0;
     const dir = Math.abs(off) > 0.4 ? Math.sign(off) : Math.random() < 0.5 ? -1 : 1;
-    world.nudgeX = dir * 40 + (Math.random() - 0.5) * 22;
-    world.nudgeY = 38;
-    state.balls.forEach((b) => {
-      b.vx += dir * 2.8 + (Math.random() - 0.5) * 1.6;
-      b.vy += 3;
-    });
+    // A real shove: the cabinet moves under the ball (an instant velocity
+    // change) and springs back over a few hundredths of a second, in
+    // simulation time (physics.js World.nudge)
+    world.nudge(state.balls, dir * (4.4 + Math.random() * 1.2), 4.2 + Math.random() * 0.8, 0.09);
     buzz(30);
-    later(() => {
-      world.nudgeX = 0;
-      world.nudgeY = 0;
-    }, 90);
     jolt(1, dir);
-    sfx.wall(30);
+    sfx.nudge();
   }
 
   // The tick keeps updating `last` even while paused, so closing the card
@@ -2318,7 +2397,12 @@ export async function createPinball(container, opts = {}) {
     // Showcase on wide screens only: the column between the side panels,
     // widened a little into their margins. Portrait keeps the play framing.
     showcaseOk = W / H > 1.02;
-    if (showcaseOk) {
+    showcase.setPlay({ ...playView });
+    if (!showcaseOk) {
+      // Turned to portrait mid-tour: the play framing above is final
+      showcase.cut(0);
+      camera.up.set(0, 1, 0);
+    } else {
       const grow = 0.22;
       const l = fit.l * (1 - grow);
       const r = fit.r * (1 - grow);
@@ -2732,7 +2816,12 @@ export async function createPinball(container, opts = {}) {
     const dtRaw = Math.min(0.05, real);
     last = now;
     if (real > 0) perf.frameMs += (real * 1000 - perf.frameMs) * 0.1;
-    if (!running || helpOpen) return;
+    if (!running || helpOpen) {
+      // Time on the strategy card is not play time: the save timers wait
+      if (state.ballSaveUntil > now) state.ballSaveUntil += real * 1000;
+      if (state.mbSaveUntil > now) state.mbSaveUntil += real * 1000;
+      return;
+    }
     if (root.dataset.phase !== state.phase) root.dataset.phase = state.phase;
 
     // rAF timestamps can predate `last` (clamped above) or arrive seconds
@@ -2809,23 +2898,17 @@ export async function createPinball(container, opts = {}) {
           // ball and, if that fails, simply serves a new one. Escalating the
           // shove and then re-serving guarantees no ball is ever stranded,
           // whatever corner of the geometry it found.
-          if (b.speed < 1.1 && !(b.x > L.laneX && b.y < 4)) {
+          // A ball held on a raised flipper is a cradle, not a lost ball
+          const cradled = (flipL.pressed || flipR.pressed) && b.y < 11.5;
+          if (b.speed < 1.1 && !cradled && !(b.x > L.laneX && b.y < 4)) {
             b.stuckFor = (b.stuckFor || 0) + FIXED;
-            if (b.stuckFor > 2.2) {
+            if (b.stuckFor > 3) {
               b.searches = (b.searches || 0) + 1;
-              const power = 1 + b.searches * 0.7;
-              b.vx += clamp((L.centerX - b.x) * 0.9, -7, 7) * power +
-                (Math.random() - 0.5) * 5 * power;
-              // High up in the habitrail a ball needs a real shove to come
-              // back down; low down it only needs a nudge back into play.
-              b.vy += (b.y > 20 ? -9 : 6) * power;
               b.stuckFor = 0;
-              jolt(0.4 + b.searches * 0.15, 0);
-              sfx.wall(20);
-
+              ballSearch(b, b.searches);
               // Still stuck after three searches: put it back in the shooter
               // lane and fire it. No ball lost, no penalty.
-              if (b.searches >= 3) {
+              if (b.searches >= 4) {
                 b.searches = 0;
                 b.place(L.laneBallX, L.laneBottomY + L.laneWallR + L.ballRadius + 0.06, 0, 0);
                 b.laneFor = 1.3;
@@ -2850,7 +2933,11 @@ export async function createPinball(container, opts = {}) {
     if (state.phase === 'play') {
       for (let ri = state.riders.length - 1; ri >= 0; ri--) {
         const r = state.riders[ri];
-        r.t += dt / r.dur;
+        // The wire costs speed on the climb and gives it back on the way
+        // down: the ball's pace (and its rolling sound) follows the bends
+        const tan = refs.rampCurves[r.side].getTangentAt(Math.min(1, r.t));
+        r.v = clamp(r.v - (tan.y * 62 - tan.z * 14) * dt, 12, 40);
+        r.t += (r.v * dt) / r.len;
         if (r.t >= 1) {
           state.riders.splice(ri, 1);
           releaseRider(r);
@@ -3017,6 +3104,7 @@ export async function createPinball(container, opts = {}) {
       if (!(b.x > L.laneX && b.y < 4)) fastest = Math.max(fastest, b.speed);
       meshIdx++;
     }
+    let wireSpeed = 0;
     for (const r of state.riders) {
       if (meshIdx >= ballMeshes.length) break;
       const mesh = ballMeshes[meshIdx];
@@ -3025,8 +3113,9 @@ export async function createPinball(container, opts = {}) {
       mesh.position.set(p.x, p.y + L.ballRadius, p.z);
       const tan = refs.rampCurves[r.side].getTangentAt(Math.min(1, r.t));
       axis.set(tan.z, 0, -tan.x).normalize();
-      mesh.rotateOnWorldAxis(axis, (dt * 16) / (2 * Math.PI * L.ballRadius));
+      mesh.rotateOnWorldAxis(axis, ((r.v || 16) * dt) / L.ballRadius);
       fx.trail(meshIdx, mesh.position, 30, !reduceMotion);
+      wireSpeed = Math.max(wireSpeed, r.v || 0);
       meshIdx++;
     }
     if (state.held && meshIdx < ballMeshes.length) {
@@ -3042,7 +3131,7 @@ export async function createPinball(container, opts = {}) {
       ballMeshes[meshIdx].visible = false;
       fx.trail(meshIdx, ballMeshes[meshIdx].position, 0, false);
     }
-    sfx.roll(state.phase === 'play' ? fastest : 0, state.riders.length > 0);
+    sfx.roll(state.phase === 'play' ? fastest : 0, state.riders.length > 0, wireSpeed);
 
     // Contact shadows follow their ball and fade as it climbs a wireform —
     // a shadow that stays hard while the ball is three units in the air is
@@ -3108,6 +3197,24 @@ export async function createPinball(container, opts = {}) {
         b.trophy.material.emissiveIntensity = hot ? 1.5 : 0.5;
       }
       b.group.scale.lerp(vOne, Math.min(1, dtRaw * 9));
+      // Mechanics: the ring is yanked down and springs back, the skirt dips
+      // toward where the ball struck
+      if (b.skirt && b.fire > 0) {
+        b.fire = Math.max(0, b.fire - dtRaw * 9);
+        b.ring.position.y = b.ringY - 0.34 * Math.min(1, b.fire * 1.6);
+        b.skirt.rotation.x = b.tiltX * b.fire;
+        b.skirt.rotation.z = b.tiltZ * b.fire;
+      }
+    });
+    [refs.leftSling, refs.rightSling].forEach((m) => {
+      if (!m || !(m.userData.fire > 0)) return;
+      m.userData.fire = Math.max(0, m.userData.fire - dtRaw * 10);
+      if (m.userData.kick) m.position.copy(m.userData.kick).multiplyScalar(0.2 * Math.min(1, m.userData.fire * 1.5));
+    });
+    Object.values(refs.rampFlaps || {}).forEach((fl) => {
+      if (!(fl.userData.fire > 0)) return;
+      fl.userData.fire = Math.max(0, fl.userData.fire - dtRaw * 3.5);
+      fl.rotation.x = fl.userData.restX - 0.45 * Math.sin(Math.PI * fl.userData.fire);
     });
 
     for (let i = flashes.length - 1; i >= 0; i--) {
@@ -3150,7 +3257,10 @@ export async function createPinball(container, opts = {}) {
     // The glass sheet only shows at a low angle; on phones it is a full-table
     // blend for nothing while playing, so it is drawn only in the showcase
     glassSheet.visible = !small || sk > 0;
-    room.fill.intensity = 0.1 + 1.25 * sk;
+    room.fill.intensity = 0.1 + 1.25 * (peek ? 1 : sk);
+    // The coin door's lights sit under the portrait HUD's bottom row: dim
+    // while playing, full in the showcase
+    cab.refs.doorLit.color.setScalar(0.42 + 0.7 * (peek ? 1 : sk));
     if (peek) {
       // Test hook: a close-up camera (window.__pbFlipper.peek)
       camera.position.copy(peek.from);
@@ -3195,9 +3305,18 @@ export async function createPinball(container, opts = {}) {
   last = performance.now();
   raf = requestAnimationFrame(tick);
 
+  let hiddenAt = 0;
   const onVisibility = () => {
     running = !document.hidden;
     last = performance.now();
+    // Nor does time in another tab
+    if (document.hidden) hiddenAt = last;
+    else if (hiddenAt) {
+      const away = last - hiddenAt;
+      if (state.ballSaveUntil > hiddenAt) state.ballSaveUntil += away;
+      if (state.mbSaveUntil > hiddenAt) state.mbSaveUntil += away;
+      hiddenAt = 0;
+    }
     if (document.hidden) {
       flipL.pressed = false;
       flipR.pressed = false;
@@ -3224,6 +3343,8 @@ export async function createPinball(container, opts = {}) {
     dmd,
     /** The physics flippers: `.pressed` shows input arriving, `.angle` the swing */
     flippers: colliderRefs.flippers,
+    /** The physics world (gravity, nudge, colliders) for the feel rig */
+    world,
     info() {
       return {
         ...perf,
@@ -3299,6 +3420,10 @@ export async function createPinball(container, opts = {}) {
       camera.updateProjectionMatrix();
       scene.fog.near = 200;
       scene.fog.far = 400;
+    },
+    /** Showcase camera now, at orbit time t (for screenshots) */
+    showcaseAt(t = 9) {
+      showcase.cut(1, t);
     },
     /** Fire the flasher domes (for screenshots) */
     flasher: fireFlasher,

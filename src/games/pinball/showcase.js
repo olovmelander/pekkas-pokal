@@ -23,7 +23,7 @@ export function createShowcase(THREE, { CAB, ROOM, reduceMotion }) {
   const X = new THREE.Vector3(1, 0, 0);
   const WORLD_UP = new THREE.Vector3(0, 1, 0);
   // Aim a little above the middle of the machine, so the head gets room
-  const pivot = new THREE.Vector3(CAB.cx, -10, -21);
+  const pivot = new THREE.Vector3(CAB.cx, -11, -22);
 
   // What has to fit on screen: the body, the legs' feet and the head
   const pts = [];
@@ -65,8 +65,26 @@ export function createShowcase(THREE, { CAB, ROOM, reduceMotion }) {
       .addScaledVector(F, Math.cos(el) * Math.cos(az))
       .addScaledVector(U, Math.sin(el));
 
-  /** Distance at which the machine fits the rectangle, seen from (az, el) */
-  function fitAt(az, el, W, H, rect, offX, offY) {
+  /** The machine's box on screen for a camera without a view offset */
+  function boxOf(cam, W, H) {
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    let y0 = Infinity;
+    let y1 = -Infinity;
+    pts.forEach((p) => {
+      look.copy(p).project(cam);
+      const x = ((look.x + 1) / 2) * W;
+      const y = ((1 - look.y) / 2) * H;
+      x0 = Math.min(x0, x);
+      x1 = Math.max(x1, x);
+      y0 = Math.min(y0, y);
+      y1 = Math.max(y1, y);
+    });
+    return { w: x1 - x0, h: y1 - y0, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 };
+  }
+
+  /** Distance at which the machine fills the rectangle, seen from (az, el) */
+  function fitAt(az, el, W, H, rect) {
     let d = 120;
     dirOf(az, el, v);
     for (let i = 0; i < 10; i++) {
@@ -74,26 +92,8 @@ export function createShowcase(THREE, { CAB, ROOM, reduceMotion }) {
       probe.up.copy(U);
       probe.lookAt(pivot);
       probe.updateMatrixWorld();
-      let x0 = Infinity;
-      let x1 = -Infinity;
-      let y0 = Infinity;
-      let y1 = -Infinity;
-      pts.forEach((p) => {
-        look.copy(p).project(probe);
-        const x = ((look.x + 1) / 2) * W;
-        const y = ((1 - look.y) / 2) * H;
-        x0 = Math.min(x0, x);
-        x1 = Math.max(x1, x);
-        y0 = Math.min(y0, y);
-        y1 = Math.max(y1, y);
-      });
-      // Fit the larger of the two overshoots, about the rectangle's centre
-      // (the probe has no view offset: the play camera's shift comes after)
-      const cx = rect.x + rect.w / 2 - offX;
-      const cy = rect.y + rect.h / 2 - offY;
-      const sx = Math.max(cx - x0, x1 - cx) / (rect.w / 2);
-      const sy = Math.max(cy - y0, y1 - cy) / (rect.h / 2);
-      const k = Math.max(sx, sy);
+      const b = boxOf(probe, W, H);
+      const k = Math.max(b.w / rect.w, b.h / rect.h);
       if (Math.abs(k - 1) < 0.01) break;
       d = Math.min(400, Math.max(40, d * k));
     }
@@ -118,16 +118,22 @@ export function createShowcase(THREE, { CAB, ROOM, reduceMotion }) {
       probe.aspect = W / H;
       probe.clearViewOffset();
       probe.updateProjectionMatrix();
+      s.rect = rect;
       s.radii = [];
       for (let i = 0; i <= 16; i++) {
         const az = -1.1 + (i / 16) * 1.9;
-        s.radii.push(Math.max(fitAt(az, 0.1, W, H, rect, play.offX, play.offY), fitAt(az, 0.3, W, H, rect, play.offX, play.offY)));
+        s.radii.push(Math.max(fitAt(az, 0.1, W, H, rect), fitAt(az, 0.3, W, H, rect)));
       }
     },
+    /** The play framing changed but the showcase is off (portrait) */
+    setPlay(play) {
+      s.play = play;
+    },
     /** Jump straight to a state without flying (reduced motion, peek) */
-    cut(goal) {
+    cut(goal, t) {
       s.goal = goal;
       s.k = goal;
+      if (t !== undefined) s.t = t;
       if (!goal) s.active = false; // the caller owns the camera from here
     },
     /**
@@ -182,7 +188,14 @@ export function createShowcase(THREE, { CAB, ROOM, reduceMotion }) {
       camera.fov = lerp(play.fov, s.fov, e);
       camera.near = lerp(play.near, Math.min(40, rS * 0.3), e);
       camera.far = Math.max(play.far, rS + 240);
-      camera.setViewOffset(play.W, play.H, -play.offX, -play.offY, play.W, play.H);
+      // Centre the machine's box in the rectangle by sliding the image
+      camera.clearViewOffset();
+      camera.updateProjectionMatrix();
+      camera.updateMatrixWorld();
+      const b = boxOf(camera, play.W, play.H);
+      const offX = lerp(play.offX, s.rect.x + s.rect.w / 2 - b.cx, e);
+      const offY = lerp(play.offY, s.rect.y + s.rect.h / 2 - b.cy, e);
+      camera.setViewOffset(play.W, play.H, -offX, -offY, play.W, play.H);
       camera.updateProjectionMatrix();
       fog.near = lerp(play.fogNear, rS * 1.05, e);
       fog.far = lerp(play.fogFar, rS * 2.6, e);

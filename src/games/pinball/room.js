@@ -340,8 +340,8 @@ function wallTexture(THREE) {
     g.strokeText(text, x, y);
     g.shadowBlur = 0;
   };
-  neon('Arkaden', 512, 92, 70, '#ff4fb8');
-  neon('PEKKAS', 512, 40, 30, '#59e6ff');
+  neon('Arkaden', 512, 150, 44, '#ff4fb8');
+  neon('PEKKAS', 512, 116, 20, '#59e6ff');
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -434,7 +434,7 @@ export function buildRoom(THREE, { mergeGeometries, materials }) {
   shadows.renderOrder = 1;
   frame.add(shadows);
   const glowGeo = floorQuads(THREE, [
-    [0, 8, 34, 22, [0.3, 0.2, 0.1]],
+    [0, 8, 34, 22, [0.17, 0.11, 0.05]],
     [-PITCH, 8 + SET_BACK, 34, 22, [0, 0, 0]],
     [PITCH, 8 + SET_BACK, 34, 22, [0, 0, 0]]
   ], 0.16);
@@ -457,9 +457,9 @@ export function buildRoom(THREE, { mergeGeometries, materials }) {
   disposables.push(wallTex);
   const wall = new THREE.Mesh(
     new THREE.PlaneGeometry(300, 112),
-    new THREE.MeshBasicMaterial({ map: wallTex, fog: false })
+    new THREE.MeshBasicMaterial({ map: wallTex, color: 0xb0b0b0, fog: false })
   );
-  wall.position.set(0, 56, -112);
+  wall.position.set(0, 50, -112);
   frame.add(wall);
 
   // The neighbours: their own print and translites, and both cabinets drawn

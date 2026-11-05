@@ -661,46 +661,67 @@ export function rampCurve(THREE, path) {
 }
 
 /**
- * A wireform habitrail: two chrome tubes riding either side of the curve,
- * with periodic U-shaped cross ties. The Medieval Madness look.
+ * A wireform habitrail, the way they are bent: two floor wires the ball
+ * rolls on, two side wires at the height of its middle that keep it in,
+ * U-hoops welded round all four every ball-length or so, and steel
+ * supports down to the playfield wherever the ramp is high enough to need
+ * one. Returns plain geometries (table space) so buildTable can bake both
+ * ramps into a single chrome draw.
  */
-function buildWireform(THREE, curve, materials, t0 = 0) {
-  const g = new THREE.Group();
-  const railR = 0.07;
-  const halfGap = 0.34;
-
-  // Offset each rail horizontally, perpendicular to the path direction
-  [-1, 1].forEach((side) => {
-    const pts = [];
-    for (let i = 0; i <= 60; i++) {
-      const t = t0 + ((1 - t0) * i) / 60;
-      const p = curve.getPointAt(t);
-      const tan = curve.getTangentAt(t);
-      const perp = new THREE.Vector3(-tan.z, 0, tan.x);
-      const l = perp.length() || 1;
-      pts.push(p.clone().addScaledVector(perp.multiplyScalar(1 / l), side * halfGap));
-    }
-    const railCurve = new THREE.CatmullRomCurve3(pts);
-    const tube = new THREE.Mesh(new THREE.TubeGeometry(railCurve, 90, railR, 7, false), materials.chrome);
-    g.add(tube);
-  });
-
-  // Cross ties: shallow U-loops under the ball path
-  for (let i = 1; i < 12; i++) {
-    const t = i / 12;
-    if (t < t0 + 0.02) continue;
+function wireformGeometries(THREE, curve, t0 = 0) {
+  const geos = [];
+  const wireR = 0.055;
+  const ballR = L.ballRadius;
+  const SEG = 80;
+  const up = new THREE.Vector3(0, 1, 0);
+  const frame = (t0r) => {
+    // t0 + (1 − t0)·i/n can land a hair past 1, where a curve has no point
+    const t = Math.min(1, Math.max(0, t0r));
     const p = curve.getPointAt(t);
     const tan = curve.getTangentAt(t);
-    const tie = new THREE.Mesh(
-      new THREE.TorusGeometry(halfGap, 0.045, 6, 14, Math.PI),
-      materials.rail
-    );
-    tie.position.copy(p).y -= 0.06;
-    tie.rotation.z = Math.PI; // open side up
-    tie.rotation.y = Math.atan2(tan.x, tan.z) + Math.PI / 2;
-    g.add(tie);
+    const side = new THREE.Vector3().crossVectors(tan, up);
+    if (side.lengthSq() < 1e-6) side.set(1, 0, 0);
+    side.normalize();
+    return { p, tan, side };
+  };
+  // [lateral, height above the ball's lowest point]
+  const WIRES = [[-0.34, 0.07], [0.34, 0.07], [-0.66, ballR + 0.06], [0.66, ballR + 0.06]];
+  WIRES.forEach(([lat, h]) => {
+    const pts = [];
+    for (let i = 0; i <= SEG; i++) {
+      const { p, side } = frame(t0 + ((1 - t0) * i) / SEG);
+      pts.push(p.clone().addScaledVector(side, lat).add(new THREE.Vector3(0, h, 0)));
+    }
+    geos.push(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 110, wireR, 6, false));
+  });
+
+  // U-hoops around the ball path, and supports to the wood
+  const len = curve.getLength();
+  const n = Math.max(6, Math.round(((1 - t0) * len) / 1.15));
+  for (let i = 0; i <= n; i++) {
+    const t = t0 + ((1 - t0) * i) / n;
+    const { p, tan, side } = frame(t);
+    const c = p.clone().add(new THREE.Vector3(0, ballR + 0.06, 0));
+    const hoop = new THREE.TorusGeometry(0.68, 0.04, 5, 14, Math.PI);
+    // Torus arc lies in its XY plane from +x through +y: flip it so the
+    // arc runs UNDER the ball, then turn its plane across the path
+    hoop.rotateZ(Math.PI);
+    const m = new THREE.Matrix4().makeBasis(side, new THREE.Vector3().crossVectors(tan, side).normalize(), tan);
+    hoop.applyMatrix4(m);
+    hoop.translate(c.x, c.y, c.z);
+    geos.push(hoop);
+    // Every third hoop on a raised stretch stands on a post
+    if (i % 3 === 1 && p.y > 0.7) {
+      const hgt = p.y - 0.02;
+      const post = new THREE.CylinderGeometry(0.05, 0.06, hgt, 6);
+      post.translate(p.x, hgt / 2, p.z);
+      geos.push(post);
+      const foot = new THREE.CylinderGeometry(0.14, 0.16, 0.05, 8);
+      foot.translate(p.x, 0.025, p.z);
+      geos.push(foot);
+    }
   }
-  return g;
+  return geos;
 }
 
 /**
@@ -724,7 +745,9 @@ function plasticRampParts(THREE, curve, t1, row) {
   const idx = [];
   const tops = [[], []];
   const perp = new THREE.Vector3();
-  const frame = (t) => {
+  const frame = (t0r) => {
+    // t0 + (1 − t0)·i/n can land a hair past 1, where a curve has no point
+    const t = Math.min(1, Math.max(0, t0r));
     const p = curve.getPointAt(t);
     const tan = curve.getTangentAt(t);
     perp.set(-tan.z, 0, tan.x);
@@ -1819,6 +1842,7 @@ export function buildTable(THREE, mergeGeometries, materials) {
   group.add(rails);
 
   /* ---- Slingshots: rubber triangle body + glowing kicker face ---- */
+  const slingPostGeos = [];
   [['leftSling', L.leftSlingPts], ['rightSling', L.rightSlingPts]].forEach(([name, P]) => {
     const tri = new THREE.Shape();
     tri.moveTo(P.T[0], P.T[1]);
@@ -1863,67 +1887,115 @@ export function buildTable(THREE, mergeGeometries, materials) {
     bandMesh.castShadow = true;
     group.add(bandMesh);
     corners.forEach((c) => {
-      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, PLASTIC_Y, 10), materials.chrome);
-      post.position.set(c[0], PLASTIC_Y / 2, -c[1]);
-      group.add(post);
+      const post = new THREE.CylinderGeometry(0.12, 0.14, PLASTIC_Y, 10);
+      post.translate(c[0], PLASTIC_Y / 2, -c[1]);
+      slingPostGeos.push(post);
     });
+    // The kicker pushes its rubber out along the face normal (index.js
+    // animates face.position by this, in table space)
+    const fx0 = P.BI[0] - P.T[0];
+    const fy0 = P.BI[1] - P.T[1];
+    const fl = Math.hypot(fx0, fy0) || 1;
+    let nx = -fy0 / fl;
+    let ny = fx0 / fl;
+    if (nx * (cx - P.T[0]) + ny * (cy - P.T[1]) > 0) {
+      nx = -nx;
+      ny = -ny;
+    }
+    face.userData.kick = new THREE.Vector3(nx, 0, -ny);
   });
+  // Six chrome sling posts in one draw
+  {
+    const posts = new THREE.Mesh(mergeGeometries(slingPostGeos, false), materials.chrome);
+    group.add(posts);
+  }
 
-  /* ---- Posts: brass, each wearing its rubber ring and a star-post cap ---- */
-  L.posts.forEach((p) => {
-    const post = new THREE.Mesh(
-      new THREE.CylinderGeometry(p.r * 0.5, p.r * 0.56, L.wallH, 12),
-      materials.gold
-    );
-    post.position.set(p.x, L.wallH / 2, -p.y);
-    post.castShadow = true;
-    group.add(post);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(p.r - 0.085, 0.085, 8, 20), materials.rubberWhite);
-    ring.rotation.x = Math.PI / 2;
-    ring.position.set(p.x, 0.62, -p.y);
-    ring.castShadow = true;
-    group.add(ring);
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(p.r * 0.8, p.r * 0.95, 0.22, 8), materials.blueGlow);
-    cap.position.set(p.x, L.wallH + 0.11, -p.y);
-    group.add(cap);
-  });
+  /* ---- Posts: brass, each wearing its rubber ring and a star-post cap ----
+     Merged per material: three draws for all of them, not three each. */
+  {
+    const brass = [];
+    const rings = [];
+    const caps = [];
+    L.posts.forEach((p) => {
+      const post = new THREE.CylinderGeometry(p.r * 0.5, p.r * 0.56, L.wallH, 12);
+      post.translate(p.x, L.wallH / 2, -p.y);
+      brass.push(post);
+      const ring = new THREE.TorusGeometry(p.r - 0.085, 0.085, 8, 20);
+      ring.rotateX(Math.PI / 2);
+      ring.translate(p.x, 0.62, -p.y);
+      rings.push(ring);
+      const cap = new THREE.CylinderGeometry(p.r * 0.8, p.r * 0.95, 0.22, 8);
+      cap.translate(p.x, L.wallH + 0.11, -p.y);
+      caps.push(cap);
+    });
+    const posts = new THREE.Mesh(mergeGeometries(brass, false), materials.gold);
+    posts.castShadow = true;
+    group.add(posts);
+    const ringMesh = new THREE.Mesh(mergeGeometries(rings, false), materials.rubberWhite);
+    ringMesh.castShadow = true;
+    group.add(ringMesh);
+    group.add(new THREE.Mesh(mergeGeometries(caps, false), materials.blueGlow));
+  }
 
-  /* ---- Pop bumpers ---- */
+  /* ---- Pop bumpers ----
+     The real anatomy, bottom up: a black base flange on the wood, the
+     switch skirt (it dips toward the ball when it is struck), the body
+     column, the steel ring the coil yanks DOWN to throw the ball, and the
+     cap — a lit insert under a clear dome with the bulb inside. index.js
+     animates the skirt and ring on every fire. */
+  const bumperBases = [];
   L.bumpers.forEach((b) => {
+    const base = new THREE.CylinderGeometry(L.bumperR * 1.12, L.bumperR * 1.17, 0.08, 28);
+    base.translate(b.x, 0.04, -b.y);
+    bumperBases.push(base);
+
     const g = new THREE.Group();
     g.position.set(b.x, 0, -b.y);
 
     const skirt = new THREE.Mesh(
-      new THREE.CylinderGeometry(L.bumperR, L.bumperR * 1.05, 0.5, 28),
+      new THREE.CylinderGeometry(L.bumperR * 0.84, L.bumperR * 1.02, 0.12, 28),
       materials.rubber
     );
-    skirt.position.y = 0.25;
+    skirt.position.y = 0.17;
     skirt.castShadow = true;
     g.add(skirt);
 
+    const body = new THREE.Mesh(
+      new THREE.CylinderGeometry(L.bumperR * 0.5, L.bumperR * 0.54, 0.7, 20),
+      materials.chrome
+    );
+    body.position.y = 0.55;
+    g.add(body);
+
     const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(L.bumperR * 0.92, 0.15, 12, 32),
+      new THREE.TorusGeometry(L.bumperR * 0.8, 0.13, 10, 32),
       materials.goldGlow
     );
     ring.rotation.x = Math.PI / 2;
-    ring.position.y = 0.56;
+    ring.position.y = 0.66;
     g.add(ring);
 
     const cap = new THREE.Mesh(
-      new THREE.CylinderGeometry(L.bumperR * 0.72, L.bumperR * 0.86, 0.34, 24),
+      new THREE.CylinderGeometry(L.bumperR * 0.72, L.bumperR * 0.84, 0.3, 24),
       materials.gold
     );
-    cap.position.y = 0.78;
+    cap.position.y = 1.05;
     cap.castShadow = true;
     g.add(cap);
+
+    // The printed insert on the cap top, lit from the bulb below
+    const insert = new THREE.Mesh(new THREE.CircleGeometry(L.bumperR * 0.6, 24), materials.goldGlow);
+    insert.rotation.x = -Math.PI / 2;
+    insert.position.y = 1.215;
+    g.add(insert);
 
     // The lamp bead that lives inside the cap. Small, very bright, and read
     // through the plastic — which is what gives a pop bumper its glow.
     const bead = new THREE.Mesh(
-      new THREE.SphereGeometry(L.bumperR * 0.26, 12, 8),
+      new THREE.SphereGeometry(L.bumperR * 0.24, 12, 8),
       new THREE.MeshBasicMaterial({ color: 0xfff0c0, toneMapped: false })
     );
-    bead.position.y = 1.06;
+    bead.position.y = 1.3;
     g.add(bead);
 
     const dome = new THREE.Mesh(
@@ -1941,18 +2013,26 @@ export function buildTable(THREE, mergeGeometries, materials) {
         envMapIntensity: 1.4
       })
     );
-    dome.position.y = 0.94;
+    dome.position.y = 1.2;
     dome.renderOrder = 3;
     g.add(dome);
 
     const light = new THREE.PointLight(0xf2c14e, 0, 11, 2);
-    light.position.y = 1.9;
+    light.position.y = 2.1;
     g.add(light);
 
     g.userData.keep = true;
     group.add(g);
-    refs.bumpers.push({ group: g, ring, trophy: dome, bead, light, base: 0, isTrophy: false });
+    refs.bumpers.push({
+      group: g, ring, trophy: dome, bead, light, base: 0, isTrophy: false,
+      skirt, ringY: ring.position.y, fire: 0, tiltX: 0, tiltZ: 0
+    });
   });
+  {
+    const bases = new THREE.Mesh(mergeGeometries(bumperBases, false), materials.rubber);
+    bases.receiveShadow = true;
+    group.add(bases);
+  }
 
   /* ---- Drop targets (angled banks) ----
      Real drop targets: a thin upright plate (≈5 mm), its printed face in
@@ -2156,10 +2236,12 @@ export function buildTable(THREE, mergeGeometries, materials) {
   const rampPlastic = [];
   const rampEdges = [];
   const rampStickers = [];
+  const wireGeos = [];
+  refs.rampFlaps = {};
   ['left', 'right'].forEach((side, row) => {
     const curve = rampCurve(THREE, L.ramps[side].path);
     refs.rampCurves[side] = curve;
-    group.add(buildWireform(THREE, curve, materials, RAMP_PLASTIC_T - 0.01));
+    wireGeos.push(...wireformGeometries(THREE, curve, RAMP_PLASTIC_T - 0.01));
     const parts = plasticRampParts(THREE, curve, RAMP_PLASTIC_T, row);
     rampPlastic.push(parts.plastic);
     rampEdges.push(...parts.edges);
@@ -2190,8 +2272,17 @@ export function buildTable(THREE, mergeGeometries, materials) {
     flap.rotation.x = -Math.atan2(rise, run);
     const lip = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.035, Math.hypot(run, rise) + 0.06), materials.chrome);
     flap.add(lip);
+    flap.userData.keep = true;
+    flap.userData.restX = flap.rotation.x;
     group.add(flap);
+    refs.rampFlaps[side] = flap;
   });
+  {
+    // Both habitrails, hoops and supports: one baked chrome draw
+    const wires = new THREE.Mesh(mergeGeometries(wireGeos.map((g) => (g.index ? g.toNonIndexed() : g)), false), materials.chrome);
+    wires.castShadow = true;
+    group.add(wires);
+  }
   {
     // Polycarbonate: nearly invisible face-on, bright where it turns away
     // (the env catches it), never writing depth so the ball shows through
