@@ -63,6 +63,7 @@
     <link rel="stylesheet" href="src/styles/games.css" />
     <link rel="stylesheet" href="src/styles/game-hud.css" />
     <link rel="stylesheet" href="src/styles/responsive.css" />
+    <link rel="stylesheet" href="src/styles/pages.css" />
 
     <script>
       // Temat sätts före första målningen så sidan inte blinkar: sparat val
@@ -139,7 +140,7 @@
               <span class="live-dot" aria-hidden="true"></span>
               <span>Regerande mästare</span>
               <span class="sep" aria-hidden="true"></span>
-              <span id="hero-year">—</span>
+              <a id="hero-year" class="hero-year-link" href="#/historik">—</a>
             </p>
             <h1 class="champion-name gilded" id="hero-champion">—</h1>
             <p class="champion-meta" id="hero-champion-meta">—</p>
@@ -280,10 +281,10 @@
 
         <section class="card chart-card reveal">
           <div class="card-head">
-            <h2>Medaljfördelning</h2>
-            <p class="card-sub">Guld, silver och brons per deltagare</p>
+            <h2>Medaljracet</h2>
+            <p class="card-sub">Medaljer sammanlagt, år för år. Prickarna visar när de kom. Tryck på en linje eller ett namn för att följa någon annan.</p>
           </div>
-          <div class="chart-wrap tall"><canvas id="medal-chart" role="img" aria-label="Staplat diagram: medaljer per deltagare"></canvas></div>
+          <div class="chart-wrap tall"><canvas id="medal-chart" role="img" aria-label="Linjediagram: medaljer sammanlagt per år"></canvas></div>
         </section>
       </section>
 
@@ -359,9 +360,9 @@
           <section class="card chart-card reveal">
             <div class="card-head">
               <h2>Snittplacering</h2>
-              <p class="card-sub">Genomsnitt över valda år</p>
+              <p class="card-sub">Genomsnittlig placering över valda år. Längst stapel är bäst — 1:a betyder seger varje gång. Ljusare stapel: färre än tre starter.</p>
             </div>
-            <div class="chart-wrap tall"><canvas id="avg-chart" role="img" aria-label="Stapeldiagram: snittplacering"></canvas></div>
+            <div class="chart-wrap tall"><canvas id="avg-chart" role="img" aria-label="Liggande stapeldiagram: snittplacering, bäst först"></canvas></div>
           </section>
         </div>
 
@@ -433,6 +434,12 @@
         <h2 class="section-heading" id="games-soon-heading">Kommande <small>Spelen för de här åren är inte byggda än</small></h2>
         <div class="game-soon-grid" id="game-soon-grid"></div>
       </section>
+
+      <!-- ============ ÅRETS SIDA (#/ar/<år>) — byggs av renderYearPage ============ -->
+      <section id="view-year" class="view page-view" aria-labelledby="year-title"></section>
+
+      <!-- ============ PROFIL (#/deltagare/<namn>) — byggs av renderProfile ============ -->
+      <section id="view-person" class="view page-view" aria-labelledby="person-title"></section>
     </main>
 
     <!-- Spelscen i helskärm -->
@@ -494,16 +501,6 @@
         <span>Spel</span>
       </a>
     </nav>
-
-    <!-- Modal (profil / årsdetalj) -->
-    <div class="modal-backdrop" id="modal" hidden>
-      <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-title" tabindex="-1">
-        <button class="modal-close" id="modal-close" type="button" aria-label="Stäng">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
-        </button>
-        <div id="modal-body"></div>
-      </div>
-    </div>
 
     <!-- Bibliotek -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>

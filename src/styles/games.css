@@ -50,13 +50,44 @@
   position: absolute;
   inset: 0;
   z-index: -2;
+  overflow: hidden;
+}
+
+/* Medan stillbilden laddar: en suddig miniatyr av samma bild (--blur sätts
+   per spel i GAMES), så kortet aldrig står tomt och inget hoppar */
+.game-cover::before {
+  content: '';
+  position: absolute;
+  inset: -24px;
+  background: var(--blur, none) var(--focus, 50% 50%) / cover no-repeat;
+  filter: blur(10px) saturate(1.15);
 }
 
 .game-cover img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 1.2s var(--ease-out), filter var(--t-med);
+  object-position: var(--focus, 50% 50%);
+  opacity: 0;
+  transition: opacity 0.6s var(--ease-out), transform 1.2s var(--ease-out), filter var(--t-med);
+}
+
+.game-cover.is-loaded img {
+  opacity: 1;
+}
+
+/* När bilden tonat in behövs inte miniatyren (och dess suddlager) längre */
+.game-cover.is-loaded::before {
+  visibility: hidden;
+  transition: visibility 0s linear 0.7s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-cover img {
+    transition: none;
+  }
 }
 
 .game-shade {
@@ -135,9 +166,24 @@
 }
 
 .game-info {
+  position: relative;
   display: grid;
   gap: 4px;
   max-width: 36rem;
+}
+
+/* En mörk slöja som följer textblocket, hur högt det än blir: texten håller
+   AA-kontrast även över ljusa partier i stillbilden (lampor, himmel, sjö) */
+.game-info::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  top: -3.5rem;
+  bottom: -3rem;
+  left: -100vw;
+  right: -100vw;
+  background: linear-gradient(180deg, rgba(8, 7, 5, 0), rgba(8, 7, 5, 0.5) 3.5rem);
+  pointer-events: none;
 }
 
 .game-comp {

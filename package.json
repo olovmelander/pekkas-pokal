@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "share-pages": "node scripts/share-pages.mjs dist",
     "preview": "vite preview",
     "serve": "python -m http.server 8000 --directory public",
     "serve:node": "npx http-server public -p 8000 -c-1",
