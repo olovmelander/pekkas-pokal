@@ -325,6 +325,10 @@ const FAB_FRAG_PARS = /* glsl */ `
 varying vec3 vFabP;
 varying vec3 vFabN;
 uniform float uFabScale;
+uniform vec3 uFabShL;
+uniform vec3 uFabShR;
+uniform vec3 uFabAxL;
+uniform vec3 uFabAxR;
 float fabHash(vec2 c) {
   vec3 p3 = fract(vec3(c.xyx) * 0.1031);
   p3 += dot(p3, p3.yzx + 33.33);
@@ -334,6 +338,14 @@ float fabHash(vec2 c) {
 float fabLine(float d, float L) {
   float f = max(fwidth(d), 1e-5);
   return clamp(0.5 + (L * 0.5 - d) / f, 0.0, 1.0) * min(1.0, L / f);
+}
+// A seam ring round an arm, just below the shoulder joint (sh: the joint,
+// ax: down the arm, both in the bind pose)
+float fabArmRing(vec3 p, vec3 sh, vec3 ax) {
+  vec3 q = p - sh;
+  float t = dot(q, ax);
+  float r = length(q - ax * t);
+  return fabLine(abs(t - 0.04), 0.003) * step(r, 0.085) * step(-0.02, t);
 }
 vec3 fabPerturb(vec3 surfPos, vec3 surfNorm, vec2 dHdxy, float faceDir) {
   vec3 dx = dFdx(surfPos);
@@ -362,6 +374,10 @@ float fabPhi = abs(atan(fabN.z, abs(fabN.x) + 1e-5));
 float fabTorso = step(0.93, fabP.y) * step(fabP.y, 1.31) * step(abs(fabP.x), 0.2);
 float fabLeg = step(0.47, fabP.y) * step(fabP.y, 0.88) * step(abs(fabP.x), 0.22);
 float fabSeam = fabLine(fabPhi * (fabP.y > 0.9 ? 0.15 : 0.07), 0.0035) * max(fabTorso, fabLeg) * fabOut;
+// The sleeves set into the body, and the zip down the back
+fabSeam = max(fabSeam, max(fabArmRing(fabP, uFabShL, uFabAxL), fabArmRing(fabP, uFabShR, uFabAxR)));
+float fabBack = step(fabN.z, 0.0) * step(0.95, fabP.y) * step(fabP.y, 1.5) * step(abs(fabP.x), 0.12);
+fabSeam = max(fabSeam, fabLine(abs(atan(fabN.x, -fabN.z + 1e-5)) * 0.15, 0.004) * fabBack);
 // The collar line and the piping along the top of the lamé
 float fabNeck = step(abs(fabP.x), 0.12) * step(1.47, fabP.y);
 fabSeam = max(fabSeam, fabLine(abs(fabP.y - 1.522), 0.003) * fabNeck);
@@ -381,7 +397,7 @@ fabSeam = max(fabSeam, fabLine(abs(fabP.y - 1.441), 0.004) * step(abs(fabP.x), 0
   // The lamé's stand-up collar round the neck (the jacket's own collar
   // under it): woven-metal grey, on the cloth mesh
   float fabCollar = smoothstep(1.45, 1.462, fabP.y) * (1.0 - smoothstep(0.1, 0.118, abs(fabP.x)));
-  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0, 0.0, 0.0), fabCollar);
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.34, 0.35, 0.37), fabCollar);
   fabSeam = max(fabSeam, fabLine(abs(fabP.y - 1.456), 0.004) * step(abs(fabP.x), 0.11));
   diffuseColor.rgb *= 1.0 - 0.2 * fabSeam;
 #endif`;
@@ -408,7 +424,12 @@ const FAB_NORMAL = /* glsl */ `
 }`;
 
 function fabricCompile(shader) {
-  shader.uniforms.uFabScale = this.userData.fabScale;
+  const u = this.userData;
+  shader.uniforms.uFabScale = u.fabScale;
+  shader.uniforms.uFabShL = u.fabShL;
+  shader.uniforms.uFabShR = u.fabShR;
+  shader.uniforms.uFabAxL = u.fabAxL;
+  shader.uniforms.uFabAxR = u.fabAxR;
   shader.vertexShader = shader.vertexShader
     .replace('#include <common>', `#include <common>${FAB_VERT_PARS}`)
     .replace('#include <begin_vertex>', `#include <begin_vertex>${FAB_VERT}`);
@@ -420,13 +441,35 @@ function fabricCompile(shader) {
     .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>${FAB_NORMAL}`);
 }
 
+const _bindM = new THREE.Matrix4();
+
+/** Where a bone sits in the bind pose (÷ scale) and which way it hangs. */
+function bindBone(person, name, pos, dir) {
+  const skel = person.mesh.skeleton;
+  const b = person.bones[name];
+  const i = skel && b ? skel.bones.indexOf(b) : -1;
+  if (i < 0) return;
+  _bindM.copy(skel.boneInverses[i]).invert();
+  pos.setFromMatrixPosition(_bindM).multiplyScalar(1 / person.scale);
+  dir.set(0, -1, 0).transformDirection(_bindM);
+}
+
 /** Turn one of the fencer's own materials into fabric (cloth or lamé). */
-function makeFabric(mat, scale, lame) {
-  if (!mat || mat.userData.fabScale) {
-    if (mat && mat.userData.fabScale) mat.userData.fabScale.value = scale;
-    return;
+function makeFabric(mat, person, lame) {
+  if (!mat) return;
+  const u = mat.userData;
+  if (!u.fabScale) {
+    u.fabScale = { value: 1 };
+    // Defaults far away: no ring until the bind pose is read
+    u.fabShL = { value: new THREE.Vector3(0, -9, 0) };
+    u.fabShR = { value: new THREE.Vector3(0, -9, 0) };
+    u.fabAxL = { value: new THREE.Vector3(0, -1, 0) };
+    u.fabAxR = { value: new THREE.Vector3(0, -1, 0) };
   }
-  mat.userData.fabScale = { value: scale };
+  u.fabScale.value = person.scale;
+  bindBone(person, 'upperArmL', u.fabShL.value, u.fabAxL.value);
+  bindBone(person, 'upperArmR', u.fabShR.value, u.fabAxR.value);
+  if (mat.onBeforeCompile === fabricCompile) return;
   mat.onBeforeCompile = fabricCompile;
   if (lame) mat.defines = { ...(mat.defines || {}), FAB_LAME: '' };
   mat.needsUpdate = true;
@@ -568,7 +611,7 @@ export class Fencer {
     // A new person between bouts: their grips are solved here, on the
     // bracket screen, never mid-phrase
     this.warmGrips();
-    makeFabric(p.materials.cloth, p.scale, false);
+    makeFabric(p.materials.cloth, p, false);
     const { lame } = p.materials;
     if (lame) {
       // Lamé is woven metal thread, not plate: mid-grey silver with a soft
@@ -577,7 +620,7 @@ export class Fencer {
       lame.metalness = 0.44;
       lame.envMapIntensity = 0.36;
       lame.color.setRGB(0.9, 0.91, 0.93);
-      makeFabric(lame, p.scale, true);
+      makeFabric(lame, p, true);
       lame.emissive.copy(this.flashColor);
       lame.emissiveIntensity = 0;
       this.bib.material = lame;

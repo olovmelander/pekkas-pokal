@@ -9,11 +9,13 @@
  * reel, heave, wind-up, throw, cheer …) is a target for the rod — where
  * the right fist is, which way the rod points — and every channel eases
  * there on a spring, so a throw overshoots and settles, and a strike snaps
- * the rod up with real follow-through. Both arms are then solved with
- * two-bone IK: the right fist holds the reel seat, the left hand finds the
- * fore grip, the butt, or the crank knob as it turns. The rod bends in its
- * vertex shader with the load and whips with its own angular speed, and
- * the line leaves the bent tip.
+ * the rod up with real follow-through. The rod sits in his right fist
+ * through the shared grip API (person.hold, 'power' grip): the fist on the
+ * reel seat, the reel hanging under it between the fingers. The left hand
+ * closes on the fore grip, the butt, or the crank knob as it turns — its
+ * targets blended and solved with the same API's hand frame, so no finger
+ * floats. The rod bends in its vertex shader with the load and whips with
+ * its own angular speed, and the line leaves the bent tip.
  */
 
 import * as THREE from 'three';

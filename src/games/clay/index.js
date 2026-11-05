@@ -862,6 +862,9 @@ export async function createClay(container) {
     hud.verdict.classList.remove('show');
     if (fired) {
       gallery.push({ mesh: fired.mesh, from: fired.mesh.position.clone(), to: studio.sill[gallery.length], t: 0, s0: fired.mesh.scale.x });
+      // On a phone the small pieces on the sill skip the shadow pass: four of
+      // them doubled the evening's last frame (~14k triangles each)
+      if (lowTier) fired.mesh.castShadow = false;
       fired = null;
       sfx.whoosh();
     }
@@ -1432,8 +1435,19 @@ export async function createClay(container) {
     hand.userData.k = Math.min(1, (hand.userData.k || 0) + dt * 8);
     const s = 0.86 + 0.14 * hand.userData.k;
     hand.scale.set(side * s, s, s);
+    if (o.inside) o.reach = reachOf(side, s);
     potter.pose(o);
   }
+
+  /** Inside the pot the elbow goes over its mouth, a little toward the viewer (in the hand group's space). */
+  const reachV = new THREE.Vector3();
+  function reachOf(side, s) {
+    return reachV.set((0 - hand.position.x) / (side * s), (H + 0.4 - hand.position.y) / s, (0.2 - hand.position.z) / s);
+  }
+
+  /** Where the inside hand sits: on the inner wall, behind the axis plane, so its arm crosses the mouth. */
+  const INSIDE_Z = -0.25;
+  const insideX = (j) => Math.sqrt(Math.max(0.0004, innerR(j) ** 2 - INSIDE_Z * INSIDE_Z)) - 0.03;
 
   /** Hand at the contact point, sponge while smoothing, slip thrown off. */
   function updateHands(dt, t) {
@@ -1454,10 +1468,8 @@ export async function createClay(container) {
       if (pull) {
         // Pulling out works from INSIDE the pot: fingers down the inner
         // wall, pads pressing outward, the forearm over the rim
-        handPos.set(b.side * (innerR(b.j) - 0.012) + shake, b.y, -0.12);
-        placeHand(handPos, b.side, {
-          inside: true, slope: ws.slope, curv: -ws.curv, press, t, lift: Math.max(0, H + 0.3 - b.y - 1.25)
-        }, dt);
+        handPos.set(b.side * insideX(b.j) + shake, b.y, INSIDE_Z);
+        placeHand(handPos, b.side, { inside: true, slope: ws.slope, curv: -ws.curv, press, t }, dt);
       } else {
         // Pushing in: palm and finger pads on the outer wall
         handPos.set(b.side * (shownR(b.j) + 0.01) + shake, b.y, 0.06);
@@ -1499,13 +1511,13 @@ export async function createClay(container) {
       const pull = guide.worst.sign < 0;
       const ws = wallShape(j);
       const y = (j / (N - 1)) * H;
-      if (pull) handPos.set(innerR(j) - 0.012 - reach * 0.02, y + (1 - reach) * 0.5, -0.12);
+      if (pull) handPos.set(insideX(j) - 0.02 + reach * 0.018, y, INSIDE_Z);
       else handPos.set(r[j] + 0.01 + (1 - reach) * 0.35, y, 0.06);
       hand.position.copy(handPos);
-      const s = 0.6 + 0.4 * reach;
+      const s = pull ? 1 : 0.6 + 0.4 * reach;
       hand.scale.set(s, s, s);
-      potter.pose({ inside: pull, slope: ws.slope, curv: pull ? -ws.curv : ws.curv, press: reach * 0.6, t, lift: Math.max(0, H + 0.3 - y - 1.25) });
-      hand.visible = reach > 0.05;
+      potter.pose({ inside: pull, slope: ws.slope, curv: pull ? -ws.curv : ws.curv, press: reach * 0.6, t, reach: pull ? reachOf(1, s) : null });
+      hand.visible = pull || reach > 0.05;
     } else if (!b) {
       hand.visible = false;
     }

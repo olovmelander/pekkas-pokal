@@ -779,16 +779,44 @@ function backglassTexture(THREE, logo, faceW, faceH) {
   g.fillText('FLIPPER · 2025', W / 2, tlTop + tlH * 0.78);
   g.letterSpacing = '0px';
 
-  /* ---- Speaker panel: unlit black plastic ---- */
+  /* ---- Speaker panel: printed black plastic with the castle's heraldry ---- */
   const panel = g.createLinearGradient(0, tlBot, 0, H);
-  panel.addColorStop(0, '#15172a');
-  panel.addColorStop(1, '#07080f');
+  panel.addColorStop(0, '#1b1530');
+  panel.addColorStop(0.5, '#110d20');
+  panel.addColorStop(1, '#07060f');
   g.fillStyle = panel;
   g.fillRect(0, tlBot, W, H - tlBot);
-  g.fillStyle = 'rgba(242,193,78,.75)';
+  // Faint diamond trellis, the playfield's pattern carried up into the head
+  g.save();
+  g.beginPath();
+  g.rect(0, tlBot, W, H - tlBot);
+  g.clip();
+  g.strokeStyle = 'rgba(242,193,78,.07)';
+  g.lineWidth = 2;
+  for (let k = -H; k < W + H; k += 46) {
+    g.beginPath();
+    g.moveTo(k, tlBot);
+    g.lineTo(k - (H - tlBot), H);
+    g.moveTo(k, tlBot);
+    g.lineTo(k + (H - tlBot), H);
+    g.stroke();
+  }
+  g.restore();
+  g.fillStyle = 'rgba(242,193,78,.8)';
   g.fillRect(0, tlBot - 3, W, 6);
+  // Gold rules along the bottom edge, with a diamond in the middle
+  g.fillStyle = 'rgba(242,193,78,.55)';
+  g.fillRect(W * 0.04, H - 22, W * 0.92, 3);
+  g.fillRect(W * 0.1, H - 14, W * 0.8, 1.5);
+  g.beginPath();
+  g.moveTo(W / 2, H - 32);
+  g.lineTo(W / 2 + 12, H - 20.5);
+  g.lineTo(W / 2, H - 9);
+  g.lineTo(W / 2 - 12, H - 20.5);
+  g.closePath();
+  g.fill();
 
-  // DMD well: the dark bezel the plasma sits back in
+  // DMD well: the dark bezel the plasma sits back in, edged in gold
   const mx = (dmd.w / 2 + 0.28) * u;
   const my0 = Y(dy + dmd.h / 2 + 0.28);
   const my1 = Y(dy - dmd.h / 2 - 0.28);
@@ -796,31 +824,92 @@ function backglassTexture(THREE, logo, faceW, faceH) {
   g.beginPath();
   g.roundRect(W / 2 - mx, my0, mx * 2, my1 - my0, 18);
   g.fill();
-  g.strokeStyle = 'rgba(160,170,200,.35)';
+  g.strokeStyle = 'rgba(160,170,200,.4)';
   g.lineWidth = 4;
   g.stroke();
+  g.strokeStyle = 'rgba(242,193,78,.6)';
+  g.lineWidth = 2;
+  g.beginPath();
+  g.roundRect(W / 2 - mx - 9, my0 - 9, mx * 2 + 18, my1 - my0 + 18, 24);
+  g.stroke();
 
-  // Speaker grilles either side: a ring of chrome round a field of holes
+  // Speaker grilles either side: a gold-and-chrome ring round perforated
+  // steel, a crest in the middle of each — a real speaker panel's dress
   const gx = dmd.w / 2 + (faceW / 2 - dmd.w / 2) / 2;
-  [-gx, gx].forEach((sx) => {
+  [-gx, gx].forEach((sx, side) => {
     const cx = X(sx);
     const cy = Y(dy);
     const r = Math.min(((faceW / 2 - dmd.w / 2) / 2 - 0.15) * u, (dmd.h / 2) * u);
-    g.fillStyle = '#10121e';
+    const steel = g.createRadialGradient(cx - r * 0.3, cy - r * 0.35, r * 0.1, cx, cy, r);
+    steel.addColorStop(0, '#2a2d3e');
+    steel.addColorStop(1, '#0c0d16');
+    g.fillStyle = steel;
     g.beginPath();
     g.arc(cx, cy, r, 0, Math.PI * 2);
     g.fill();
+    // Hex-staggered perforations
     g.fillStyle = '#000';
-    for (let y = -r; y <= r; y += 11) {
-      for (let x = -r; x <= r; x += 11) {
-        if (x * x + y * y < (r - 8) * (r - 8)) g.fillRect(cx + x - 2.5, cy + y - 2.5, 5, 5);
+    for (let y = -r, row = 0; y <= r; y += 9, row++) {
+      for (let x = -r + (row % 2) * 4.5; x <= r; x += 9) {
+        if (x * x + y * y < (r - 10) * (r - 10)) {
+          g.beginPath();
+          g.arc(cx + x, cy + y, 2.6, 0, Math.PI * 2);
+          g.fill();
+        }
       }
     }
-    g.strokeStyle = 'rgba(200,210,235,.6)';
-    g.lineWidth = 6;
+    // Rings: chrome outside, gold inside
+    const ring = g.createLinearGradient(cx, cy - r, cx, cy + r);
+    ring.addColorStop(0, '#f3f6ff');
+    ring.addColorStop(0.5, '#7b8199');
+    ring.addColorStop(1, '#dfe4f5');
+    g.strokeStyle = ring;
+    g.lineWidth = 9;
     g.beginPath();
     g.arc(cx, cy, r, 0, Math.PI * 2);
     g.stroke();
+    g.strokeStyle = 'rgba(242,193,78,.85)';
+    g.lineWidth = 3;
+    g.beginPath();
+    g.arc(cx, cy, r - 9, 0, Math.PI * 2);
+    g.stroke();
+    // The crest: a shield with a trophy (left) or a tower (right)
+    const s = r * 0.36;
+    g.fillStyle = '#7a1022';
+    g.strokeStyle = '#f2c14e';
+    g.lineWidth = 4;
+    g.beginPath();
+    g.moveTo(cx - s, cy - s);
+    g.lineTo(cx + s, cy - s);
+    g.lineTo(cx + s, cy + s * 0.1);
+    g.quadraticCurveTo(cx + s, cy + s, cx, cy + s * 1.4);
+    g.quadraticCurveTo(cx - s, cy + s, cx - s, cy + s * 0.1);
+    g.closePath();
+    g.fill();
+    g.stroke();
+    g.fillStyle = '#f2c14e';
+    if (side === 0) {
+      g.beginPath();
+      g.moveTo(cx - s * 0.5, cy - s * 0.6);
+      g.lineTo(cx + s * 0.5, cy - s * 0.6);
+      g.quadraticCurveTo(cx + s * 0.45, cy + s * 0.1, cx + s * 0.1, cy + s * 0.2);
+      g.lineTo(cx + s * 0.1, cy + s * 0.45);
+      g.lineTo(cx + s * 0.32, cy + s * 0.62);
+      g.lineTo(cx - s * 0.32, cy + s * 0.62);
+      g.lineTo(cx - s * 0.1, cy + s * 0.45);
+      g.lineTo(cx - s * 0.1, cy + s * 0.2);
+      g.quadraticCurveTo(cx - s * 0.45, cy + s * 0.1, cx - s * 0.5, cy - s * 0.6);
+      g.fill();
+    } else {
+      g.fillRect(cx - s * 0.4, cy - s * 0.25, s * 0.8, s * 0.9);
+      [-0.4, -0.08, 0.24].forEach((k) => g.fillRect(cx + k * s, cy - s * 0.55, s * 0.16, s * 0.32));
+      g.fillStyle = '#7a1022';
+      g.beginPath();
+      g.arc(cx, cy + s * 0.3, s * 0.15, Math.PI, 0);
+      g.lineTo(cx + s * 0.15, cy + s * 0.65);
+      g.lineTo(cx - s * 0.15, cy + s * 0.65);
+      g.fill();
+    }
   });
 
   const tex = new THREE.CanvasTexture(cv);

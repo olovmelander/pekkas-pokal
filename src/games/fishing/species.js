@@ -1,19 +1,26 @@
 /**
  * Pekkas Fiske — procedural fish.
  *
- * Every species is generated from a spine profile plus a handful of fin
- * blades. Markings — countershading, the perch's bars, the pike's pale
- * beans, the salmon's spots, a gill arc and a lateral line — are painted
- * into the vertex colours while the body is generated, so there is not a
- * single texture in the water.
+ * Every species is generated from a spine profile (a Catmull-Rom outline
+ * with its own height and width envelopes — a pinched caudal peduncle, a
+ * pike's flat duck-bill) plus its own fin layout: the perch's spiny first
+ * dorsal with its black spot and the soft second one, the pike's dorsal and
+ * anal set far back by the tail, the adipose fin and forked tail of salmon
+ * and whitefish, the roach's red fins. Markings — three-band counter-
+ * shading, the perch's bars, the pike's pale beans, the salmon's crosses,
+ * a gill arc, the lateral line, the mouth — are painted into the vertex
+ * colours, so there is not a single texture in the water.
  *
- * The body is one smooth, indexed surface with analytic normals (the old
- * three rigid links creased at every joint), and it swims in the vertex
- * shader: a travelling wave whose amplitude grows towards the tail — the
- * carangiform stroke real roach, perch and pike use. Each species is ONE
- * InstancedMesh, so the whole lake — the shoal you dodge, the decorative
- * fish around it, the far silhouettes and the schools — costs one draw call
- * per species instead of three per fish.
+ * Fins are thin membranes: rays fanned from the root, darker and nearly
+ * opaque, with paler membrane between them that thins to nothing at the
+ * trailing edge (RGBA vertex colours on a transparent, two-sided material).
+ * Silver species get a faint thin-film iridescence on their flanks.
+ *
+ * Bodies and fins swim in the vertex shader: a travelling wave whose
+ * amplitude grows towards the tail — the carangiform stroke real roach,
+ * perch and pike use. Each species is TWO InstancedMeshes (bodies, fins)
+ * sharing one instance buffer, so the whole lake costs two draw calls per
+ * species, and only the fish near the frame are drawn at all.
  */
 
 import * as THREE from 'three';
