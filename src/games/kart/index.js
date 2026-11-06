@@ -363,7 +363,7 @@ export default async function createGokart(container) {
 
   // Test hook for the browser harness: inspect and drive the race without frames.
   const snapshotDriver = (driver) => {
-    const keys = ['distance', 'lane', 'heading', 'yawRate', 'steerAngle', 'speed', 'slip', 'wheelspin', 'surface', 'skidding', 'hit', 'grip', 'slipstream', 'finishTime', 'held', 'launchPenalty'];
+    const keys = ['distance', 'lane', 'heading', 'yawRate', 'steerAngle', 'speed', 'slip', 'wheelspin', 'surface', 'skidding', 'hit', 'grip', 'slipstream', 'finishTime', 'held', 'launchPenalty', 'u', 'reversing'];
     return Object.fromEntries(keys.map((key) => [key, driver[key]]).concat(driver.name ? [['name', driver.name]] : []));
   };
   const hook = {
