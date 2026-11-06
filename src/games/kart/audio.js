@@ -228,6 +228,8 @@ export function createKartAudio(game, { trackLength = 665 } = {}) {
 
   return {
     event,
+    /** Engine speed for the rev counter. */
+    get rpm() { return rpm; },
     /** `controls` is optional ({ throttle, brake }); without it load is read from acceleration. */
     update(dt, player, opponents = [], state = 'racing', controls = null) {
       const step = clamp(finite(dt), 0, 0.1);
@@ -284,8 +286,13 @@ export function createKartAudio(game, { trackLength = 665 } = {}) {
       set(g.rustleFilter.frequency, 300 + speed * 25, t, 0.1);
 
       // Rivals: louder when close, panned by which side they are on, Doppler-ish pitch as they pass.
-      opponents.slice(0, g.rivals.length).forEach((opponent, i) => {
-        const voice = g.rivals[i];
+      g.rivals.forEach((voice, i) => {
+        const opponent = opponents[i];
+        if (!opponent || opponent.finishTime != null && Math.abs(trackGap(finite(player.distance), finite(opponent.distance), trackLength)) > 40) {
+          set(voice.level.gain, 0, t, 0.2);
+          voice.prevGap = null;
+          return;
+        }
         const oSpeed = Math.max(0, finite(opponent.speed));
         const oAccel = step > 0 ? (oSpeed - voice.speed) / step : 0;
         voice.speed = oSpeed;

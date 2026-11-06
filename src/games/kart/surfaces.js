@@ -205,8 +205,8 @@ float tSeal = 0.0;`)
     vec2 lo = vec2(0.2 + tHash(cell + 3.1) * 0.6, 0.8 + tHash(cell + 5.7) * 3.0);
     vec2 hi = lo + vec2(0.8 + tHash(cell + 9.3) * 0.9, 1.6 + tHash(cell + 1.9) * 3.5);
     vec2 inside = step(lo, f) * step(f, hi);
-    float patch = inside.x * inside.y;
-    shade = mix(shade, h < 0.08 ? 0.78 : 1.07, patch);
+    float patchMask = inside.x * inside.y;
+    shade = mix(shade, h < 0.08 ? 0.78 : 1.07, patchMask);
     vec2 toEdge = min(abs(f - lo), abs(f - hi));
     float border = max(tLine(toEdge.x, 0.025, footprint) * step(lo.y, f.y) * step(f.y, hi.y),
                        tLine(toEdge.y, 0.025, footprint) * step(lo.x, f.x) * step(f.x, hi.x));

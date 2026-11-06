@@ -260,6 +260,8 @@ export function createEffects(scene, track, { reducedMotion = false, coarse = fa
 
   return {
     burst,
+    /** Live particle counts, for tests and the debug hook. */
+    get counts() { return { soft: soft.count, hot: hot.count }; },
     /** Particles for every driver; the first driver also drives the speed overlay. */
     update(dt, drivers, camera) {
       const step = clamp(finite(dt), 0, 0.05);

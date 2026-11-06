@@ -123,7 +123,8 @@ export function createKartCamera(camera, track, { reducedMotion = false, view = 
       const before = yaw;
       yaw += wrapAngle(wishYaw - yaw) * ease(mode === 'nose' ? 30 : rig.follow, step);
       yawRate += ((step ? wrapAngle(yaw - before) / step : 0) - yawRate) * ease(6, step);
-      accel += ((step ? (speed - previousSpeed) / step : 0) - accel) * ease(5, step);
+      const measured = Number.isFinite(driver.longAccel) ? driver.longAccel : step ? (speed - previousSpeed) / step : 0;
+      accel += (measured - accel) * ease(5, step);
       accel = clamp(accel, -14, 9);
       previousSpeed = speed;
       const fast = clamp(speed / TOP_SPEED, 0, 1);

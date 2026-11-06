@@ -17,7 +17,7 @@ export function createBatch() {
       return batch.addMatrix(geometry, material, matrix, color);
     },
     addMatrix(geometry, material, m, color = null) {
-      let g = geometry.index ? geometry.toNonIndexed() : geometry.clone();
+      const g = geometry.index ? geometry.toNonIndexed() : geometry.clone();
       g.applyMatrix4(m);
       if (!g.attributes.normal) g.computeVertexNormals();
       if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
@@ -126,7 +126,7 @@ export function canvasTexture(width, height, draw, { anisotropy = 4, srgb = true
 /** A plane whose UVs cover one rectangle [u0, v0, u1, v1] of an atlas. */
 export function atlasPlane(width, height, [u0, v0, u1, v1]) {
   const geometry = new THREE.PlaneGeometry(width, height);
-  const uv = geometry.attributes.uv;
+  const { uv } = geometry.attributes;
   for (let i = 0; i < uv.count; i++) uv.setXY(i, u0 + (u1 - u0) * uv.getX(i), v0 + (v1 - v0) * uv.getY(i));
   return geometry;
 }

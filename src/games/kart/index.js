@@ -1,10 +1,13 @@
 /** Pekkas Gokart — Varggropen 2012, a three-lap arcade race at golden hour. */
-import * as THREE from 'three';
 import { createArcade } from '../shared/arcade.js';
-import { hasCommandModifier } from '../shared/keyboard.js';
 import { createCircuit, createKart } from './world.js';
 import { createKartCamera } from './camera.js';
-import { LAPS, TRACK_HALF_WIDTH, steeringFromButtons, clamp, cornerSpeed, slipstreamFactor, newDriver, stepDriver, stepRival, resolveContact, markFinish, raceStandings, raceScore, formatTime, engineFeedback } from './physics.js';
+import { createEffects } from './effects.js';
+import { createKartAudio } from './audio.js';
+import { createKartHud } from './hud.js';
+import { createKartInput } from './input.js';
+import { goldenHour, FOG_COLOR } from './atmosphere.js';
+import { LAPS, clamp, slipstreamFactor, newDriver, stepDriver, stepRival, resolveContact, markFinish, raceStandings, raceScore, formatTime } from './physics.js';
 
 export const layout = 'full';
 const RIVALS = [
@@ -18,112 +21,45 @@ const RIVALS = [
 export default async function createGokart(container) {
   const game = createArcade(container, {
     id: 'kart-2012', title: 'Pekkas Gokart', subtitle: 'VARGGROPEN · 2012',
-    accent: '#f2c05c', sky: 0xbacbc9, fog: 0xbacbc9
+    accent: '#f2c05c', sky: FOG_COLOR, fog: FOG_COLOR
   });
-  const { scene, camera, ui, keys } = game;
+  const { scene, camera } = game;
   game.root.classList.add('kart-game');
   camera.far = 550;
-  scene.fog = new THREE.Fog(0xbacbc9, 105, 285);
-  const sun = scene.children.find((object) => object.isDirectionalLight);
-  if (sun) {
-    sun.position.set(-40, 55, 30);
-    Object.assign(sun.shadow.camera, { left: -34, right: 34, top: 34, bottom: -34, far: 180 });
-    sun.shadow.camera.updateProjectionMatrix();
-  }
-  const track = createCircuit(scene, { reducedMotion: game.reducedMotion, anisotropy: Math.min(8, game.renderer.capabilities.getMaxAnisotropy()) });
+  // Golden hour: low warm sun, long shadows, warm haze, cool sky fill (atmosphere.js).
+  const light = goldenHour(game, { phone: matchMedia('(pointer: coarse)').matches });
+  const track = createCircuit(scene, { reducedMotion: game.reducedMotion, anisotropy: Math.min(8, game.renderer.capabilities.getMaxAnisotropy()), camera });
   const player = newDriver(-19, -1.3);
   const kart = createKart(0xe9b748, 6, 'Viktor Jones');
-  const engine = game.createVoice({ type: 'sawtooth', frequency: 55, gain: 0 });
-  const tires = game.createVoice({ type: 'triangle', frequency: 185, gain: 0 });
   scene.add(kart.root);
   const opponents = RIVALS.map((rival, index) => {
     const model = createKart(rival.color, index + 1, rival.full);
     scene.add(model.root);
     return { ...rival, ...newDriver(-14.5 + index * 3.4, index % 2 ? -1.5 : 1.5), model };
   });
-  const interfaceEl = document.createElement('div');
-  interfaceEl.className = 'kart-interface';
-  interfaceEl.dataset.state = 'menu';
-  interfaceEl.innerHTML = `
-    <div class="kart-race-meta"><strong data-position>6<small> / 6</small></strong><span data-lap>VARV 1 / 3</span><span data-time>0:00.0</span><span data-gap>STARTFÄLT</span></div>
-    <svg class="kart-map" viewBox="-59 -52 118 104" role="img" aria-label="Bankarta med din guldfärgade kart och motståndarna"><path></path></svg>
-    <div class="kart-countdown" role="status" aria-live="polite"></div>
-    <div class="kart-dashboard"><div class="kart-speed"><b>0</b><small>KM/H</small></div><div class="kart-grip" role="meter" aria-label="Däckgrepp" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><i></i></div><div class="kart-tip">HÅLL GAS · BROMSA FÖRE KURVAN</div></div>
-    <div class="kart-controls">
-      <div class="kart-control-group"><button type="button" data-control="left" aria-label="Styr vänster">←<small>A / ←</small></button><button type="button" data-control="right" aria-label="Styr höger">→<small>D / →</small></button></div>
-      <div class="kart-control-group"><button type="button" data-control="brake" aria-label="Bromsa"><span>BROMS</span><small>S / ↓ / ␣</small></button><button type="button" data-control="throttle" aria-label="Håll för att gasa"><span>GAS</span><small>W / ↑</small></button></div>
-    </div>`;
-  ui.appendChild(interfaceEl);
-  const find = (selector) => interfaceEl.querySelector(selector);
-  const map = find('.kart-map');
-  const { bounds } = track;
-  map.setAttribute('viewBox', `${bounds.min.x - 8} ${bounds.min.z - 8} ${bounds.max.x - bounds.min.x + 16} ${bounds.max.z - bounds.min.z + 16}`);
-  map.querySelector('path').setAttribute('d', `${Array.from({ length: 101 }, (_, i) => {
-    const point = track.sample(i / 100 * track.length).position;
-    return `${i ? 'L' : 'M'}${point.x.toFixed(1)},${point.z.toFixed(1)}`;
-  }).join(' ')} Z`);
-  const dots = [...opponents, { color: 0xffdc75 }].map((driver) => {
-    const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    dot.setAttribute('r', driver === opponents[0] ? 3.5 : 3.2);
-    dot.setAttribute('fill', `#${driver.color.toString(16).padStart(6, '0')}`);
-    map.appendChild(dot);
-    return dot;
-  });
-  dots[dots.length - 1].setAttribute('r', '4.5');
   let state = 'menu';
-  const held = new Map();
-  const pointerControls = new Map();
-  const pressed = control => [...held.values(), ...pointerControls.values()].includes(control);
-  const refreshButton = control => find(`[data-control="${control}"]`).classList.toggle('is-held', pressed(control));
-  function releasePointer(event) {
-    const control = pointerControls.get(event.pointerId);
-    if (!control) return;
-    pointerControls.delete(event.pointerId);
-    refreshButton(control);
-  }
-  interfaceEl.querySelectorAll('[data-control]').forEach((button) => {
-    game.listen(button, 'pointerdown', (event) => {
-      if (event.pointerType === 'mouse' && event.button !== 0) return;
-      if (!['racing', 'countdown'].includes(state) || game.paused) return;
-      event.preventDefault();
-      button.setPointerCapture(event.pointerId);
-      const { control } = button.dataset;
-      pointerControls.set(event.pointerId, control);
-      refreshButton(control);
-    });
-    game.listen(button, 'pointerup', releasePointer);
-    game.listen(button, 'pointercancel', releasePointer);
-    game.listen(button, 'lostpointercapture', releasePointer);
-    game.listen(button, 'keydown', (event) => {
-      if (hasCommandModifier(event)) return;
-      // Native UI is ignored by the shared keyboard listener; these are actual driving controls.
-      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'KeyA', 'KeyD', 'KeyW', 'KeyS'].includes(event.code)) {
-        if (['racing', 'countdown'].includes(state) && !game.paused) { event.preventDefault(); keys.add(event.code); }
-        return;
-      }
-      if (!['Enter', 'Space'].includes(event.code) || event.repeat || !['racing', 'countdown'].includes(state) || game.paused) return;
-      event.preventDefault();
-      held.set(event.code, button.dataset.control);
-      refreshButton(button.dataset.control);
-    });
-    game.listen(button, 'keyup', event => {
-      if (!['Enter', 'Space'].includes(event.code)) return;
-      event.preventDefault(); held.delete(event.code); refreshButton(button.dataset.control);
-    });
-    game.listen(button, 'blur', () => {
-      for (const [code, control] of held) if (control === button.dataset.control) held.delete(code);
-      refreshButton(button.dataset.control);
-    });
+  // Feel (feel.js modules): HUD, controls, particles, sound and the camera views.
+  const coarse = matchMedia('(pointer: coarse)').matches;
+  const sound = createKartAudio(game, { trackLength: track.length });
+  let shake = 0;
+  const hud = createKartHud(game, {
+    track, rivals: RIVALS,
+    onEvent(name, detail = {}) { sound.event(name, detail); if (detail.shake) shake = Math.max(shake, detail.shake); }
   });
-  function clearControls() {
-    held.clear();
-    pointerControls.clear();
-    interfaceEl.querySelectorAll('.is-held').forEach((button) => button.classList.remove('is-held'));
-  }
-  game.listen(window, 'blur', clearControls);
-  game.listen(game.root, 'arcadepause', clearControls);
-  game.listen(document, 'visibilitychange', () => { if (document.hidden) clearControls(); });
-  const chase = createKartCamera(camera, track, { reducedMotion: game.reducedMotion });
+  const interfaceEl = hud.el;
+  const effects = createEffects(scene, track, { reducedMotion: game.reducedMotion, coarse, overlay: interfaceEl });
+  let savedView = 'chase';
+  try { savedView = localStorage.getItem('pp-kart-view') === 'nose' ? 'nose' : 'chase'; } catch { /* private mode */ }
+  const chase = createKartCamera(camera, track, { reducedMotion: game.reducedMotion, view: savedView });
+  hud.setView(chase.view);
+  const input = createKartInput(game, interfaceEl, {
+    onView() {
+      const view = chase.toggleView();
+      hud.setView(view);
+      try { localStorage.setItem('pp-kart-view', view); } catch { /* private mode */ }
+    }
+  });
+  const clearControls = () => input.clear();
   let elapsed = 0;
   let countdown = 3;
   let oldCountdown = -1;
@@ -144,7 +80,7 @@ export default async function createGokart(container) {
     Object.assign(player, newDriver(-19, -1.3));
     opponents.forEach((opponent, i) => Object.assign(opponent, newDriver(-14.5 + i * 3.4, i % 2 ? -1.5 : 1.5)));
     state = 'countdown';
-    chase.reset();
+    resetFeel();
     elapsed = 0;
     countdown = 3;
     oldCountdown = -1;
@@ -197,8 +133,24 @@ export default async function createGokart(container) {
   }
 
   function updateCamera(dt, time) {
-    const focus = chase.update(player, state, dt, time);
-    game.setShadowFocus(focus.x, focus.y, focus.z);
+    const focus = chase.update(player, state, dt, time, shake);
+    shake = 0;
+    light.follow(camera, focus);
+  }
+
+  /** Feel, once per frame after physics: camera, particles, sound and HUD.
+   * The HUD derives the race moments (lights, laps, impacts, flag) from `info`. */
+  function feel(dt, time, info) {
+    input.state = info.state;
+    updateCamera(dt, time);
+    const rivalsOnTrack = info.mode === 'time' ? [] : info.opponents ?? [];
+    effects.update(dt, [info.player, ...rivalsOnTrack], camera);
+    sound.update(dt, info.player, rivalsOnTrack, info.state);
+    const controlsHint = !coarse ? 'HÅLL ↑ / W FÖR ATT KÖRA' : input.autogas ? 'AUTOGAS PÅ · DU STYR OCH BROMSAR' : 'HÅLL GAS FÖR ATT KÖRA';
+    hud.update(dt, info, { rpm: sound.rpm, controlsHint });
+  }
+  function resetFeel() {
+    chase.reset(); hud.reset(); effects.reset(); sound.reset(); input.clear();
   }
 
   positionModel(kart, player);
@@ -207,8 +159,10 @@ export default async function createGokart(container) {
   game.setHUD('VARGGROPEN · 2012', 'Pekkas Gokart', 'Tre varv. Fem rivaler. En pokal.');
   game.showPanel({
     eyebrow: '2012 · VARGGROPEN', title: 'Pekkas Gokart',
-    body: '<p>Varggropens 665 meter långa bana, varm asfalt och fem hungriga rivaler. Kör tre varv och utmana Jonas, Erik och Viktor från 2012 års pall.</p><p><strong>Styr ← → / A D. Håll ↑ / W för gas.</strong> Bromsa med ↓ / S / mellanslag före en snäv kurva. På telefon håller du GAS och styr med pilknapparna.</p><p><strong>Linjen vinner loppet.</strong> För hög fart i kurvan tappar grepp. Gå in brett, hitta innerkanten och gasa ut. Bakom en rival minskar luftmotståndet en aning.</p><p>Tre varv med gas, broms och omkörningar. Gräset och däckvallen kostar tid.</p><p><small>Bansträckningen följer klubbens flygfoto. Exakta höjder och 2012 års markeringar är tolkade.</small></p>',
-    button: 'Till startlinjen', onStart: start
+    body: `<p>Varggropens 665 meter långa bana, varm asfalt och fem hungriga rivaler från 2012 års pall.</p>${hud.setupHTML()}<p><strong>Styr ← → / A D. Håll ↑ / W för gas.</strong> Bromsa med ↓ / S / mellanslag före en snäv kurva. Släpp gasen mitt i kurvan så glider baken ut; motstyr för att fånga den. C byter kameravy.</p><p>På telefon håller du GAS och styr med pilknapparna, eller drar med tummen på vänstra halvan. Slå på AUTOGAS så håller spelet gasen åt dig.</p><p><small>Bansträckningen följer klubbens flygfoto. Exakta höjder och 2012 års markeringar är tolkade.</small></p>`,
+    button: 'Till startlinjen',
+    // eslint-disable-next-line no-undef
+    onStart: () => (typeof startRace === 'function' ? startRace(hud.readSetup()) : start())
   });
 
   game.onFrame((dt, time) => {
@@ -217,7 +171,6 @@ export default async function createGokart(container) {
       countdown -= dt;
       const digit = Math.ceil(countdown);
       if (digit !== oldCountdown) {
-        find('.kart-countdown').textContent = digit > 0 ? String(digit) : 'KÖR!';
         oldCountdown = digit;
         game.tone(digit > 0 ? 330 : 660, 0.12, 'triangle');
       }
@@ -226,10 +179,10 @@ export default async function createGokart(container) {
     let steer = 0;
     if (state === 'racing') {
       elapsed += dt;
-      if (elapsed > 0.75) find('.kart-countdown').textContent = '';
-      steer = steeringFromButtons(pressed('left') || keys.has('ArrowLeft') || keys.has('KeyA'), pressed('right') || keys.has('ArrowRight') || keys.has('KeyD'));
-      const throttle = pressed('throttle') || keys.has('ArrowUp') || keys.has('KeyW');
-      const brake = pressed('brake') || keys.has('ArrowDown') || keys.has('KeyS') || keys.has('Space');
+      const controls = input.read();
+      ({ steer } = controls);
+      const throttle = controls.throttle > 0;
+      const brake = controls.brake > 0;
       const slipstream = slipstreamFactor(player, opponents, track.length);
       skidClock += dt;
       if (player.skidding && player.speed > 6 && skidClock > 0.06) { track.skid(player.distance, player.lane); skidClock = 0; }
@@ -276,39 +229,24 @@ export default async function createGokart(container) {
       previousPosition = position;
       if (player.finishTime !== null) finish();
     }
-    const sound = engineFeedback(player.speed, {
-      active: state === 'racing', throttle: pressed('throttle') || keys.has('ArrowUp') || keys.has('KeyW'),
-      brake: pressed('brake') || keys.has('ArrowDown') || keys.has('KeyS') || keys.has('Space')
-    });
-    engine.set(sound.frequency, sound.gain);
-    tires.set(170 + player.speed * 8, state === 'racing' && player.skidding ? 0.009 : 0);
     track.update(dt, time);
     positionModel(kart, player, steer);
     kart.update(dt, time);
     opponents.forEach((opponent) => { positionModel(opponent.model, opponent); opponent.model.update(dt, time); });
-    updateCamera(dt, time);
-    if (hudClock > 0.08) {
+    feel(dt, time, {
+      state, mode: 'race', lap, laps: LAPS, elapsed, lapStarted, bestLap, lastLap,
+      lightsLit: 0, lightsOut: state === 'racing', jumpStart: false, player, opponents, position: positionOfPlayer()
+    });
+    if (hudClock > 0.5) {
       hudClock = 0;
-      const position = positionOfPlayer();
-      find('[data-position]').innerHTML = `${position}<small> / 6</small>`;
-      find('[data-lap]').textContent = `VARV ${lap} / ${LAPS}`;
-      find('[data-time]').textContent = formatTime(elapsed);
-      const ahead = raceStandings([player, ...opponents])[position - 2];
-      find('[data-gap]').textContent = ahead ? `${ahead.full.split(' ')[0]} · ${Math.max(0, ahead.distance - player.distance).toFixed(0)} M FRAMFÖR` : 'DU LEDER';
-      find('.kart-speed b').textContent = String(Math.round(player.speed * 3.6));
-      find('.kart-grip i').style.width = `${player.grip * 100}%`;
-      find('.kart-grip').setAttribute('aria-valuenow', String(Math.round(player.grip * 100)));
-      find('.kart-grip').classList.toggle('sliding', player.skidding);
-      const upcoming = cornerSpeed(track.curvature(player.distance + 10));
-      find('.kart-tip').textContent = player.speed < 1 ? 'HÅLL GAS ELLER ↑ / W FÖR ATT KÖRA' : Math.abs(player.lane) > TRACK_HALF_WIDTH ? 'GRÄS BROMSAR · TILLBAKA TILL ASFALTEN' : player.skidding ? 'GREPPET SLÄPPER · LÄTTA PÅ GASEN' : player.speed > upcoming * 1.12 ? 'BROMSA INFÖR KURVAN' : player.slipstream > 0.2 ? 'I SUGET · VÄLJ LÄGE FÖR OMKÖRNING' : 'BRA GREPP · HITTA DIN LINJE';
-      [...opponents, player].forEach((driver, i) => {
-        const point = track.sample(driver.distance).position;
-        dots[i].setAttribute('cx', String(point.x));
-        dots[i].setAttribute('cy', String(point.z));
-      });
       if (state === 'racing') game.setHUD('PEKKAS GOKART · 2012', 'Varggropen', Number.isFinite(bestLap) ? `Bästa varv ${formatTime(bestLap)}` : 'Gas · broms · hitta den rena linjen');
     }
   });
 
-  return { destroy() { clearControls(); engine.stop(); tires.stop(); track.dispose(); kart.dispose(); opponents.forEach(opponent => opponent.model.dispose()); game.destroy(); } };
+  return {
+    destroy() {
+      clearControls(); sound.destroy(); effects.dispose(); hud.destroy();
+      track.dispose(); kart.dispose(); opponents.forEach(opponent => opponent.model.dispose()); game.destroy();
+    }
+  };
 }

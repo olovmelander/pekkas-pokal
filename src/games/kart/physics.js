@@ -16,7 +16,7 @@ export const TOP_SPEED = 18.6;
 /** Sustained cornering acceleration a tidy driver reaches on asphalt. */
 export const GRIP_ACCELERATION = 11.4;
 export const GRAVITY = 9.81;
-export const KART = Object.freeze({ mass: 165, inertia: 58, front: 0.86, rear: 0.64, height: 0.4, halfWidth: 0.82, halfLength: 1.3, axleTrack: 0.88 });
+export const KART = Object.freeze({ mass: 165, inertia: 58, front: 0.86, rear: 0.64, height: 0.34, halfWidth: 0.82, halfLength: 1.3, axleTrack: 0.88 });
 export const WHEELBASE = KART.front + KART.rear;
 export const SUBSTEP = 1 / 240;
 export const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -56,12 +56,12 @@ export function laneSurface(lane, curvature = 0) {
   return side <= TRACK_HALF_WIDTH ? 'asphalt' : 'grass';
 }
 
-export function newDriver(distance = 0, lane = 0, { assist = 0.55, mass = KART.mass } = {}) {
+export function newDriver(distance = 0, lane = 0, { assist = ASSIST, mass = KART.mass } = {}) {
   return {
     distance, lane, heading: 0, yawRate: 0, steerAngle: 0, u: 0, w: 0, speed: 0, lateral: 0,
     slip: 0, frontSlip: 0, wheelspin: 0, surface: 'asphalt', skidding: false, hit: 0, grip: 1,
     slipstream: 0, finishTime: null, rumble: 0, bump: 0, wallContact: false, held: false,
-    launchPenalty: 0, assist, mass, longAccel: 0, latAccel: 0, throttle: 0, brake: 0, contact: 0
+    launchPenalty: 0, atWall: false, assist, mass, longAccel: 0, latAccel: 0, throttle: 0, brake: 0, contact: 0, stuck: 0
   };
 }
 
@@ -99,6 +99,19 @@ export function steerRate(speed) {
 }
 
 const tyre = (alpha, B) => Math.sin(TYRE_C * Math.atan(B * alpha));
+
+/** Default countersteer help: how much of the rear's slide angle the front
+ * wheels follow on their own, like a kart's caster pulling the wheel. */
+export const ASSIST = 1.2;
+
+/** Rear slide angle beyond ordinary cornering slip (rad). Countersteer
+ * follows this, so normal cornering is untouched. */
+export function slideAngle(driver) {
+  const speed = Math.hypot(driver.u || 0, driver.w || 0);
+  if (speed < 1.5) return 0;
+  const alpha = Math.atan2((driver.w || 0) - KART.rear * (driver.yawRate || 0), Math.max(Math.abs(driver.u || 0), 0.5));
+  return Math.sign(alpha) * clamp(Math.abs(alpha) - 0.08, 0, 0.6);
+}
 
 // --- Track environment --------------------------------------------------------
 const environments = new WeakMap();
@@ -158,17 +171,17 @@ function substep(driver, input, env, h) {
   const speed = Math.hypot(u, w);
   // Steering: speed-dependent limit and rate; the assist term turns the front
   // wheels a little towards the direction of travel, which is countersteer.
-  const beta = speed > 1.5 ? Math.atan2(w, Math.max(Math.abs(u), 0.5)) : 0;
   const steer = clamp(Number(input.steer) || 0, -1, 1);
-  const target = clamp(steer * steerLimit(speed) + (driver.assist ?? 0.55) * clamp(beta, -0.7, 0.7), -MAX_STEER, MAX_STEER);
-  const centring = Math.abs(target) < Math.abs(driver.steerAngle) ? 1.6 : 1;
-  const rate = steerRate(speed) * centring * h;
+  const target = clamp(steer * steerLimit(speed) + (driver.assist ?? ASSIST) * slideAngle(driver), -MAX_STEER, MAX_STEER);
+  // Unwinding and countersteering are quick hand movements; winding on is not.
+  const unwinding = Math.abs(target) < Math.abs(driver.steerAngle) || (target - driver.steerAngle) * r < 0;
+  const rate = steerRate(speed) * (unwinding ? 2.4 : 1) * h;
   driver.steerAngle += clamp(target - driver.steerAngle, -rate, rate);
   const delta = driver.steerAngle, cd = Math.cos(delta), sd = Math.sin(delta);
 
   // Load transfer from the lagged longitudinal acceleration.
   const mu = driver._mu ?? SURFACES.asphalt.grip;
-  const shift = m * driver.longAccel * KART.height / WHEELBASE;
+  const shift = m * clamp(driver.longAccel, -5, 4) * KART.height / WHEELBASE;
   const fzF = Math.max(m * GRAVITY * 0.15, m * GRAVITY * b / WHEELBASE - shift);
   const fzR = Math.max(m * GRAVITY * 0.15, m * GRAVITY * a / WHEELBASE + shift);
   const maxF = mu * FRONT.grip * fzF, maxR = mu * REAR.grip * fzR;
@@ -221,8 +234,12 @@ function substep(driver, input, env, h) {
     r = lambda * r + (1 - lambda) * rKin;
     w = lambda * w + (1 - lambda) * rKin * b;
   }
-  // A marshal's helping hand: a kart stopped facing the wrong way turns back.
-  if (now < 2.5 && Math.abs(driver.heading) > 1.7) r = -Math.sign(driver.heading) * 1.4;
+  // A marshal's helping hand: a kart stuck across the track is turned back.
+  driver.stuck = now < 1.5 && (Math.abs(driver.heading) > 0.9 || (driver.atWall && throttle > 0)) ? (driver.stuck || 0) + h : 0;
+  if (driver.stuck > 0.6) {
+    r = Math.abs(driver.heading) > 0.05 ? -Math.sign(driver.heading) * 1.6 : 0;
+    if (Math.abs(driver.lane) > TRACK_HALF_WIDTH) driver.lane -= Math.sign(driver.lane) * 0.8 * h;
+  }
   if ((brake > 0 && now < 0.2) || (throttle === 0 && now < 0.06)) u = w = r = 0;
 
   // Frenet update: d(heading)/dt = yawRate - curvature * ds/dt.
@@ -268,6 +285,7 @@ function resolveBarrier(driver, events) {
   }
   const penetration = side * driver.lane + best - (WALL_LANE + KART.halfWidth);
   if (Math.abs(driver.lane) < WALL_LANE - 0.55) driver.wallContact = false;
+  driver.atWall = penetration > -0.03;
   if (penetration <= 0) return;
   const m = driver.mass || KART.mass, I = KART.inertia * m / KART.mass;
   let [vs, vn] = trackVelocity(driver);
@@ -300,13 +318,12 @@ const RADIUS = 0.8;
  * Positional correction is split by inverse mass, so karts can run
  * wheel-to-wheel without passing through each other. */
 export function resolveContact(a, b, length, events = []) {
-  const gap = trackGap(a.distance, b.distance, length);
-  const dn = b.lane - a.lane;
-  if (Math.abs(gap) > 3.2 || Math.abs(dn) > 2.2) return false;
+  if (Math.abs(trackGap(a.distance, b.distance, length)) > 3.2 || Math.abs(b.lane - a.lane) > 2.2) return false;
   const scale = 1;
   const ca = Math.cos(a.heading), sa = Math.sin(a.heading), cb = Math.cos(b.heading), sb = Math.sin(b.heading);
   let touched = false;
   for (const xa of CIRCLES) for (const xb of CIRCLES) {
+    const gap = trackGap(a.distance, b.distance, length), dn = b.lane - a.lane;
     const ax = xa * ca, an = xa * sa, bx = gap * scale + xb * cb, bn = dn + xb * sb;
     let nx = bx - ax, nn = bn - an;
     const dist = Math.hypot(nx, nn), overlap = RADIUS * 2 - dist;

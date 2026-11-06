@@ -3,7 +3,7 @@ import * as THREE from 'three';
 /** Golden hour over Varggropen: a low warm sun from the north-west (a Swedish
  * summer evening), long shadows, a cool sky fill and warm haze. */
 export const SUN_DIRECTION = new THREE.Vector3(-0.68, 0.235, -0.62).normalize();
-export const FOG_COLOR = 0xd9b994;
+export const FOG_COLOR = 0xe2b98c;
 const SUN_DISTANCE = 140;
 
 /** Sets the shared engine's lights for golden hour and returns a shadow
@@ -11,19 +11,20 @@ const SUN_DISTANCE = 140;
 export function goldenHour(game, { phone = false } = {}) {
   const { scene, sun, ambient, fill } = game;
   scene.background = new THREE.Color(FOG_COLOR);
-  scene.fog = new THREE.Fog(FOG_COLOR, 60, 300);
+  scene.fog = new THREE.Fog(FOG_COLOR, 55, 290);
+  if (game.renderer) game.renderer.toneMappingExposure = 1.1;
   if (ambient) {
-    ambient.color.set(0x9db7d9); ambient.groundColor.set(0x6e5536); ambient.intensity = 0.62;
+    ambient.color.set(0x8fa9d2); ambient.groundColor.set(0x5e4630); ambient.intensity = 0.5;
   }
   if (fill) {
     // Cool bounce from the blue sky opposite the sun.
-    fill.color.set(0x8fb0e6); fill.intensity = 0.42;
+    fill.color.set(0x7d9fdc); fill.intensity = 0.36;
     fill.position.set(-SUN_DIRECTION.x * 30, 18, -SUN_DIRECTION.z * 30);
   }
   const reach = phone ? 26 : 32;
   if (sun) {
-    sun.color.set(0xffb874);
-    sun.intensity = 3.35;
+    sun.color.set(0xffa458);
+    sun.intensity = 3.9;
     sun.target.position.set(0, 0, 0);
     sun.position.copy(SUN_DIRECTION).multiplyScalar(SUN_DISTANCE);
     sun.target.updateMatrixWorld();
@@ -72,7 +73,7 @@ export function goldenSky({ radius = 330, reducedMotion = false } = {}) {
     side: THREE.BackSide, depthWrite: false, fog: false,
     uniforms: {
       uTime: time, uSun: { value: SUN_DIRECTION.clone() },
-      uHaze: { value: new THREE.Color(FOG_COLOR) }, uZenith: { value: new THREE.Color(0x5f8fc4) },
+      uHaze: { value: new THREE.Color(FOG_COLOR) }, uZenith: { value: new THREE.Color(0x4a7cbc) },
       uGlow: { value: new THREE.Color(0xffc27a) }
     },
     vertexShader: `varying vec3 vDirection;
@@ -91,15 +92,15 @@ export function goldenSky({ radius = 330, reducedMotion = false } = {}) {
         float azimuth = max(dot(normalize(vec3(d.x, 0.0, d.z) + 1e-5), flatSun), 0.0);
         // Haze at the horizon, blue overhead; the band is warmer towards the sun.
         vec3 c = mix(uHaze, uZenith, pow(up, 0.5));
-        c = mix(c, vec3(0.86, 0.63, 0.58), (1.0 - smoothstep(0.0, 0.28, up)) * (1.0 - azimuth) * 0.22);
+        c = mix(c, vec3(0.9, 0.62, 0.6), (1.0 - smoothstep(0.0, 0.3, up)) * (1.0 - azimuth) * 0.3);
         c += uGlow * pow(azimuth, 3.0) * (1.0 - smoothstep(0.0, 0.45, up)) * 0.5;
         c += uGlow * pow(sunDot, 12.0) * 0.55 + vec3(1.0, 0.8, 0.5) * pow(sunDot, 120.0) * 0.9;
         c += vec3(2.4, 1.9, 1.2) * smoothstep(0.9993, 0.9998, sunDot);
         // Clouds: drifting, darker on their tops away from the sun, gold-lit near it.
         vec2 p = d.xz / (up + 0.2) * 2.6 + vec2(uTime * 0.005, 0.0);
         float n = cloud(p);
-        float opacity = smoothstep(0.6, 0.78, n) * smoothstep(-0.02, 0.18, d.y) * 0.85;
-        vec3 shadowSide = vec3(0.55, 0.55, 0.66);
+        float opacity = smoothstep(0.66, 0.84, n) * smoothstep(-0.02, 0.18, d.y) * 0.8;
+        vec3 shadowSide = mix(vec3(0.72, 0.58, 0.62), vec3(0.85, 0.6, 0.45), pow(sunDot, 2.0));
         vec3 litSide = mix(vec3(1.0, 0.86, 0.68), vec3(1.0, 0.72, 0.42), pow(sunDot, 4.0));
         vec3 cloudColor = mix(shadowSide, litSide, smoothstep(0.62, 0.86, n) * 0.6 + pow(sunDot, 3.0) * 0.5);
         c = mix(c, cloudColor, opacity);
