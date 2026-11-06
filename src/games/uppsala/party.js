@@ -645,7 +645,8 @@ function createFlipCup(ctx) {
       camX += (target - camX) * (1 - Math.exp(-dt * 3));
     },
     camera(goal, lookAt, { portrait, short }) {
-      if (portrait) { goal.set(camX + 0.4, 3.0, 8.5); lookAt.set(camX, 0.76, 5.48); } else { goal.set(camX * 0.6 + 0.4, 3.1, 8.4); lookAt.set(camX * 0.6 + (short ? 0.9 : 0), 0.75, 5.45); }
+      // High enough to look down past the heads of the teammates waiting their turn.
+      if (portrait) { goal.set(camX + 0.2, 4.0, 7.9); lookAt.set(camX, 0.72, 5.45); } else { goal.set(camX * 0.6 + 0.3, 4.2, 8.0); lookAt.set(camX * 0.6 + (short ? 0.9 : 0), 0.7, 5.4); }
     },
     summary: () => `Fyra flippar på ${decimal(playerTime ?? raceTime)} s${misses ? ` med ${misses} ${misses === 1 ? 'miss' : 'missar'}` : ' utan en enda miss'}. ${won ? 'Ni slog' : 'Ni förlorade mot'} Vallgrens lag (${decimal(rivalTime ?? plan.total)} s). Tiden ger upp till 90 poäng och vinsten tio till.`,
     dispose() { clearDrops(world, drops); }
