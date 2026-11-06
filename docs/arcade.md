@@ -33,7 +33,10 @@ Three.js laddas som tidigare från CDN i den publicerade versionen.
 
 `src/games/shared/arcade.js` sköter renderingslivscykel, storleksändring,
 ljud av/på, paus, fokusförlust, lokal rekordsparning och resursstädning.
-Det bygger på spelens befintliga grafikskydd. Tunga efterbehandlingseffekter
+Det bygger på spelens befintliga grafikskydd. Om webbläsaren tappar och sedan
+lämnar tillbaka grafikkontexten, vilket en telefon gör när appen läggs i bakgrunden,
+bakas ljusmiljön om före nästa synliga bild. Start-, instruktions- och
+resultatdialoger tonar ut spelets egen HUD medan de visas. Tunga efterbehandlingseffekter
 undviks; pixeltätheten begränsas på telefon och sänks vid ihållande låg
 bildfrekvens. `?gfx=safe#/spel/2012` stänger av skuggor och antialiasering.
 

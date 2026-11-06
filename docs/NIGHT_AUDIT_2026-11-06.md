@@ -323,6 +323,60 @@ Underlag: `pass4-final-pingis-fencing/`, `pass4-final-shooting-fishing/`,
 De första mörka återställningsbilderna är bevarade i katalogerna med
 suffix `before-environment` och räknas inte som slutbilder.
 
+## Dagpasset 6 november — verifierat
+
+Utgångsläge: `8162b12`, fjärde nattpassets checkpoint. Inga senare nattpass hade
+körts när dagpasset tog över 06:20 UTC; ingen annan skribent var aktiv.
+
+| Spel/område | Förbättring och belägg |
+| --- | --- |
+| Gemensam arkadmotor (2011–2018) | Den förfiltrerade miljön bakas om efter verklig WebGL-återställning, före första synliga bild och aldrig i en dold flik. Det döda målet släpps i stället för att raderas igen, vilket annars ger WebGL-varningar. Pixeltest med riktig `WEBGL_lose_context` på en pausad bild (medel / sämsta 24 px-ruta): Ambition 13,9 / 51 → 0 / 0, triathlon 1,9 / 24 → 0 / 0. |
+| Måleri 2021, Flipper 2025, Lerskulptur 2026 | Samma ombakning, bara där miljön fortfarande används (säkert läge, saknade flyttalsmål och Måleriets vaktsteg bevaras). Flipper bakar även kulans egen miljö. En återställning under paus ritar om den frysta scenen i stället för att lämna den svart. Måleri 16,3 / 51,7 → 0 / 0, Flipper 6,2 / 60,2 → 0 / 0, Lera 16,1 / 26,5 → 0 / 0. Inga varningar under återställningen. |
+| Grafikskyddet (alla spel) | Notisen om tappad grafik säger att den kommer tillbaka och ersätts av "Grafiken är tillbaka." när webbläsaren lämnar tillbaka kontexten, i stället för att be spelaren stänga ett spel som redan fungerar. |
+| Skuggor (2011–2018) | `PCFShadowMap` i stället för borttagna `PCFSoftShadowMap`; r187-varningen i varje nytt spel är borta. |
+| Dialoger (2011–2018) | Start-, instruktions- och resultatdialoger tonar ut spelets egen HUD, instrumentpaneler och kontroller. Tidigare syntes t.ex. gokartens rubrik och triathlonets tidtagning bredvid dialogen. Resultatdialogerna innehåller hela resultatet själva. |
+| Bondespelen 2015 | Kontrollerna dockas till höger i liggande telefon, som i Gårdskampen; tavla, vedstapel och kast syns fritt. Bildkontrollerat i 844×390. |
+| Fäktning 2023 | Coachrutan ligger uppe till vänster under poängen i kort landskap. Uppmätt överlapp med fäktarnas armar/klinga vid första anfallsvarningen: 12 000 px² → 0 i både 844×390 och 667×375. Stående och dator oförändrade. |
+| Triathlon 2017 | Spelaren kan inte längre simma, springa eller cykla genom Per, Mikael och Tobias. Kropparna hålls isär efter verklig storlek per gren (simmare 0,77 × 2,22 m, löpare 0,49 × 1,19 m, cyklist 0,59 × 2,36 m) plus en liten marginal. Spelaren glider mjukt förbi på den sida hen redan ligger, eller hålls strax bakom när en sidoförflyttning skulle lämna banan, krocka med en annan rival eller ändra en ring, flaska eller bom; styr man ut släpper det direkt. Ingen fart- eller energiförlust, och läet fungerar som förut. 600 slumpade lopp i 30/60/144 Hz: synligt överlapp 154 bildrutor per lopp → 0, medeltid 96,63 → 96,69 s, inga sidoryck över 4,5 m/s. Två hela lopp i webbläsaren (1280×800, 390×844) till resultat. |
+
+### Dagpassets verifiering
+
+- **225 enhetstester i 32 filer** passerar (12 nya för triathlonets avstånd:
+  kroppsmått mot verkliga modeller, passage i varje gren, hållning vid ring,
+  oförändrat lä, 4 000 slumpfall utan NaN och ett helt skriptat lopp).
+- ESLint **0 fel** (1 315 varningar, stil/komplexitet som tidigare).
+  `npm run build` och delningssidor godkända; `git diff --check` ren.
+- **Spelbyte:** tio spel öppnade och stängda i följd i samma sida (2011–2018,
+  2019, 2025): tio WebGL-kontexter skapade och tio släppta, inga
+  kvarlämnade canvas-element, inga varningar om för många kontexter, inga sidfel.
+- **Bilder:** alla åtta nya spel i 1280×800, 390×844 och 844×390 (titel,
+  instruktion och spelläge), samt 2011, 2012, 2015 och 2018 i 320×568, öppnade
+  och granskade. En uppmätt kontroll visade att gokartens HUD och minikarta
+  inte överlappar på 320 px.
+- **Testmiljö:** webbläsarkontrollerna använder Chromium med SwiftShader via
+  ett testverktyg som serverar källträdet och lokala kopior av Three.js. I
+  denna sandlåda når Chromium inte CDN:et genom proxyn, så `npm run test:games`
+  mot produktionsbygget laddar inga spel här; det är en miljöbegränsning.
+
+### Status för nattens kö
+
+1. Fäktningens coachruta i kort landskap: **åtgärdad**. Engångsbakade miljöer
+   i de åtta nya spelen samt Måleri, Flipper och Lera: **åtgärdade och
+   bildverifierade** med verklig förlust och återställning.
+2. Fri passage genom triathlonrivaler: **åtgärdad** utan fartstraff och med
+   oförändrat lä.
+3. Granskning på 320 px och liggande telefon: **utförd**, en åtgärd (Bondespelens
+   kontroller).
+4. Resursstädning vid byte mellan spel: **kontrollerad**, ingen läcka.
+
+**Kvarstående, kända och ofarliga:** att stänga ett spel *efter* en förlorad
+kontext ger upp till cirka 250 konsolvarningar ("object does not belong to this
+context") från three.js-objekt skapade före förlusten. Det gällde redan före
+dagpasset, påverkar inte spelet och försvinner när kontexten släpps. I triathlon
+kan en rival som når en växlingslinje ovanpå spelaren vara dold upp till cirka
+0,2 s medan spelaren glider undan, och den som styr rakt in i en rivals spår
+bakifrån hålls bakom tills hen styr ut.
+
 ## Fortsättning och begränsningar
 
 ### Fynd som förs till nästa pass

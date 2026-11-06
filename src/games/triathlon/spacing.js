@@ -71,10 +71,12 @@ export function separatePlayer({ discipline, from, to, dt, rivals = [], items = 
     .sort((a, b) => Math.abs(a.distance - to.distance) - Math.abs(b.distance - to.distance));
   if (!field.length) return result;
   const lookahead = STAGES.find(leg => leg.id === discipline).speed * 1.2;
-  const upcoming = items.filter(item => !item.resolved && item.at >= from.distance && item.at <= to.distance + lookahead);
+  const upcoming = items.filter(item => !item.resolved && item.at >= from.distance
+    && item.at <= to.distance + lookahead);
   const inside = (lane, item) => Math.abs(lane - item.x) < CATCH_RADIUS[item.kind];
   const neutral = (a, b) => upcoming.every(item => inside(a, item) === inside(b, item));
-  const blocked = (lane, self) => field.some(r => r !== self && Math.abs(r.distance - to.distance) < end && Math.abs(lane - r.lane) < side - SLACK);
+  const blocked = (lane, self) => field.some(r => r !== self
+    && Math.abs(r.distance - to.distance) < end && Math.abs(lane - r.lane) < side - SLACK);
 
   let { x } = to;
   for (const r of field) {
@@ -86,13 +88,16 @@ export function separatePlayer({ discipline, from, to, dt, rivals = [], items = 
     if (previousGap >= end - SLACK) {
       // Closing from behind: only an unforced, harmless sidestep is allowed.
       const settled = r.lane + towards * side;
-      if (steer === -towards || Math.abs(settled) > COURSE_EDGE || blocked(settled, r) || !neutral(x, settled)) continue;
+      const harmless = Math.abs(settled) <= COURSE_EDGE && !blocked(settled, r) && neutral(x, settled);
+      if (steer === -towards || !harmless) continue;
     }
     const target = r.lane + towards * want;
     // Already clear last frame: follow the eased boundary. Lined up: slide
     // out, never deeper than last frame whatever the steering says.
     const wasClear = Math.abs(previousOff) >= sideRoom(discipline, previousGap) - SLACK;
-    const base = towards > 0 ? Math.max(x, Math.min(from.x, target)) : Math.min(x, Math.max(from.x, target));
+    const base = towards > 0
+      ? Math.max(x, Math.min(from.x, target))
+      : Math.min(x, Math.max(from.x, target));
     x = wasClear ? target : base + towards * Math.min(NUDGE * step, towards * (target - base));
     result.eased = true;
   }
@@ -115,9 +120,11 @@ export function separatePlayer({ discipline, from, to, dt, rivals = [], items = 
 /** At a stage start (behind the transition panel) step clear of anyone standing on the player. */
 export function clearStart(discipline, x, distance, rivals) {
   const { side, end } = clearance(discipline);
-  const near = rivals.filter(r => Number.isFinite(r.lane) && Number.isFinite(r.distance) && Math.abs(r.distance - distance) < end && Math.abs(x - r.lane) < side);
+  const near = rivals.filter(r => Number.isFinite(r.lane) && Number.isFinite(r.distance)
+    && Math.abs(r.distance - distance) < end && Math.abs(x - r.lane) < side);
   if (!near.length || !Number.isFinite(x)) return x;
   const free = lane => Math.abs(lane) <= COURSE_EDGE && near.every(r => Math.abs(lane - r.lane) >= side - SLACK);
-  const options = near.flatMap(r => [r.lane - side, r.lane + side]).filter(free).sort((a, b) => Math.abs(a - x) - Math.abs(b - x));
+  const options = near.flatMap(r => [r.lane - side, r.lane + side]).filter(free)
+    .sort((a, b) => Math.abs(a - x) - Math.abs(b - x));
   return options.length ? options[0] : x;
 }
