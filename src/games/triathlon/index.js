@@ -4,7 +4,8 @@ import { buildCourse, makeCourseItem } from './scenery.js';
 import { createAthlete } from './athlete.js';
 import { frameTriathlon } from './camera.js';
 import { RIVALS, rivalLane } from './rivals.js';
-import { STAGES, clamp, advancePace, passageLane, finishPlace, raceProgress, scoreRace, formatTime, rivalAtTime, canDraft } from './rules.js';
+import { STAGES, CATCH_RADIUS, clamp, advancePace, passageLane, finishPlace, raceProgress, scoreRace, formatTime, rivalAtTime, canDraft } from './rules.js';
+import { COURSE_EDGE, separatePlayer, clearStart } from './spacing.js';
 
 export const layout = 'full';
 
@@ -60,7 +61,7 @@ export default async function createTriathlon(container) {
   let splits = [], items = [], started = false;
   let combo = 0, bestCombo = 0, previousPlace = 1, feedbackCooldown = 0;
   let { speed } = STAGES[0];
-  let lateralSpeed = 0;
+  let lateralSpeed = 0, clock = 0;
 
   function clearInput() {
     held.clear(); pointerActions.clear();
@@ -129,7 +130,7 @@ export default async function createTriathlon(container) {
     clearInput(); stage = 0; distance = elapsed = stageStart = x = 0; stamina = 100; exhausted = false;
     slow = gates = drinks = hits = combo = bestCombo = lateralSpeed = 0; ({ speed } = STAGES[0]); previousPlace = 1; feedbackCooldown = 0; splits = []; drafting = false; started = true; state = 'race';
     athlete.reset();
-    rivals.forEach(r => { r.athlete.reset(); Object.assign(r, rivalAtTime(0, r.duration, r.strengths)); });
+    rivals.forEach(r => { r.athlete.reset(); Object.assign(r, rivalAtTime(0, r.duration, r.strengths)); r.prevDistance = r.distance; });
     controls.hidden = dashboard.hidden = false; buildItems(); game.hidePanel();
     game.setHUD(STAGES[0].name, '0:00.0', '1 / 4 · 260 m kvar');
     game.tone(392, 0.16, 'triangle'); game.toast('Starten går! Hitta din rytm.');
@@ -164,6 +165,8 @@ export default async function createTriathlon(container) {
       button: guide.button,
       onStart() {
         stage = next; distance = 0; stageStart = elapsed; slow = lateralSpeed = 0; ({ speed } = STAGES[stage]); state = 'race';
+        // Hidden by the stage change: never begin a leg standing inside a rival.
+        x = clearStart(STAGES[stage].id, x, 0, startField(clock));
         stamina = Math.min(100, stamina + 12); exhausted = stamina < 25 && exhausted;
         controls.hidden = false; buildItems(); game.hidePanel(); clearInput(); game.tone(523, 0.16, 'triangle');
       }
@@ -180,7 +183,7 @@ export default async function createTriathlon(container) {
       const crossingX = passageLane(previousDistance, distance, previousX, x, item.at);
       if (crossingX === null) continue;
       item.resolved = true;
-      if (Math.abs(crossingX - item.x) < (item.kind === 'gate' ? 0.8 : 0.85)) {
+      if (Math.abs(crossingX - item.x) < CATCH_RADIUS[item.kind]) {
         if (item.kind === 'gate') {
           gates++; combo++; bestCombo = Math.max(bestCombo, combo); stamina = Math.min(100, stamina + 9); game.toast(combo >= 3 ? `${combo} RENA RINGAR I RAD · +9 ENERGI` : 'Ren linje! +9 energi · +140'); game.tone(660, 0.08, 'sine');
         } else if (item.kind === 'drink') {
@@ -192,10 +195,31 @@ export default async function createTriathlon(container) {
     }
   }
 
+  function rivalsInLeg(time) {
+    return rivals.filter(r => r.stage === stage && !r.finished)
+      .map(r => ({ lane: rivalLane(r, time), distance: r.distance, prevDistance: r.prevDistance }));
+  }
+
+  /** Rivals in the new leg, plus anyone stepping onto its start line in the next moment. */
+  function startField(time) {
+    return rivals.filter(r => !r.finished).flatMap(r => {
+      const lane = rivalLane({ ...r, stage }, time);
+      if (r.stage === stage) return [{ lane, distance: r.distance }];
+      return rivalAtTime(elapsed + 0.4, r.duration, r.strengths).stage === stage ? [{ lane, distance: 0 }] : [];
+    });
+  }
+
+  function advanceRivals() {
+    for (const r of rivals) {
+      const before = r.stage, { distance: last } = r;
+      Object.assign(r, rivalAtTime(elapsed, r.duration, r.strengths));
+      r.prevDistance = before === r.stage ? last : r.distance;
+    }
+  }
+
   function updateRivals(dt, time) {
     drafting = false;
     for (const r of rivals) {
-      Object.assign(r, rivalAtTime(elapsed, r.duration, r.strengths));
       const delta = r.distance - distance;
       const visualLane = rivalLane(r, time);
       r.athlete.root.position.set(visualLane, 0, -delta);
@@ -207,6 +231,7 @@ export default async function createTriathlon(container) {
 
   game.onFrame((dt, time) => {
     const discipline = STAGES[stage].id;
+    clock = time;
     if (state === 'race') {
       const previousDistance = distance, previousX = x;
       drafting = rivals.some(r => canDraft(stage, distance, x, { ...r, lane: rivalLane(r, time) }));
@@ -216,8 +241,14 @@ export default async function createTriathlon(container) {
       lateralSpeed += (lateralTarget - lateralSpeed) * (1 - Math.exp(-dt * 13));
       const pace = advancePace({ stamina, exhausted, stage, surge: pressed('surge'), drafting, slow, speed }, dt, STAGES[stage].distance - distance);
       ({ stamina, exhausted, speed } = pace);
-      x = clamp(x + (lateralSpeed + current) * pace.time, -3.85, 3.85);
+      x = clamp(x + (lateralSpeed + current) * pace.time, -COURSE_EDGE, COURSE_EDGE);
       distance += pace.distance; elapsed += pace.time;
+      advanceRivals();
+      // Bodies stay apart: slide round a rival or settle just behind; no pace penalty.
+      ({ x, distance } = separatePlayer({
+        discipline, dt: pace.time, steer: direction, items, rivals: rivalsInLeg(time),
+        from: { x: previousX, distance: previousDistance }, to: { x, distance }
+      }));
       slow = Math.max(0, slow - pace.time); feedbackCooldown = Math.max(0, feedbackCooldown - pace.time);
       updateRivals(pace.time, time);
       athlete.update(discipline, pace.time, time, pace.pushing, speed);

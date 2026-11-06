@@ -50,7 +50,8 @@ export function createAthlete(scene, name, color, player = false) {
   person.bones.head.add(helmet);
   // A soft contact ring doubles as an unmistakable player marker.
   const marker = new THREE.Mesh(new THREE.RingGeometry(0.45, 0.55, 28), new THREE.MeshBasicMaterial({ color: player ? 0xf9d576 : color, transparent: true, opacity: player ? 0.7 : 0.3, side: THREE.DoubleSide }));
-  marker.rotation.x = -Math.PI / 2; marker.position.y = 0.025; root.add(marker);
+  // Passing rivals ride side by side: keep the rings 12 mm apart in height.
+  marker.rotation.x = -Math.PI / 2; marker.position.y = player ? 0.037 : 0.025; root.add(marker);
   const wake = new THREE.Group(); root.add(wake);
   const ripples = Array.from({ length: 5 }, () => {
     const ripple = new THREE.Mesh(new THREE.RingGeometry(0.44, 0.465, 26), new THREE.MeshBasicMaterial({ color: 0xd5f5e7, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false }));

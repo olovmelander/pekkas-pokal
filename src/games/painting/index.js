@@ -238,10 +238,7 @@ export async function createPainting(container) {
    * wet paint: a tiny scene of the same sky over a lawn-coloured ground,
    * prefiltered once. Fresh oil picks up the sky; bare linen does not.
    */
-  let envRT = null;
-  // PMREM renders in half floats; a GPU that cannot render to them would
-  // hand back garbage for a reflection, so it is skipped there (and in safe mode)
-  if (gfx.floatRT && !gfx.safe) {
+  function bakeEnvironment() {
     const envScene = new THREE.Scene();
     const sky = buildSky();
     envScene.add(sky);
@@ -253,16 +250,50 @@ export async function createPainting(container) {
     ground.position.y = -1;
     envScene.add(ground);
     const pmrem = new THREE.PMREMGenerator(renderer);
-    envRT = pmrem.fromScene(envScene, 0.04);
-    pmrem.dispose();
-    envScene.traverse((o) => {
-      if (o.geometry) o.geometry.dispose();
-      if (o.material) {
-        if (o.material.map) o.material.map.dispose();
-        o.material.dispose();
-      }
-    });
+    try {
+      return pmrem.fromScene(envScene, 0.04);
+    } finally {
+      pmrem.dispose();
+      envScene.traverse((o) => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) {
+          if (o.material.map) o.material.map.dispose();
+          o.material.dispose();
+        }
+      });
+    }
+  }
+  let envRT = null;
+  // PMREM renders in half floats; a GPU that cannot render to them would
+  // hand back garbage for a reflection, so it is skipped there (and in safe mode)
+  if (gfx.floatRT && !gfx.safe) {
+    envRT = bakeEnvironment();
     scene.environment = envRT.texture;
+  }
+  /*
+   * A restored WebGL context brings back the geometry and the image
+   * textures, but the prefiltered sky lived only in a render target and
+   * comes back black: the whole garden and the wet paint go dull. It is
+   * baked again before the first visible frame (never in a hidden tab), and
+   * only if the garden still uses it — safe mode and the watchdog's last
+   * step go without on purpose and stay that way.
+   */
+  let environmentRestorePending = false;
+  // ...and one frame is owed even while paused: a restored canvas is blank
+  let redrawPending = false;
+  function restoreEnvironment() {
+    const previous = envRT;
+    if (!previous) return;
+    // The old target's GPU objects died with the old context; deleting them
+    // again would only make WebGL warn. Drop the reference instead.
+    envRT = null;
+    if (scene.environment !== previous.texture) return;
+    try {
+      envRT = bakeEnvironment();
+    } catch {
+      renderer.setRenderTarget(null);
+    }
+    scene.environment = envRT ? envRT.texture : null;
   }
 
   /* World */
@@ -583,7 +614,7 @@ export async function createPainting(container) {
     if (paused || helpOpen) {
       palette.update(0);
       updateCamera(0, clock.now);
-      renderer.render(scene, camera);
+      drawFrame();
     }
   }
 
@@ -1598,13 +1629,27 @@ export async function createPainting(container) {
   timer.connect(document);
   const brushPos = new THREE.Vector3();
 
+  function drawFrame() {
+    if (environmentRestorePending && !document.hidden) {
+      environmentRestorePending = false;
+      restoreEnvironment();
+    }
+    renderer.render(scene, camera);
+    redrawPending = false;
+  }
+
   function tick() {
     raf = requestAnimationFrame(tick);
     // No rAF timestamp: update() reads performance.now(), the same clock the
     // timer was started on, so the first delta cannot come out negative
     timer.update();
     const dt = Math.min(Math.max(timer.getDelta(), 0), MAX_STEP);
-    if (!running || paused || helpOpen) return;
+    if (!running || document.hidden) return;
+    if (paused || helpOpen) {
+      // Repaint the frozen garden, without advancing anything
+      if (redrawPending) drawFrame();
+      return;
+    }
     clock.tick(dt);
     const t = clock.now;
 
@@ -1674,7 +1719,7 @@ export async function createPainting(container) {
     hat.rotation.y = Math.sin(t * 0.3) * 0.05 + Math.sin(hatHop * 14) * 0.2 * hatHop;
 
     updateCamera(dt, t);
-    renderer.render(scene, camera);
+    drawFrame();
     watchdog.afterFrame();
   }
 
@@ -1710,6 +1755,11 @@ export async function createPainting(container) {
   document.addEventListener('visibilitychange', onVisibility);
   window.addEventListener('blur', onBlur);
   window.addEventListener('focus', onFocus);
+  const onContextRestored = () => {
+    if (envRT) environmentRestorePending = true;
+    redrawPending = true;
+  };
+  renderer.domElement.addEventListener('webglcontextrestored', onContextRestored);
 
   /* ---- Debug API -------------------------------------------------------- */
 
@@ -1838,6 +1888,7 @@ export async function createPainting(container) {
     window.removeEventListener('keydown', onKeyDown);
     window.removeEventListener('blur', onBlur);
     window.removeEventListener('focus', onFocus);
+    renderer.domElement.removeEventListener('webglcontextrestored', onContextRestored);
     canvasHost.removeEventListener('pointerdown', onPointerDown);
     canvasHost.removeEventListener('pointermove', onPointerMove);
     clock.destroy();

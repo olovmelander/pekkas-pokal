@@ -7,6 +7,9 @@ export const STAGES = [
 
 export const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
+/** Sideways reach within which the player takes a ring, bottle or barrier. */
+export const CATCH_RADIUS = { gate: 0.8, drink: 0.85, obstacle: 0.85 };
+
 /** Exhaustion has hysteresis: a tiny recovery cannot immediately re-enable sprint. */
 export function paceStep({ stamina, exhausted, stage, surge, drafting = false, slow = 0 }, dt) {
   const spec = STAGES[stage];

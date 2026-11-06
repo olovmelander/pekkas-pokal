@@ -157,10 +157,20 @@ export async function createPinball(container, opts = {}) {
   // A studio box lights every metal surface evenly, which is exactly why the
   // rails used to read as grey plastic: chrome needs something bright AND
   // something dark to reflect before it looks like metal at all.
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  const envSource = machineEnvironment(THREE);
-  const envRT = pmrem.fromEquirectangular(envSource);
-  envSource.dispose();
+  let pmrem = new THREE.PMREMGenerator(renderer);
+  // Both rooms are painted on a 2D canvas, then prefiltered into a render
+  // target. A lost WebGL context takes the targets with it (see
+  // restoreEnvironments), so bake() is kept for painting them again.
+  const bake = (paint) => {
+    const source = paint(THREE);
+    try {
+      return pmrem.fromEquirectangular(source);
+    } finally {
+      source.dispose();
+    }
+  };
+  let envRT = bake(machineEnvironment);
+  let environmentRestorePending = false;
   scene.environment = envRT.texture;
   scene.environmentIntensity = 1;
 
@@ -206,9 +216,7 @@ export async function createPinball(container, opts = {}) {
   }
 
   // The ball mirrors a room made for it (see ballEnvironment)
-  const ballEnvSource = ballEnvironment(THREE);
-  const ballEnvRT = pmrem.fromEquirectangular(ballEnvSource);
-  ballEnvSource.dispose();
+  let ballEnvRT = bake(ballEnvironment);
   materials.ball.envMap = ballEnvRT.texture;
 
   // Ball mesh pool for multiball, plus parked meshes for locked balls
@@ -383,6 +391,10 @@ export async function createPinball(container, opts = {}) {
   let usePost = !gfx.safe && gfx.floatRT;
   let needsRedraw = true;
   const drawFrame = () => {
+    if (environmentRestorePending && !document.hidden) {
+      environmentRestorePending = false;
+      restoreEnvironments();
+    }
     if (usePost) composer.render();
     else renderer.render(scene, camera);
     needsRedraw = false;
@@ -3392,6 +3404,37 @@ export async function createPinball(container, opts = {}) {
   };
   document.addEventListener('visibilitychange', onVisibility);
 
+  /*
+   * A restored WebGL context brings back geometry and image textures, but
+   * both prefiltered rooms lived only in render targets and come back black:
+   * the chrome, the lacquered wood and the ball go dull. drawFrame() bakes
+   * them again before the first visible frame (never in a hidden tab), and
+   * only where they are still in use. The generator and the old targets died
+   * with the old context; deleting them again would only make WebGL warn, so
+   * they are dropped, not disposed.
+   */
+  function restoreEnvironments() {
+    let table = null;
+    let ball = null;
+    pmrem = new THREE.PMREMGenerator(renderer);
+    try {
+      table = bake(machineEnvironment);
+      ball = bake(ballEnvironment);
+    } catch {
+      renderer.setRenderTarget(null);
+      gfxNotice(container, 'Grafiken förenklades för att fungera på den här enheten.');
+    }
+    if (envRT && scene.environment === envRT.texture) scene.environment = table ? table.texture : null;
+    if (ballEnvRT && materials.ball.envMap === ballEnvRT.texture) materials.ball.envMap = ball ? ball.texture : null;
+    envRT = table;
+    ballEnvRT = ball;
+  }
+  const onContextRestored = () => {
+    if (envRT || ballEnvRT) environmentRestorePending = true;
+    needsRedraw = true;
+  };
+  renderer.domElement.addEventListener('webglcontextrestored', onContextRestored);
+
   renderBalls();
   renderMult();
   renderPokal();
@@ -3517,6 +3560,7 @@ export async function createPinball(container, opts = {}) {
     gameClock.destroy();
     ro.disconnect();
     document.removeEventListener('visibilitychange', onVisibility);
+    renderer.domElement.removeEventListener('webglcontextrestored', onContextRestored);
     canvasHost.removeEventListener('pointerdown', onPointerDown);
     canvasHost.removeEventListener('pointermove', onPointerMove);
     window.removeEventListener('pointerup', onPointerUp);
@@ -3548,8 +3592,8 @@ export async function createPinball(container, opts = {}) {
     dmd.dispose();
     fx.dispose();
     room.dispose();
-    envRT.dispose();
-    ballEnvRT.dispose();
+    envRT?.dispose();
+    ballEnvRT?.dispose();
     pmrem.dispose();
     // Passes own their materials and targets; the composer only its two
     composer.passes.forEach((pass) => pass.dispose());

@@ -322,15 +322,21 @@ export async function createClay(container) {
    * would bake a black map, so it goes without one and gets a stronger
    * sky fill instead (below).
    */
-  let envRT = null;
-  if (gfx.floatRT) {
+  function bakeEnvironment() {
     const pmrem = new THREE.PMREMGenerator(renderer);
     const envScene = buildEnvScene(studio.window);
-    envRT = pmrem.fromScene(envScene, 0.035);
+    try {
+      return pmrem.fromScene(envScene, 0.035);
+    } finally {
+      disposeScene(envScene);
+      pmrem.dispose();
+    }
+  }
+  let envRT = null;
+  if (gfx.floatRT) {
+    envRT = bakeEnvironment();
     scene.environment = envRT.texture;
     scene.environmentIntensity = 0.6;
-    disposeScene(envScene);
-    pmrem.dispose();
   }
 
   /* ---- Lights: one dominant, a couple of fills, accents ---------------- */
@@ -354,6 +360,33 @@ export async function createClay(container) {
   const front = new THREE.DirectionalLight(0xffe6c8, 0.7);
   front.position.set(3, 4, 9);
   scene.add(front);
+
+  /*
+   * A restored WebGL context brings back geometry and image textures, but
+   * the baked studio light lived only in a render target and comes back
+   * black: wet clay, glaze and the wheel's metal go dull. renderScene()
+   * bakes it again before the first visible frame (never in a hidden tab),
+   * and only if the studio still uses it.
+   */
+  let environmentRestorePending = false;
+  // ...and while paused one frame is owed: a restored canvas is blank
+  let redrawPending = false;
+  function restoreEnvironment() {
+    const previous = envRT;
+    if (!previous) return;
+    // The old target's GPU objects died with the old context; deleting them
+    // again would only make WebGL warn. Drop the reference instead.
+    envRT = null;
+    if (scene.environment !== previous.texture) return;
+    try {
+      envRT = bakeEnvironment();
+    } catch {
+      renderer.setRenderTarget(null);
+      // The same stronger sky fill a GPU without the map starts with
+      hemi.intensity = 0.85;
+    }
+    scene.environment = envRT ? envRT.texture : null;
+  }
 
   // ACCENTS: the pendant over the wheel, and a roaming light for the kiln,
   // the reveal and the window display
@@ -1312,6 +1345,11 @@ export async function createClay(container) {
   let renderReady = false;
 
   function renderScene(dt = 0) {
+    if (environmentRestorePending && !document.hidden) {
+      environmentRestorePending = false;
+      restoreEnvironment();
+    }
+    redrawPending = false;
     renderer.info.reset();
     if (usePost) composer.render(dt);
     else renderer.render(scene, camera);
@@ -1974,7 +2012,12 @@ export async function createClay(container) {
     // Active time freezes both shape physics and delayed verdict effects.
     const dt = !paused && !helpOpen && frozenNow === null ? clampDt(raw) * timeScale : 0;
     last = nowRaw;
-    if (!running || paused || helpOpen) return;
+    if (!running || document.hidden) return;
+    if (paused || helpOpen) {
+      // Repaint the frozen studio after a context restore; nothing advances
+      if (redrawPending && renderReady) renderScene(0);
+      return;
+    }
     guardFrameTime(raw);
     if (hudHost.dataset.phase !== state.phase) hudHost.dataset.phase = state.phase;
     clock.tick(dt);
@@ -2059,6 +2102,11 @@ export async function createClay(container) {
     if (!running) { clearInput(); sfx.silence(); if (!helpOpen && ['intro', 'throw', 'fire', 'judge'].includes(state.phase)) setPaused(true); } else if (paused || helpOpen) resize();
   };
   document.addEventListener('visibilitychange', onVisibility);
+  const onContextRestored = () => {
+    if (envRT) environmentRestorePending = true;
+    redrawPending = true;
+  };
+  renderer.domElement.addEventListener('webglcontextrestored', onContextRestored);
 
   renderChips();
   showStart();
@@ -2178,6 +2226,7 @@ export async function createClay(container) {
     renderReady = false;
     ro.disconnect();
     document.removeEventListener('visibilitychange', onVisibility);
+    renderer.domElement.removeEventListener('webglcontextrestored', onContextRestored);
     canvasHost.removeEventListener('pointerdown', onPointerDown);
     canvasHost.removeEventListener('pointermove', onPointerMove);
     canvasHost.removeEventListener('pointerleave', onPointerLeave);
