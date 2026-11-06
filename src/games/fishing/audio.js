@@ -16,6 +16,7 @@ export class Sfx {
   constructor() {
     this.ctx = null;
     this.muted = false;
+    this.paused = false;
     this.reelAt = 0;
     this.bubbleAt = 0;
   }
@@ -28,7 +29,7 @@ export class Sfx {
 
       // master -> depth low-pass -> soft limiter -> out
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.32;
+      this.master.gain.value = this.muted || this.paused ? 0 : 0.32;
 
       this.lp = this.ctx.createBiquadFilter();
       this.lp.type = 'lowpass';
@@ -111,6 +112,14 @@ export class Sfx {
     if (this.ctx.state === 'suspended') this.ctx.resume();
   }
 
+  setMuted(muted) { this.muted = muted; this.updateMaster(); }
+
+  setPaused(paused) { this.paused = paused; this.updateMaster(); }
+
+  updateMaster() {
+    if (this.master) this.master.gain.setTargetAtTime(this.muted || this.paused ? 0 : 0.32, this.ctx.currentTime, 0.025);
+  }
+
   /** Depth in metres drives the muffling, the drone and the noise beds. */
   setDepth(d, maxDepth, aboveWater) {
     if (!this.ctx) return;
@@ -125,7 +134,7 @@ export class Sfx {
   }
 
   tone(freq, dur, type = 'sine', gain = 0.5, sweep = 0, delay = 0, echo = false) {
-    if (!this.ctx || this.muted) return;
+    if (!this.ctx || this.muted || this.paused) return;
     const t = this.ctx.currentTime + delay;
     const osc = this.ctx.createOscillator();
     const env = this.ctx.createGain();
@@ -142,7 +151,7 @@ export class Sfx {
   }
 
   noise(dur, gain = 0.4, freq = 800, q = 1, sweepTo = 0, delay = 0) {
-    if (!this.ctx || this.muted) return;
+    if (!this.ctx || this.muted || this.paused) return;
     const t = this.ctx.currentTime + delay;
     const n = Math.max(1, Math.floor(this.ctx.sampleRate * dur));
     const buf = this.ctx.createBuffer(1, n, this.ctx.sampleRate);
@@ -197,7 +206,7 @@ export class Sfx {
 
   /** Ratcheting reel — call every frame, it rate-limits itself. */
   reelTick(speed) {
-    if (!this.ctx || this.muted) return;
+    if (!this.ctx || this.muted || this.paused) return;
     const now = this.ctx.currentTime;
     const gap = Math.max(0.022, 0.14 - speed * 0.007);
     if (now - this.reelAt < gap) return;
@@ -207,7 +216,7 @@ export class Sfx {
 
   /** Soft bubble blips while the lure sinks — rate-limited like the reel. */
   bubble() {
-    if (!this.ctx || this.muted) return;
+    if (!this.ctx || this.muted || this.paused) return;
     const now = this.ctx.currentTime;
     if (now - this.bubbleAt < 0.16 + Math.random() * 0.2) return;
     this.bubbleAt = now;
@@ -278,7 +287,7 @@ export class Sfx {
 
   /** Storlom: the long wail across a Swedish lake at midnight. */
   loon() {
-    if (!this.ctx || this.muted) return;
+    if (!this.ctx || this.muted || this.paused) return;
     const t = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
     const env = this.ctx.createGain();

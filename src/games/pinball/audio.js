@@ -14,6 +14,7 @@ export class Sfx {
   constructor() {
     this.ctx = null;
     this.muted = false;
+    this.paused = false;
   }
 
   /** Browsers only allow audio after a gesture, so the graph is built lazily. */
@@ -39,7 +40,7 @@ export class Sfx {
     comp.connect(ctx.destination);
 
     this.master = ctx.createGain();
-    this.master.gain.value = this.muted ? 0 : MASTER;
+    this.master.gain.value = this.muted || this.paused ? 0 : MASTER;
     this.master.connect(comp);
 
     // The room. A short generated impulse response puts the machine in an
@@ -87,11 +88,17 @@ export class Sfx {
 
   setMuted(m) {
     this.muted = m;
-    if (this.master) this.master.gain.setTargetAtTime(m ? 0 : MASTER, this.ctx.currentTime, 0.03);
+    this.updateMaster();
+  }
+
+  setPaused(paused) { this.paused = paused; this.updateMaster(); }
+
+  updateMaster() {
+    if (this.master) this.master.gain.setTargetAtTime(this.muted || this.paused ? 0 : MASTER, this.ctx.currentTime, 0.03);
   }
 
   live() {
-    return !!this.ctx && this.ctx.state === 'running' && !this.muted;
+    return !!this.ctx && this.ctx.state === 'running' && !this.muted && !this.paused;
   }
 
   /** Routes a voice to the dry bus and, optionally, the room. */

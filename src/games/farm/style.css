@@ -1,0 +1,52 @@
+@import '../shared/arcade.css';
+.country-game { --country-gold: #edca78; }
+.country-controls { position:absolute; z-index:3; left:50%; bottom:max(14px, env(safe-area-inset-bottom)); transform:translateX(-50%); width:min(540px, calc(100% - 28px)); padding:13px 16px 12px; border:1px solid #ead5a533; border-radius:20px; background:linear-gradient(160deg,#18241edc,#111c19ed); box-shadow:0 14px 50px #0004; backdrop-filter:blur(12px); pointer-events:auto; color:#f9f0dc; }
+.country-controls[hidden] { display:none; }
+.country-round { display:flex; flex-wrap:wrap; align-items:baseline; column-gap:12px; }
+.country-kicker { font-size:9px; letter-spacing:.16em; color:#d2ba83; }
+.country-round strong { font-family:var(--ff-serif,Georgia,serif); font-size:22px; font-weight:400; }
+.country-hint { flex-basis:100%; margin-top:3px; font-size:11px; color:#c5cebc; }
+.country-meter { position:relative; height:8px; margin-top:12px; background:#ffffff20; border-radius:8px; overflow:hidden; }
+.country-meter i { position:absolute; inset:0 auto 0 0; background:linear-gradient(90deg,#80bca6,#edd18a); border-radius:8px; }
+.country-zone { position:absolute; left:calc(var(--zone, 60%) - 5%); width:10%; height:100%; background:#fff9; z-index:1; }
+.country-meter.balance .country-zone { width:42%; left:29%; background:#96c3aa66; }
+.country-meter.balance i { background:#fff6be; z-index:2; }
+.country-readout { margin:8px 0; font-size:11px; text-align:center; color:#eee1bf; font-variant-numeric:tabular-nums; min-height:17px; }
+.country-actions { display:grid; grid-template-columns:64px 1fr 64px; gap:12px; }
+.country-actions button { min-height:48px; border:1px solid #f6df9e55; border-radius:13px; background:#f3e5be16; color:#fff8e5; font-family:inherit; font-size:23px; cursor:pointer; touch-action:none; user-select:none; -webkit-user-select:none; }
+.country-actions .country-action { background:linear-gradient(140deg,#f0d296,#c3a064); color:#242a1e; font-size:12px; font-weight:800; letter-spacing:.09em; }
+.country-actions button:hover,.country-actions button.held { filter:brightness(1.16); }
+.country-actions button:focus-visible { outline:3px solid #f9f0c6; outline-offset:3px; }
+.country-note { font-size:12px!important; line-height:1.6!important; color:#c1c1ab!important; }
+.country-event-list { display:grid; gap:8px; margin:20px auto; text-align:left; max-width:300px; }
+.country-event-list span { display:flex; gap:16px; align-items:center; padding:8px 0; border-bottom:1px solid #e8d8b222; font-size:14px; }
+.country-event-list b { color:#c8ad74; font-size:10px; letter-spacing:.12em; }
+.country-results { display:grid; grid-template-columns:1fr auto; gap:10px 25px; text-align:left; margin:20px 0; font-size:14px; }
+.country-results b { color:#ecd096; font-variant-numeric:tabular-nums; }
+@media (max-height:560px) and (min-width:600px) { .country-controls { width:min(430px,55%); padding:8px 12px; bottom:8px; } .country-hint { display:none; } .country-round strong { font-size:17px; } .country-meter { margin-top:7px; } .country-readout { margin:4px 0; } .country-actions button { min-height:40px; } .country-event-list { margin:10px auto; gap:0; } }
+@media (max-width:380px) { .country-controls { padding:10px; } .country-round strong { font-size:20px; } .country-actions { grid-template-columns:52px 1fr 52px; gap:8px; } .country-hint { font-size:10px; } }
+.farm-controls .farm-vertical { display:flex; justify-content:center; gap:8px; margin:6px 0; }
+.farm-controls .farm-vertical[hidden] { display:none; }
+.farm-controls .farm-vertical button { min-width:52px; min-height:40px; border:1px solid #e9d2a355; background:#f3e5be16; color:#fff5da; border-radius:10px; font-size:20px; touch-action:none; cursor:pointer; }
+.farm-controls .farm-single { grid-template-columns:1fr; }
+.farm-controls .farm-no-zone .country-zone { display:none; }
+.farm-controls [hidden] { display:none!important; }
+.farm-tournament .arcade-body .country-event-list { gap:3px; margin:12px auto; }
+.farm-tournament .arcade-body .country-event-list span { padding:6px 0; }
+@media(max-height:650px) { .farm-tournament .arcade-body .country-event-list { margin:7px auto; gap:0; } .farm-tournament .arcade-body .country-event-list span { padding:3px 0; font-size:12px; } .farm-controls .farm-vertical button { min-height:34px; } }
+.farm-progress { position:absolute; top:108px; left:22px; display:flex; gap:7px; pointer-events:none; }
+.farm-progress span { width:23px; height:23px; display:grid; place-items:center; border:1px solid #f5dcac66; border-radius:50%; color:#eee1bf88; background:#20332688; font-size:10px; font-weight:700; }
+.farm-progress .current { color:#2b2b19; background:#f1d18b; border-color:#ffe8ae; box-shadow:0 0 18px #ebcb7455; }
+.farm-progress .done { color:#dfefc3; border-color:#b2d58c; background:#3b5639b8; }
+.farm-controls { border-color:#f1d79b55; background:linear-gradient(150deg,#20332be8,#13241ff0); }
+.farm-controls .country-hint { min-height:15px; }
+.farm-controls .country-meter { height:10px; }
+.farm-controls .farm-perfect { box-shadow:0 0 17px #f4d78e77; }
+.farm-controls .farm-perfect i { background:#fff2bf; }
+@media(max-width:600px) { .farm-progress { top:90px; left:14px; gap:5px; } .farm-progress span { width:19px; height:19px; font-size:9px; } }
+@media(max-height:560px) and (min-width:600px) { .farm-progress { top:108px; } }
+/* Phone held sideways: dock the controls to the right like Gårdskampen, so
+   the target, the wood pile and the throws stay in the open middle */
+@media (max-height:560px) and (min-width:600px) {
+  .farm-controls { left:auto; right:14px; width:310px; transform:none; }
+}

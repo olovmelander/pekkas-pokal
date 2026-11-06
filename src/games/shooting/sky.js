@@ -213,20 +213,28 @@ export function bakeEnvironment(renderer, sky) {
   const pmrem = new THREE.PMREMGenerator(renderer);
   const envScene = new THREE.Scene();
   const prevBelow = sky.uniforms.uBelow.value.clone();
+  const prevDisk = sky.uniforms.uDisk.value;
   sky.uniforms.uBelow.value.set(0x4b5a2c);
   sky.uniforms.uDisk.value = 0.25;
   const { parent } = sky.dome;
+  const parentIndex = parent ? parent.children.indexOf(sky.dome) : -1;
   const prevPos = sky.dome.position.clone();
   sky.dome.position.set(0, 0, 0);
   envScene.add(sky.dome);
-  const rt = pmrem.fromScene(envScene, 0.02, 1, 400);
-  envScene.remove(sky.dome);
-  if (parent) parent.add(sky.dome);
-  sky.dome.position.copy(prevPos);
-  sky.uniforms.uBelow.value.copy(prevBelow);
-  sky.uniforms.uDisk.value = 1;
-  pmrem.dispose();
-  return rt;
+  try {
+    return pmrem.fromScene(envScene, 0.02, 1, 400);
+  } finally {
+    envScene.remove(sky.dome);
+    if (parent) {
+      parent.add(sky.dome);
+      parent.children.splice(parent.children.indexOf(sky.dome), 1);
+      parent.children.splice(parentIndex, 0, sky.dome);
+    }
+    sky.dome.position.copy(prevPos);
+    sky.uniforms.uBelow.value.copy(prevBelow);
+    sky.uniforms.uDisk.value = prevDisk;
+    pmrem.dispose();
+  }
 }
 
 /* ------------------------------------------------------------- depth haze */

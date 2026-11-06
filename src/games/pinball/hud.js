@@ -52,13 +52,13 @@ export function buildHud(root, { touch }) {
           <div><dt>← →</dt><dd>Flippers (även Shift, A/D)</dd></div>
           <div><dt>Mellanslag</dt><dd>Håll &amp; släpp avfyraren</dd></div>
           <div><dt>N</dt><dd>Nudga bollen mot mitten — inte för ofta</dd></div>
-          <div><dt>?</dt><dd>Strategikort</dd></div>
+          <div><dt>P / ?</dt><dd>Paus och strategikort</dd></div>
         </dl>
       </section>
 
       <div class="pbf-bottom">
         <div class="pbf-plunger" id="pbf-plunger" hidden>
-          <div class="pbf-plunger-label">${
+          <div class="pbf-plunger-label" id="pbf-plunger-label">${
   touch ? 'Håll fingret på bordet · släpp i det turkosa' : 'Håll mellanslag · släpp i det turkosa'
 }</div>
           <div class="pbf-power"><i class="pbf-skill"></i><span id="pbf-power-fill"></span></div>
@@ -73,7 +73,7 @@ export function buildHud(root, { touch }) {
         <div><span>Höger flipper</span></div>
       </div>
 
-      <button class="pbf-round pbf-info" id="pbf-info" aria-label="Strategikort">?</button>
+      <button class="pbf-round pbf-info" id="pbf-info" aria-label="Pausa och visa strategikort">?</button>
       <button class="pbf-round pbf-mute" id="pbf-mute" aria-label="Ljud på/av">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
           stroke-linecap="round" stroke-linejoin="round">
@@ -82,9 +82,9 @@ export function buildHud(root, { touch }) {
       </button>
 
       <div class="pbf-help" id="pbf-help" hidden>
-        <div class="pbf-help-card" role="dialog" aria-label="Strategikort">
+        <div class="pbf-help-card" role="dialog" aria-label="Pausa och visa strategikort">
           <h3>Strategikort</h3>
-          <p class="pbf-help-sub">Pekkas Pokal Flipper</p>
+          <p class="pbf-help-sub">Spelet är pausat · inga bollar eller bonussekunder går förlorade</p>
           <ul class="pbf-help-list">
             <li><i style="--c:#f2c14e"></i><b>Ramper</b> Kungsvägen (vänster mynning) och Vallgraven (hårt skott i höger orbit) — kedjar kombos och räknas som varv.</li>
             <li><i style="--c:#7c8cf8"></i><b>Vänster orbit</b> Snurran ger poäng per varv. Skjut den inom tre sekunder efter avfyrningen för SUPER skill shot.</li>
@@ -97,7 +97,7 @@ export function buildHud(root, { touch }) {
             <li><i style="--c:#ffd166"></i><b>Grenar &amp; Finalen</b> Varje gren har eget mål, egen klocka och lyser sina skott i grenens färg. Varje steg ger mer än det förra, och tid kvar på klockan blir tidsbonus. Klara alla fem → Finalen: 60 sekunder multiball där allt räknas ×5.</li>
           </ul>
           <p class="pbf-help-tip">Skill shot: det turkosa fältet flyttar sig för varje boll — lågt 5 000, mitten 7 500, högt 10 000. Skjut sedan vänster orbit inom tre sekunder för SUPER (15 000).</p>
-          <div class="pbf-help-keys">Flippers: skärmhalvorna, ←/→ eller Shift · Avfyrare: håll &amp; släpp / mellanslag · Nudge: N (knuffar den lägsta bollen mot mitten) · Fyra nudgar för snabbt ger TILT · Esc stänger kortet</div>
+          <div class="pbf-help-keys">Flippers: skärmhalvorna, ←/→ eller Shift · Avfyrare: håll &amp; släpp / mellanslag · Nudge: N (knuffar den lägsta bollen mot mitten) · Fyra nudgar för snabbt ger TILT · P pausar · Esc stänger kortet</div>
           <button class="pbf-btn" id="pbf-help-close">Tillbaka till spelet</button>
         </div>
       </div>
@@ -120,6 +120,7 @@ export function buildHud(root, { touch }) {
     board: $('pbf-board'),
     plunger: $('pbf-plunger'),
     powerFill: $('pbf-power-fill'),
+    plungerLabel: $('pbf-plunger-label'),
     skill: root.querySelector('.pbf-skill'),
     nudge: $('pbf-nudge'),
     zones: $('pbf-zones'),

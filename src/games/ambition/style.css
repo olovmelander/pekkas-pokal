@@ -1,0 +1,223 @@
+@import '../shared/arcade.css';
+
+.ambition-game { --amb-gold: #e2c487; --amb-ink: #102d2a; }
+.ambition-game .arcade-hud { text-shadow: 0 2px 12px #000; }
+.amb-shell { position: absolute; inset: 83px 20px 58px; display: grid; grid-template-rows: auto minmax(110px, 1fr) auto; gap: 12px; color: #faf2df; pointer-events: none; }
+.amb-shell[hidden], .amb-rulebook[hidden] { display: none; }
+.amb-shell button { font: inherit; cursor: pointer; pointer-events: auto; -webkit-tap-highlight-color: transparent; }
+.amb-shell button:focus-visible { outline: 3px solid #ffe7a8; outline-offset: 3px; }
+.amb-scoreboard { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; width: min(700px, 100%); margin: auto; }
+.amb-player { padding: 10px 13px; background: linear-gradient(145deg, #0c2224ec, #101d20d9); border: 1px solid #c7aa7059; border-radius: 13px; box-shadow: 0 6px 25px #0002; }
+.amb-player.you { background: linear-gradient(145deg, #25574ae6, #0a2a28e6); border-color: #e2c487b3; }
+.amb-player.thinking { box-shadow: 0 0 0 1px #e2c487, 0 0 24px #e2c48725; }
+.amb-player > span { display: block; font-size: 12px; color: #f0d7a9; letter-spacing: .05em; }
+.amb-player strong { display: block; font-size: 24px; font-variant-numeric: tabular-nums; line-height: 1.25; font-weight: 600; }
+.amb-player strong small { font-size: 10px; font-weight: 400; color: #d2d4c8; }
+.amb-player i { display: block; font-size: 10px; color: #b8c6bb; font-style: normal; }
+.amb-center { display: grid; place-items: center; min-height: 0; position: relative; }
+.amb-pass-note { text-align: center; padding: 14px 28px; border-radius: 20px; text-shadow: 0 2px 14px #000; background: radial-gradient(ellipse, #092b29cb, #092b2900 72%); }
+.amb-emblem { color: var(--amb-gold); font-size: 40px; line-height: 1; filter: drop-shadow(0 4px 7px #0008); }
+.amb-pass-note h2, .amb-summary h2, .amb-rulebook h2 { font-family: var(--ff-serif, Georgia, serif); font-weight: 400; font-style: italic; font-size: clamp(23px, 3.3vw, 38px); line-height: 1.1; margin: 9px 0; color: #ffe9bc; }
+.amb-pass-note p { font-size: 13px; line-height: 1.65; color: #f1e7cf; }
+.amb-pass-counter { color: var(--amb-gold); font-size: 26px; margin-top: 10px; font-variant-numeric: tabular-nums; }
+.amb-pass-counter span { color: #d5d9cc; font-size: 12px; }
+.amb-trick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; width: min(520px, 92%); }
+.amb-trick-seat { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 9px; }
+.amb-trick-seat > span { font-size: 12px; letter-spacing: .04em; color: #e7d9b7; text-shadow: 0 1px 8px #000; }
+.amb-card { position: relative; width: 100%; max-width: 106px; aspect-ratio: 0.7; display: block; color: #17303a; background: radial-gradient(ellipse at 25% 15%, #fffdf7, #f5ecd6 75%); border: 1px solid #d8ccae; border-radius: 8px; box-shadow: 0 4px 0 #c4b69a, 0 9px 16px #0006; font-family: Georgia, serif; text-align: left; user-select: none; transform: translateY(0); transition: transform .2s ease, box-shadow .2s ease, opacity .2s ease; padding: 0; }
+.amb-card.red { color: #b33a44; }
+.amb-corner { position: absolute; top: 6px; left: 7px; line-height: .92; text-align: center; font-size: 23px; font-weight: bold; }
+.amb-corner i { display: block; font-size: 17px; line-height: 1.1; font-style: normal; }
+.amb-corner.bottom { top: auto; left: auto; bottom: 6px; right: 7px; transform: rotate(180deg); }
+.amb-pip { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -48%); font-size: 44px; }
+.amb-card-value { position: absolute; right: 5px; top: 6px; font: 600 10px/1.2 var(--font-body, sans-serif); color: #605a45; }
+.amb-card.selected { transform: translateY(-11px); border-color: #ffe4a5; box-shadow: 0 0 0 2px #e5bd68, 0 12px 25px #0008; background: #fff0c9; }
+.amb-card:disabled { cursor: default; opacity: .43; filter: saturate(.4); }
+.amb-card:not(:disabled):hover { transform: translateY(-6px); }
+.amb-card.selected:hover { transform: translateY(-13px); }
+.amb-back { background: repeating-linear-gradient(45deg, #284f4b 0, #284f4b 4px, #37675c 4px, #37675c 5px); border: 5px solid #f6e9cd; display: grid; place-items: center; }
+.amb-back span { font-family: var(--ff-serif, Georgia, serif); color: #e1c58c; border: 1px solid #d5bd7899; border-radius: 50%; width: 52px; height: 62px; display: grid; place-items: center; font-size: 22px; font-style: italic; }
+.amb-card-slot { width: 100%; max-width: 106px; aspect-ratio: .7; border: 1px dashed #e0c89363; border-radius: 9px; display: grid; place-items: center; font-size: 36px; color: #e0c89338; background: #082b292e; }
+.amb-trick-seat.winner .amb-card { transform: translateY(-10px); box-shadow: 0 0 0 2px #ecc77b, 0 0 35px #e6bf6f80, 0 14px 25px #0006; }
+.amb-trick-seat.winner > span { color: #fff2c9; }
+.amb-bottom { width: min(930px, 100%); margin: 0 auto; min-width: 0; background: linear-gradient(180deg, #102a28c9, #061c1bea); padding: 12px 15px 8px; border: 1px solid #d4b57859; border-radius: 18px; box-shadow: 0 10px 40px #0005; }
+.amb-status { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 17px; min-height: 32px; font-size: 13px; color: #f9e7bc; }
+.amb-help-button, .amb-secondary { border: 1px solid #d5bc8363; background: #173d35; color: #f3e5c6; border-radius: 9px; padding: 9px 12px; white-space: nowrap; min-height: 40px; }
+.amb-help-button { font-size: 11px !important; }
+.amb-hand { display: flex; justify-content: center; gap: 7px; padding: 0 0 8px; }
+.amb-hand .amb-card { flex: 1 1 0; min-width: 0; max-width: 62px; }
+.amb-hand .amb-corner { font-size: 17px; left: 5px; top: 6px; }
+.amb-hand .amb-corner i { font-size: 13px; }
+.amb-hand .amb-corner.bottom { right: 5px; bottom: 5px; left: auto; top: auto; }
+.amb-hand .amb-pip { font-size: 28px; }
+.amb-hand .amb-card-value { font-size: 8px; top: 4px; right: 4px; }
+.amb-primary { border: 1px solid #f2d798; color: #1c271b; background: linear-gradient(140deg, #f4db9e, #d1a95b); box-shadow: inset 0 1px #fff7d9, 0 4px 12px #0003; padding: 11px 20px; min-height: 44px; border-radius: 10px; font-weight: 700 !important; }
+.amb-primary:disabled { opacity: .45; cursor: default; }
+.amb-pass-actions { display: flex; justify-content: center; gap: 9px; margin-top: 9px; font-size: 13px; }
+.amb-footnote { font-size: 10px; line-height: 1.45; color: #b7c7b9; text-align: center; margin-top: 7px; }
+.amb-eyebrow { font-size: 10px; letter-spacing: .18em; color: #d8bb80; }
+.amb-summary { pointer-events: auto; width: min(500px, 100%); padding: 22px 25px; background: linear-gradient(140deg, #133a34f5, #102421f5); border: 1px solid #d6b87196; box-shadow: 0 22px 90px #0009; border-radius: 20px; text-align: center; }
+.amb-summary p { font-size: 12px; line-height: 1.6; color: #d3ddcf; margin: 12px 0; }
+.amb-results { display: grid; gap: 4px; margin: 15px 0; text-align: left; }
+.amb-results > div { display: grid; grid-template-columns: 1fr 1fr .5fr 1fr; gap: 8px; padding: 8px; border-radius: 7px; font-size: 12px; background: #ffffff06; align-items: center; }
+.amb-results .you { background: #d3b17120; color: #ffe3a5; }
+.amb-results b { font-size: 11px; text-align: right; }
+.amb-rulebook { position: absolute; inset: 0; margin: auto; z-index: 15; pointer-events: auto; overflow-y: auto; width: min(540px, 100%); max-height: 100%; height: fit-content; padding: 26px; color: #f3e8cd; background: #102d2bf9; border: 1px solid #cba86b; border-radius: 20px; box-shadow: 0 0 0 100vmax #0009; }
+.amb-rulebook p, .amb-rulebook li { font-size: 13px; line-height: 1.65; }
+.amb-rulebook p { margin: 12px 0; }
+.amb-rulebook ol { padding-left: 20px; margin: 15px 0; }
+.amb-rulebook li { padding-left: 4px; margin: 8px 0; }
+.amb-rulebook b { color: #f1cf87; }
+.amb-rule-close { position: absolute; right: 10px; top: 8px; width: 40px; height: 40px; font-size: 25px !important; color: #edd8ac; background: transparent; border: 0; }
+.amb-table-play { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; gap: 13px; }
+.amb-pot { display: flex; gap: 18px; align-items: center; padding: 8px 16px; border: 1px solid #e4c78f42; border-radius: 30px; background: #0b2725ca; text-shadow: 0 2px 5px #0004; }
+.amb-pot > span { color: #e8cc93; font-size: 9px; letter-spacing: .1em; }
+.amb-pot strong { font-size: 19px; font-variant-numeric: tabular-nums; }
+.amb-pot small { font-size: 9px; font-weight: normal; color: #d0d8c8; }
+.amb-collect { border: 1px solid #e4c78f73; border-radius: 30px; background: #153f32e8; color: #ffe1a1; padding: 10px 17px; min-height: 40px; font-size: 11px !important; }
+.amb-decision { display: flex; align-items: center; gap: 14px; padding-top: 10px; margin-top: 4px; border-top: 1px solid #e1d4a825; }
+.amb-position { flex: 1; min-width: 0; text-align: left; border-left: 2px solid #7eaaab; padding-left: 10px; }
+.amb-position.gold { border-color: #ead18f; }
+.amb-position.risk { border-color: #f49b87; }
+.amb-position strong { display: block; color: #d4e6db; font-size: 11px; }
+.amb-position.gold strong { color: #f4dba4; }
+.amb-position.risk strong { color: #ffbaa4; }
+.amb-position span { display: block; font-size: 10px; line-height: 1.5; color: #bfcfc2; margin-top: 3px; }
+.amb-play-card { flex: 0 0 auto; padding: 10px 18px; min-width: 118px; font-size: 12px !important; }
+.amb-your-turn .amb-bottom { border-color: #ebcb7e99; }
+.amb-journey { display: flex; gap: 8px; justify-content: center; margin: 12px 0; }
+.amb-journey span { min-width: 68px; padding: 8px 12px; background: #e9c8830c; border: 1px solid #e9c88330; border-radius: 9px; }
+.amb-journey small { display: block; color: #b8c5b8; font-size: 8px; letter-spacing: .1em; }
+.amb-journey b { display: block; color: #f2d597; font: 23px var(--ff-serif, Georgia, serif); }
+
+@media (max-width: 600px) {
+  .amb-shell { inset: 78px 8px 55px; gap: 8px; }
+  .amb-scoreboard { gap: 4px; }
+  .amb-player { padding: 7px 6px; border-radius: 9px; }
+  .amb-player > span { font-size: 11px; }
+  .amb-player strong { font-size: 20px; }
+  .amb-player strong small { font-size: 8px; }
+  .amb-player i { font-size: 9px; white-space: nowrap; }
+  .amb-player > span::after { content: ''; }
+  .amb-trick { gap: 9px; width: min(360px, 96%); }
+  .amb-trick-seat { gap: 5px; }
+  .amb-trick-seat > span { font-size: 10px; }
+  .amb-trick .amb-card, .amb-card-slot { max-width: 72px; }
+  .amb-corner { font-size: 19px; left: 5px; top: 5px; }
+  .amb-corner i { font-size: 14px; }
+  .amb-pip { font-size: 30px; }
+  .amb-corner.bottom { right: 5px; bottom: 5px; }
+  .amb-card-value { font-size: 8px; right: 4px; top: 5px; }
+  .amb-back span { width: 36px; height: 45px; font-size: 17px; }
+  .amb-bottom { padding: 8px 7px 6px; border-radius: 13px; }
+  .amb-hand { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 12px 4px; padding: 0 2px 5px; }
+  .amb-hand .amb-card { min-height: 65px; max-width: 65px; aspect-ratio: .68; border-radius: 5px; }
+  .amb-hand .amb-corner { font-size: 15px; left: 3px; top: 4px; }
+  .amb-hand .amb-corner i { font-size: 12px; }
+  .amb-hand .amb-corner.bottom { display: none; }
+  .amb-hand .amb-pip { font-size: 22px; top: 66%; }
+  .amb-hand .amb-card-value { font-size: 7px; right: 3px; top: 4px; }
+  .amb-status { font-size: 11px; margin-bottom: 13px; gap: 6px; }
+  .amb-help-button { min-height: 36px; padding: 8px 10px; }
+  .amb-pass-actions { margin-top: 7px; font-size: 11px; }
+  .amb-pass-actions button { padding: 9px 12px; }
+  .amb-pass-note { padding: 0 12px; }
+  .amb-emblem { font-size: 26px; }
+  .amb-pass-note h2 { font-size: 24px; margin: 5px 0; }
+  .amb-pass-note p { font-size: 11px; }
+  .amb-pass-counter { font-size: 23px; margin-top: 4px; }
+  .amb-footnote { font-size: 9px; }
+  .amb-summary { padding: 17px 12px; }
+  .amb-summary h2 { font-size: 27px; }
+  .amb-results > div { font-size: 11px; gap: 4px; padding: 7px 4px; }
+  .amb-results b { font-size: 10px; }
+  .amb-rulebook { padding: 22px 18px; }
+  .amb-table-play { gap: 9px; }
+  .amb-pot { gap: 10px; padding: 6px 12px; }
+  .amb-pot > span { font-size: 8px; }
+  .amb-pot strong { font-size: 15px; }
+  .amb-pot small { font-size: 8px; }
+  .amb-decision { gap: 7px; padding-top: 7px; }
+  .amb-position strong { font-size: 10px; }
+  .amb-position span { font-size: 9px; }
+  .amb-play-card { min-width: 91px; padding: 8px; font-size: 11px !important; }
+  .amb-your-turn .amb-footnote { display: none; }
+  .amb-result .amb-center { overflow-y: auto; }
+}
+
+@media (max-height: 560px) and (min-width: 601px) {
+  .ambition-game .arcade-hud { display: grid; grid-template-columns: auto auto; align-items: center; gap: 3px 7px; }
+  .ambition-game .arcade-hud .arcade-label { font-size: 8px; }
+  .ambition-game .arcade-hud .arcade-value { font-size: 25px; }
+  .ambition-game .arcade-hud .arcade-detail { grid-column: 1 / -1; font-size: 10px; }
+  .amb-shell { inset: 58px 14px 42px; grid-template-columns: 130px 1fr; grid-template-rows: minmax(80px, 1fr) auto; gap: 7px 15px; }
+  .amb-scoreboard { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; align-self: center; }
+  .amb-player { padding: 5px; }
+  .amb-player strong { font-size: 18px; }
+  .amb-player strong small, .amb-player i { display: none; }
+  .amb-center { grid-column: 2; grid-row: 1; }
+  .amb-bottom { grid-column: 1 / -1; grid-row: 2; padding: 5px 10px; display: grid; grid-template-columns: 145px 1fr; gap: 5px 9px; align-items: center; }
+  .amb-status { margin: 0; font-size: 10px; flex-wrap: wrap; }
+  .amb-hand { gap: 5px; padding: 4px 0; }
+  .amb-hand .amb-card { max-width: 42px; }
+  .amb-hand .amb-corner { font-size: 14px; }
+  .amb-hand .amb-corner.bottom { display: none; }
+  .amb-hand .amb-pip { font-size: 21px; top: 65%; }
+  .amb-footnote { display: none; }
+  .amb-pass-actions { grid-column: 1 / -1; margin: 0; }
+  .amb-pass-actions button { min-height: 34px; padding: 6px 12px; font-size: 11px; }
+  .amb-trick { max-width: 340px; gap: 14px; }
+  .amb-trick .amb-card, .amb-card-slot { max-width: 54px; }
+  .amb-trick .amb-corner { font-size: 16px; }
+  .amb-trick .amb-corner.bottom { display: none; }
+  .amb-trick .amb-pip { font-size: 24px; top: 65%; }
+  .amb-pass-note h2 { font-size: 25px; margin: 2px 0; }
+  .amb-pass-note p { font-size: 11px; }
+  .amb-pass-note .amb-emblem { display: none; }
+  .amb-pass-counter { font-size: 20px; margin: 2px; }
+  .amb-summary { padding: 10px 18px; max-height: 100%; overflow-y: auto; }
+  .amb-summary h2 { font-size: 24px; margin: 3px 0; }
+  .amb-results { margin: 5px 0; gap: 2px; }
+  .amb-results > div { padding: 4px; }
+  .amb-summary p { margin: 4px 0; font-size: 10px; }
+  .amb-summary .amb-primary { min-height: 34px; padding: 7px 14px; font-size: 12px; }
+  .amb-table-play { gap: 5px; }
+  .amb-pot { padding: 3px 10px; gap: 8px; }
+  .amb-pot strong { font-size: 13px; }
+  .amb-pot > span, .amb-pot small { font-size: 8px; }
+  .amb-collect { min-height: 28px; padding: 4px 12px; font-size: 10px !important; }
+  .amb-decision { grid-column: 1 / -1; margin: 0; padding-top: 4px; }
+  .amb-position span { display: inline; font-size: 9px; }
+  .amb-position strong { display: inline; margin-right: 9px; font-size: 10px; }
+  .amb-play-card { min-height: 36px; padding: 6px 12px; }
+  .amb-journey { margin: 5px 0; }
+  .amb-journey span { padding: 4px 10px; }
+  .amb-journey b { font-size: 18px; }
+}
+
+@media (max-width: 600px) and (max-height: 700px) {
+  .amb-shell { bottom: max(12px, env(safe-area-inset-bottom)); grid-template-rows: auto minmax(60px, 1fr) auto; gap: 6px; }
+  .amb-player { padding: 5px 6px; }
+  .amb-pass-note .amb-emblem, .amb-pass-note p { display: none; }
+  .amb-pass-note h2 { font-size: 22px; margin: 2px; }
+  .amb-pass-counter { font-size: 21px; }
+  .amb-hand .amb-card { min-height: 58px; }
+  .amb-trick .amb-card, .amb-card-slot { max-width: 54px; }
+  .amb-trick .amb-corner.bottom { display: none; }
+  .amb-trick .amb-pip { font-size: 25px; top: 66%; }
+  .amb-trick-seat { gap: 3px; }
+  .amb-summary { max-height: 100%; overflow-y: auto; }
+  .amb-table-play { gap: 4px; }
+  .amb-pot { padding: 3px 8px; }
+  .amb-pot strong { font-size: 12px; }
+  .amb-pot small { display: none; }
+  .amb-collect { min-height: 27px; padding: 3px 10px; font-size: 9px !important; }
+  .amb-decision { padding-top: 5px; }
+  .amb-position span { font-size: 8px; }
+  .amb-play-card { min-height: 44px; }
+  .amb-result .amb-journey { margin: 6px 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .amb-card { transition: none; }
+}

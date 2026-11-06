@@ -12,9 +12,11 @@ export class Sfx {
   constructor() {
     this.ctx = null;
     this.muted = false;
+    this.paused = false;
   }
 
   resume() {
+    if (this.paused) return;
     if (!this.ctx) {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return;
@@ -27,7 +29,13 @@ export class Sfx {
       this.master.connect(comp).connect(this.ctx.destination);
       this.ambient();
     }
-    if (this.ctx.state === 'suspended') this.ctx.resume();
+    if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+  }
+
+  setPaused(value) {
+    this.paused = value;
+    if (value) this.ctx?.suspend().catch(() => {});
+    else if (this.ctx) this.resume();
   }
 
   /** Mute everything, the wind bed included — not just the next effect. */
@@ -37,7 +45,7 @@ export class Sfx {
   }
 
   tone(freq, dur, type = 'sine', gain = 0.5, sweep = 0, delay = 0) {
-    if (!this.ctx || this.muted) return;
+    if (!this.ctx || this.muted || this.paused || this.ctx.state !== 'running') return;
     const t = this.ctx.currentTime + delay;
     const osc = this.ctx.createOscillator();
     const env = this.ctx.createGain();
@@ -53,7 +61,7 @@ export class Sfx {
   }
 
   noiseHit(dur, gain, freq, q = 1, delay = 0) {
-    if (!this.ctx || this.muted) return;
+    if (!this.ctx || this.muted || this.paused || this.ctx.state !== 'running') return;
     const t = this.ctx.currentTime + delay;
     const n = Math.max(1, Math.floor(this.ctx.sampleRate * dur));
     const buf = this.ctx.createBuffer(1, n, this.ctx.sampleRate);
@@ -96,7 +104,7 @@ export class Sfx {
     this.wind = src;
 
     const bird = () => {
-      if (!this.ctx || this.muted) return;
+      if (!this.ctx || this.muted || this.paused || this.ctx.state !== 'running') return;
       const f = 2200 + Math.random() * 1800;
       const n2 = 2 + Math.floor(Math.random() * 3);
       for (let i = 0; i < n2; i++) {
@@ -203,7 +211,7 @@ export class Sfx {
 
   /** Polite garden applause. */
   applause(big = false) {
-    if (!this.ctx || this.muted) return;
+    if (!this.ctx || this.muted || this.paused || this.ctx.state !== 'running') return;
     const t = this.ctx.currentTime;
     const dur = big ? 1.8 : 1;
     const n = Math.floor(this.ctx.sampleRate * dur);

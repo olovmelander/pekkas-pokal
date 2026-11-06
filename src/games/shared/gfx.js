@@ -359,14 +359,23 @@ export function guardRenderer(renderer, host) {
     gfxNotice(host, `En effekt kunde inte ritas på den här grafikkretsen (${profile.gpu}). Prova ?gfx=safe i adressen.`, { timeout: 12000 })
   );
   const canvas = renderer.domElement;
+  // A phone drops the GPU context when the app is backgrounded or memory is
+  // short. preventDefault lets the browser hand it back; the notice then
+  // says so instead of telling the player to restart a game that recovered.
   const onLost = (e) => {
     e.preventDefault();
-    gfxNotice(host, 'Grafiken tappades av webbläsaren — stäng och öppna spelet igen.', { timeout: 0 });
+    gfxNotice(host, 'Grafiken tappades av webbläsaren. Den kommer tillbaka strax; annars stäng och öppna spelet igen.', { timeout: 0 });
   };
+  const onRestored = () => gfxNotice(host, 'Grafiken är tillbaka.', { timeout: 2500 });
   canvas.addEventListener('webglcontextlost', onLost);
+  canvas.addEventListener('webglcontextrestored', onRestored);
   if (profile.debug) {
     gfxNotice(host, `GPU: ${profile.gpu} · WebGL2: ${profile.isWebGL2} · flyttalsmål: ${profile.floatRT} · MSAA ≤ ${profile.maxSamples}`, { timeout: 0 });
   }
-  profile.dispose = () => canvas.removeEventListener('webglcontextlost', onLost);
+  profile.dispose = () => {
+    canvas.removeEventListener('webglcontextlost', onLost);
+    canvas.removeEventListener('webglcontextrestored', onRestored);
+    clearTimeout(host?.querySelector('.gfx-notice')?._t);
+  };
   return profile;
 }

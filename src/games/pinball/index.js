@@ -11,6 +11,8 @@
  */
 
 import * as THREE from 'three';
+import { createGameClock } from '../shared/game-clock.js';
+import { hasCommandModifier } from '../shared/keyboard.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -19,6 +21,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { guardRenderer, postTarget, addSanitize, RenderWatchdog, gfxNotice, precompile } from '../shared/gfx.js';
 
 import { World, Ball, clamp, closestOnSegment } from './physics.js';
+import { drainDisposition } from './ball-lifecycle.js';
 import { L, buildColliders, createPlayfieldCanvas } from './table.js';
 import { buildTable, createMaterials, machineEnvironment, bakeStatic, ballEnvironment } from './meshes.js';
 import { CAB, ROOM, headTop, buildCabinet, buildGlass } from './cabinet.js';
@@ -96,17 +99,13 @@ export async function createPinball(container, opts = {}) {
   canvasHost.className = 'pb-canvas';
   root.appendChild(canvasHost);
   const hud = buildHud(root, { touch });
+  const plungerHint = hud.plungerLabel.textContent;
 
-  // Every game-logic timer goes through here so destroy() can cancel them
-  const timers = new Set();
-  const later = (fn, ms) => {
-    const id = setTimeout(() => {
-      timers.delete(id);
-      fn();
-    }, ms);
-    timers.add(id);
-    return id;
-  };
+  // Timers and deadlines share active play time: help, tab switches and
+  // lost focus cannot consume a skill shot, serve a ball or end a round.
+  const gameClock = createGameClock();
+  let running = true;
+  const later = (fn, ms) => gameClock.schedule(fn, ms / 1000);
 
   const sfx = new Sfx();
 
@@ -158,10 +157,20 @@ export async function createPinball(container, opts = {}) {
   // A studio box lights every metal surface evenly, which is exactly why the
   // rails used to read as grey plastic: chrome needs something bright AND
   // something dark to reflect before it looks like metal at all.
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  const envSource = machineEnvironment(THREE);
-  const envRT = pmrem.fromEquirectangular(envSource);
-  envSource.dispose();
+  let pmrem = new THREE.PMREMGenerator(renderer);
+  // Both rooms are painted on a 2D canvas, then prefiltered into a render
+  // target. A lost WebGL context takes the targets with it (see
+  // restoreEnvironments), so bake() is kept for painting them again.
+  const bake = (paint) => {
+    const source = paint(THREE);
+    try {
+      return pmrem.fromEquirectangular(source);
+    } finally {
+      source.dispose();
+    }
+  };
+  let envRT = bake(machineEnvironment);
+  let environmentRestorePending = false;
   scene.environment = envRT.texture;
   scene.environmentIntensity = 1;
 
@@ -207,9 +216,7 @@ export async function createPinball(container, opts = {}) {
   }
 
   // The ball mirrors a room made for it (see ballEnvironment)
-  const ballEnvSource = ballEnvironment(THREE);
-  const ballEnvRT = pmrem.fromEquirectangular(ballEnvSource);
-  ballEnvSource.dispose();
+  let ballEnvRT = bake(ballEnvironment);
   materials.ball.envMap = ballEnvRT.texture;
 
   // Ball mesh pool for multiball, plus parked meshes for locked balls
@@ -382,9 +389,15 @@ export async function createPinball(container, opts = {}) {
   // UnrealBloomPass draws into half-float targets of its own, so without a
   // renderable float format the whole chain is skipped rather than half-run.
   let usePost = !gfx.safe && gfx.floatRT;
+  let needsRedraw = true;
   const drawFrame = () => {
+    if (environmentRestorePending && !document.hidden) {
+      environmentRestorePending = false;
+      restoreEnvironments();
+    }
     if (usePost) composer.render();
     else renderer.render(scene, camera);
+    needsRedraw = false;
   };
 
   /* ---- Physics ---- */
@@ -433,6 +446,7 @@ export async function createPinball(container, opts = {}) {
     multiball: false,
     jackpotLit: false,
     mbSaveUntil: 0,
+    pendingServes: 0,
 
     // Castle gate: bashed open with 3 hits, or held open by locks/modes
     gate: { hits: 0, until: 0, bashed: false },
@@ -643,7 +657,7 @@ export async function createPinball(container, opts = {}) {
   function coach(key, text, x, y, h = 1.2, ms = 3800) {
     if (gamesPlayed > COACH_GAMES || coachState.seen.has(key)) return;
     coachState.seen.add(key);
-    Object.assign(coachState, { x, y, h, until: performance.now() + ms, on: true });
+    Object.assign(coachState, { x, y, h, until: (gameClock.now * 1000) + ms, on: true });
     hud.coachText.textContent = text;
     hud.coach.hidden = false;
     hud.coach.classList.remove('go');
@@ -771,7 +785,7 @@ export async function createPinball(container, opts = {}) {
 
   /* ---- Combos: chained orbit/jackpot shots inside a rolling window ---- */
   function comboShot() {
-    const now = performance.now();
+    const now = (gameClock.now * 1000);
     if (now - state.combo.t < 3500) {
       state.combo.n++;
       state.perBall.combos++;
@@ -869,7 +883,7 @@ export async function createPinball(container, opts = {}) {
 
   /** The third hit: the door gives way and falls as a drawbridge */
   function breakGate() {
-    const now = performance.now();
+    const now = (gameClock.now * 1000);
     state.gate.hits = 0;
     state.gate.bashed = true;
     // Twelve seconds to get the ball through (it used to be nine)
@@ -910,7 +924,7 @@ export async function createPinball(container, opts = {}) {
     fx.flash(L.jackpot.x, 2, -L.jackpot.y, 0xffd27a, 10, 0.45);
     fx.spark(L.jackpot.x, 2, -L.jackpot.y, 0xff9a3c, 30, 12, 9);
     // Let the ball roll out, then the castle hauls its door back up
-    state.gate.until = performance.now() + 1600;
+    state.gate.until = (gameClock.now * 1000) + 1600;
     comboShot();
     if (c.storms >= 2 && !c.ebGiven && !c.ebLit) {
       c.ebLit = true;
@@ -935,7 +949,7 @@ export async function createPinball(container, opts = {}) {
   function addABall() {
     state.addBallLit = false;
     state.addBallUsed = true;
-    state.mbSaveUntil = Math.max(state.mbSaveUntil, performance.now() + 6000);
+    state.mbSaveUntil = Math.max(state.mbSaveUntil, (gameClock.now * 1000) + 6000);
     sfx.addBall();
     dmd.addBall();
     fireFlasher('right', 1.1);
@@ -991,7 +1005,7 @@ export async function createPinball(container, opts = {}) {
       const t = state.trolls[i];
       if (!t.up) return;
       t.up = false;
-      t.downUntil = performance.now() + 6000;
+      t.downUntil = (gameClock.now * 1000) + 6000;
       const p = L.trolls[i];
       award(3000, p.x, p.y);
       state.perBall.trolls = (state.perBall.trolls || 0) + 1;
@@ -1006,7 +1020,7 @@ export async function createPinball(container, opts = {}) {
     },
     onGate(v, _b) {
       if (v < 1.2) return;
-      const now = performance.now();
+      const now = (gameClock.now * 1000);
       if (now - (state.sensorLast.gate || 0) < 350) return;
       state.sensorLast.gate = now;
       if (gateIsOpen()) return;
@@ -1182,7 +1196,7 @@ export async function createPinball(container, opts = {}) {
       }
 
       // In through the broken gate: the castle is stormed
-      if (state.gate.bashed && performance.now() < state.gate.until) {
+      if (state.gate.bashed && (gameClock.now * 1000) < state.gate.until) {
         stormCastle();
         return;
       }
@@ -1194,7 +1208,7 @@ export async function createPinball(container, opts = {}) {
       modeEvent('jackpot');
     },
     onSensor(id, _v, b) {
-      const now = performance.now();
+      const now = (gameClock.now * 1000);
       if (now - (state.sensorLast[id] || 0) < 700) return;
       state.sensorLast[id] = now;
       if (state.phase !== 'play') return;
@@ -1338,7 +1352,7 @@ export async function createPinball(container, opts = {}) {
     if (idx >= 0) state.balls.splice(idx, 1);
     b.live = false;
     // Ball save pauses while the ball is parked
-    const saveLeft = Math.max(0, state.ballSaveUntil - performance.now());
+    const saveLeft = Math.max(0, state.ballSaveUntil - (gameClock.now * 1000));
     state.ballSaveUntil = 0;
     state.held = { ball: b, t: 0, idle: 0, choice: 0, list, saveLeft };
     dmd.reset();
@@ -1372,7 +1386,7 @@ export async function createPinball(container, opts = {}) {
     b.stuckFor = 0;
     b.searches = 0;
     state.balls.push(b);
-    if (h.saveLeft > 0) state.ballSaveUntil = performance.now() + h.saveLeft;
+    if (h.saveLeft > 0) state.ballSaveUntil = (gameClock.now * 1000) + h.saveLeft;
     fx.flash(GATE_X, 1, -(GATE_Y - 1.5), 0xffe08a, 6, 0.4);
     sfx.launch();
     startMode(h.list[h.choice]);
@@ -1472,7 +1486,7 @@ export async function createPinball(container, opts = {}) {
     state.jackpots = 0;
     state.superLit = false;
     state.addBallLit = false;
-    state.mbSaveUntil = performance.now() + 60000;
+    state.mbSaveUntil = (gameClock.now * 1000) + 60000;
     later(raiseTrolls, 1200);
     sfx.modeStinger('finalen');
     fireFlasher('both', 1.4);
@@ -1523,7 +1537,7 @@ export async function createPinball(container, opts = {}) {
     state.superLit = false;
     state.addBallLit = false;
     state.addBallUsed = false;
-    state.mbSaveUntil = performance.now() + 12000;
+    state.mbSaveUntil = (gameClock.now * 1000) + 12000;
     sfx.multiball();
     jolt(1.4, 0);
     punch(1.4);
@@ -1665,7 +1679,7 @@ export async function createPinball(container, opts = {}) {
       state.lockLit ||
       (state.multiball && state.jackpotLit) ||
       (state.mode && (state.mode.wizard || state.mode.def.id === 'fiske')) ||
-      performance.now() < state.gate.until
+      (gameClock.now * 1000) < state.gate.until
     );
   }
 
@@ -1686,7 +1700,9 @@ export async function createPinball(container, opts = {}) {
    * used for lock replacements, multiball serves and Finalen.
    */
   function serveBall(delay = 600) {
+    state.pendingServes++;
     later(() => {
+      state.pendingServes--;
       if (state.phase !== 'play') return;
       const nb = new Ball(L.ballRadius);
       nb.place(L.laneBallX, L.laneBottomY + L.laneWallR + L.ballRadius + 0.06, 0, 0);
@@ -1717,6 +1733,8 @@ export async function createPinball(container, opts = {}) {
     hud.plunger.hidden = false;
     hud.nudge.hidden = true;
     hud.powerFill.style.width = '0%';
+    hud.plungerLabel.textContent = plungerHint;
+    hud.plunger.dataset.ready = 'false';
     state.held = null;
     // A different skill-shot lane lights for every ball
     state.skill = (state.skill + 1 + Math.floor(Math.random() * 2)) % SKILL_BANDS.length;
@@ -1739,8 +1757,8 @@ export async function createPinball(container, opts = {}) {
     b.vy = 57 + p * 11;
     b.vx = 0;
     state.phase = 'play';
-    state.ballSaveUntil = state.saveUsed ? 0 : performance.now() + BALL_SAVE_MS;
-    state.superUntil = performance.now() + 3000;
+    state.ballSaveUntil = state.saveUsed ? 0 : (gameClock.now * 1000) + BALL_SAVE_MS;
+    state.superUntil = (gameClock.now * 1000) + 3000;
     hud.plunger.hidden = true;
     hud.nudge.hidden = false;
     sfx.launch();
@@ -1775,22 +1793,19 @@ export async function createPinball(container, opts = {}) {
     if (idx >= 0) state.balls.splice(idx, 1);
     b.live = false;
 
-    // A ball riding a wireform still counts as in play
-    const inPlay = state.balls.length + state.riders.length + (state.held ? 1 : 0);
-    if (inPlay >= 1) {
-      // Multiball continues — respawn during the grace window
-      if (performance.now() < state.mbSaveUntil) {
-        say(['BOLL', 'RÄDDAD'], { prio: 1, dur: 1 });
-        serveBall(400);
-      } else if (inPlay === 1 && state.multiball && !(state.mode && state.mode.wizard)) {
-        endMultiball();
-      }
+    const disposition = drainDisposition(state, gameClock.now * 1000, BALL_SAVE_GRACE);
+    if (disposition === 'replace') {
+      say(['BOLL', 'RÄDDAD'], { prio: 1, dur: 1 });
+      serveBall(400);
+      return;
+    }
+    if (disposition === 'continue' || disposition === 'end-multiball') {
+      if (disposition === 'end-multiball') endMultiball();
       return;
     }
 
-    // Last ball gone. The save has a short hidden grace after its lamp goes
-    // out, as on a real machine: a drain a heartbeat late is still saved.
-    if (performance.now() < state.ballSaveUntil + BALL_SAVE_GRACE) {
+    // The same grace applies to the last single ball; tilt forfeits the save.
+    if (disposition === 'save') {
       state.saveUsed = true;
       state.ballSaveUntil = 0;
       sfx.save();
@@ -1942,6 +1957,8 @@ export async function createPinball(container, opts = {}) {
   }
 
   function startGame() {
+    gameClock.clear();
+    cancelControls();
     if (pendingScore) return;
     sfx.resume();
     gamesPlayed++;
@@ -1965,6 +1982,7 @@ export async function createPinball(container, opts = {}) {
     state.multiball = false;
     state.jackpotLit = false;
     state.mbSaveUntil = 0;
+    state.pendingServes = 0;
     state.gate = { hits: 0, until: 0, bashed: false };
     state.castle = { storms: 0, ebLit: false, ebGiven: false };
     state.jackpots = 0;
@@ -2015,6 +2033,8 @@ export async function createPinball(container, opts = {}) {
   /* ---- Input ---- */
   let helpOpen = false;
   const pointers = new Map();
+  const heldKeys = new Map();
+  const plungerKeys = new Set();
   const flipL = colliderRefs.flippers.left;
   const flipR = colliderRefs.flippers.right;
 
@@ -2047,7 +2067,7 @@ export async function createPinball(container, opts = {}) {
   function refreshFlippers() {
     let left = false;
     let right = false;
-    pointers.forEach((side) => {
+    [...pointers.values(), ...heldKeys.values()].forEach((side) => {
       if (side === 'left') left = true;
       else if (side === 'right') right = true;
     });
@@ -2056,6 +2076,7 @@ export async function createPinball(container, opts = {}) {
   }
 
   function onPointerDown(e) {
+    if (helpOpen || !running || (e.pointerType === 'mouse' && e.button !== 0)) return;
     sfx.resume();
     canvasHost.setPointerCapture?.(e.pointerId);
 
@@ -2075,7 +2096,7 @@ export async function createPinball(container, opts = {}) {
   function onPointerUp(e) {
     const was = pointers.get(e.pointerId);
     pointers.delete(e.pointerId);
-    if (was === 'plunger' && state.phase === 'launch') {
+    if (was === 'plunger' && state.phase === 'launch' && ![...pointers.values()].includes('plunger') && !plungerKeys.size) {
       state.charging = false;
       launchBall();
       return;
@@ -2084,6 +2105,7 @@ export async function createPinball(container, opts = {}) {
   }
 
   function onPointerMove(e) {
+    if (helpOpen || !running) return;
     if (state.phase !== 'play' || !pointers.has(e.pointerId)) return;
     // Let a finger slide across the middle to swap flippers
     const rect = canvasHost.getBoundingClientRect();
@@ -2105,18 +2127,23 @@ export async function createPinball(container, opts = {}) {
   };
 
   function onKeyDown(e) {
+    if (hasCommandModifier(e)) return;
     // Typing a name for the topplista is not playing the game
     if (e.target && e.target.closest && e.target.closest('input, textarea')) return;
     if (e.repeat) return;
     const k = e.key.toLowerCase();
     if (helpOpen) {
-      if (k === 'escape' || k === ' ' || k === '?') setHelp(false);
+      if (k === 'escape' || k === ' ' || k === '?' || k === 'p') setHelp(false);
       e.preventDefault();
       return;
     }
+    if (!running) return;
+    if (k === 'p') { setHelp(true); return; }
     const side = sideOf(e);
     if (side) {
-      setFlipper(side, true);
+      e.preventDefault();
+      heldKeys.set(e.code || k, side);
+      refreshFlippers();
       return;
     }
     if (k === ' ' || k === 'arrowdown' || k === 'enter') {
@@ -2124,8 +2151,10 @@ export async function createPinball(container, opts = {}) {
       e.preventDefault();
       sfx.resume();
       if (state.held && state.phase === 'play') endSelect();
-      else if (state.phase === 'launch') state.charging = true;
-      else if (state.phase === 'idle' || state.phase === 'over') startGame();
+      else if (state.phase === 'launch') {
+        plungerKeys.add(e.code || k);
+        state.charging = true;
+      } else if (state.phase === 'idle' || state.phase === 'over') startGame();
     } else if (k === 'n') doNudge();
     else if (k === '?') setHelp(true);
   }
@@ -2133,6 +2162,7 @@ export async function createPinball(container, opts = {}) {
   // Esc closes the strategy card, not the whole game: caught on the way
   // down, before the site's own Esc-closes-the-stage handler sees it
   function onKeyCapture(e) {
+    if (hasCommandModifier(e)) return;
     if (helpOpen && e.key === 'Escape') {
       e.stopPropagation();
       e.preventDefault();
@@ -2143,11 +2173,13 @@ export async function createPinball(container, opts = {}) {
   function onKeyUp(e) {
     const side = sideOf(e);
     if (side) {
-      setFlipper(side, false);
+      heldKeys.delete(e.code || e.key.toLowerCase());
+      refreshFlippers();
       return;
     }
     const k = e.key.toLowerCase();
-    if ((k === ' ' || k === 'arrowdown' || k === 'enter') && state.phase === 'launch' && state.charging) {
+    const wasCharging = plungerKeys.delete(e.code || k);
+    if ((k === ' ' || k === 'arrowdown' || k === 'enter') && state.phase === 'launch' && state.charging && wasCharging && !plungerKeys.size && ![...pointers.values()].includes('plunger')) {
       state.charging = false;
       launchBall();
     }
@@ -2205,8 +2237,8 @@ export async function createPinball(container, opts = {}) {
   }
 
   function doNudge() {
-    if (state.phase !== 'play' || state.tilted) return;
-    const now = performance.now();
+    if (helpOpen || !running || state.phase !== 'play' || state.tilted) return;
+    const now = (gameClock.now * 1000);
     // A cabinet can't be shoved again while it is still rocking back
     if (now - (state.lastNudge || 0) < 320) return;
     state.lastNudge = now;
@@ -2262,11 +2294,41 @@ export async function createPinball(container, opts = {}) {
   function setHelp(open) {
     helpOpen = open;
     hud.help.hidden = !open;
-    if (open) {
-      flipL.pressed = false;
-      flipR.pressed = false;
-      pointers.clear();
+    sfx.setPaused(open);
+    if (open) cancelControls();
+  }
+
+  function cancelControls() {
+    pointers.clear();
+    heldKeys.clear();
+    plungerKeys.clear();
+    flipL.pressed = false;
+    flipR.pressed = false;
+    state.charging = false;
+    state.power = 0;
+    hud.powerFill.style.width = '0%';
+    hud.plungerLabel.textContent = plungerHint;
+    hud.plunger.dataset.ready = 'false';
+    [...hud.zones.children].forEach((zone) => zone.classList.remove('press'));
+  }
+
+  function onPointerCancel(e) {
+    const was = pointers.get(e.pointerId);
+    pointers.delete(e.pointerId);
+    if (was === 'plunger' && ![...pointers.values()].includes('plunger') && !plungerKeys.size) {
+      state.charging = false;
+      state.power = 0;
+      hud.powerFill.style.width = '0%';
+      hud.plungerLabel.textContent = plungerHint;
+      hud.plunger.dataset.ready = 'false';
     }
+    refreshFlippers();
+  }
+
+  function onBlur() {
+    cancelControls();
+    sfx.roll(0, false);
+    if (state.phase !== 'idle' && state.phase !== 'over') setHelp(true);
   }
 
   function onSheetClick(e) {
@@ -2285,7 +2347,8 @@ export async function createPinball(container, opts = {}) {
 
   canvasHost.addEventListener('pointerdown', onPointerDown);
   window.addEventListener('pointerup', onPointerUp);
-  window.addEventListener('pointercancel', onPointerUp);
+  window.addEventListener('pointercancel', onPointerCancel);
+  window.addEventListener('blur', onBlur);
   canvasHost.addEventListener('pointermove', onPointerMove);
   window.addEventListener('keydown', onKeyCapture, true);
   window.addEventListener('keydown', onKeyDown);
@@ -2442,6 +2505,7 @@ export async function createPinball(container, opts = {}) {
     const k = Math.min(0.5, 460 / Math.max(w, h));
     bloom.setSize(Math.round(w * k), Math.round(h * k));
     fitCamera();
+    needsRedraw = true;
   }
 
   const ro = new ResizeObserver(resize);
@@ -2478,7 +2542,7 @@ export async function createPinball(container, opts = {}) {
         }
       });
     } else {
-      const saveLeft = state.ballSaveUntil - performance.now();
+      const saveLeft = state.ballSaveUntil - (gameClock.now * 1000);
       // An arrow is lit only when that shot counts for something right now:
       // a gren lights the shots IT scores, not every ramp on the table
       const mid = state.mode && !state.mode.wizard ? state.mode.def.id : '';
@@ -2823,24 +2887,24 @@ export async function createPinball(container, opts = {}) {
   let last = performance.now();
   let acc = 0;
   const FIXED = 1 / 120;
-  let running = true;
   const axis = new THREE.Vector3();
   let boardTick = 0;
 
-  function tick(now) {
+  function tick(realNow) {
     raf = requestAnimationFrame(tick);
-    const real = Math.max(0, (now - last) / 1000);
+    const real = Math.max(0, (realNow - last) / 1000);
     const dtRaw = Math.min(0.05, real);
-    last = now;
+    last = realNow;
     if (real > 0) perf.frameMs += (real * 1000 - perf.frameMs) * 0.1;
-    if (!running || helpOpen) {
-      // Time on the strategy card is not play time: the save timers wait
-      if (state.ballSaveUntil > now) state.ballSaveUntil += real * 1000;
-      if (state.mbSaveUntil > now) state.mbSaveUntil += real * 1000;
-      // …and neither does the fallen drawbridge
-      if (state.gate.until > now) state.gate.until += real * 1000;
+    if (!running) return;
+    if (helpOpen) {
+      // Resize clears the render targets. Repaint the frozen table after a
+      // rotation without advancing coils, ball physics or scheduled events.
+      if (needsRedraw) drawFrame();
       return;
     }
+    gameClock.tick(dtRaw);
+    const now = gameClock.now * 1000;
     if (root.dataset.phase !== state.phase) root.dataset.phase = state.phase;
 
     // rAF timestamps can predate `last` (clamped above) or arrive seconds
@@ -2866,6 +2930,10 @@ export async function createPinball(container, opts = {}) {
     if (state.phase === 'launch' && state.charging) {
       state.power = Math.min(1, state.power + dtRaw * 1.15);
       hud.powerFill.style.width = `${state.power * 100}%`;
+      const band = SKILL_BANDS[state.skill];
+      const ready = state.power >= band.lo && state.power <= band.hi;
+      hud.plunger.dataset.ready = String(ready);
+      hud.plungerLabel.textContent = ready ? `SLÄPP NU · ${fmtScore(band.pts)} POÄNG` : state.power > band.hi ? 'SLÄPP FÖR ATT SPELA' : plungerHint;
     }
 
     acc += dt;
@@ -2890,7 +2958,7 @@ export async function createPinball(container, opts = {}) {
           if (!b.doomed && b.y < 4.4 && b.vy < -2 && b.x < L.laneX &&
             state.balls.length === 1 && state.riders.length === 0) {
             b.doomed = true;
-            const saving = performance.now() < state.ballSaveUntil;
+            const saving = (gameClock.now * 1000) < state.ballSaveUntil;
             const final = !saving && state.ballNo >= BALLS_PER_GAME && state.extraBalls === 0;
             if (saving || final) {
               slowMo(saving ? 0.28 : 0.4, 0.4);
@@ -2966,7 +3034,7 @@ export async function createPinball(container, opts = {}) {
 
     // Trolls: respawn after being knocked down, drive collider + mesh
     {
-      const now2 = performance.now();
+      const now2 = (gameClock.now * 1000);
       const modeRunning = !!state.mode || state.multiball;
       state.trolls.forEach((t, i) => {
         if (!modeRunning) t.up = false;
@@ -3078,7 +3146,7 @@ export async function createPinball(container, opts = {}) {
 
     // The nudge button warms up with each recent nudge: the tilt bob made visible
     {
-      const nowN = performance.now();
+      const nowN = (gameClock.now * 1000);
       // Read off the same settling tilt bob doNudge uses, as a forecast:
       // amber when a nudge now would draw a warning, red when it would TILT.
       // The colour cools as the cabinet settles.
@@ -3101,7 +3169,7 @@ export async function createPinball(container, opts = {}) {
       hud.mode.hidden = true;
     }
     renderGoal();
-    updateCoach(performance.now());
+    updateCoach((gameClock.now * 1000));
     boardTick += dtRaw;
     if (view.land && boardTick > 0.4) {
       boardTick = 0;
@@ -3329,27 +3397,43 @@ export async function createPinball(container, opts = {}) {
   last = performance.now();
   raf = requestAnimationFrame(tick);
 
-  let hiddenAt = 0;
   const onVisibility = () => {
     running = !document.hidden;
     last = performance.now();
-    // Nor does time in another tab
-    if (document.hidden) hiddenAt = last;
-    else if (hiddenAt) {
-      const away = last - hiddenAt;
-      if (state.ballSaveUntil > hiddenAt) state.ballSaveUntil += away;
-      if (state.mbSaveUntil > hiddenAt) state.mbSaveUntil += away;
-      if (state.gate.until > hiddenAt) state.gate.until += away;
-      hiddenAt = 0;
-    }
-    if (document.hidden) {
-      flipL.pressed = false;
-      flipR.pressed = false;
-      pointers.clear();
-      sfx.roll(0, false);
-    }
+    if (document.hidden) onBlur();
   };
   document.addEventListener('visibilitychange', onVisibility);
+
+  /*
+   * A restored WebGL context brings back geometry and image textures, but
+   * both prefiltered rooms lived only in render targets and come back black:
+   * the chrome, the lacquered wood and the ball go dull. drawFrame() bakes
+   * them again before the first visible frame (never in a hidden tab), and
+   * only where they are still in use. The generator and the old targets died
+   * with the old context; deleting them again would only make WebGL warn, so
+   * they are dropped, not disposed.
+   */
+  function restoreEnvironments() {
+    let table = null;
+    let ball = null;
+    pmrem = new THREE.PMREMGenerator(renderer);
+    try {
+      table = bake(machineEnvironment);
+      ball = bake(ballEnvironment);
+    } catch {
+      renderer.setRenderTarget(null);
+      gfxNotice(container, 'Grafiken förenklades för att fungera på den här enheten.');
+    }
+    if (envRT && scene.environment === envRT.texture) scene.environment = table ? table.texture : null;
+    if (ballEnvRT && materials.ball.envMap === ballEnvRT.texture) materials.ball.envMap = ball ? ball.texture : null;
+    envRT = table;
+    ballEnvRT = ball;
+  }
+  const onContextRestored = () => {
+    if (envRT || ballEnvRT) environmentRestorePending = true;
+    needsRedraw = true;
+  };
+  renderer.domElement.addEventListener('webglcontextrestored', onContextRestored);
 
   renderBalls();
   renderMult();
@@ -3361,6 +3445,7 @@ export async function createPinball(container, opts = {}) {
   // Deterministic hooks for automated tests (and curious friends)
   window.__pbFlipper = {
     state,
+    clock: gameClock,
     scene,
     camera,
     renderer,
@@ -3472,14 +3557,15 @@ export async function createPinball(container, opts = {}) {
   function destroy() {
     cancelAnimationFrame(raf);
     running = false;
-    timers.forEach((id) => clearTimeout(id));
-    timers.clear();
+    gameClock.destroy();
     ro.disconnect();
     document.removeEventListener('visibilitychange', onVisibility);
+    renderer.domElement.removeEventListener('webglcontextrestored', onContextRestored);
     canvasHost.removeEventListener('pointerdown', onPointerDown);
     canvasHost.removeEventListener('pointermove', onPointerMove);
     window.removeEventListener('pointerup', onPointerUp);
-    window.removeEventListener('pointercancel', onPointerUp);
+    window.removeEventListener('pointercancel', onPointerCancel);
+    window.removeEventListener('blur', onBlur);
     window.removeEventListener('keydown', onKeyCapture, true);
     window.removeEventListener('keydown', onKeyDown);
     window.removeEventListener('keyup', onKeyUp);
@@ -3506,8 +3592,8 @@ export async function createPinball(container, opts = {}) {
     dmd.dispose();
     fx.dispose();
     room.dispose();
-    envRT.dispose();
-    ballEnvRT.dispose();
+    envRT?.dispose();
+    ballEnvRT?.dispose();
     pmrem.dispose();
     // Passes own their materials and targets; the composer only its two
     composer.passes.forEach((pass) => pass.dispose());
