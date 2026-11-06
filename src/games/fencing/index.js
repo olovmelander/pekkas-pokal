@@ -38,6 +38,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { guardRenderer, postTarget, addSanitize, RenderWatchdog, gfxNotice, precompile } from '../shared/gfx.js';
 import { Sfx } from './audio.js';
 import { takeFeint, openingRemaining, hasAttackPriority, attackIsOutOfTurn, claimTouch, canParry } from './combat-rules.js';
+import { isActionButtonEvent } from './input.js';
 import { Fencer, Animator, P, POSE_LEN } from './fencer.js';
 import { mulberry, glowTexture, buildSalle, buildEnvScene } from './salle.js';
 import { Sparks, Trail, Flashes, Confetti, starTexture, ringTexture } from './fx.js';
@@ -1183,7 +1184,12 @@ export async function createFencing(container) {
       if (k === 'Tab') { e.preventDefault(); el.helpClose.focus(); }
       return;
     }
-    if (e.repeat) return;
+    if (e.repeat) {
+      // A held native button can synthesize click(detail=0) on repeated
+      // Enter, or on Space release. The first keydown already acted.
+      if ((k === ' ' || k === 'Enter') && e.target.closest?.('.fen-pad button')) e.preventDefault();
+      return;
+    }
     if (state.phase === 'replay' || state.phase === 'ceremony') {
       if (k === ' ' || k === 'Enter' || k === 'Escape') {
         e.preventDefault(); e.stopPropagation(); skipReplay();
@@ -1258,19 +1264,19 @@ export async function createFencing(container) {
   }
 
   const lineDown = (e) => {
-    if (helpOpen || e.isPrimary === false || e.button !== 0) return;
+    if (helpOpen || !isActionButtonEvent(e)) return;
     e.preventDefault();
     sfx.resume();
     setLine(Number(e.currentTarget.dataset.line));
   };
   const lungeDown = (e) => {
-    if (helpOpen || e.isPrimary === false || e.button !== 0) return;
+    if (helpOpen || !isActionButtonEvent(e)) return;
     e.preventDefault();
     sfx.resume();
     playerLunge(false);
   };
   const feintDown = (e) => {
-    if (helpOpen || e.isPrimary === false || e.button !== 0) return;
+    if (helpOpen || !isActionButtonEvent(e)) return;
     e.preventDefault();
     sfx.resume();
     playerLunge(true);
@@ -1301,9 +1307,11 @@ export async function createFencing(container) {
   window.addEventListener('focus', onFocus);
   window.addEventListener('keydown', onKeyDown, true);
   el.panel.addEventListener('click', onPanelClick);
-  el.lineBtns.forEach((b) => b.addEventListener('pointerdown', lineDown));
-  el.lunge.addEventListener('pointerdown', lungeDown);
-  el.feint.addEventListener('pointerdown', feintDown);
+  for (const type of ['pointerdown', 'click']) {
+    el.lineBtns.forEach((b) => b.addEventListener(type, lineDown));
+    el.lunge.addEventListener(type, lungeDown);
+    el.feint.addEventListener(type, feintDown);
+  }
   el.mute.addEventListener('click', muteClick);
   el.info.addEventListener('click', infoClick);
   el.helpClose.addEventListener('click', helpCloseClick);
@@ -1950,6 +1958,11 @@ export async function createFencing(container) {
     window.removeEventListener('blur', onBlur);
     window.removeEventListener('focus', onFocus);
     window.removeEventListener('keydown', onKeyDown, true);
+    for (const type of ['pointerdown', 'click']) {
+      el.lineBtns.forEach((b) => b.removeEventListener(type, lineDown));
+      el.lunge.removeEventListener(type, lungeDown);
+      el.feint.removeEventListener(type, feintDown);
+    }
     hud.dispose();
     if (window.__ppFakt) delete window.__ppFakt;
     gfx.dispose();

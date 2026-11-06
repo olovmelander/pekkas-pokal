@@ -367,6 +367,9 @@ export function guardRenderer(renderer, host) {
   if (profile.debug) {
     gfxNotice(host, `GPU: ${profile.gpu} · WebGL2: ${profile.isWebGL2} · flyttalsmål: ${profile.floatRT} · MSAA ≤ ${profile.maxSamples}`, { timeout: 0 });
   }
-  profile.dispose = () => canvas.removeEventListener('webglcontextlost', onLost);
+  profile.dispose = () => {
+    canvas.removeEventListener('webglcontextlost', onLost);
+    clearTimeout(host?.querySelector('.gfx-notice')?._t);
+  };
   return profile;
 }

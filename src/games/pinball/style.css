@@ -628,14 +628,18 @@
 
 .pbf-plunger-label {
   margin-bottom: 8px;
-  white-space: nowrap;
+  padding: 6px 9px;
+  border: 1px solid rgba(214, 220, 246, 0.14);
+  border-radius: 8px;
+  background: rgba(8, 10, 22, 0.9);
+  white-space: normal;
   font-size: 0.66rem;
+  line-height: 1.35;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(214, 220, 246, 0.85);
-  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
-  animation: pbf-breathe 2s ease-in-out infinite;
+  color: var(--ink);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 }
 
 .pbf-power {
@@ -1211,10 +1215,6 @@
   width: min(var(--side-w), 300px);
 }
 
-.pbf[data-orient='land'] .pbf-plunger-label {
-  white-space: normal;
-}
-
 /* Off the table, where a thumb rests when the phone is on its side */
 .pbf[data-orient='land'] .pbf-nudge {
   left: auto;
@@ -1485,7 +1485,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pbf-plunger-label,
   .pbf-goal i,
   .pbf-grenar li.active b,
   .pbf-mode-head span.urgent {
@@ -1519,4 +1518,4 @@
 /* The shot window answers with words as well as colour, without covering the table. */
 .pbf-plunger[data-ready='true'] .pbf-power { border-color: #8ffff0; box-shadow: 0 0 18px #5eead455; }
 .pbf-plunger[data-ready='true'] .pbf-power span { background: linear-gradient(90deg, #2aa898, #b6fff2); }
-.pbf-plunger[data-ready='true'] .pbf-plunger-label { color: #b6fff2; animation: none; }
+.pbf-plunger[data-ready='true'] .pbf-plunger-label { color: #b6fff2; }

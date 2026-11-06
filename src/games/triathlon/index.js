@@ -2,6 +2,7 @@ import { createArcade } from '../shared/arcade.js';
 import { buildCourse, makeCourseItem } from './scenery.js';
 import { createAthlete } from './athlete.js';
 import { frameTriathlon } from './camera.js';
+import { RIVALS, rivalLane } from './rivals.js';
 import { STAGES, clamp, advancePace, passageLane, finishPlace, raceProgress, scoreRace, formatTime, rivalAtTime, canDraft } from './rules.js';
 
 export const layout = 'full';
@@ -33,11 +34,9 @@ export default async function createTriathlon(container) {
   const course = buildCourse(scene);
   game.setShadowFocus(0, 0, -12);
   const athlete = createAthlete(scene, 'Viktor Jones', 0xd9ad4d, true);
-  const rivals = [
-    { name: 'Per Vikman', color: 0xc25856, duration: 89, lane: -2.4, strengths: [1.08, 0.98, 1] },
-    { name: 'Mikael Hägglund', color: 0x68a3bc, duration: 96, lane: 2.2, strengths: [0.96, 1.07, 1] },
-    { name: 'Tobias Lundqvist', color: 0x839b5a, duration: 104, lane: 0, strengths: [1, 0.95, 1.07] }
-  ].map((r, i) => ({ ...r, athlete: createAthlete(scene, r.name, r.color), progress: 0, phase: i * 1.8 }));
+  const rivals = RIVALS.map((r, i) => ({
+    ...r, athlete: createAthlete(scene, r.name, r.color), progress: 0, phase: i * 1.8
+  }));
 
   const dashboard = document.createElement('div'); dashboard.className = 'tri-dashboard';
   dashboard.innerHTML = `<div class="tri-stages">${STAGES.map((leg, i) => `<span class="tri-stage">0${i + 1} ${leg.verb}</span>`).join('')}</div>
@@ -195,7 +194,7 @@ export default async function createTriathlon(container) {
     for (const r of rivals) {
       Object.assign(r, rivalAtTime(elapsed, r.duration, r.strengths));
       const delta = r.distance - distance;
-      const visualLane = r.lane + Math.sin(time * 0.17 + r.phase) * 0.3;
+      const visualLane = rivalLane(r, time);
       r.athlete.root.position.set(visualLane, 0, -delta);
       r.athlete.root.visible = r.stage === stage && !r.finished && delta > -12 && delta < 100;
       if (canDraft(stage, distance, x, { ...r, lane: visualLane })) drafting = true;
@@ -207,7 +206,7 @@ export default async function createTriathlon(container) {
     const discipline = STAGES[stage].id;
     if (state === 'race') {
       const previousDistance = distance, previousX = x;
-      drafting = rivals.some(r => canDraft(stage, distance, x, { ...r, lane: r.lane + Math.sin(time * 0.17 + r.phase) * 0.3 }));
+      drafting = rivals.some(r => canDraft(stage, distance, x, { ...r, lane: rivalLane(r, time) }));
       const direction = Number(pressed('right')) - Number(pressed('left'));
       const current = discipline === 'swim' ? Math.sin(elapsed * 0.65) * 0.21 : 0;
       const lateralTarget = direction * (discipline === 'bike' ? 5.8 : 4.8);

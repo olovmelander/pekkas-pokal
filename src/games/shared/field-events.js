@@ -4,6 +4,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildNature, buildScenicSky } from './scenic.js';
 import { buildFieldGarden, buildFlowerBorders } from './field-garden.js';
 import { isNativeControlTarget } from './keyboard.js';
+import { bindFieldDirection } from './field-input.js';
 import { clamp, precisionScore, jumpScore, hoopCrossing, hurdleHeight, medalFor, chargePower, croquetEnd, fieldThrowScore } from '../pentathlon/rules.js';
 
 const EVENTS = {
@@ -235,6 +236,7 @@ export async function createFieldGames(container, config) {
   const previewPose = new THREE.Object3D();
   let lastWidth = 0, lastHeight = 0;
   const buttons = { left: false, right: false };
+  const directionControls = [];
   const clamp01 = (v) => clamp(v, 0, 1);
   const effectBits = [];
   function confetti(position) {
@@ -289,6 +291,12 @@ export async function createFieldGames(container, config) {
         projectile = ball(0.23, kind === 'boule' ? '#d5b765' : '#ce704e', 0, 0.24, 7, eventWorld, kind === 'boule' ? 0.65 : 0);
         if (kind === 'boule') {
           ringTarget = new THREE.Group(); eventWorld.add(ringTarget);
+          // The small wooden jack needs a stable silhouette against the gravel,
+          // separate from the smaller pale ring predicting the throw's landing.
+          for (const [inner, outer, color, height] of [[0.46, 0.69, '#294a3d', 0.006], [0.49, 0.58, '#fff3cd', 0.008]]) {
+            const targetRing = mesh(new THREE.RingGeometry(inner, outer, 48), color, 0, height, 0, ringTarget);
+            targetRing.rotation.x = -Math.PI / 2; targetRing.castShadow = false;
+          }
           ball(0.13, '#e7cd64', 0, 0.13, 0, ringTarget);
           opponentBall = ball(0.23, '#ced3cd', 0.9, 0.23, -4, eventWorld, 0.8);
         } else {
@@ -451,6 +459,7 @@ export async function createFieldGames(container, config) {
     actionPointer = actionKey = null;
     if (holding) charge = 0;
     holding = false; buttons.left = buttons.right = false; action.classList.remove('held');
+    directionControls.forEach((control) => control.cancel());
     if (pointer !== null && action.hasPointerCapture?.(pointer)) action.releasePointerCapture(pointer);
   }
   function pressKey(code) {
@@ -493,10 +502,10 @@ export async function createFieldGames(container, config) {
     if (['ArrowLeft', 'ArrowRight', 'KeyA', 'KeyD'].includes(e.code)) { e.preventDefault(); a.keys.add(e.code); }
   });
   [[left, 'left'], [right, 'right']].forEach(([button, side]) => {
-    a.listen(button, 'pointerdown', (e) => { e.preventDefault(); button.setPointerCapture(e.pointerId); buttons[side] = true; });
-    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach((event) => a.listen(button, event, () => { buttons[side] = false; }));
-    a.listen(button, 'keydown', (e) => { if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); buttons[side] = true; } });
-    a.listen(button, 'keyup', () => { buttons[side] = false; });
+    directionControls.push(bindFieldDirection({
+      listen: a.listen, button, keyTarget: window, enabled: () => state === 'play' && !a.paused,
+      onChange: (down) => { buttons[side] = down; button.classList.toggle('held', down); }
+    }));
   });
   const cameraGoal = new THREE.Vector3();
   const lookGoal = new THREE.Vector3();

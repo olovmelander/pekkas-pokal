@@ -1038,6 +1038,13 @@
     bottom: auto;
   }
 
+  /* Coach and opponent/rally banners share this narrow strip. Read one at a
+     time; the existing coach state returns when the short toast has finished. */
+  .pg-ui .pb-toast.show ~ .pg-keys.touch {
+    opacity: 0;
+    visibility: hidden;
+  }
+
   .pg-ui .fg-phase {
     bottom: calc(10px + env(safe-area-inset-bottom));
   }

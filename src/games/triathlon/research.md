@@ -104,3 +104,16 @@ dimma och tre bakre åsryggar bygger djup. Solriktningen delas av himlen,
 vattenreflexen, vegetationen och den riktiga skuggljuskällan. Art direction är
 en svensk sensommarsjö, inte ett påstående om Lomsjöns dokumenterade strand
 eller bebyggelse. Regler, lokala grenordningen och kollisionsytor är bevarade.
+
+## Simstartens läsbarhet
+
+Bildgranskning visade att Tobias och spelaren startade i samma sidospår och
+att deras simtag gick genom varandra. Rivalerna har nu särskilda simspår med
+plats för hela armrörelsen, även efter lång väntan på startpanelen. Ett prov
+med de verkliga animerade figurernas sidogränser kontrollerar minst 18 cm
+marginal. Simspåren ligger stilla i sidled; själva simtaget rullar kroppen.
+Det samlade startfältet ryms även på en 320 px bred telefon. Spelarens svaga
+ström åt höger ryms också.
+Löpningens och cyklingens spår, drafting, rivalernas fart och måltider är
+oförändrade. Fri styrning kan fortfarande föra spelaren genom en rival senare
+i loppet; startjusteringen inför inga personkollisioner eller tidsstraff.

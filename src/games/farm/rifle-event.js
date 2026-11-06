@@ -11,7 +11,8 @@ export function createRifleEvent(ctx) {
   for (const x of [-2.3, 2.3]) for (const y of [-1.9, 1.9]) {
     const bolt = cylinder(.035, .025, 0x81918e, x, y, .14, board); bolt.rotation.x = Math.PI / 2;
   }
-  for (const x of [-1.9, 1.9]) cylinder(0.1, 5.4, 0xbfa27a, x, 0.15, -0.16, board);
+  // Tops stay at world y=5.95; the feet extend through the gravel at y=0.01.
+  for (const x of [-1.9, 1.9]) cylinder(0.1, 6, 0xbfa27a, x, -0.15, -0.16, board);
   const paper = document.createElement('canvas'); paper.width = paper.height = 512;
   const ink = paper.getContext('2d'); ink.fillStyle = '#eee4ca'; ink.fillRect(0, 0, 512, 512);
   ink.fillStyle = '#30352f'; ink.beginPath(); ink.arc(256, 256, 173, 0, Math.PI * 2); ink.fill();
