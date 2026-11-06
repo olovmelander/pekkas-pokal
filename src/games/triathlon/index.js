@@ -5,7 +5,7 @@ import { createAthlete } from './athlete.js';
 import { frameTriathlon } from './camera.js';
 import { RIVALS, rivalLane } from './rivals.js';
 import { STAGES, CATCH_RADIUS, clamp, advancePace, passageLane, finishPlace, raceProgress, scoreRace, formatTime, rivalAtTime, canDraft } from './rules.js';
-import { COURSE_EDGE, separatePlayer, clearStart } from './spacing.js';
+import { COURSE_EDGE, separatePlayer, clearStart, bodiesOverlap } from './spacing.js';
 
 export const layout = 'full';
 
@@ -61,7 +61,7 @@ export default async function createTriathlon(container) {
   let splits = [], items = [], started = false;
   let combo = 0, bestCombo = 0, previousPlace = 1, feedbackCooldown = 0;
   let { speed } = STAGES[0];
-  let lateralSpeed = 0, clock = 0;
+  let lateralSpeed = 0, clock = 0, contact = { eased: false, held: false };
 
   function clearInput() {
     held.clear(); pointerActions.clear();
@@ -223,13 +223,36 @@ export default async function createTriathlon(container) {
       const delta = r.distance - distance;
       const visualLane = rivalLane(r, time);
       r.athlete.root.position.set(visualLane, 0, -delta);
-      r.athlete.root.visible = r.stage === stage && !r.finished && delta > -12 && delta < 100;
+      // Someone stepping out of the transition area onto the player waits the
+      // fraction of a second the player needs to slide aside.
+      const onPlayer = r.distance < 4 && bodiesOverlap(STAGES[stage].id, { x, distance }, { x: visualLane, distance: r.distance });
+      r.athlete.root.visible = r.stage === stage && !r.finished && delta > -12 && delta < 100 && !onPlayer;
+      r.visualLane = visualLane;
       if (canDraft(stage, distance, x, { ...r, lane: visualLane })) drafting = true;
       if (r.athlete.root.visible) r.athlete.update(STAGES[r.stage].id, dt, time + r.phase, false, r.speed);
     }
   }
 
-  game.onFrame((dt, time) => {
+  // Test hook (window.__ppTriathlon): read-only race state, `steps` so a slow
+  // software-rendered test browser can run several race steps per frame, and
+  // `frozen` to hold a still frame for screenshots. Nothing in the game sets
+  // them; with steps = 1 the clock equals the arcade's.
+  const testHook = {
+    steps: 1, frozen: false,
+    snapshot: () => ({
+      state, stage, distance, x, elapsed, stamina, drafting, ...contact,
+      rivals: rivals.map(r => ({ name: r.name, stage: r.stage, distance: r.distance, lane: r.visualLane, visible: r.athlete.root.visible }))
+    })
+  };
+  window.__ppTriathlon = testHook;
+  let frameClock = 0;
+  game.onFrame(dt => {
+    if (testHook.frozen) return;
+    const steps = clamp(Math.round(testHook.steps) || 1, 1, 8);
+    for (let i = 0; i < steps; i++) { frameClock += dt; frame(dt, frameClock); }
+  });
+
+  function frame(dt, time) {
     const discipline = STAGES[stage].id;
     clock = time;
     if (state === 'race') {
@@ -245,10 +268,11 @@ export default async function createTriathlon(container) {
       distance += pace.distance; elapsed += pace.time;
       advanceRivals();
       // Bodies stay apart: slide round a rival or settle just behind; no pace penalty.
-      ({ x, distance } = separatePlayer({
+      contact = separatePlayer({
         discipline, dt: pace.time, steer: direction, items, rivals: rivalsInLeg(time),
         from: { x: previousX, distance: previousDistance }, to: { x, distance }
-      }));
+      });
+      ({ x, distance } = contact);
       slow = Math.max(0, slow - pace.time); feedbackCooldown = Math.max(0, feedbackCooldown - pace.time);
       updateRivals(pace.time, time);
       athlete.update(discipline, pace.time, time, pace.pushing, speed);
@@ -278,7 +302,7 @@ export default async function createTriathlon(container) {
       const progress = Math.round(raceProgress(stage, distance) * 100);
       progressBar.style.width = `${progress}%`; progressTrack.setAttribute('aria-valuenow', String(progress));
     }
-  });
+  }
 
   controls.hidden = true;
   help.textContent = 'Tre grenar. En energireserv. Hitta din rytm.';
@@ -290,6 +314,7 @@ export default async function createTriathlon(container) {
 
   return {
     destroy() {
+      if (window.__ppTriathlon === testHook) delete window.__ppTriathlon;
       clearInput(); ambience.stop(); removeItems(); course.dispose(); athlete.dispose(); rivals.forEach(r => r.athlete.dispose()); game.destroy();
     }
   };

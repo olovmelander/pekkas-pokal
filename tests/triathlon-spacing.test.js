@@ -4,7 +4,7 @@ import { createAthlete } from '../src/games/triathlon/athlete.js';
 import { RIVALS, rivalLane } from '../src/games/triathlon/rivals.js';
 import { STAGES, CATCH_RADIUS, advancePace, canDraft, passageLane, rivalAtTime } from '../src/games/triathlon/rules.js';
 import {
-  BODY, EASE, COURSE_EDGE, clearance, sideRoom, bodiesOverlap, separatePlayer, clearStart
+  BODY, EASE, EASE_BEHIND, COURSE_EDGE, clearance, sideRoom, bodiesOverlap, separatePlayer, clearStart
 } from '../src/games/triathlon/spacing.js';
 
 const LEGS = ['swim', 'run', 'bike'];
@@ -159,7 +159,7 @@ describe('triathlon drafting with body spacing', () => {
   it('does nothing at all when no rival is within reach', () => {
     const { end } = clearance('bike');
     const from = { x: 0.2, distance: 300 }, to = { x: 0.25, distance: 300.3 };
-    for (const gap of [end + EASE + 0.01, 10, 16, -(end + EASE + 0.01)]) {
+    for (const gap of [end + EASE + 0.01, 10, 16, -(end + EASE_BEHIND + 0.01)]) {
       expect(separatePlayer({ discipline: 'bike', dt: DT, from, to, rivals: [{ lane: 0.2, distance: 300.3 + gap, prevDistance: 300 + gap }] }))
         .toEqual({ ...to, eased: false, held: false });
     }
@@ -235,7 +235,12 @@ describe('triathlon spacing robustness', () => {
           splits.push(elapsed); stage++; distance = 0;
           if (stage < STAGES.length) {
             const next = STAGES[stage].id;
-            const spawn = rivals.filter(r => r.stage === stage && !r.finished).map(r => ({ lane: rivalLane(r, time), distance: r.distance }));
+            // As index.js: rivals in the leg plus anyone reaching its start line within 0.4 s.
+            const spawn = rivals.filter(r => !r.finished).flatMap(r => {
+              const lane = rivalLane({ ...r, stage }, time);
+              if (r.stage === stage) return [{ lane, distance: r.distance }];
+              return rivalAtTime(elapsed + 0.4, r.duration, r.strengths).stage === stage ? [{ lane, distance: 0 }] : [];
+            });
             if (separate) x = clearStart(next, x, 0, spawn);
           }
         }
