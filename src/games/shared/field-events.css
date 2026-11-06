@@ -25,6 +25,7 @@
 .field-game .field-buttons button:disabled { opacity: .4; }
 .field-game .field-buttons button:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
 .field-game .field-buttons button[hidden] { visibility: hidden; display: block; }
+.field-game .field-buttons.solo { grid-template-columns: 1fr; }
 .field-game .field-meter { position: relative; height: 12px; margin: 9px 0 12px; border-radius: 6px; background: #ffffff17; overflow: hidden; }
 .field-game .field-meter i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg,#83bfb4,#f4d486); border-radius: inherit; width: 0; }
 .field-game .field-meter b { position: absolute; width: 3px; top: 0; bottom: 0; left: 66%; background: #fff; box-shadow: 0 0 9px #fff; }

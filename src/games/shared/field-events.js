@@ -269,6 +269,11 @@ export async function createFieldGames(container, config) {
     });
     eventWorld.clear(); effectBits.length = 0;
   }
+  // Without arrows the action button takes the whole row (hidden buttons leave the grid).
+  function showArrows(show) {
+    left.hidden = right.hidden = !show;
+    controls.querySelector('.field-buttons').classList.toggle('solo', !show);
+  }
   function setupEvent() {
     cancelInput();
     custom?.dispose?.(); custom = null;
@@ -283,7 +288,7 @@ export async function createFieldGames(container, config) {
     eventSign = label(events[kind].title, -5.8, 1.5, -13, 2.7, eventWorld);
     pole(0.06, 1.6, '#715c3c', -5.8, 0.8, -13, eventWorld);
     action.textContent = events[kind].verb;
-    left.hidden = right.hidden = ['hurdles', 'target', 'jump'].includes(kind);
+    showArrows(!['hurdles', 'target', 'jump'].includes(kind));
     action.disabled = kind === 'balance';
     meter.hidden = ['hurdles', 'target', 'jump'].includes(kind); meter.classList.toggle('balance', kind === 'balance');
     meter.classList.remove('zone', 'plain'); marker.style.width = '';
@@ -293,7 +298,7 @@ export async function createFieldGames(container, config) {
         THREE, a, world: eventWorld, mesh, box, pole, ball, mat, label, athlete, crew,
         ui: { hint, action, meter, fill, marker }, confetti, finish: (score) => finishEvent(score)
       });
-      left.hidden = right.hidden = !custom.aim;
+      showArrows(custom.aim);
       meter.hidden = custom.meter === false;
       updateRail(); updateHUD();
       return;
@@ -695,7 +700,7 @@ export async function createFieldGames(container, config) {
   });
   updateCamera(); intro();
   // Inspection hook for the browser checks; removed on destroy.
-  const hook = { goTo(i) { eventIndex = clamp(i, 0, config.events.length - 1); showEvent(); }, get state() { return state; }, get kind() { return kind; }, get total() { return total; } };
+  const hook = { goTo(i) { eventIndex = clamp(i, 0, config.events.length - 1); showEvent(); }, get state() { return state; }, get kind() { return kind; }, get total() { return total; }, get probe() { return custom?.probe; } };
   window.__ppField = hook;
   return { destroy() {
     if (window.__ppField === hook) delete window.__ppField;

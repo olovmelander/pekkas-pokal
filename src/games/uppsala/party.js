@@ -8,7 +8,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { POSES } from '../shared/people.js';
 import { clamp, chargePower } from '../pentathlon/rules.js';
 import {
-  PONG, rackCups, pongPower, pongLanding, pongIdealPower, pongJudge, pongScore,
+  PONG, rackCups, pongPower, pongLanding, pongIdealPower, pongAimFor, pongJudge, pongScore,
   FLIP, FLIP_TIMING, flipOutcome, rivalFlipPlan, flipCupScore
 } from './party-rules.js';
 
@@ -236,6 +236,16 @@ function createBeerPong(ctx) {
 
   return {
     aim: true,
+    // Browser checks: read the state and throw with an exact aim and power.
+    probe: {
+      state: () => ({ sunk, used, done, flying: !!flight, cups: cups.filter((c) => c.live).length }),
+      throwAt(index, power) {
+        const cup = cups.filter((c) => c.live)[index] || cups.find((c) => c.live);
+        if (!cup || flight || done) return false;
+        aim = pongAimFor(cup); charge = (power ?? pongIdealPower(cup)) * 1.2 / PONG.chargeRate;
+        throwBall(); return true;
+      }
+    },
     detail: () => `Muggar ${sunk}/6 · Boll ${Math.min(used + (flight || done ? 0 : 1), PONG.balls)}/${PONG.balls}`,
     instruction: () => '← / → sikta · håll och släpp när ringen ligger över en mugg',
     press() {
@@ -536,6 +546,19 @@ function createFlipCup(ctx) {
     p.update(dt, t);
   }
 
+  function releaseFlip() {
+    if (drinking) { drinking = false; return; }
+    if (!charging) return;
+    charging = false;
+    const lane = mine[leg];
+    const outcome = flipOutcome(chargePower(charge), lane.sweet);
+    lane.phase = outcome; lane.k = 0; lane.charge = 0;
+    if (outcome === 'flip') { a.tone(620, 0.07, 'sine'); return; }
+    misses++;
+    a.tone(170, 0.12, 'triangle');
+    a.toast(outcome === 'short' ? 'För löst – släpp lite senare.' : 'För hårt – släpp lite tidigare.');
+  }
+
   function setMode(mode) {
     if (mode === lastMode) return;
     lastMode = mode;
@@ -546,6 +569,16 @@ function createFlipCup(ctx) {
 
   return {
     aim: false,
+    probe: {
+      state: () => ({ race, leg, phase: mine[leg]?.phase, rivalLeg, raceTime, playerTime, misses, won }),
+      drink() { const lane = mine[leg]; if (lane?.phase === 'drink') { lane.drink = 1; lane.lift = 1; } },
+      flip(power) {
+        const lane = mine[leg];
+        if (lane?.phase !== 'ready') return false;
+        charging = true; charge = (power ?? lane.sweet) * 1.2;
+        releaseFlip(); return true;
+      }
+    },
     detail: () => `Ni ${leg}/${FLIP.legs} · Vallgren ${rivalLeg}/${FLIP.legs} · ${decimal(raceTime)} s`,
     instruction: () => 'Håll knappen för att dricka, håll och släpp sedan för att flippa',
     press() {
@@ -555,18 +588,7 @@ function createFlipCup(ctx) {
       if (lane.phase === 'ready') { charging = true; charge = 0; return true; }
       return false;
     },
-    release() {
-      if (drinking) { drinking = false; return; }
-      if (!charging) return;
-      charging = false;
-      const lane = mine[leg];
-      const outcome = flipOutcome(chargePower(charge), lane.sweet);
-      lane.phase = outcome; lane.k = 0; lane.charge = 0;
-      if (outcome === 'flip') { a.tone(620, 0.07, 'sine'); return; }
-      misses++;
-      a.tone(170, 0.12, 'triangle');
-      a.toast(outcome === 'short' ? 'För löst – släpp lite senare.' : 'För hårt – släpp lite tidigare.');
-    },
+    release: releaseFlip,
     cancel() { drinking = false; charging = false; charge = 0; },
     update(dt) {
       clock += dt;
