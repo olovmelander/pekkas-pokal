@@ -510,7 +510,8 @@ function createFlipCup(ctx) {
     let pose;
     const finished = playerTime !== null && (state === 'result' || state === 'final' || finishAt > 0);
     const ourTeam = lane.side > 0;
-    if (finished && ourTeam === won) pose = POSES.cheer(t + lane.i * 0.4);
+    if (active) pose = POSES.idle(t, undefined, lane.i + (ourTeam ? 0 : 5));
+    else if (finished && ourTeam === won) pose = POSES.cheer(t + lane.i * 0.4);
     else if (state === 'result' || state === 'final') pose = POSES.clap(t + lane.i);
     else if (lane.cheer > 0) pose = POSES.cheer(t + lane.i * 0.3);
     else pose = POSES.idle(t, undefined, lane.i + (ourTeam ? 0 : 5));
