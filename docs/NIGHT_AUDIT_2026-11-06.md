@@ -108,6 +108,66 @@ gemensamma kontrollen av ett fryst produktionsbygge.
   arbetskatalog `/workspace/pekkas-night/`. Tabellen ovan bevarar resultat
   även om en senare körning får en ny miljö.
 
+## Andra passet — verifierat
+
+Kodcheckpoint: `95e8a186cb39f93e923fa058fcbfebea50772b36`. Slutkontroll: 2026-11-06 00:45 UTC.
+
+Detta pass följer upp konkreta fynd från första checkpointens bild- och
+inputgranskning. Ändringarna nedan är nya efter `aece1ca`; första passets
+och nattbasens förbättringar räknas inte igen.
+
+| Spel/område | Ny förbättring och riktad verifiering |
+| --- | --- |
+| Fäktning 2023 | Båda tummarna kan välja gard/stöt oberoende. Hjälpmedelsaktivering via enbart klick fungerar. Pekarsläpp och upprepade Enter/Space skapar inga extra handlingar. Fem verkliga browserfel före rättning, 18/18 fall efter; fyra nya enhetstester. |
+| Femkamp 2013, Parkmästare 2014 | Riktningsknappar behåller varje finger och fysisk tangent separat. Orelaterat släpp avbryter inte styrningen; Tab/fokusbyte lämnar ingen fastlåst tangent. Knappens nedtryckta utseende följer det samlade tillståndet. Åtta nya regressioner, 20 riktade browserkontroller och 11 återkontroller av input/knappåterkoppling. |
+| Parkmästare 2014 | En stilla mörk/ljus markring gör lillen synlig mot gruset, även på 320 px och i liggande telefon. Markeringen följer alla tre målplaceringar; bollstorlek, poäng och kastfysik är oförändrade. Tre riktiga kast och målkoordinater verifierade. |
+| Bondespel 2015 | Luftgevärstavlans stöd når nu marken. Verklig world-geometri mätt före/efter: nederkant 0,55 → −0,05 m, överkant kvar 5,95 m. Sex bilder från samma kameror jämförda i tre format. Markkontakten syns direkt på dator/telefon; i liggande vy ligger nederdelen bakom kontrollpanelen och styrks av geometrimätningen. |
+| Triathlon 2017 | Fyra simmare startar åtskilda och ryms i telefonbilden. En första bredare placering klippte en arm på mobil och ersattes före checkpoint med smalare fasta simspår. Verkliga animerade kroppsmått och projektion testas även vid 320 px. Minsta marginal cirka 0,206 m vid start och 0,191 m med maximal passiv ström. Normalrendering i tre format, omstart och stängning godkända. Löp-/cykelspår, drafting, fart och måltider bevarade. |
+| Pingis 2019 | Motståndar-/rallybanner och coachtext visas efter varandra i låg liggande vy. Båda läsbara faserna bildgranskade; coachen återkommer när den befintliga toasten upphör. Inga nya timers. |
+| Flipper 2025 | Avfyrningsinstruktionen har stabil ljus text och mörk bakgrund i stället för en kontrastsvag opacity-puls. Text/mätare ryms i 320×568, 390×844, 844×390 och 1280×800. Turkos timingåterkoppling och riktig touch-/Space-avfyrning verifierade. |
+| Gemensam grafik | En väntande grafikfelnotis-timer avbryts vid destroy. CPU-repro visade tidigare en borttagen DOM-notis kvarhållen upp till 12 sekunder; efter rättning återstår varken timer eller context-listener. Upprepad dispose och frånvarande host testade. Ingen permanent GPU-läcka påstås. |
+
+### Andra passets verifieringsmetod
+
+- **192 enhetstester i 31 filer** passerade. Efter simspårens sista
+  begränsning kördes de 23 berörda triathlontesterna igen: alla godkända.
+- ESLint: **0 fel, 1 309 varningar**. Ny input-/rivalhjälpkod har inga
+  lintfel; `git diff --check` är ren.
+- Produktionsbygge och delningssidor godkända. `dist/src/games` jämfördes
+  med källfilerna före och efter browserkontrollen och var identiskt.
+- **21/21 nya produktionsfall godkända**, ordinarie RAF mot fryst bygge:
+  2013, 2014, 2015, 2017, 2019, 2023 och 2025 × 1280×800, 390×844,
+  844×390. Start/rendering, paus/återgång, tangentbordsfokus, viewport
+  och stängning verifierade; båda harnessarna avslutade med exit 0.
+  Alla 21 bilder granskade. Några äldre spels bilder visar tidig
+  introduktion/kameraövergång, vilket inte är bevis för senare matchläge.
+- De riktade fäktnings-, field- och flipperkontrollerna använder riktiga
+  DOM-/CDP-händelser men styrd klocka och undertryckt RAF. Stillbilderna
+  använder ordinarie grafikpipeline. De är inte normal-RAF-spelpass eller
+  mätningar av fysisk telefonprestanda.
+- Farmens A/B-bilder och triathlonets slutliga startbilder använder
+  ordinarie RAF/rendering. Farmens jämförelse sätter samma kamera i båda
+  fallen; gamla stöd återskapas enbart genom testets nätverksinterception.
+- Testharnessar korrigerades för för snäv kameratolerans, modulcache vid
+  samma hash och en tvetydig knappselektor. Ett devserveravbrott krävde
+  omkörning av två farmbilder. Dessa var test-/miljöfel, inte produktfel.
+- Detaljbevis: `shooting-fencing-pass2.md`, `field-pingis.md`,
+  `farm-country-pass2.md`, `pass2-triathlon-start.md`,
+  `fantasy-fishing-pinball-pass2.md` och `gfx-cleanup.log` under
+  `/workspace/pekkas-night/`.
+
+### Kompletterande Varggropen-research
+
+[Klubbens bansida](https://vkrc.se/klubben/banan/) bekräftar 665 m,
+tekniska kurvor, kuperad terräng och 40–50 sekunders hyrkartsvarv. Första
+nattpassets 43,4 s är förenligt med beskrivningen. En
+[samtida deltagarblogg från juni 2012](https://ragokartracing.blogspot.com/2012/06/)
+gav ingen inmätt höjdprofil eller entydig startlinje/körriktning för
+Pekkas tävling. Ett sökresultat med namnet banprofil gällde ett skidspår,
+inte gokartbanan. Ingen ny tillförlitlig höjdprofil hittades i denna
+begränsade komplettering. Den tidigare avlästa planen och dess uttryckliga
+osäkerhetsmarkeringar bevaras; ingen banändring räknas som nytt nattarbete.
+
 ## Fortsättning och begränsningar
 
 ### Fynd som förs till nästa pass
@@ -120,20 +180,29 @@ Fäktningens tvåtummars-/click-fel har reproducerats i riktig Chromium;
 field-riktningsknapparnas blandade hållkällor har reproducerats genom de
 faktiska registrerade callbacks. En kort kvarhållning av DOM via
 grafikfelnotisens timer är belagd; ingen permanent resursläcka är belagd.
-Dessa är ännu **inte åtgärdade** i kodcheckpointen ovan.
+Dessa fynd är åtgärdade i andra passet ovan; de ingick inte i första
+kodcheckpointen.
 
 ### Kö för följande nattpass
 
-Följande är kandidater att **reproducera**, inte redan bekräftade eller
-åtgärdade fel. Välj nya substantiella kontroller; kör inte hela sviten
-igen utan ny ändring eller konkret kvarstående osäkerhet.
+Nedan skiljs bekräftade, ännu öppna fynd från bredare granskningskandidater.
+Välj nya substantiella kontroller; kör inte hela sviten igen utan ny
+ändring eller konkret kvarstående osäkerhet.
 
-1. Fäktningens självständiga handlingsknappar avvisar sekundärpekare.
-   Prova två verkliga tummar på gard/stöt och hjälpmedelsaktivering via
-   enbart `click`. Utvärdera separat från ägarskapet för ett siktdrag.
-2. Prova blandade hållkällor och fokusbyte även på de äldre spelens
-   riktningsknappar. Ny kontroll ska omfatta faktisk input, paus och
-   återgång; anta inte att en ensam boolean automatiskt är en spelbugg.
+1. En ny CPU-granskning av faktiska callbacks bekräftar att sekundär
+   musknapp aktiverar hållkontroller i farm/country/kart/triathlon och
+   att lokala Ctrl/Meta/Alt-handlers i dessa samt field kringgår skalets
+   korrekta guard. 101 kontroller: 71 oönskade aktiveringar/nyckelinsättningar
+   och 30 godkända avbrotts-/negativkontroller. Detta är ännu inte rättat.
+   Repro: `node /workspace/pekkas-night/pass2-input-followup.mjs`;
+   exakt fil/rad och användareffekt i `pass2-input-followup.md`.
+   Nästa pass bör rätta startfiltreringen och verifiera vanlig/Shift-input,
+   fysisk keyup efter modifierarbyte och två fingrar. OS-reserverade
+   kortkommandons faktiska leverans är inte browserbevisad.
+2. Triathlon har fortsatt fri passage genom rivaler senare i loppet.
+   Startöverlappet är rättat, men personkollisioner eller automatiskt
+   undanvikande skulle ändra spelmekanik/drafting och kräver en separat
+   motivering och verifiering. Det är ingen utfäst åtgärd.
 3. Granska längre spelpass visuellt på 320 px och liggande telefon:
    instruktionernas läsbarhet, respons på träff/miss, kamera och effekter
    under verkliga spelsituationer. Jämför nya miljöer med de äldre spelen
