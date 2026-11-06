@@ -145,7 +145,7 @@ function createBeerPong(ctx) {
   pongTable(ctx);
   cooler(ctx, 0.95, 6.95, 0.3);
   const cups = rackCups().map((c) => {
-    const cup = makeCup(kit, world, 0.55);
+    const cup = makeCup(kit, world, 0.7);
     cup.group.position.set(c.x, TOP, c.z);
     return { ...c, cup, gone: -1 };
   });
@@ -163,7 +163,7 @@ function createBeerPong(ctx) {
   const host = crew.get('Erik Vallgren');
   host?.root.position.set(0.04, 0.02, 3.5); host?.root.rotation.set(0, 0, 0);
   // Out of the camera's way: two at the sides of the table, two behind the rack, two back by the thrower.
-  const spots = [[-1.35, 4.6], [1.35, 4.9], [1.25, 3.5], [-1.2, 3.42], [1.95, 6.05], [-2.0, 5.75]];
+  const spots = [[-1.6, 4.55], [1.6, 4.85], [1.25, 3.45], [-1.2, 3.4], [2.05, 6.1], [-2.1, 5.8]];
   const fans = [...crew.values()].filter((p) => p !== host);
   const centre = { x: 0, z: 5.05 };
   fans.forEach((p, i) => {
@@ -289,9 +289,9 @@ function createBeerPong(ctx) {
           dot.updateMatrix(); dots.setMatrixAt(i, dot.matrix);
         }
         dots.instanceMatrix.needsUpdate = true;
-        ui.hint.textContent = holding ? `${Math.round(power * 100)} % kraft · släpp när ringen ligger över en mugg`
-          : `Sikta ← → · ${6 - sunk} ${6 - sunk === 1 ? 'mugg' : 'muggar'} kvar · ${PONG.balls - used} ${PONG.balls - used === 1 ? 'boll' : 'bollar'}`;
       }
+      const left = `${6 - sunk} ${6 - sunk === 1 ? 'mugg' : 'muggar'} kvar · ${PONG.balls - used} ${PONG.balls - used === 1 ? 'boll' : 'bollar'}`;
+      ui.hint.textContent = ready && holding ? `${Math.round(power * 100)} % kraft · släpp när ringen ligger över en mugg` : ready ? `Sikta ← → · ${left}` : left;
       if (flight) {
         flight.t += dt;
         if (flight.phase === 'arc') {
