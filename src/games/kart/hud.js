@@ -64,7 +64,7 @@ const MARKUP = `
   </div>
   <div class="kart-controls" data-game-controls>
     <div class="kart-control-group"><button type="button" data-control="left" aria-label="Styr vänster">←<small>A / ←</small></button><button type="button" data-control="right" aria-label="Styr höger">→<small>D / →</small></button></div>
-    <div class="kart-control-group"><button type="button" data-control="brake" aria-label="Bromsa"><span>BROMS</span><small>S / ↓ / ␣</small></button><button type="button" data-control="throttle" aria-label="Håll för att gasa"><span>GAS</span><small>W / ↑</small></button></div>
+    <div class="kart-control-group"><button type="button" data-control="brake" aria-label="Bromsa, eller backa när karten står still"><span>BROMS</span><small>S / ↓ / ␣</small></button><button type="button" data-control="throttle" aria-label="Håll för att gasa"><span>GAS</span><small>W / ↑</small></button></div>
   </div>
   <button type="button" class="kart-autogas" data-toggle="autogas" aria-pressed="false" aria-label="Autogas: håller gasen åt dig">AUTOGAS <b>AV</b></button>`;
 
@@ -178,7 +178,8 @@ export function createKartHud(game, { track, rivals = [], onEvent = () => {} } =
   function wrongWayCheck(info, player, dt) {
     if (info.state !== 'racing' || player.finishTime != null) { wrongClock = 0; wrongWay = false; lastDistance = null; return; }
     const heading = Number.isFinite(player.heading) ? player.heading : null;
-    const back = heading !== null ? Math.cos(heading) < -0.25 : lastDistance !== null && player.distance < lastDistance - 0.02;
+    // Facing backwards and driving nose-first; backing up the right way round is fine.
+    const back = heading !== null ? Math.cos(heading) < -0.25 && finite(player.u, 1) > 0.5 : lastDistance !== null && player.distance < lastDistance - 0.02;
     const forward = heading !== null ? Math.cos(heading) > 0.2 : lastDistance !== null && player.distance > lastDistance + 0.02;
     lastDistance = player.distance;
     if (back && finite(player.speed) > 1.2) wrongClock += dt;
@@ -239,6 +240,7 @@ export function createKartHud(game, { track, rivals = [], onEvent = () => {} } =
   function tip(info, player, controlsHint) {
     if (info.state === 'grid' || info.state === 'lights') return 'VÄNTA TILLS LJUSEN SLOCKNAR';
     const speed = finite(player.speed);
+    if (player.reversing) return 'BACKAR · SLÄPP BROMSEN FÖR ATT STANNA';
     if (speed < 1) return controlsHint;
     if (wrongWay) return 'VÄND OCH KÖR ÅT ANDRA HÅLLET';
     if (player.surface === 'grass') return 'GRÄS BROMSAR · TILLBAKA TILL ASFALTEN';

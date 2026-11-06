@@ -322,7 +322,7 @@ export default async function createGokart(container) {
     const rivalsOnTrack = info.mode === 'time' ? [] : info.opponents ?? [];
     effects.update(dt, [info.player, ...rivalsOnTrack], camera);
     sound.update(dt, info.player, rivalsOnTrack, info.state);
-    const controlsHint = !coarse ? 'HÅLL ↑ / W FÖR ATT KÖRA' : input.autogas ? 'AUTOGAS PÅ · DU STYR OCH BROMSAR' : 'HÅLL GAS FÖR ATT KÖRA';
+    const controlsHint = !coarse ? 'HÅLL ↑ / W FÖR ATT KÖRA · ↓ BACKAR' : input.autogas ? 'AUTOGAS PÅ · HÅLL BROMS FÖR ATT BACKA' : 'HÅLL GAS FÖR ATT KÖRA · BROMS BACKAR';
     hud.update(dt, info, { rpm: sound.rpm, controlsHint });
   }
   function resetFeel() {
@@ -335,7 +335,7 @@ export default async function createGokart(container) {
   game.setHUD('VARGGROPEN · 2012', 'Pekkas Gokart', 'Tre varv. Fem rivaler. En pokal.');
   game.showPanel({
     eyebrow: '2012 · VARGGROPEN', title: 'Pekkas Gokart',
-    body: `<p>Varggropens 665 meter långa bana, varm asfalt och fem hungriga rivaler från 2012 års pall.</p>${hud.setupHTML()}<p><strong>Styr ← → / A D. Håll ↑ / W för gas.</strong> Bromsa med ↓ / S / mellanslag före en snäv kurva. Släpp gasen mitt i kurvan så glider baken ut; motstyr för att fånga den. C byter kameravy.</p><p>På telefon håller du GAS och styr med pilknapparna, eller drar med tummen på vänstra halvan. Slå på AUTOGAS så håller spelet gasen åt dig.</p><p><small>Bansträckningen följer klubbens flygfoto. Exakta höjder och 2012 års markeringar är tolkade.</small></p>`,
+    body: `<p>Varggropens 665 meter långa bana, varm asfalt och fem hungriga rivaler från 2012 års pall.</p>${hud.setupHTML()}<p><strong>Styr ← → / A D. Håll ↑ / W för gas.</strong> Bromsa med ↓ / S / mellanslag före en snäv kurva; står du still och håller bromsen backar karten. Släpp gasen mitt i kurvan så glider baken ut; motstyr för att fånga den. C byter kameravy.</p><p>På telefon håller du GAS och styr med pilknapparna, eller drar med tummen på vänstra halvan. Håll BROMS när du står still för att backa. Slå på AUTOGAS så håller spelet gasen åt dig.</p><p><small>Bansträckningen följer klubbens flygfoto. Exakta höjder och 2012 års markeringar är tolkade.</small></p>`,
     button: 'Till startlinjen',
     onStart: () => startRace(hud.readSetup())
   });
@@ -363,7 +363,7 @@ export default async function createGokart(container) {
 
   // Test hook for the browser harness: inspect and drive the race without frames.
   const snapshotDriver = (driver) => {
-    const keys = ['distance', 'lane', 'heading', 'yawRate', 'steerAngle', 'speed', 'slip', 'wheelspin', 'surface', 'skidding', 'hit', 'grip', 'slipstream', 'finishTime', 'held', 'launchPenalty'];
+    const keys = ['distance', 'lane', 'heading', 'yawRate', 'steerAngle', 'speed', 'slip', 'wheelspin', 'surface', 'skidding', 'hit', 'grip', 'slipstream', 'finishTime', 'held', 'launchPenalty', 'u', 'reversing'];
     return Object.fromEntries(keys.map((key) => [key, driver[key]]).concat(driver.name ? [['name', driver.name]] : []));
   };
   const hook = {

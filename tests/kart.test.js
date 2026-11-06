@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Euler, Vector3, PerspectiveCamera } from 'three';
 import {
   LAPS, TRACK_HALF_WIDTH, WALL_LANE, TOP_SPEED, KART, steeringFromButtons, clamp, trackGap, slipstreamFactor, newDriver, stepDriver,
-  stepField, racePosition, raceScore, resolveContact, markFinish, raceStandings, formatTime, engineFeedback, laneSurface, slideAngle
+  stepField, racePosition, raceScore, resolveContact, markFinish, raceStandings, formatTime, engineFeedback, laneSurface, slideAngle, REVERSE_TOP
 } from '../src/games/kart/physics.js';
 import { buildRacingLine, createBrain, rivalInput, catchupFactor, RIVAL_PROFILES, DIFFICULTIES, seededRandom } from '../src/games/kart/ai.js';
 import { createGhostRecorder, encodeGhost, decodeGhost, ghostAt, ghostTimeAt, saveGhost, loadGhost, GHOST_KEY } from '../src/games/kart/ghost.js';
@@ -127,6 +127,53 @@ describe('gokart handling', () => {
     expect(driver.speed).toBeLessThan(speed);
     drive(driver, { steer: 0, throttle: true, brake: true }, 0, 3);
     expect(driver.speed).toBe(0);
+  });
+  it('backs up when the brake is held at a standstill, slowly and only after a pause', () => {
+    const driver = newDriver();
+    drive(driver, { brake: 1 }, 0, 0.25);
+    expect(driver.distance).toBe(0);
+    expect(driver.reversing).toBe(false);
+    drive(driver, { brake: 1 }, 0, 2.5);
+    expect(driver.reversing).toBe(true);
+    expect(driver.distance).toBeLessThan(-2);
+    expect(driver.u).toBeLessThan(0);
+    expect(driver.speed).toBeLessThanOrEqual(REVERSE_TOP + 0.05);
+    // Letting go rolls it to a stop; gas while still rolling back brakes first.
+    drive(driver, { throttle: 1 }, 0, 0.2);
+    expect(driver.u).toBeGreaterThan(-REVERSE_TOP);
+    drive(driver, { throttle: 1 }, 0, 2);
+    expect(driver.u).toBeGreaterThan(2);
+  });
+  it('stops rather than backs up from speed, and never backs with gas held or for rivals', () => {
+    const driver = newDriver(); driver.u = driver.speed = 12;
+    let stoppedAt = null, firstBack = null;
+    for (let i = 0; i < 300; i++) {
+      stepDriver(driver, { brake: 1 }, 0, STEP);
+      if (stoppedAt === null && driver.speed === 0) stoppedAt = i;
+      if (firstBack === null && driver.u < 0) firstBack = i;
+    }
+    expect(stoppedAt).not.toBeNull();
+    expect((firstBack - stoppedAt) * STEP).toBeGreaterThanOrEqual(0.3);
+    const both = newDriver();
+    drive(both, { brake: 1, throttle: 1 }, 0, 3);
+    expect(both.distance).toBe(0);
+    const rival = newDriver();
+    drive(rival, { brake: 1, reverse: false }, 0, 3);
+    expect(rival.distance).toBe(0);
+  });
+  it('steers the nose the other way when backing, and backs out of the tyre wall', () => {
+    const forward = newDriver(), backward = newDriver();
+    drive(forward, { throttle: 1 }, 0, 0.4);
+    drive(forward, { throttle: 0.3, steer: 1 }, 0, 0.8);
+    drive(backward, { brake: 1 }, 0, 1.2);
+    drive(backward, { brake: 1, steer: 1 }, 0, 0.8);
+    expect(forward.heading).toBeGreaterThan(0.02);
+    expect(backward.heading).toBeLessThan(-0.02);
+    // Nose into the wall at an angle: holding the brake backs it away.
+    const stuck = newDriver(100, WALL_LANE - 0.6); stuck.heading = 0.9;
+    drive(stuck, { brake: 1 }, route, 3);
+    expect(stuck.lane).toBeLessThan(WALL_LANE - 1.2);
+    expect(finite(stuck)).toBe(true);
   });
   it('has rental-kart pace: about 67 km/h flat out and a believable launch', () => {
     const driver = newDriver();

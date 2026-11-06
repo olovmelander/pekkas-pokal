@@ -122,7 +122,8 @@ export function createKartCamera(camera, track, { reducedMotion = false, view = 
       if (snap) {
         previousKart.copy(kart); yaw = kartYaw; yawRate = 0; previousSpeed = speed; accel = 0; initialized = false;
       } else if (moved > 0.004 && speed > 1.2) {
-        const travel = Math.atan2(kart.x - previousKart.x, kart.z - previousKart.z);
+        // Backing up: the kart still points the other way, so flip the travel direction.
+        const travel = Math.atan2(kart.x - previousKart.x, kart.z - previousKart.z) + (finite(driver.u, 1) < 0 ? Math.PI : 0);
         wishYaw = kartYaw + wrapAngle(travel - kartYaw) * clamp((speed - 1.2) / 3, 0, 1);
       }
       previousKart.copy(kart);

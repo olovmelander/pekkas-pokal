@@ -141,6 +141,7 @@ Välj **Lopp** eller **Tidskörning** mot ett spöke av ditt bästa varv, och
 | --- | --- | --- |
 | Styr | ← →-knapparna eller dra med tummen på vänstra halvan | ←/→ eller A/D |
 | Gas / broms | GAS och BROMS, eller AUTOGAS | ↑/W och ↓/S/mellanslag |
+| Backa | Håll BROMS när karten står still | Håll ↓/S/mellanslag när karten står still |
 | Kameravy | Knappen BAKOM/NÄRA | C |
 
 Kameran sitter lågt bakom karten och vidgas med farten, däcken ryker i

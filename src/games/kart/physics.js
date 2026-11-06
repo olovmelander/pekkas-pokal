@@ -36,6 +36,11 @@ const TYRE_C = 1.38;             // about 88 % of peak left at full sideways
 const FRONT = { B: 15.5, grip: 0.95 }, REAR = { B: 19, grip: 1.06 };
 const DRIVE_ELLIPSE = 0.6;       // a solid axle under power pushes rather than spins
 const MAX_STEER = 0.5;
+// Reverse: hold the brake at a standstill (without gas) and the kart backs
+// up slowly, enough to get out of a wall or a spin.
+const REVERSE_DRIVE = 2.2;       // m/s²
+export const REVERSE_TOP = 2.6;  // m/s, about 9 km/h
+const REVERSE_DELAY = 0.35;      // s stopped with the brake held before it backs
 const LOAD_LAG = 0.12;           // s, chassis pitch before load moves
 
 /** Grip, rolling drag and texture of each surface. Rumble is for feel/audio. */
@@ -64,7 +69,8 @@ export function newDriver(distance = 0, lane = 0, { assist = ASSIST, mass = KART
     distance, lane, heading: 0, yawRate: 0, steerAngle: 0, u: 0, w: 0, speed: 0, lateral: 0,
     slip: 0, frontSlip: 0, wheelspin: 0, surface: 'asphalt', skidding: false, hit: 0, grip: 1,
     slipstream: 0, finishTime: null, rumble: 0, bump: 0, wallContact: false, held: false,
-    launchPenalty: 0, atWall: false, assist, mass, longAccel: 0, latAccel: 0, throttle: 0, brake: 0, contact: 0, stuck: 0
+    launchPenalty: 0, atWall: false, assist, mass, longAccel: 0, latAccel: 0, throttle: 0, brake: 0, contact: 0, stuck: 0,
+    reverseWait: 0, reversing: false
   };
 }
 
@@ -159,10 +165,19 @@ function prepare(driver, input, env) {
 function substep(driver, input, env, h) {
   const m = driver.mass || KART.mass, I = KART.inertia * m / KART.mass, a = KART.front, b = KART.rear;
   let { u, w, yawRate: r } = driver;
-  const throttleIn = clamp(Number(input.throttle) || 0, 0, 1), brake = clamp(Number(input.brake) || 0, 0, 1);
-  const throttle = brake > 0 ? 0 : throttleIn;
+  const throttleIn = clamp(Number(input.throttle) || 0, 0, 1), brakeIn = clamp(Number(input.brake) || 0, 0, 1);
+  // The brake held at a standstill, without gas, becomes reverse. While the
+  // kart rolls backwards, gas works as a brake until it has stopped.
+  const canReverse = input.reverse !== false && brakeIn > 0 && throttleIn === 0;
+  driver.reverseWait = canReverse && u < 0.3 ? (driver.reverseWait || 0) + h : canReverse ? driver.reverseWait || 0 : 0;
+  // Rolling back after a bump, the brake brakes first; reverse comes after the pause.
+  const reversing = canReverse && !driver.held && driver.reverseWait >= REVERSE_DELAY;
+  const backing = u < -0.3;
+  const brake = reversing ? 0 : backing ? Math.max(brakeIn, throttleIn) : brakeIn;
+  const throttle = brakeIn > 0 || backing ? 0 : throttleIn;
+  driver.reversing = reversing;
   if (driver.held) {
-    driver.u = driver.w = driver.yawRate = driver.speed = driver.lateral = 0;
+    driver.u = driver.w = driver.yawRate = driver.speed = driver.lateral = driver.reverseWait = 0;
     driver.wheelspin = throttle;
     driver.steerAngle += clamp(clamp(Number(input.steer) || 0, -1, 1) * 0.4 - driver.steerAngle, -3 * h, 3 * h);
     return;
@@ -196,9 +211,10 @@ function substep(driver, input, env, h) {
   let launch = 1;
   if (driver.launchPenalty > 0) { launch = 0.32; driver.launchPenalty = Math.max(0, driver.launchPenalty - h); }
   const drive = u > -0.5 ? throttle * Math.min(DRIVE_MAX, POWER / Math.max(speed, 1)) * m * launch : 0;
+  const reverseDrive = reversing ? -brakeIn * REVERSE_DRIVE * m * clamp((REVERSE_TOP + u) / 0.6, 0, 1) : 0;
   const brakeForce = brake * BRAKE_DECEL * m;
   let fxF = -BRAKE_FRONT * brakeForce * clamp(frontLong / 0.4, -1, 1);
-  let fxR = drive - (1 - BRAKE_FRONT) * brakeForce * clamp(rearLong / 0.4, -1, 1);
+  let fxR = drive + reverseDrive - (1 - BRAKE_FRONT) * brakeForce * clamp(rearLong / 0.4, -1, 1);
   let capF = maxF, capR = maxR, spin = launch < 1 ? 1 : 0, locked = false;
   if (Math.abs(fxF) > maxF * 0.97) { fxF = Math.sign(fxF) * maxF * 0.9; capF = maxF * 0.3; locked = true; } else capF = Math.sqrt(maxF * maxF - fxF * fxF);
   if (Math.abs(fxR) > maxR * 0.97) {
@@ -229,17 +245,19 @@ function substep(driver, input, env, h) {
   // Blend into a kinematic bicycle at walking pace, where slip angles are meaningless.
   const now = Math.hypot(u, w);
   if (now < 3) {
-    const lambda = clamp((now - 0.8) / 2.2, 0, 1), rKin = u * Math.tan(delta) / WHEELBASE;
+    // Backing up is always kinematic: a reversing kart is unstable in a tyre model.
+    const lambda = u < 0 ? 0 : clamp((now - 0.8) / 2.2, 0, 1), rKin = u * Math.tan(delta) / WHEELBASE;
     r = lambda * r + (1 - lambda) * rKin;
     w = lambda * w + (1 - lambda) * rKin * b;
   }
   // A marshal's helping hand: a kart stuck across the track is turned back.
-  driver.stuck = now < 1.5 && (Math.abs(driver.heading) > 0.9 || (driver.atWall && throttle > 0)) ? (driver.stuck || 0) + h : 0;
+  // Not while the driver is backing out on their own.
+  driver.stuck = !reversing && now < 1.5 && (Math.abs(driver.heading) > 0.9 || (driver.atWall && throttle > 0)) ? (driver.stuck || 0) + h : 0;
   if (driver.stuck > 0.6) {
     r = Math.abs(driver.heading) > 0.05 ? -Math.sign(driver.heading) * 1.6 : 0;
     if (Math.abs(driver.lane) > TRACK_HALF_WIDTH) driver.lane -= Math.sign(driver.lane) * 0.8 * h;
   }
-  if ((brake > 0 && now < 0.2) || (throttle === 0 && now < 0.06)) u = w = r = 0;
+  if (!reversing && ((brake > 0 && now < 0.2) || (throttle === 0 && now < 0.06))) u = w = r = 0;
 
   // Frenet update: d(heading)/dt = yawRate - curvature * ds/dt.
   const kappa = env.curvature(driver.distance);
