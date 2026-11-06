@@ -218,7 +218,7 @@
       icon: '⛲',
       colors: ['#8a7950', '#183b34'],
       cover: 'games/uppsala.webp',
-      coverBlur: 'data:image/webp;base64,UklGRpoAAABXRUJQVlA4II4AAADQBACdASoYABEAPxFwslMsJaQisBgIAYAiCWI3AAOgrhACtofSW0AclmUUVdA4AAD2SqYouY+3yVODOrwnyh3dYkjLBG+hxGISi59phiE39SxFgcAt86yX+zLsgJTrxlUowSsGIYXMJVQ2gjSSmf9ETVZnMb4873egJzocYlAWfkICaIL9K50sL3DZiAAA',
+      coverBlur: 'data:image/webp;base64,UklGRtQAAABXRUJQVlA4IMgAAAAQBACdASoYABEAPrVQoUwnJKMiKAqo4BaJQBdmUAAmRCaEpBScRiZXfgD+J5F7dvIgVhYDYc7B4CunjpDAUVzO4IWYaU/eSOrp4aPaCgzjcCubj2nnC3/Yv6JkRXH7j5IOCgjnTR38Wmx2YuFHMuYKvfuqO1WNfwP+DrKY7Su//2Fush+ytak3LBPsQUhjZx+uJLt5/b8EsGsX0j2joSD0WNTazIi7wdVPyuDHj4XiR4ge8RORZK0wjXaYasEQD03NBuoGU4AAAA==',
       module: 'src/games/uppsala/index.js'
     },
     {
