@@ -418,6 +418,10 @@ export function createArcade(container, options = {}) {
     invalidate() { renderRequested = true; },
     onFrame(callback) { callbacks.add(callback); return () => callbacks.delete(callback); },
     get paused() { return paused; },
-    get muted() { return muted; }
+    get muted() { return muted; },
+    /** The shared AudioContext once a player gesture has woken it, else null.
+     * Pause and mute suspend it and destroy closes it, so graphs built on it
+     * obey both (games still silence their own nodes between races). */
+    get audioContext() { return audio && audio.state !== 'closed' ? audio : null; }
   };
 }
