@@ -40,6 +40,9 @@ slutar nära målet. Missade slag återgår till sin utgångspunkt; denna avsikt
 arkadregel står i instruktionen och hindrar att en nybörjare fastnar bakom en
 båge. Sex slag ger utrymme att lära sig kraft och vinkel.
 
+Uppsala har sedan november 2026 även **beerpong** och **flipcup**, som enligt
+deltagarna spelades 2014. De beskrivs i [Uppsalas researchfil](../uppsala/research.md).
+
 Varje gren har en egen instruktion innan start, omedelbar ljud- och textrespons,
 resultat mellan grenarna, medalj, lokalt personbästa och omspel. Guld kräver
 80 poäng i snitt, silver 55 och brons 30. Samma trösklar fungerar för båda

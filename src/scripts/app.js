@@ -214,7 +214,7 @@
       year: 2014,
       title: 'Pekkas Parkmästare',
       competition: 'Mångkamp Uppsala',
-      tagline: 'Boule, krocket och ringkast i Uppsalas gyllene park.',
+      tagline: 'Beerpong, flipcup, boule, krocket och ringkast i Uppsalas gyllene park.',
       icon: '⛲',
       colors: ['#8a7950', '#183b34'],
       cover: 'games/uppsala.webp',
