@@ -32,6 +32,11 @@
 .arcade-primary:hover { filter: brightness(1.1); }
 .arcade-primary:active { transform: translateY(1px); }
 .arcade-panel-foot { display: block; margin-top: 20px; color: #84978c; font-size: 8px; letter-spacing: .18em; }
+/* A start, instruction or result dialog owns the screen: the game's own HUD,
+   dashboards and controls fade out behind it instead of peeking out beside
+   it (the title twice, a timer under the dialog's edge). */
+.arcade-ui > :not(.arcade-overlay):not(.arcade-pause):not(.arcade-tools):not(.arcade-toast) { transition: opacity .25s ease; }
+.arcade-has-panel .arcade-ui > :not(.arcade-overlay):not(.arcade-pause):not(.arcade-tools):not(.arcade-toast) { opacity: 0; }
 .arcade-is-paused .arcade-ui > :not(.arcade-pause):not(.arcade-tools) { pointer-events: none; }
 .arcade-is-paused .arcade-ui > :not(.arcade-pause):not(.arcade-tools) button { pointer-events: none; }
 .arcade-controls { position: absolute; left: 18px; right: 18px; bottom: max(18px, env(safe-area-inset-bottom)); display: flex; gap: 10px; justify-content: center; }

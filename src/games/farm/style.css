@@ -45,3 +45,8 @@
 .farm-controls .farm-perfect i { background:#fff2bf; }
 @media(max-width:600px) { .farm-progress { top:90px; left:14px; gap:5px; } .farm-progress span { width:19px; height:19px; font-size:9px; } }
 @media(max-height:560px) and (min-width:600px) { .farm-progress { top:108px; } }
+/* Phone held sideways: dock the controls to the right like Gårdskampen, so
+   the target, the wood pile and the throws stay in the open middle */
+@media (max-height:560px) and (min-width:600px) {
+  .farm-controls { left:auto; right:14px; width:310px; transform:none; }
+}

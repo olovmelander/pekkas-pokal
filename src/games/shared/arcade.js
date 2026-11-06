@@ -55,7 +55,9 @@ export function createArcade(container, options = {}) {
   const renderer = new THREE.WebGLRenderer({ antialias: !coarse && !safe, alpha: false, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, coarse || safe ? 1.35 : 1.75));
   renderer.shadowMap.enabled = !safe;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // r187 removed PCFSoftShadowMap (it fell back with a console warning). PCF
+  // now filters with hardware comparison; light.shadow.radius sets the spread.
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = lighting === 'interior' ? 1.05 : 1.03;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -80,15 +82,28 @@ export function createArcade(container, options = {}) {
   fill.position.set(18, 9, -18);
   scene.add(ambient, sun, sun.target, fill);
   let environment = null;
-  if (!safe) {
+  // A restored WebGL context brings back geometry and image textures, but the
+  // pre-filtered environment lives only in a render target: it comes back
+  // black and metal, water and lacquer turn dull. Rebake it before the first
+  // visible frame after a restore (never while the tab is hidden).
+  let environmentRestorePending = false;
+  function bakeEnvironment(afterContextLoss = false) {
     try {
-      environment = arcadeEnvironment(renderer, lighting === 'interior');
+      const next = arcadeEnvironment(renderer, lighting === 'interior');
+      // After a context loss the old target's GPU objects died with the old
+      // context; deleting them again only makes WebGL warn
+      if (!afterContextLoss) environment?.dispose();
+      environment = next;
       scene.environment = environment.texture;
       scene.environmentIntensity = lighting === 'interior' ? 0.55 : 0.38;
+      return true;
     } catch {
-      // Older WebGL devices retain a complete direct-light rendering path.
-      ambient.intensity += 0.3;
+      return false;
     }
+  }
+  if (!safe && !bakeEnvironment()) {
+    // Older WebGL devices retain a complete direct-light rendering path.
+    ambient.intensity += 0.3;
   }
   const shadowOffset = new THREE.Vector3();
   function setShadowFocus(x, y, z) {
@@ -246,7 +261,12 @@ export function createArcade(container, options = {}) {
     if (document.hidden && panel.hidden) setPaused(true);
     renderRequested = true;
   });
-  listen(renderer.domElement, 'webglcontextrestored', () => { renderRequested = true; });
+  listen(renderer.domElement, 'webglcontextrestored', () => {
+    // Only an environment that was baked before needs baking again: a
+    // deliberate safe mode or a device that failed the bake stays as it was
+    if (environment) environmentRestorePending = true;
+    renderRequested = true;
+  });
   listen(root, 'pointerdown', wakeAudio, { passive: true });
   listen(root, 'contextmenu', (event) => event.preventDefault());
   listen(pauseButton, 'click', () => setPaused(!paused));
@@ -344,7 +364,13 @@ export function createArcade(container, options = {}) {
     // Keep one fresh frame after pause, resize or context restore, then let
     // the GPU rest. DOM focus and audio controls do not need a new 3D frame.
     if (!paused || renderRequested) {
-      if (!document.hidden) renderer.render(scene, camera);
+      if (!document.hidden) {
+        if (environmentRestorePending) {
+          environmentRestorePending = false;
+          bakeEnvironment(true);
+        }
+        renderer.render(scene, camera);
+      }
       renderRequested = false;
     }
   }
