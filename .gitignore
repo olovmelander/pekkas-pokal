@@ -186,3 +186,5 @@ private/
 *.tsbuildinfo
 .eslintignore
 .prettierignore
+# Agent/test scratch folders
+tests/.tmp-*/
