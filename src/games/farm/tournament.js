@@ -7,7 +7,7 @@ import { createThrowEvent } from './throw-events.js';
 import { createWoodEvent } from './wood-events.js';
 import { clamp } from './rules.js';
 import { bindHoldControl } from './input.js';
-import { isNativeControlTarget } from '../shared/keyboard.js';
+import { hasCommandModifier, isNativeControlTarget } from '../shared/keyboard.js';
 
 export const FARM_EVENTS = [
   { kind: 'rifle', title: 'Luftgevärsskytte', verb: 'SKJUT', instructions: 'Tio skott på ringtavlan. Dra siktet med fingret eller musen och tryck SKJUT. Piltangenter eller WASD siktar på dator; mellanslag skjuter. Andningen flyttar siktet lite — välj ditt ögonblick.' },
@@ -129,6 +129,7 @@ export async function createFarmTournament(container) {
     if (name === 'action') actionControl = control;
   }
   game.listen(window, 'keydown', (e) => {
+    if (hasCommandModifier(e)) return;
     if (mode !== 'playing' || game.paused || e.code !== 'Space' || isNativeControlTarget(e.target)) return;
     e.preventDefault();
     if (!e.repeat) actionControl.press('global:Space');

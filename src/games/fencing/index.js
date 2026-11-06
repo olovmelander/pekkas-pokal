@@ -39,6 +39,7 @@ import { guardRenderer, postTarget, addSanitize, RenderWatchdog, gfxNotice, prec
 import { Sfx } from './audio.js';
 import { takeFeint, openingRemaining, hasAttackPriority, attackIsOutOfTurn, claimTouch, canParry } from './combat-rules.js';
 import { isActionButtonEvent } from './input.js';
+import { hasCommandModifier } from '../shared/keyboard.js';
 import { Fencer, Animator, P, POSE_LEN } from './fencer.js';
 import { mulberry, glowTexture, buildSalle, buildEnvScene } from './salle.js';
 import { Sparks, Trail, Flashes, Confetti, starTexture, ringTexture } from './fx.js';
@@ -1173,6 +1174,12 @@ export async function createFencing(container) {
   }
 
   function onKeyDown(e) {
+    if (hasCommandModifier(e)) {
+      // Space's native click happens on release, possibly after Ctrl was let go.
+      // Cancel only our action buttons' activation while leaving other shortcuts alone.
+      if ((e.key === ' ' || e.key === 'Enter') && e.target.closest?.('.fen-pad button')) e.preventDefault();
+      return;
+    }
     const k = e.key;
     if (k === '?' || k.toLowerCase() === 'p' || (k === 'Escape' && helpOpen)) {
       e.preventDefault();

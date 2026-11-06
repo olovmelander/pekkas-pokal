@@ -3968,6 +3968,7 @@
   function initOverlays() {
     $('#game-close').addEventListener('click', closeOverlay);
     document.addEventListener('keydown', (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key === 'Escape' && !$('#game-stage').hidden) {
         // Game handlers on window can dismiss help or a local dialog first.
         setTimeout(() => {

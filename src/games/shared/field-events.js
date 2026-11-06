@@ -3,7 +3,7 @@ import { createPerson, appearanceFor, POSES } from './people.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildNature, buildScenicSky } from './scenic.js';
 import { buildFieldGarden, buildFlowerBorders } from './field-garden.js';
-import { isNativeControlTarget } from './keyboard.js';
+import { hasCommandModifier, isNativeControlTarget } from './keyboard.js';
 import { bindFieldDirection } from './field-input.js';
 import { clamp, precisionScore, jumpScore, hoopCrossing, hurdleHeight, medalFor, chargePower, croquetEnd, fieldThrowScore } from '../pentathlon/rules.js';
 
@@ -471,6 +471,7 @@ export async function createFieldGames(container, config) {
     actionKey = null; releaseAction();
   }
   const keyDown = (e) => {
+    if (hasCommandModifier(e)) return;
     if (isNativeControlTarget(e.target)) return;
     if (e.code === 'Space' && state === 'play') {
       e.preventDefault();
@@ -495,9 +496,13 @@ export async function createFieldGames(container, config) {
   a.listen(action, 'pointercancel', (e) => { if (e.pointerId === actionPointer) cancelInput(); });
   a.listen(action, 'lostpointercapture', (e) => { if (e.pointerId === actionPointer) cancelInput(); });
   // Enter and Space activate a focused button without synthetic pointer events.
-  a.listen(action, 'keydown', (e) => { if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); if (!e.repeat) pressKey(e.code); } });
+  a.listen(action, 'keydown', (e) => {
+    if (hasCommandModifier(e)) return;
+    if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); if (!e.repeat) pressKey(e.code); }
+  });
   a.listen(action, 'keyup', (e) => { if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); releaseKey(e.code); } });
   a.listen(controls, 'keydown', (e) => {
+    if (hasCommandModifier(e)) return;
     if (!e.target.closest?.('.field-buttons') || state !== 'play' || a.paused) return;
     if (['ArrowLeft', 'ArrowRight', 'KeyA', 'KeyD'].includes(e.code)) { e.preventDefault(); a.keys.add(e.code); }
   });

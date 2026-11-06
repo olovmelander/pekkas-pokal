@@ -35,4 +35,15 @@ describe('Independent fencing action buttons', () => {
     }
     expect(isActionButtonEvent({ type: 'click', detail: 0, button: 2 })).toBe(false);
   });
+
+  it('does not turn modified native keyboard clicks into attacks after keydown was ignored', () => {
+    const button = new EventTarget();
+    let attacks = 0;
+    button.addEventListener('click', event => { if (isActionButtonEvent(event)) attacks++; });
+    const click = modifiers => button.dispatchEvent(Object.assign(new Event('click'), { detail: 0, button: 0, ...modifiers }));
+    for (const key of ['ctrlKey', 'metaKey', 'altKey']) click({ [key]: true });
+    expect(attacks).toBe(0);
+    click({}); click({ shiftKey: true });
+    expect(attacks).toBe(2);
+  });
 });

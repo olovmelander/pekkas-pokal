@@ -1,3 +1,5 @@
+import { hasCommandModifier } from './keyboard.js';
+
 /** A direction stays down until all of its physical input sources let go. */
 export function bindFieldDirection({ listen, button, keyTarget, enabled, onChange }) {
   const pointers = new Set(), keys = new Set();
@@ -17,6 +19,7 @@ export function bindFieldDirection({ listen, button, keyTarget, enabled, onChang
   };
   for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) listen(button, name, releasePointer);
   listen(button, 'keydown', (event) => {
+    if (hasCommandModifier(event)) return;
     if (!isActionKey(event.code)) return;
     event.preventDefault();
     // A held key must not activate the next button after Tab changes focus.

@@ -52,6 +52,7 @@ import { buildGrass, buildSeedHeads } from './grass.js';
 import { Particles, Shards, ShotCloud, buildAmbient } from './fx.js';
 import { buildHud, cardHtml, startPanelHtml, endPanelHtml, fmt } from './hud.js';
 import { createGameClock } from '../shared/game-clock.js';
+import { hasCommandModifier } from '../shared/keyboard.js';
 import { aimKey, createAimKeys, stepKeyboardAim, touchAimOffset } from './input.js';
 import { predictBallistic, stepBallistic } from './ballistics.js';
 
@@ -1379,6 +1380,7 @@ export async function createShooting(container) {
   // Esc closes the help card, not the whole game: caught on the way down,
   // before the site's own Esc-closes-the-stage handler sees it
   function onKeyCapture(e) {
+    if (hasCommandModifier(e)) return;
     if (helpOpen && e.key === 'Escape') {
       e.stopPropagation();
       e.preventDefault();
@@ -1387,6 +1389,7 @@ export async function createShooting(container) {
   }
 
   function onKeyDown(e) {
+    if (hasCommandModifier(e)) return;
     if (e.key === '?' || e.code === 'KeyP') {
       e.preventDefault();
       if (!e.repeat) setHelp(!helpOpen);

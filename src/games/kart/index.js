@@ -1,6 +1,7 @@
 /** Pekkas Gokart — Varggropen 2012, a three-lap arcade race at golden hour. */
 import * as THREE from 'three';
 import { createArcade } from '../shared/arcade.js';
+import { hasCommandModifier } from '../shared/keyboard.js';
 import { createCircuit, createKart } from './world.js';
 import { createKartCamera } from './camera.js';
 import { LAPS, TRACK_HALF_WIDTH, steeringFromButtons, clamp, cornerSpeed, slipstreamFactor, newDriver, stepDriver, stepRival, resolveContact, markFinish, raceStandings, raceScore, formatTime, engineFeedback } from './physics.js';
@@ -82,6 +83,7 @@ export default async function createGokart(container) {
   }
   interfaceEl.querySelectorAll('[data-control]').forEach((button) => {
     game.listen(button, 'pointerdown', (event) => {
+      if (event.pointerType === 'mouse' && event.button !== 0) return;
       if (!['racing', 'countdown'].includes(state) || game.paused) return;
       event.preventDefault();
       button.setPointerCapture(event.pointerId);
@@ -93,6 +95,7 @@ export default async function createGokart(container) {
     game.listen(button, 'pointercancel', releasePointer);
     game.listen(button, 'lostpointercapture', releasePointer);
     game.listen(button, 'keydown', (event) => {
+      if (hasCommandModifier(event)) return;
       // Native UI is ignored by the shared keyboard listener; these are actual driving controls.
       if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'KeyA', 'KeyD', 'KeyW', 'KeyS'].includes(event.code)) {
         if (['racing', 'countdown'].includes(state) && !game.paused) { event.preventDefault(); keys.add(event.code); }

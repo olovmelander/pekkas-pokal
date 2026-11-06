@@ -41,7 +41,7 @@ import { guardRenderer, RenderWatchdog, gfxNotice, precompile } from '../shared/
 import { buildHud, MEDAL_NAMES } from './hud.js';
 import { movementKey, sampleFlick } from './input.js';
 import { POINTS_TO_WIN, canReturnBall, matchWinner, playerServes, winBonus } from './rules.js';
-import { isEditableTarget, isNativeControlTarget } from '../shared/keyboard.js';
+import { hasCommandModifier, isEditableTarget, isNativeControlTarget } from '../shared/keyboard.js';
 
 /** Fill the whole stage on desktop; the camera reframes per aspect. */
 export const layout = 'full';
@@ -1674,6 +1674,7 @@ export async function createPingis(container) {
   }
 
   function onKeyDown(e) {
+    if (hasCommandModifier(e)) return;
     if (isEditableTarget(e.target)) return;
     if (e.key === '?' || e.code === 'KeyP' || (e.key === 'Escape' && helpOpen)) {
       e.preventDefault(); e.stopPropagation();

@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { guardRenderer } from './gfx.js';
 import { arcadeEnvironment } from './arcade-lighting.js';
-import { isEditableTarget, isNativeControlTarget, isGameControlTarget } from './keyboard.js';
+import { hasCommandModifier, isEditableTarget, isNativeControlTarget, isGameControlTarget } from './keyboard.js';
 
 export function createArcade(container, options = {}) {
   const { id = 'arcade', title = 'Pekkas Pokal', subtitle = '', accent = '#e9bf5c', sky = 0x97b4be, fog = sky, lighting = 'outdoor' } = options;
@@ -221,7 +221,7 @@ export function createArcade(container, options = {}) {
   const gameKeys = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ShiftLeft', 'ShiftRight']);
   listen(window, 'keydown', (event) => {
     // A local dialog or focused game control has already handled this key.
-    if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.defaultPrevented || hasCommandModifier(event)) return;
     if (event.code === 'Tab') {
       const buttons = [...root.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), summary, a[href], [tabindex="0"]'), document.querySelector('#game-close')]
         .filter((element) => element && !element.closest('[inert]') && element.getClientRects().length && getComputedStyle(element).visibility !== 'hidden');

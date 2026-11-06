@@ -1,3 +1,5 @@
+import { hasCommandModifier } from '../shared/keyboard.js';
+
 /** A held control must release even if focus or pointer capture moves elsewhere. */
 export function bindHoldControl(listen, button, { canStart, onDown, onUp, onCancel }) {
   const sources = new Set();
@@ -20,6 +22,7 @@ export function bindHoldControl(listen, button, { canStart, onDown, onUp, onCanc
     onCancel();
   };
   listen(button, 'pointerdown', (event) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
     event.preventDefault();
     if (!canStart()) return;
     button.setPointerCapture(event.pointerId);
@@ -32,6 +35,7 @@ export function bindHoldControl(listen, button, { canStart, onDown, onUp, onCanc
   listen(button, 'pointercancel', (event) => stop(`pointer:${event.pointerId}`, true));
   listen(button, 'lostpointercapture', (event) => stop(`pointer:${event.pointerId}`, true));
   listen(button, 'keydown', (event) => {
+    if (hasCommandModifier(event)) return;
     if (!['Enter', 'Space'].includes(event.code)) return;
     event.preventDefault();
     if (!event.repeat) start(`key:${event.code}`);

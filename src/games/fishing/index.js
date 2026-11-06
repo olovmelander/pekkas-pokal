@@ -25,6 +25,7 @@
 
 import * as THREE from 'three';
 import { createGameClock } from '../shared/game-clock.js';
+import { hasCommandModifier } from '../shared/keyboard.js';
 import { dodgeMultiplier, bottomReward, tapRadiusNdc, isPerfectCatch } from './rules.js';
 import { guardRenderer, RenderWatchdog, gfxNotice, precompile } from '../shared/gfx.js';
 import { Sfx } from './audio.js';
@@ -1045,6 +1046,7 @@ export async function createFishing(container) {
   }
 
   function onKeyDown(e) {
+    if (hasCommandModifier(e)) return;
     if (e.target.closest?.('input, textarea, select')) return;
     const k = e.key.toLowerCase();
     if (k === '?' || k === 'p' || (k === 'escape' && (helpOpen || bookOpen))) {
@@ -1183,6 +1185,7 @@ export async function createFishing(container) {
   }
 
   function onKeyCapture(e) {
+    if (hasCommandModifier(e)) return;
     if (e.key === 'Escape' && (helpOpen || bookOpen)) {
       e.preventDefault();
       e.stopPropagation();

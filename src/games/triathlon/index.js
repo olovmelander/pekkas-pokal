@@ -1,4 +1,5 @@
 import { createArcade } from '../shared/arcade.js';
+import { hasCommandModifier } from '../shared/keyboard.js';
 import { buildCourse, makeCourseItem } from './scenery.js';
 import { createAthlete } from './athlete.js';
 import { frameTriathlon } from './camera.js';
@@ -71,6 +72,7 @@ export default async function createTriathlon(container) {
   game.listen(root, 'arcadepause', clearInput);
   controls.querySelectorAll('button').forEach(button => {
     game.listen(button, 'pointerdown', event => {
+      if (event.pointerType === 'mouse' && event.button !== 0) return;
       if (state !== 'race' || game.paused) return;
       event.preventDefault(); button.setPointerCapture(event.pointerId);
       pointerActions.set(event.pointerId, button.dataset.control); button.classList.add('held');
@@ -80,6 +82,7 @@ export default async function createTriathlon(container) {
       button.classList.toggle('held', [...pointerActions.values()].includes(button.dataset.control) || [...held.values()].includes(button.dataset.control));
     };
     game.listen(button, 'keydown', event => {
+      if (hasCommandModifier(event)) return;
       if (event.code !== 'Space' && codeAction[event.code]) {
         if (state === 'race' && !game.paused) { event.preventDefault(); game.keys.add(event.code); }
         return;

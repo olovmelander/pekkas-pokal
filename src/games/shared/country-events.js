@@ -7,7 +7,7 @@ import { clamp, landing, precisionScore, advanceBalance, kubbHit, medal } from '
 import { discPosition, throwIsCaught } from '../lundqvist/rules.js';
 import { createCountryEquipment } from './country-equipment.js';
 import { bindHoldControl } from '../farm/input.js';
-import { isNativeControlTarget } from './keyboard.js';
+import { hasCommandModifier, isNativeControlTarget } from './keyboard.js';
 
 /** Reusable country events used by the 2016 arcade interpretation. */
 export async function createCountryGames(container, config) {
@@ -99,6 +99,7 @@ export async function createCountryGames(container, config) {
     if (name === 'action') actionControl = control;
   }
   game.listen(window, 'keydown', (e) => {
+    if (hasCommandModifier(e)) return;
     if (mode !== 'playing' || game.paused || e.code !== 'Space' || isNativeControlTarget(e.target)) return;
     e.preventDefault();
     if (!e.repeat) actionControl.press('global:Space');

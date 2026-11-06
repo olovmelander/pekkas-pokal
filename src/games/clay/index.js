@@ -36,6 +36,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { guardRenderer, postTarget, addSanitize, RenderWatchdog, gfxNotice, precompile } from '../shared/gfx.js';
 import { Sfx } from './audio.js';
 import { createGameClock } from '../shared/game-clock.js';
+import { hasCommandModifier } from '../shared/keyboard.js';
 import { createPointerSession } from './input.js';
 import { N, H, R_MIN, R_MAX, WALL, ClayBody, ringMaps, glazeMaps, clayMaterial, glazeMaterial } from './clay.js';
 import { mulberry, buildStudio, buildWheel, buildSponge, buildEnvScene, disposeScene } from './studio.js';
@@ -1083,6 +1084,7 @@ export async function createClay(container) {
   }
 
   function onKeyDown(e) {
+    if (hasCommandModifier(e)) return;
     if ((e.key === 'p' || e.key === 'P') && !e.repeat) { e.preventDefault(); setPaused(!paused); return; }
     if ((paused || helpOpen) && e.key === 'Tab') {
       e.preventDefault();
@@ -1177,7 +1179,10 @@ export async function createClay(container) {
   // Pointer capture lets a thumb drift slightly outside the tool while held.
   hud.smooth.addEventListener('pointercancel', smoothOff);
   hud.smooth.addEventListener('lostpointercapture', smoothOff);
-  hud.smooth.addEventListener('keydown', (e) => { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) smoothOn(e); });
+  hud.smooth.addEventListener('keydown', (e) => {
+    if (hasCommandModifier(e)) return;
+    if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) smoothOn(e);
+  });
   hud.smooth.addEventListener('keyup', (e) => { if (e.key === ' ' || e.key === 'Enter') smoothOff(e); });
   hud.mute.addEventListener('click', () => {
     sfx.muted = !sfx.muted;

@@ -1,5 +1,11 @@
 /** Native controls own their keys. A focused sound button must be clickable
  * with Space without firing, charging or accelerating the game underneath. */
+
+/** Browser/system shortcut modifiers must not start gameplay. Shift stays available. */
+export function hasCommandModifier(event) {
+  return !!(event.ctrlKey || event.metaKey || event.altKey);
+}
+
 export function isEditableTarget(target) {
   return !!target?.closest?.('input, select, textarea, [contenteditable]:not([contenteditable="false"])');
 }

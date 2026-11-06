@@ -1,4 +1,5 @@
 import { createArcade } from '../shared/arcade.js';
+import { hasCommandModifier } from '../shared/keyboard.js';
 import { buildStadium } from './world.js';
 import {
   BUDGET, ROUNDS, PLAYERS, CLUBS, POSITIONS, DEFAULT_SQUAD, RIVALS, playerById,
@@ -268,6 +269,7 @@ export default async function createFantasy(container) {
     } else if (phase === 'review' && action === 'final') seasonResult();
   });
   arcade.listen(window, 'keydown', (event) => {
+    if (hasCommandModifier(event)) return;
     if (arcade.paused || phase !== 'manage' || /INPUT|SELECT|TEXTAREA/.test(event.target.tagName)) return;
     if (/^[1-5]$/.test(event.key)) { selected = Number(event.key) - 1; renderManager(); }
     if (event.code === 'KeyC') { captain = squad[selected]; renderManager(); }

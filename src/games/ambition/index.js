@@ -1,4 +1,5 @@
 import { createArcade } from '../shared/arcade.js';
+import { hasCommandModifier } from '../shared/keyboard.js';
 import { buildRoom } from './room.js';
 import { SYMBOLS, SUIT_NAMES, rankLabel, cardName, makeDeck, shuffle, sortHand, cardPoints,
   legalCards, winningPlay, scoreDeal, chooseCard, passingCards, passHands, positionAdvice, previewCard } from './rules.js';
@@ -262,6 +263,7 @@ export default async function createAmbition(container) {
   });
 
   app.listen(shell, 'keydown', (event) => {
+    if (hasCommandModifier(event)) return;
     if (app.paused) return;
     if (state.help) {
       if (event.key === 'Escape') {

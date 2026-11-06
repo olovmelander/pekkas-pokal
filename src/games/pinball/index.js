@@ -12,6 +12,7 @@
 
 import * as THREE from 'three';
 import { createGameClock } from '../shared/game-clock.js';
+import { hasCommandModifier } from '../shared/keyboard.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -2114,6 +2115,7 @@ export async function createPinball(container, opts = {}) {
   };
 
   function onKeyDown(e) {
+    if (hasCommandModifier(e)) return;
     // Typing a name for the topplista is not playing the game
     if (e.target && e.target.closest && e.target.closest('input, textarea')) return;
     if (e.repeat) return;
@@ -2148,6 +2150,7 @@ export async function createPinball(container, opts = {}) {
   // Esc closes the strategy card, not the whole game: caught on the way
   // down, before the site's own Esc-closes-the-stage handler sees it
   function onKeyCapture(e) {
+    if (hasCommandModifier(e)) return;
     if (helpOpen && e.key === 'Escape') {
       e.stopPropagation();
       e.preventDefault();
