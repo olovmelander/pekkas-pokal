@@ -20,6 +20,9 @@ export const KART = Object.freeze({ mass: 165, inertia: 58, front: 0.86, rear: 0
 export const WHEELBASE = KART.front + KART.rear;
 export const SUBSTEP = 1 / 240;
 export const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+/** Default countersteer help: how much of the rear's slide angle the front
+ * wheels follow on their own, like a kart's caster pulling the wheel. */
+export const ASSIST = 1.2;
 
 const DRIVE_MAX = 4.1;           // m/s², rental two-stroke off the line
 const POWER = 47.5;              // W/kg at the rear axle
@@ -100,10 +103,6 @@ export function steerRate(speed) {
 
 const tyre = (alpha, B) => Math.sin(TYRE_C * Math.atan(B * alpha));
 
-/** Default countersteer help: how much of the rear's slide angle the front
- * wheels follow on their own, like a kart's caster pulling the wheel. */
-export const ASSIST = 1.2;
-
 /** Rear slide angle beyond ordinary cornering slip (rad). Countersteer
  * follows this, so normal cornering is untouched. */
 export function slideAngle(driver) {
@@ -153,7 +152,7 @@ function prepare(driver, input, env) {
   driver._roll = (a.roll + b.roll) / 2;
   driver._rollSpeed = (a.rollSpeed + b.rollSpeed) / 2;
   driver._bump = (a.bump + b.bump) / 2;
-  driver.rumble = (a.rumble + b.rumble) / 2 * clamp(driver.speed / 8, 0, 1);
+  driver.rumble = Math.max(a.rumble, b.rumble) * clamp(driver.speed / 8, 0, 1);
   driver.slipstream = driver.surface === 'grass' || input.brake ? 0 : clamp(input.slipstream || 0, 0, 1);
 }
 
@@ -290,13 +289,17 @@ function resolveBarrier(driver, events) {
   const m = driver.mass || KART.mass, I = KART.inertia * m / KART.mass;
   let [vs, vn] = trackVelocity(driver);
   let r = driver.yawRate;
+  // Tyre stacks give over a wide patch: the effective contact sits nearer the
+  // centre than the bumper corner, so the kart bounces as well as rotates.
+  px *= 0.55; pn *= 0.55;
   const normalSpeed = side * (vn + r * px);
   driver.lane -= side * penetration;
   if (normalSpeed <= 0) return;
-  const restitution = 0.32, friction = 0.4;
+  const restitution = 0.42, friction = 0.4;
   const j = (1 + restitution) * normalSpeed / (1 / m + px * px / I);
   vn -= side * j / m;
   r -= side * j * px / I;
+  if (normalSpeed > 1) vn = side * Math.min(side * vn, -0.3 * normalSpeed);
   const tangent = vs - r * pn;
   const jt = -Math.sign(tangent) * Math.min(friction * j, Math.abs(tangent) / (1 / m + pn * pn / I));
   vs += jt / m;

@@ -191,7 +191,7 @@ float tSeal = 0.0;`)
   float footprint = length(fwidth(p));
   // Rubber laid down along the racing line, heavier in the braking zones.
   float off = lane - lineLane;
-  tRubber = exp(-off * off / 1.15) * (0.75 + 0.25 * tNoise(vec2(lane * 2.0, d * 0.35)));
+  tRubber = exp(-off * off / 0.9) * (0.7 + 0.3 * tNoise(vec2(lane * 2.0, d * 0.35)));
   float wide = lane - lineLane * 0.55;
   tRubber += exp(-wide * wide / 3.5) * 0.18;
   // Broad wear and the darker binder of patched areas.
@@ -213,22 +213,22 @@ float tSeal = 0.0;`)
     tSeal = max(tSeal, border);
   }
   // Hairline cracks where the surface has worked loose.
-  float crackZone = smoothstep(0.55, 0.75, tNoise(vec2(lane * 0.3 + 40.0, d * 0.05)));
+  float crackZone = smoothstep(0.62, 0.8, tNoise(vec2(lane * 0.3 + 40.0, d * 0.05)));
   float crackField = tNoise(vec2(lane * 1.7, d * 0.55)) + tNoise(vec2(lane * 4.1, d * 1.3)) * 0.35;
-  float crack = tLine(crackField - 0.68, 0.012, length(fwidth(vec2(crackField)))) * crackZone;
+  float crack = tLine(crackField - 0.68, 0.0035, length(fwidth(vec2(crackField)))) * crackZone;
   // Construction seams: a longitudinal joint and a transverse joint every 37 m.
   float seam = max(tLine(lane - 1.15, 0.018, footprint), tLine((fract(d / 37.0 + 0.5) - 0.5) * 37.0, 0.02, footprint) * step(abs(lane), 3.3));
-  tSeal = max(tSeal, seam * 0.8);
+  tSeal = max(tSeal, seam * 0.45);
   // Edges stay paler: dust from the gravel and no rubber.
   float edge = smoothstep(2.6, 3.4, abs(lane));
-  shade *= 1.0 - tRubber * 0.36;
+  shade *= 1.0 - tRubber * 0.42;
   shade = mix(shade, shade * 1.08, edge);
-  shade *= 1.0 - crack * 0.5;
+  shade *= 1.0 - crack * 0.45;
   shade = mix(shade, 0.42, tSeal * 0.75);
   diffuseColor.rgb *= shade;
 }`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-roughnessFactor = clamp(roughnessFactor - tRubber * 0.2 - tSeal * 0.3, 0.35, 1.0);`);
+roughnessFactor = clamp(roughnessFactor - tRubber * 0.16 - tSeal * 0.08, 0.5, 1.0);`);
   };
   material.customProgramCacheKey = () => 'kart-asphalt-v1';
   return material;

@@ -113,7 +113,7 @@ export function speedProfile(line, { lateral = GRIP_ACCELERATION, brake = 5.8, t
  * player's input goes through. */
 export function pursuitSteer(driver, targetLane, look, track) {
   const env = trackEnv(track);
-  const speed = driver.speed;
+  const { speed } = driver;
   const beta = speed > 1.5 ? Math.atan2(driver.w, Math.max(Math.abs(driver.u), 0.5)) : 0;
   const theta = driver.heading + beta;
   const front = speed > 1.5 ? Math.atan2(driver.w + KART.front * driver.yawRate, Math.max(Math.abs(driver.u), 0.5)) : 0;
@@ -154,7 +154,7 @@ const MISTAKES = ['wide', 'lift', 'early'];
 /** Inputs for one rival this frame. `drivers` is the whole field. */
 export function rivalInput(driver, brain, { line, track, drivers, dt = 1 / 60, cooldown = false }) {
   const env = trackEnv(track);
-  const speed = driver.speed, s = driver.distance;
+  const { speed, distance: s } = driver;
   const look = 3.4 + speed * 0.3;
   const bendAhead = env.curvature(s + 8 + speed * 0.4);
   // The line with a personal wobble that shrinks with consistency.
@@ -163,8 +163,9 @@ export function rivalInput(driver, brain, { line, track, drivers, dt = 1 / 60, c
   let clear = true;
   brain.sideClock = Math.max(0, brain.sideClock - dt);
   brain.defendClock = Math.max(0, brain.defendClock - dt);
-  if (cooldown) { target *= 0.62; lane = clamp(lane * 0.5 + 1.6, -2.5, 2.5); }
-  else {
+  if (cooldown) {
+    target *= 0.62; lane = clamp(lane * 0.5 + 1.6, -2.5, 2.5);
+  } else {
     for (const other of drivers) {
       if (other === driver || other.ghost || other.finishTime !== null) continue;
       const gap = trackGap(s, other.distance, line.length), dn = other.lane - driver.lane;

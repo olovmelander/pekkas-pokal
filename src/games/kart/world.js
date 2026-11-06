@@ -63,14 +63,14 @@ export function createKart(color, number = 1, name = 'Viktor Jones') {
     part(roundedBox(0.32, 0.05, 0.86, 0.02), plastic, side * 0.74, 0.24, -0.02);
   }
   // Full rear bumper wrapping the rear wheels.
-  part(roundedBox(2.12, 0.2, 0.24, 0.07), plastic, 0, 0.34, -1.24);
+  part(roundedBox(2.08, 0.13, 0.22, 0.06), paint, 0, 0.38, -1.24);
+  part(roundedBox(2.0, 0.07, 0.2, 0.03), plastic, 0, 0.27, -1.23);
   for (const side of [-1, 1]) {
-    part(roundedBox(0.16, 0.2, 0.52, 0.06), plastic, side * 1.07, 0.34, -1.0);
+    part(roundedBox(0.15, 0.16, 0.5, 0.06), paint, side * 1.06, 0.36, -1.0);
     rod([side * 0.55, 0.33, -1.12], [side * 0.55, 0.33, -0.9], 0.02);
   }
-  part(roundedBox(1.2, 0.05, 0.06, 0.02), paint, 0, 0.45, -1.32);
   // Moulded seat shell.
-  part(sideProfile([[-0.08, 0.58], [-0.14, 0.46], [-0.52, 0.36], [-0.72, 0.42], [-0.84, 1.02], [-0.76, 1.05], [-0.65, 0.62], [-0.54, 0.52], [-0.13, 0.6]], 0.46, 0.035), plastic, 0, 0, 0);
+  part(sideProfile([[-0.08, 0.58], [-0.14, 0.46], [-0.52, 0.36], [-0.72, 0.42], [-0.8, 0.86], [-0.72, 0.88], [-0.64, 0.6], [-0.54, 0.52], [-0.13, 0.6]], 0.4, 0.035), plastic, 0, 0, 0);
   // Engine on the driver's right: block, finned barrel, air box, chain guard.
   const ex = -0.64;
   part(roundedBox(0.3, 0.3, 0.4, 0.04), metal, ex, 0.47, -0.58);
@@ -79,10 +79,10 @@ export function createKart(color, number = 1, name = 'Viktor Jones') {
   part(new THREE.CylinderGeometry(0.07, 0.07, 0.06, 12), plastic, ex - 0.17, 0.5, -0.6, 0, 0, Math.PI / 2);
   part(roundedBox(0.06, 0.18, 0.42, 0.02), plastic, -0.48, 0.36, -0.78);
   // Exhaust: header into a silencer behind the seat, with a short tailpipe.
-  rod([ex + 0.05, 0.72, -0.76], [ex + 0.18, 0.66, -0.96], 0.028);
-  part(new THREE.CylinderGeometry(0.085, 0.085, 0.5, 14), metal, -0.27, 0.64, -0.98, 0, 0, Math.PI / 2);
-  for (const x of [-0.52, -0.02]) part(new THREE.CylinderGeometry(0.088, 0.088, 0.03, 14), plastic, x, 0.64, -0.98, 0, 0, Math.PI / 2);
-  rod([0.0, 0.62, -0.98], [0.1, 0.6, -1.08], 0.022);
+  rod([ex + 0.05, 0.72, -0.76], [ex + 0.12, 0.6, -0.93], 0.026);
+  part(new THREE.CylinderGeometry(0.07, 0.07, 0.34, 14), metal, -0.4, 0.56, -0.96, 0, 0, Math.PI / 2);
+  for (const x of [-0.57, -0.23]) part(new THREE.CylinderGeometry(0.073, 0.073, 0.025, 14), plastic, x, 0.56, -0.96, 0, 0, Math.PI / 2);
+  rod([-0.23, 0.55, -0.96], [-0.15, 0.53, -1.05], 0.02);
   // Fuel filler and steering column.
   part(new THREE.CylinderGeometry(0.05, 0.05, 0.05, 10), plastic, 0.0, 0.5, 0.58);
   rod([0, 0.3, 0.76], [0, 0.97, 0.43], 0.02);
@@ -183,10 +183,11 @@ export function createKart(color, number = 1, name = 'Viktor Jones') {
     lean += (wishLean - lean) * Math.min(1, step * 6);
     nod += (wishNod - nod) * Math.min(1, step * (wishNod > nod ? 10 : 4));
     if (!detail.visible) return;
-    pose.spine = [0.05 + nod * 0.12, 0, lean * 0.13];
-    pose.chest = [0.12 + nod * 0.1, 0, lean * 0.1];
-    pose.neck = [nod * -0.05, 0, -lean * 0.08];
-    pose.head = [-0.04 - nod * 0.1, 0, -lean * 0.1];
+    // A positive z turn tips an upright bone towards -x, so lean is negated.
+    pose.spine = [0.05 + nod * 0.12, 0, -lean * 0.13];
+    pose.chest = [0.12 + nod * 0.1, 0, -lean * 0.1];
+    pose.neck = [nod * -0.05, 0, lean * 0.08];
+    pose.head = [-0.04 - nod * 0.1, 0, lean * 0.1];
     person.setPose(pose);
     detail.updateWorldMatrix(true, true);
     lookPoint.set(lean * 2.2, 1.0, 9).applyMatrix4(root.matrixWorld);
@@ -309,8 +310,8 @@ function rimGeometry() {
 function helmetGeometry(tint) {
   const shell = new THREE.SphereGeometry(0.23, 26, 18);
   shell.scale(1, 1.06, 1.1);
-  const visor = new THREE.SphereGeometry(0.236, 22, 8, -Math.PI * 0.36, Math.PI * 0.72, 1.12, 0.62);
-  visor.rotateY(Math.PI);
+  // Centred on +z (phi = pi/2 faces forward in SphereGeometry).
+  const visor = new THREE.SphereGeometry(0.236, 22, 8, Math.PI * 0.14, Math.PI * 0.72, 1.12, 0.62);
   visor.scale(1, 1.06, 1.12);
   const colorize = (geometry, pick) => {
     const p = geometry.attributes.position, colors = [];

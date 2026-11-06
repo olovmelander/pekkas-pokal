@@ -281,8 +281,11 @@ export function createKartAudio(game, { trackLength = 665 } = {}) {
       // Kerb rattle at the stripe rate; grass rustle with speed.
       const onKerb = surface === 'kerb' && speed > 2;
       set(g.stripes.frequency, clamp(speed / 1.1, 4, 30), t, 0.05);
-      set(g.rumbleLevel.gain, onKerb ? 0.08 + fast * 0.1 : 0, t, 0.03);
-      set(g.rustleLevel.gain, surface === 'grass' && speed > 1 ? 0.03 + fast * 0.06 : 0, t, 0.05);
+      // Handling reports how hard the kerb (rumble) and the grass (bump) shake the kart.
+      const kerbShake = Number.isFinite(player?.rumble) ? clamp(player.rumble, 0.35, 1) : 1;
+      const grassShake = Number.isFinite(player?.bump) ? clamp(player.bump, 0.4, 1) : 1;
+      set(g.rumbleLevel.gain, onKerb ? (0.08 + fast * 0.1) * kerbShake : 0, t, 0.03);
+      set(g.rustleLevel.gain, surface === 'grass' && speed > 1 ? (0.03 + fast * 0.06) * grassShake : 0, t, 0.05);
       set(g.rustleFilter.frequency, 300 + speed * 25, t, 0.1);
 
       // Rivals: louder when close, panned by which side they are on, Doppler-ish pitch as they pass.

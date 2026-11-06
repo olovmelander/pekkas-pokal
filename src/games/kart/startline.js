@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { createCrowd, createPerson, appearanceFor, POSES } from '../shared/people.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createBatch, faceTrack, canvasTexture } from './kit.js';
 
-const LAMP_OFF = new THREE.Color(0x2a0806), LAMP_ON = new THREE.Color(3.2, 0.16, 0.07);
+const LAMP_OFF = new THREE.Color(0x2a0806), LAMP_ON = new THREE.Color(1.9, 0.07, 0.03);
+const HALO_OFF = new THREE.Color(0, 0, 0), HALO_ON = new THREE.Color(0.75, 0.06, 0.02);
 const FLAGS = ['green', 'yellow', 'chequered', 'blue', 'white'];
 
 /** Start/finish staging: gantry with five red lights, a small grandstand
@@ -44,9 +46,15 @@ export function buildStartline(route, root, { layout, clear, phone = false, redu
     c.font = '900 64px "Arial Black", Arial, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
     c.fillStyle = '#f4ecd2'; c.fillText('PEKKAS POKAL · VARGGROPEN', 512, 68);
   });
-  const bannerMaterial = new THREE.MeshStandardMaterial({ map: banner, roughness: 0.7, side: THREE.DoubleSide, name: 'banner' });
-  const bannerMesh = new THREE.Mesh(new THREE.PlaneGeometry(span * 2 - 0.6, (span * 2 - 0.6) / 8), bannerMaterial);
-  bannerMesh.position.set(0, beam + 0.25 + 0.02, 0); bannerMesh.castShadow = true; gantry.add(bannerMesh);
+  const bannerMaterial = new THREE.MeshStandardMaterial({ map: banner, roughness: 0.7, name: 'banner' });
+  // Two single-sided faces, so the text reads the right way from both directions.
+  const faces = [0, Math.PI].map((turn) => {
+    const face = new THREE.PlaneGeometry(span * 2 - 0.6, (span * 2 - 0.6) / 8);
+    face.rotateY(turn); face.translate(0, beam + 0.27, turn ? -0.06 : 0.06);
+    return face;
+  });
+  const bannerMesh = new THREE.Mesh(mergeGeometries(faces), bannerMaterial); faces.forEach(g => g.dispose());
+  bannerMesh.castShadow = true; gantry.add(bannerMesh);
   // Light housing, facing the grid, hanging under the truss.
   const rig = { y: beam - 0.62, z: -0.16 };
   batch.add(box, painted, [0, rig.y, rig.z + 0.1], [0, 0, 0], [2.7, 0.92, 0.22], 0x151817, local);
@@ -58,20 +66,33 @@ export function buildStartline(route, root, { layout, clear, phone = false, redu
   const lampGeometry = new THREE.CircleGeometry(0.16, 18);
   const lampMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, name: 'start-lamps' });
   const lamps = new THREE.InstancedMesh(lampGeometry, lampMaterial, 10);
+  // A soft additive glow round each lit lamp: no post-processing involved.
+  const haloMaterial = new THREE.MeshBasicMaterial({
+    map: canvasTexture(64, 64, (c) => { const g = c.createRadialGradient(32, 32, 4, 32, 32, 31); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.35, 'rgba(255,255,255,.35)'); g.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = g; c.fillRect(0, 0, 64, 64); }),
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, name: 'start-halo'
+  });
+  const halos = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.85, 0.85), haloMaterial, 10);
   const dummy = new THREE.Object3D();
   for (let i = 0; i < 10; i++) {
     const column = i % 5, row = i < 5 ? 0.2 : -0.2;
-    dummy.position.set((column - 2) * 0.5, rig.y + row, rig.z - 0.012); dummy.rotation.set(0, Math.PI, 0); dummy.updateMatrix();
+    // Column 0 is on the drivers' left (the gantry's +x, the +lane side).
+    dummy.position.set((2 - column) * 0.5, rig.y + row, rig.z - 0.012); dummy.rotation.set(0, Math.PI, 0); dummy.updateMatrix();
     lamps.setMatrixAt(i, dummy.matrix); lamps.setColorAt(i, LAMP_OFF);
+    dummy.position.z -= 0.006; dummy.updateMatrix();
+    halos.setMatrixAt(i, dummy.matrix); halos.setColorAt(i, HALO_OFF);
   }
   lamps.name = 'start-lights'; lamps.castShadow = false; gantry.add(lamps);
+  halos.name = 'start-light-halos'; halos.castShadow = false; halos.renderOrder = 2; gantry.add(halos);
   let shownLit = -1, shownOut = null;
   function setStartLights(lit = 0, out = false) {
     const count = Math.max(0, Math.min(5, Math.floor(Number(lit) || 0)));
     if (count === shownLit && !!out === shownOut) return;
     shownLit = count; shownOut = !!out;
-    for (let i = 0; i < 10; i++) lamps.setColorAt(i, !out && i % 5 < count ? LAMP_ON : LAMP_OFF);
-    lamps.instanceColor.needsUpdate = true;
+    for (let i = 0; i < 10; i++) {
+      const on = !out && i % 5 < count;
+      lamps.setColorAt(i, on ? LAMP_ON : LAMP_OFF); halos.setColorAt(i, on ? HALO_ON : HALO_OFF);
+    }
+    lamps.instanceColor.needsUpdate = true; halos.instanceColor.needsUpdate = true;
     if (out) startFlag('green', 5);
   }
 
@@ -114,6 +135,8 @@ export function buildStartline(route, root, { layout, clear, phone = false, redu
   for (let i = 0; i < (phone ? 4 : 8); i++) seats.push({ position: [standLength / 2 + 1 + i * 0.75, 0, 0.6 + random() * 0.6], rotationY: -0.3 + random() * 0.4, pose: 'stand' });
   const crowd = createCrowd({ seats, seed: 2012, hats: 0.2 });
   stand.add(crowd.root); crowd.setMood('idle');
+  // Under the roof: their shadows would cost a second pass for little gain.
+  crowd.root.traverse((object) => { object.castShadow = false; });
   const standInverse = new THREE.Matrix4().copy(standMatrix).invert();
   const lookTarget = new THREE.Vector3();
 

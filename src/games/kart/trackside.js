@@ -112,9 +112,9 @@ export function buildTrackside(route, root, { anisotropy = 4, phone = false, ran
 
   /* ---------------------------------------------------------- tyre walls */
   const tireGeo = new THREE.LatheGeometry([
-    new THREE.Vector2(0.18, -0.12), new THREE.Vector2(0.29, -0.125), new THREE.Vector2(0.34, -0.07),
-    new THREE.Vector2(0.345, 0), new THREE.Vector2(0.34, 0.07), new THREE.Vector2(0.29, 0.125), new THREE.Vector2(0.18, 0.12)
-  ], phone ? 9 : 12);
+    new THREE.Vector2(0.18, -0.12), new THREE.Vector2(0.31, -0.122), new THREE.Vector2(0.345, -0.05),
+    new THREE.Vector2(0.345, 0.05), new THREE.Vector2(0.31, 0.122), new THREE.Vector2(0.18, 0.12)
+  ], phone ? 7 : 9);
   const tireMaterial = mat(0xffffff, 0.86);
   const tirePlaces = [];
   const dummy = new THREE.Object3D();
@@ -275,7 +275,7 @@ export function buildTrackside(route, root, { anisotropy = 4, phone = false, ran
       if (random() < 0.35) continue;
       const lane = side * (9 + random() * 5), s = sample(d, lane);
       if (!clear(s.position.x, s.position.z, d, 9.5)) continue;
-      trees.push({ x: s.position.x, y: s.position.y, z: s.position.z, height: 5 + random() * 4.5, type: random() < 0.6 ? 'birch' : 'spruce', haze: 0, details: phone ? { clumps: 14, tiers: 6, arms: 6 } : {} });
+      trees.push({ x: s.position.x, y: s.position.y, z: s.position.z, height: 5 + random() * 4.5, type: random() < 0.6 ? 'birch' : 'spruce', haze: 0, details: phone ? { clumps: 12, tiers: 6, arms: 6 } : { clumps: 16, tiers: 7, arms: 7 } });
     }
   }
 
