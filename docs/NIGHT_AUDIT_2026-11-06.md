@@ -168,6 +168,82 @@ inte gokartbanan. Ingen ny tillförlitlig höjdprofil hittades i denna
 begränsade komplettering. Den tidigare avlästa planen och dess uttryckliga
 osäkerhetsmarkeringar bevaras; ingen banändring räknas som nytt nattarbete.
 
+## Tredje passet — verifierat
+
+Kodcheckpoint: `a6eaf3a12ff17294dd4c2216fcf05bdf601d7ff6`.
+
+Fortsättningen utgår från de reproducerade inputluckorna efter andra
+checkpointen. Målningens befintliga modifieringsskydd var korrekt; de
+övriga spelens lokala lyssnare behövde samma policy som skalet.
+
+- Ctrl/Meta/Alt-kombinationer startar inte längre spelhandlingar i
+  berörda lokala handlers: exempelvis kaptensbyte vid kopiering i Fantasy,
+  paus vid utskrift i pingis, glättning/slutförande i lera, skott, kast,
+  styrning, acceleration, fiske och flipper. Ambitions kortnavigering
+  och regelboksfokus lämnar modifierade kommandon ifred.
+- Farm/country/kart/triathlon ignorerar höger- och mellanmusknapp på
+  hållkontrollerna. En ickeprimär andra touchkontakt är fortsatt giltig.
+- Fysisk keyup rensar sin ägare även om Ctrl/Meta/Alt tryckts efter
+  nedtryckningen. Shift, vanlig Space och skalets redan förhindrade
+  Space-händelse fungerar fortsatt. Inga guards lades på release/cancel.
+- Fäktning avvisar modifierad hjälpmedelsklickning. Ett verkligt native-fynd
+  krävde också att modifierad Enter/Space på just handlingsknapparna
+  avbryter nativeaktiveringen: Ctrl ned → Space ned → Ctrl upp → Space
+  upp skapade annars en omodifierad klickhändelse och en oavsiktlig stöt.
+  Vanlig Enter, Shift+Space/F och hjälpmedelsklick bevaras.
+- Sidans yttre Escape-handler ignorerar också Ctrl/Meta/Alt. Den stänger
+  därför inte hela spelet när den lokala spelhandlern korrekt avstår.
+  Faktisk callbackrepro före/efter: tre modifierade stängningar → noll;
+  vanlig Escape behåller sin stängning och lokal dialogprioritet.
+
+### Tredje passets riktade belägg
+
+- **213 enhetstester i 31 filer** passerar. Nya EventTarget-regressioner
+  täcker sekundärmus, modifierad aktivering, fortsatt Shift-styrning,
+  modifierare tillagda före fysisk release, andra tummen och AT-click.
+- ESLint: **0 fel, 1 310 varningar**. `git diff --check` är ren.
+- Nya spelens riktade normalrenderade browserpass: **38 godkända
+  kontrollgrupper**, sex desktopspel och två telefonfall. Inkluderar
+  156 levererade modifierkombinationer, 24 riktiga höger-/mellanmussekvenser,
+  riktig tvåtummarsstyrning och korrekt stängning utan canvas/sidfel.
+- Äldre spel plus Fantasy/Ambition: ett pass över åtta spel gav 109/110
+  godkända kontroller och fann native-Space-kedjan ovan. Efter rättning
+  passerade samtliga **25 riktade fäktningskontroller**, inklusive felet
+  och positiva grundhandlingar. Inga sidfel. Denna kontroll undertrycker
+  rendering/RAF och sätter explicita aktiva spelfaser, men dispatchar till
+  riktiga DOM-handlers och verifierar verkliga handlingar, t.ex. förbrukad
+  patron, pingisserve, kaptensbyte och plungerladdning. Det är inget
+  grafik- eller prestandabevis.
+- Reserverade system-/browserkombinationer provas som levererade
+  DOM-events. Rapporten påstår inte att varje operativsystem skickar
+  varje sådant kortkommando till sidan. Native Ctrl/Space/Enter i
+  fäktningen samt normala mus-/touchhändelser kördes via Chromium-input.
+- Sex initiala 5-sekunders cleanup-timeouts i den nya inputharnessen
+  korrigerades till normal 30-sekunders väntan; alla sex omprov passerade.
+  Classic-harnessen fick färska dokument vid spelbyte för att undvika
+  gamla testhooks från hash-navigation. Båda var testfixturproblem.
+- Detaljer: `pass3-input.md`, `pass3-classic-modifiers.md`,
+  `overlay-modifiers-before.json` och `overlay-modifiers-after.json`
+  under `/workspace/pekkas-night/`. Permanent inputharness ligger i
+  `scripts/check-input-guards.mjs` och `scripts/check-classic-input-guards.mjs`.
+
+### Tredje passets slutliga produktionskontroll
+
+- Bygge och delningssidor passerade. `dist/src/games` var identiskt med
+  källfilerna före och efter testerna; inget ombygge under browserkörning.
+- **38/38 kontrollgrupper** i den normala inputharnessen mot produktion:
+  sex desktopspel och två telefonfall. Dessutom **4/4 grupper** för
+  samma riktiga tvåtummarssekvenser och stängning i liggande telefon.
+  Detta är 42 kontrollgrupper, inte 42 separata spel/viewportkombinationer.
+- Den portabla classic-harnessen passerade **119/119 kontroller** mot
+  produktion, inklusive native-fäktningskedjan och sidans modifierade
+  Escape. Riktiga handlers och spelhandlingar, undertryckt rendering/RAF
+  enligt metoden ovan. Inga sidfel eller instrumenteringsfel.
+- Samtliga tre produktionsprocesser avslutade med exit 0 och stängda
+  browsers. Detaljer sparade i `pass3-production-input/`,
+  `pass3-production-landscape/` och `pass3-production-classic.json`
+  under `/workspace/pekkas-night/`.
+
 ## Fortsättning och begränsningar
 
 ### Fynd som förs till nästa pass
@@ -189,16 +265,20 @@ Nedan skiljs bekräftade, ännu öppna fynd från bredare granskningskandidater.
 Välj nya substantiella kontroller; kör inte hela sviten igen utan ny
 ändring eller konkret kvarstående osäkerhet.
 
-1. En ny CPU-granskning av faktiska callbacks bekräftar att sekundär
-   musknapp aktiverar hållkontroller i farm/country/kart/triathlon och
-   att lokala Ctrl/Meta/Alt-handlers i dessa samt field kringgår skalets
-   korrekta guard. 101 kontroller: 71 oönskade aktiveringar/nyckelinsättningar
-   och 30 godkända avbrotts-/negativkontroller. Detta är ännu inte rättat.
-   Repro: `node /workspace/pekkas-night/pass2-input-followup.mjs`;
-   exakt fil/rad och användareffekt i `pass2-input-followup.md`.
-   Nästa pass bör rätta startfiltreringen och verifiera vanlig/Shift-input,
-   fysisk keyup efter modifierarbyte och två fingrar. OS-reserverade
-   kortkommandons faktiska leverans är inte browserbevisad.
+1. **Nytt bekräftat fynd:** Pingis, skytte, fäktning och fiske ritar samma
+   pausbild på varje RAF. Normal Chromium/WebGL-mätning gav respektive
+   968/648/680/304 ritanrop över åtta pausade RAF; efter avslutad rotation
+   1200/680/928/312. Alla gav noll efter stängning och normal ritning vid
+   fortsättning. Detta är onödig pausritning, inte en stängningsläcka.
+   Fäktningens faktiska tick/watchPerf/simulate-callbacks har dessutom
+   CPU-reproducerats vid simulerade 20 fps: 5,5 s paus stänger av bloom,
+   11 s sänker DPR 2→1,5, 16,5 s halverar skuggkartans sida, medan
+   spelklockan står stilla. Ingen fysisk prestandamätning påstås.
+   Nästa pass bör låta pausbilden vila, bevara omritning vid rotation,
+   visibility/contextrestore och flytta fäktningens pausretur före
+   kvalitetsmätningen. Underlag: `pass4-paused-render-evidence.md`,
+   `pass4-paused-render-plan.md`, `paused-render-before.json` och
+   `pass4-fencing-perf-repro.json` under `/workspace/pekkas-night/`.
 2. Triathlon har fortsatt fri passage genom rivaler senare i loppet.
    Startöverlappet är rättat, men personkollisioner eller automatiskt
    undanvikande skulle ändra spelmekanik/drafting och kräver en separat
