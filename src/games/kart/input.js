@@ -182,7 +182,8 @@ export function createKartInput(game, interfaceEl, { onView = null } = {}) {
       const right = pressed('right') || keys.has('ArrowRight') || keys.has('KeyD');
       const brake = pressed('brake') || keys.has('ArrowDown') || keys.has('KeyS') || keys.has('Space') ? 1 : 0;
       // Autogas waits for lights out, so it can never cause a jump start.
-      const gas = pressed('throttle') || keys.has('ArrowUp') || keys.has('KeyW') || (autogas && state === 'racing');
+      // Braking lifts autogas, so holding BROMS at a standstill can back up.
+      const gas = pressed('throttle') || keys.has('ArrowUp') || keys.has('KeyW') || (autogas && state === 'racing' && !brake);
       smooth.steer = ramp(smooth.steer, Number(left) - Number(right), step, 0.15, 0.07);
       smooth.throttle = ramp(smooth.throttle, gas ? 1 : 0, step, 0.06, 0.04);
       smooth.brake = ramp(smooth.brake, brake, step, 0.06, 0.04);

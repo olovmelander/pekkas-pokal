@@ -234,5 +234,6 @@ export function rivalInput(driver, brain, { line, track, drivers, dt = 1 / 60, c
   // A tidy driver keeps the kart balanced once the rear steps out.
   if (driver.slip > 0.25) { brake = 0; throttle = 0.55; }
   if (liftNow) { throttle = 0; brake = 0.3; }
-  return { steer, throttle: throttle * brain.power, brake };
+  // Rivals never back up; the marshal turns a stuck rival round.
+  return { steer, throttle: throttle * brain.power, brake, reverse: false };
 }

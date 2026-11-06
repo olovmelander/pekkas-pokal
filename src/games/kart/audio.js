@@ -237,7 +237,7 @@ export function createKartAudio(game, { trackLength = 665 } = {}) {
       const accel = step > 0 ? (speed - previousSpeed) / step : 0;
       previousSpeed = speed;
       const active = ACTIVE.has(state);
-      const throttle = controls ? !!controls.throttle && !controls.brake : accel > 0.6;
+      const throttle = controls ? !!controls.throttle && !controls.brake : accel > 0.6 || !!player?.reversing;
       const wheelspin = finite(player?.wheelspin);
       rpm = kartRpm(rpm, speed, active && throttle, step, wheelspin);
       const g = ensure();
