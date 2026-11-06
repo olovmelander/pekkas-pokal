@@ -25,6 +25,7 @@
 .field-game .field-buttons button:disabled { opacity: .4; }
 .field-game .field-buttons button:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
 .field-game .field-buttons button[hidden] { visibility: hidden; display: block; }
+.field-game .field-buttons.solo { grid-template-columns: 1fr; }
 .field-game .field-meter { position: relative; height: 12px; margin: 9px 0 12px; border-radius: 6px; background: #ffffff17; overflow: hidden; }
 .field-game .field-meter i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg,#83bfb4,#f4d486); border-radius: inherit; width: 0; }
 .field-game .field-meter b { position: absolute; width: 3px; top: 0; bottom: 0; left: 66%; background: #fff; box-shadow: 0 0 9px #fff; }
@@ -54,3 +55,6 @@
   .field-game .field-result-number { font-size:34px; margin:6px 0; }
   .field-game .field-scorecard { margin:7px 0; padding:8px 0; gap:4px 18px; }
 }
+/* Party events: a target window on the meter, or a plain progress bar. */
+.field-game .field-meter.zone b { width: var(--zone, 18%); transform: translateX(-50%); border-radius: 3px; background: #9fdcb952; box-shadow: inset 0 0 0 1.5px #d2f4dd; }
+.field-game .field-meter.plain b { display: none; }

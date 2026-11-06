@@ -10,7 +10,7 @@ regelverk markeras som arkadtolkningar i spelen.
 | 2011 | Pekkas Fantasy | Fem spelare, budget, kaptensval, byten och fem omgångar mot tre managers | [Fantasy](../src/games/fantasy/research.md) |
 | 2012 | Pekkas Gokart | Tre varv mot fem rivaler, gas, broms, kurvgrepp och omkörningar | [Gokart](../src/games/kart/research.md) |
 | 2013 | Pekkas Femkamp | Ringkast, häcklöpning, prickkast, längdhopp och balans | [Femkamp](../src/games/pentathlon/research.md) |
-| 2014 | Pekkas Parkmästare | Boule, krocket och ringkast i en parkturnering | [Uppsala](../src/games/uppsala/research.md) |
+| 2014 | Pekkas Parkmästare | Boule, krocket, ringkast, beerpong och flipcup i en parkturnering | [Uppsala](../src/games/uppsala/research.md) |
 | 2015 | Pekkas Bondespel | Luftgevärsskytte, vedstapling på tid, stövelkast, hästskokast och snabb spikning | [Bondespelen](../src/games/farm/research.md) |
 | 2016 | Pekkas Gårdskamp | Kubbprecision, korgkast med vind och stockbalans | [Lundqvist](../src/games/lundqvist/research.md) |
 | 2017 | Pekkas Triathlon | Simning, löpning och cykling med gemensam energi och tre olika banutmaningar | [Triathlon](../src/games/triathlon/research.md) |
@@ -89,8 +89,8 @@ såg ut 2012. Den mjuka höjdvariationen är en tolkning av klubbens beskrivning
 av kuperad terräng; någon inmätt höjdprofil har inte hittats.
 
 Källorna belägger spelens förlagor och grundregler, inte vad som hände under
-varje vänskapstävling. Bondespelens fem delgrenar och triathlons ordning bygger på användarens
-uppgifter. De övriga mångkampernas ursprungliga delgrenar och Ambitions
+varje vänskapstävling. Bondespelens fem delgrenar, beerpong och flipcup i Uppsala 2014 och triathlons
+ordning bygger på användarens uppgifter. De övriga mångkampernas ursprungliga delgrenar och Ambitions
 husregler är inte dokumenterade i repositoriet. Miljöerna är konstnärliga
 tolkningar. Fantasy använder påhittade fotbollsspelare och simulerade matcher,
 inte liveinformation eller en rekonstruktion av säsongen 2011.
