@@ -744,11 +744,13 @@ export function makeEnvironment(renderer) {
   });
   scene.add(new THREE.Mesh(new THREE.SphereGeometry(10, 24, 12), mat));
   const pmrem = new THREE.PMREMGenerator(renderer);
-  const rt = pmrem.fromScene(scene, 0.02);
-  pmrem.dispose();
-  scene.children[0].geometry.dispose();
-  mat.dispose();
-  return rt;
+  try {
+    return pmrem.fromScene(scene, 0.02);
+  } finally {
+    pmrem.dispose();
+    scene.children[0].geometry.dispose();
+    mat.dispose();
+  }
 }
 
 /* ----------------------------------------------------------- the basin */

@@ -206,16 +206,23 @@ export async function createFencing(container) {
   const camera = new THREE.PerspectiveCamera(36, 1, 0.2, 60);
 
   // Reflections: a pre-filtered stand-in of this very room
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  const envScene = buildEnvScene();
-  const envRT = pmrem.fromScene(envScene, 0.04);
+  function bakeEnvironment() {
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const envScene = buildEnvScene();
+    try {
+      return pmrem.fromScene(envScene, 0.04);
+    } finally {
+      envScene.traverse((o) => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) o.material.dispose();
+      });
+      pmrem.dispose();
+    }
+  }
+  let envRT = bakeEnvironment();
+  let environmentRestorePending = false;
   scene.environment = envRT.texture;
   scene.environmentIntensity = 0.6;
-  envScene.traverse((o) => {
-    if (o.geometry) o.geometry.dispose();
-    if (o.material) o.material.dispose();
-  });
-  pmrem.dispose();
 
   /* ---- World ---- */
   let fencerName = load(KEY_FENCER, 'Olov Melander');
@@ -339,6 +346,7 @@ export async function createFencing(container) {
   bloom.enabled = gfx.floatRT;
   composer.addPass(new OutputPass());
   let usePost = !gfx.safe;
+  let needsRedraw = true;
 
   /* ---- Black-frame watchdog: step down until the picture lives ---- */
   const watchdog = new RenderWatchdog(
@@ -364,7 +372,10 @@ export async function createFencing(container) {
         });
       }
     ],
-    { onStep: () => gfxNotice(container, 'Grafiken förenklades för att fungera på den här enheten.') }
+    { onStep: () => {
+      needsRedraw = true;
+      gfxNotice(container, 'Grafiken förenklades för att fungera på den här enheten.');
+    } }
   );
 
   /* ---- State ---------------------------------------------------------- */
@@ -1254,6 +1265,7 @@ export async function createFencing(container) {
   function setHelp(open) {
     onPointerUp();
     helpOpen = open;
+    needsRedraw = true;
     hudHost.dataset.paused = String(open);
     el.help.hidden = !open;
     el.info.setAttribute('aria-expanded', String(open));
@@ -1526,6 +1538,7 @@ export async function createFencing(container) {
     camera.updateProjectionMatrix();
     salle.setMoteScale(rtSize.y * 0.05);
     hudHost.dataset.orient = aspect < 0.9 ? 'portrait' : 'landscape';
+    needsRedraw = true;
     resizePicture?.();
   }
   const ro = new ResizeObserver(resize);
@@ -1765,8 +1778,12 @@ export async function createFencing(container) {
     const frameDt = Math.min(0.5, Math.max(0, (now - last) / 1000));
     last = now;
     if (!running) return;
-    watchPerf(frameDt);
-    if (!frozen) simulate(realDt);
+    if (helpOpen && !needsRedraw) return;
+    // A paused repaint must not advance poses or count toward quality loss.
+    if (!helpOpen) {
+      watchPerf(frameDt);
+      if (!frozen) simulate(realDt);
+    }
     if (renderBudget <= 0) return;
     renderBudget--;
     if (camOverride) {
@@ -1778,24 +1795,40 @@ export async function createFencing(container) {
     }
     renderer.info.reset();
     drawFrame();
-    watchdog.afterFrame();
+    if (!helpOpen) watchdog.afterFrame();
   }
 
   function drawFrame() {
+    if (environmentRestorePending) {
+      const previous = envRT;
+      envRT = bakeEnvironment();
+      // Keep a watchdog-disabled environment disabled.
+      if (scene.environment === previous.texture) scene.environment = envRT.texture;
+      previous.dispose();
+      environmentRestorePending = false;
+    }
     if (usePost) composer.render();
     else renderer.render(scene, camera);
+    needsRedraw = false;
   }
 
   const onVisibility = () => {
     if (document.hidden) onBlur();
     running = !document.hidden;
     last = performance.now();
+    if (running) needsRedraw = true;
     if (sfx.ctx) {
       if (document.hidden) sfx.ctx.suspend();
       else if (!helpOpen) sfx.ctx.resume();
     }
   };
   document.addEventListener('visibilitychange', onVisibility);
+  const onContextRestored = () => {
+    // Stay idle in a hidden tab; rebuild only when a frame is permitted.
+    environmentRestorePending = true;
+    needsRedraw = true;
+  };
+  renderer.domElement.addEventListener('webglcontextrestored', onContextRestored);
 
   // Every grip the hands will take, solved now rather than mid-bout (the
   // fencers solve theirs whenever they are dressed)
@@ -1822,7 +1855,7 @@ export async function createFencing(container) {
   await precompile(renderer, scene, camera, usePost ? { target: composer.renderTarget1 } : {});
   resizePicture = () => {
     updateCamera(0, clock, true);
-    drawFrame();
+    if (running && !document.hidden) drawFrame();
   };
   hidden.forEach((o) => {
     o.visible = false;
@@ -1957,6 +1990,7 @@ export async function createFencing(container) {
     running = false;
     ro.disconnect();
     document.removeEventListener('visibilitychange', onVisibility);
+    renderer.domElement.removeEventListener('webglcontextrestored', onContextRestored);
     canvasHost.removeEventListener('pointerdown', onPointerDown);
     window.removeEventListener('pointermove', onPointerMove);
     window.removeEventListener('pointerup', onPointerUp);

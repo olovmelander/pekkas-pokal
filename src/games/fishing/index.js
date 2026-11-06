@@ -178,6 +178,8 @@ export async function createFishing(container) {
   /* ---- Renderer: ACES filmic tone mapping does the heavy lifting on the
      look. No post-processing — a phone keeps its frame rate instead. ---- */
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+  let needsRedraw = true;
+  let environmentRestorePending = false;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.12;
@@ -196,9 +198,9 @@ export async function createFishing(container) {
   // The pre-filtered environment is rendered into half-float targets; a GPU
   // that cannot render to those would hand back black. Without it the
   // hemisphere light carries the fish a little harder instead.
-  const envRT = gfx.floatRT ? makeEnvironment(renderer) : null;
+  let envRT = gfx.floatRT ? makeEnvironment(renderer) : null;
   scene.environment = envRT ? envRT.texture : null;
-  const envBoost = envRT ? 0 : 0.35;
+  let envBoost = envRT ? 0 : 0.35;
 
   // Near plane at 0.4 m: nothing ever comes closer than ~6 m, and every
   // step out buys depth precision (some GPUs only give 16 bits)
@@ -295,6 +297,7 @@ export async function createFishing(container) {
     [sky.dome, volume.mesh, shafts.mesh, snow.points].forEach((o) => {
       o.visible = false;
     });
+    needsRedraw = true;
   }
   function dropShaderPatches() {
     scene.environment = null;
@@ -307,6 +310,7 @@ export async function createFishing(container) {
         m.needsUpdate = true;
       });
     });
+    needsRedraw = true;
   }
   if (gfx.safe) dropHeavyEffects();
   // The start screen is bright sky and water: a frame that is under 12 %
@@ -1159,6 +1163,7 @@ export async function createFishing(container) {
   /* Strategy card and fångstdagbok: both pause the game while open */
   function setHelp(open) {
     helpOpen = open;
+    if (open) needsRedraw = true;
     hud.help.hidden = !open;
     sfx.setPaused(helpOpen || bookOpen);
     if (open) releaseInput();
@@ -1166,6 +1171,7 @@ export async function createFishing(container) {
 
   function setBook(open) {
     bookOpen = open;
+    if (open) needsRedraw = true;
     if (open) renderBook(hud, progress, SPECIES, speciesSvg, fmt, fmtKg);
     hud.book.hidden = !open;
     sfx.setPaused(helpOpen || bookOpen);
@@ -1237,6 +1243,7 @@ export async function createFishing(container) {
     updatePointScale();
     capU.value = pointCap(renderer, ratio);
     hudHost.classList.toggle('fi-wide', camera.aspect > 1.15);
+    needsRedraw = true;
   }
 
   const ro = new ResizeObserver(resize);
@@ -1818,13 +1825,26 @@ export async function createFishing(container) {
   let frozen = null; // test hook: null = live, else the fixed dt per frame (0 = stopped)
   let vakIn = 2.5;
 
+  function drawFrame() {
+    if (!running || document.hidden) return;
+    if (environmentRestorePending) {
+      restoreEnvironment();
+      environmentRestorePending = false;
+    }
+    renderer.render(scene, camera);
+    needsRedraw = false;
+  }
+
   function tick(now) {
     raf = requestAnimationFrame(tick);
     const rawMs = now - last;
     let dt = clampDt(rawMs);
     last = now;
     if (!running) return;
-    if (helpOpen || bookOpen) { renderer.render(scene, camera); return; }
+    if (helpOpen || bookOpen) {
+      if (needsRedraw) drawFrame();
+      return;
+    }
     adapt(rawMs);
     // Test hook: time can be frozen (or stepped by a fixed amount) so a
     // close-up can be taken mid-motion — the frame still renders
@@ -2054,16 +2074,43 @@ export async function createFishing(container) {
       hud.gaugeDeep.style.height = `${(state.rec.deepest / BOTTOM) * 100}%`;
     }
     hudHost.style.setProperty('--deep', (Math.max(0, -camera.position.y) / BOTTOM).toFixed(3));
-    renderer.render(scene, camera);
+    drawFrame();
     watchdog.afterFrame();
   }
 
   const onVisibility = () => {
     running = !document.hidden;
+    if (running) needsRedraw = true;
     last = performance.now();
     if (document.hidden) onBlur();
   };
   document.addEventListener('visibilitychange', onVisibility);
+  function restoreEnvironment() {
+    const previous = envRT;
+    if (previous) {
+      envRT = null;
+      // Keep a deliberate shader fallback disabled after context restore.
+      if (scene.environment === previous.texture) {
+        try {
+          envRT = makeEnvironment(renderer);
+        } catch {
+          renderer.setRenderTarget(null);
+          gfxNotice(container, 'Grafiken förenklades för att fungera på den här enheten.');
+        }
+        scene.environment = envRT ? envRT.texture : null;
+        if (!envRT) {
+          hemi.intensity += 0.35 - envBoost;
+          envBoost = 0.35;
+        }
+      }
+      previous.dispose();
+    }
+  }
+  const onContextRestored = () => {
+    environmentRestorePending = true;
+    needsRedraw = true;
+  };
+  renderer.domElement.addEventListener('webglcontextrestored', onContextRestored);
 
   renderCasts();
   renderBook(hud, progress, SPECIES, speciesSvg, fmt, fmtKg);
@@ -2209,6 +2256,7 @@ export async function createFishing(container) {
     running = false;
     ro.disconnect();
     document.removeEventListener('visibilitychange', onVisibility);
+    renderer.domElement.removeEventListener('webglcontextrestored', onContextRestored);
     canvasHost.removeEventListener('pointerdown', onPointerDown);
     canvasHost.removeEventListener('pointermove', onPointerMove);
     canvasHost.removeEventListener('lostpointercapture', onPointerUp);

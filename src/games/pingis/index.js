@@ -330,12 +330,69 @@ export async function createPingis(container) {
 
   /* The hall reflects itself: one cube capture from over the table, so the
      lacquer, the ball and the cups shine with THIS room, not a studio. */
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  if (hall.refs.reflector) hall.refs.reflector.visible = false;
-  const envRT = pmrem.fromScene(scene, 0.04, 0.1, 30, { position: new THREE.Vector3(0, 1.4, 0.6) });
-  if (hall.refs.reflector) hall.refs.reflector.visible = true;
-  pmrem.dispose();
-  const envTex = envRT.texture;
+  const captureObjects = new Set();
+  const captureLights = new Map();
+  scene.traverse((o) => {
+    captureObjects.add(o);
+    if (o.isLight) captureLights.set(o, o.intensity);
+  });
+  const captureLamps = hall.refs.lampMats.map(({ mat }) => [mat.uniforms.uIntensity, mat.uniforms.uIntensity.value]);
+  const captureBoardMap = hall.refs.scoreboard.material.map;
+  let envTex = null;
+  function bakeHallEnvironment() {
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const visibility = new Map();
+    const materialMaps = new Map();
+    const lightLevels = new Map();
+    const lampLevels = new Map();
+    const boardMat = hall.refs.scoreboard.material;
+    const boardMap = boardMat.map;
+    try {
+      scene.traverse((o) => {
+        // Restore the original capture, without players, prizes or a recursive mirror.
+        if (!captureObjects.has(o) || o === hall.refs.reflector) {
+          visibility.set(o, o.visible);
+          o.visible = false;
+        }
+        const mats = o.material ? [].concat(o.material) : [];
+        mats.forEach((m) => {
+          if (envTex && m.envMap === envTex) {
+            materialMaps.set(m, m.envMap);
+            m.envMap = null;
+            m.needsUpdate = true;
+          }
+        });
+      });
+      // Intro and match-point lights must not change the baked room on restoration.
+      captureLights.forEach((intensity, light) => {
+        lightLevels.set(light, light.intensity);
+        light.intensity = intensity;
+      });
+      captureLamps.forEach(([uniform, intensity]) => {
+        lampLevels.set(uniform, uniform.value);
+        uniform.value = intensity;
+      });
+      // The live scoreboard texture is attached only after the original capture.
+      if (boardMat.map !== captureBoardMap) {
+        boardMat.map = captureBoardMap;
+        boardMat.needsUpdate = true;
+      }
+      return pmrem.fromScene(scene, 0.04, 0.1, 30, { position: new THREE.Vector3(0, 1.4, 0.6) });
+    } finally {
+      visibility.forEach((visible, o) => { o.visible = visible; });
+      materialMaps.forEach((texture, m) => { m.envMap = texture; m.needsUpdate = true; });
+      lightLevels.forEach((intensity, light) => { light.intensity = intensity; });
+      lampLevels.forEach((intensity, uniform) => { uniform.value = intensity; });
+      if (boardMat.map !== boardMap) {
+        boardMat.map = boardMap;
+        boardMat.needsUpdate = true;
+      }
+      pmrem.dispose();
+    }
+  }
+  let envRT = bakeHallEnvironment();
+  envTex = envRT.texture;
+  let environmentRestorePending = false;
   const useEnv = (root) => root.traverse((o) => {
     const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
     mats.forEach((m) => {
@@ -475,6 +532,7 @@ export async function createPingis(container) {
 
   const post = createPost(renderer, scene, camera, { samples: low ? 0 : 4, bloomRes: low ? 0.35 : 0.5, profile: gfx });
   let usePost = !gfx.safe;
+  let needsRedraw = true;
   // Svart bild på någon krets: rita förbi efterbehandlingen, sedan utan skuggor
   const watchdog = new RenderWatchdog(
     renderer,
@@ -493,11 +551,32 @@ export async function createPingis(container) {
         if (hall.refs.reflector) hall.refs.reflector.visible = false;
       }
     ],
-    { onStep: () => gfxNotice(container, 'Grafiken förenklades för att fungera på den här enheten.') }
+    { onStep: () => {
+      needsRedraw = true;
+      gfxNotice(container, 'Grafiken förenklades för att fungera på den här enheten.');
+    } }
   );
   const drawFrame = () => {
+    if (environmentRestorePending) {
+      // A render target has no CPU pixels to upload after context loss.
+      const previous = envRT;
+      envRT = bakeHallEnvironment();
+      scene.traverse((o) => {
+        const mats = o.material ? [].concat(o.material) : [];
+        mats.forEach((m) => {
+          if (m.envMap === previous.texture) {
+            m.envMap = envRT.texture;
+            m.needsUpdate = true;
+          }
+        });
+      });
+      envTex = envRT.texture;
+      previous.dispose();
+      environmentRestorePending = false;
+    }
     if (usePost) post.render();
     else renderer.render(scene, camera);
+    needsRedraw = false;
   };
 
   /* ---- State ----------------------------------------------------------- */
@@ -1735,6 +1814,7 @@ export async function createPingis(container) {
   function setHelp(open) {
     clearInput();
     helpOpen = open;
+    needsRedraw = true;
     hud.el.help.hidden = !open;
     if (open) hud.setStroke(0);
     hudHost.querySelector('#pg-info').setAttribute('aria-expanded', String(open));
@@ -1801,6 +1881,7 @@ export async function createPingis(container) {
         Math.round(viewW * pixelRatio * 0.5), Math.round(viewH * pixelRatio * 0.5));
     }
     hall.refs.dust.material.uniforms.uPR.value = pixelRatio * (viewH / 900 + 0.4);
+    needsRedraw = true;
     resizePicture?.();
   }
   const ro = new ResizeObserver(resize);
@@ -1891,9 +1972,10 @@ export async function createPingis(container) {
     raf = requestAnimationFrame(tick);
     const rawDt = clampDt(now - last);
     last = now;
-    if (!running || frozen) return;
-    if (helpOpen) {
-      if (renderOn) drawFrame();
+    if (!running) return;
+    if (helpOpen || frozen) {
+      // Keep the held picture, repainting only after a resize or invalidation.
+      if (needsRedraw && renderOn) drawFrame();
       return;
     }
     frameT += rawDt;
@@ -2359,7 +2441,7 @@ export async function createPingis(container) {
     camCut = true;
     updateCamera(state.phase === 'replay' ? replayView() : liveView(0), frameT, 0);
     hall.updateReflections(camera.position);
-    if (renderOn) drawFrame();
+    if (running && !document.hidden && renderOn) drawFrame();
   };
 
   showMenu();
@@ -2369,12 +2451,19 @@ export async function createPingis(container) {
     if (document.hidden) onBlur();
     running = !document.hidden;
     last = performance.now();
+    if (running) needsRedraw = true;
     if (sfx.ctx) {
       if (document.hidden) sfx.ctx.suspend();
       else if (!helpOpen) sfx.ctx.resume();
     }
   };
   document.addEventListener('visibilitychange', onVisibility);
+  const onContextRestored = () => {
+    // Stay idle in a hidden tab; rebuild only when a frame is permitted.
+    environmentRestorePending = true;
+    needsRedraw = true;
+  };
+  renderer.domElement.addEventListener('webglcontextrestored', onContextRestored);
 
   /* ---- Debug API -------------------------------------------------------- */
 
@@ -2454,6 +2543,7 @@ export async function createPingis(container) {
     running = false;
     ro.disconnect();
     document.removeEventListener('visibilitychange', onVisibility);
+    renderer.domElement.removeEventListener('webglcontextrestored', onContextRestored);
     hudHost.removeEventListener('click', onClick);
     canvasHost.removeEventListener('pointerdown', onPointerDown);
     window.removeEventListener('pointermove', onPointerMove);

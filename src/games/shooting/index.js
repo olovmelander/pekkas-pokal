@@ -172,6 +172,8 @@ export async function createShooting(container) {
   const fxRand = mulberry(99);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+  let needsRedraw = true;
+  let environmentRestorePending = false;
   quality.dpr = Math.min(window.devicePixelRatio || 1, quality.dprCap);
   renderer.setPixelRatio(quality.dpr);
   // Whatever fails to draw, the frame behind it is evening haze, not black
@@ -264,8 +266,8 @@ export async function createShooting(container) {
   // The env bake draws the sky into a float target — compile that variant
   // in the background first instead of in one blocking burst inside PMREM
   await compileFor(sky.dome, true);
-  const envRT = bakeEnvironment(renderer, sky);
-  const envMap = envRT ? envRT.texture : null;
+  let envRT = bakeEnvironment(renderer, sky);
+  let envMap = envRT ? envRT.texture : null;
   const haze = buildHaze();
   scene.add(haze.group);
   scene.add(buildHills());
@@ -402,7 +404,10 @@ export async function createShooting(container) {
     busy = true;
     await compileFor(scene, false);
     busy = false;
-    if (alive) disposeComposer();
+    if (alive) {
+      disposeComposer();
+      needsRedraw = true;
+    }
   }
 
   async function dropShadows() {
@@ -421,6 +426,7 @@ export async function createShooting(container) {
         m.needsUpdate = true;
       });
     });
+    needsRedraw = true;
   }
 
   /** Last resort: the plainest sky and no custom-shader layers or reflections. */
@@ -438,6 +444,7 @@ export async function createShooting(container) {
         }
       });
     });
+    needsRedraw = true;
   }
 
   // Blir bilden svart eller mörk på någon krets trappas grafiken ner i
@@ -1429,6 +1436,7 @@ export async function createShooting(container) {
   function setHelp(open) {
     clearInput();
     helpOpen = open;
+    if (open) needsRedraw = true;
     hudHost.dataset.paused = String(open);
     hud.help.hidden = !open;
     hud.info.setAttribute('aria-expanded', String(open));
@@ -1557,6 +1565,7 @@ export async function createShooting(container) {
     hud.lead.setAttribute('viewBox', `0 0 ${view.w} ${view.h}`);
     camera.aspect = view.aspect;
     camera.updateProjectionMatrix();
+    needsRedraw = true;
     resizePicture?.();
   }
   const ro = new ResizeObserver(resize);
@@ -1889,6 +1898,18 @@ export async function createShooting(container) {
     }
   }
 
+  function drawFrame(dt = 0) {
+    if (!running || document.hidden) return;
+    if (environmentRestorePending) {
+      restoreEnvironment();
+      environmentRestorePending = false;
+    }
+    renderer.info.reset();
+    if (composer) composer.render(dt);
+    else renderer.render(scene, camera);
+    needsRedraw = false;
+  }
+
   function tick(now) {
     raf = requestAnimationFrame(tick);
     const realDt = clampDt(now - last);
@@ -1896,8 +1917,7 @@ export async function createShooting(container) {
     if (!running) return;
     if (helpOpen) {
       // The help card is a real pause, including shot flight and delayed series transitions.
-      if (composer) composer.render(0);
-      else renderer.render(scene, camera);
+      if (needsRedraw) drawFrame();
       return;
     }
     flowClock.tick(realDt);
@@ -1948,9 +1968,7 @@ export async function createShooting(container) {
     updateHud(realDt);
     if (rand() < realDt * 0.15) sfx.bird();
 
-    renderer.info.reset();
-    if (composer) composer.render(realDt);
-    else renderer.render(scene, camera);
+    drawFrame(realDt);
     watchdog.afterFrame();
     adapt(realDt);
   }
@@ -1962,8 +1980,7 @@ export async function createShooting(container) {
   await compileFor(scene, !!composer);
   resizePicture = () => {
     applyCamera(flowClock.now, 0);
-    if (composer) composer.render(0);
-    else renderer.render(scene, camera);
+    if (running && !document.hidden) drawFrame();
   };
   last = performance.now();
   raf = requestAnimationFrame(tick);
@@ -1971,6 +1988,7 @@ export async function createShooting(container) {
   const onVisibility = () => {
     if (document.hidden) onBlur();
     running = !document.hidden;
+    if (running) needsRedraw = true;
     last = performance.now();
     if (sfx.ctx) {
       if (document.hidden) sfx.ctx.suspend();
@@ -1978,6 +1996,43 @@ export async function createShooting(container) {
     }
   };
   document.addEventListener('visibilitychange', onVisibility);
+  function restoreEnvironment() {
+    const previous = envRT;
+    if (previous) {
+      const reflective = new Set();
+      scene.traverse((o) => {
+        [].concat(o.material || []).forEach((m) => {
+          if (m.envMap === previous.texture) reflective.add(m);
+        });
+      });
+      envRT = null;
+      envMap = null;
+      // A shader fallback may already have removed every reflection.
+      if (reflective.size) {
+        try {
+          envRT = bakeEnvironment(renderer, sky);
+        } catch {
+          renderer.setRenderTarget(null);
+          gfxNotice(container, 'Grafiken förenklades för att fungera på den här enheten.');
+        }
+        envMap = envRT ? envRT.texture : null;
+        reflective.forEach((material) => {
+          material.envMap = envMap;
+          if (!envMap) {
+            material.metalness = Math.min(material.metalness, 0.45);
+            material.roughness = Math.max(material.roughness, 0.45);
+          }
+          material.needsUpdate = true;
+        });
+      }
+      previous.dispose();
+    }
+  }
+  const onContextRestored = () => {
+    environmentRestorePending = true;
+    needsRedraw = true;
+  };
+  renderer.domElement.addEventListener('webglcontextrestored', onContextRestored);
 
   showStartPanel();
   renderSerie();
@@ -2147,6 +2202,7 @@ export async function createShooting(container) {
     timers.clear();
     flowClock.destroy();
     document.removeEventListener('visibilitychange', onVisibility);
+    renderer.domElement.removeEventListener('webglcontextrestored', onContextRestored);
     canvasHost.removeEventListener('pointerdown', onPointerDown);
     canvasHost.removeEventListener('pointermove', onPointerMove);
     window.removeEventListener('pointerup', onPointerUp);
