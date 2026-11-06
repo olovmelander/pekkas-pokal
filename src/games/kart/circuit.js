@@ -1,108 +1,54 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createCrowd } from '../shared/people.js';
-import { buildNature, buildScenicSky, sceneryRandom } from '../shared/scenic.js';
-import { createRoute, ROAD_HALF_WIDTH, terrainHeight } from './route.js';
-import { surfaceMaterial } from './surfaces.js';
+import { buildNature, sceneryRandom } from '../shared/scenic.js';
+import { createRoute, terrainHeight } from './route.js';
+import { surfaceMaterial, surfaceAt, trackLayout, racingLine, GRID_SLOTS } from './surfaces.js';
+import { goldenSky, SUN_DIRECTION } from './atmosphere.js';
+import { buildTrackside, BARRIER_FACE } from './trackside.js';
+import { buildStartline } from './startline.js';
+
+export { surfaceAt, racingLine, GRID_SLOTS };
 
 /** Varggropen: measured-length trace, local paddock, gravel and Swedish woodland. */
-export function createCircuit(scene, { reducedMotion = false, anisotropy = 4 } = {}) {
+export function createCircuit(scene, { reducedMotion = false, anisotropy = 4, camera = null, phone = null } = {}) {
   const route = createRoute(), { sample, length, planToWorld } = route;
+  const coarse = phone ?? (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches);
   const random = sceneryRandom(20120728);
   const root = new THREE.Group(); root.name = 'varggropen-circuit'; scene.add(root);
-  const asphalt = surfaceMaterial('asphalt', anisotropy), gravel = surfaceMaterial('gravel', anisotropy), grass = surfaceMaterial('grass', anisotropy);
+  const grass = surfaceMaterial('grass', anisotropy);
   const materials = new Map();
   function material(color, metalness = 0) {
     const key = `${color}:${metalness}`;
     if (!materials.has(key)) materials.set(key, new THREE.MeshStandardMaterial({ color, roughness: metalness ? 0.54 : 0.83, metalness }));
     return materials.get(key);
   }
-  const white = material(0xe1e0cd), rubber = material(0x242925), steel = material(0x7d8985, 0.65);
+  const white = material(0xe1e0cd), steel = material(0x7d8985, 0.65);
   const cube = new THREE.BoxGeometry(1, 1, 1), cylinder = new THREE.CylinderGeometry(1, 1, 1, 10);
   function mesh(geometry, mat, at, scale, parent = root) {
     const object = new THREE.Mesh(geometry, mat); object.position.set(...at); object.scale.set(...scale);
     object.castShadow = object.receiveShadow = true; parent.add(object); return object;
   }
   function box(mat, at, scale, parent = root) { return mesh(cube, mat, at, scale, parent); }
-  function strip(from, to, lift, mat, start = 0, end = length, tint = null) {
-    const positions = [], uv = [], colors = [], indices = [];
-    const steps = Math.max(4, Math.ceil((end - start) / 0.65));
-    for (let i = 0; i <= steps; i++) {
-      const distance = start + (end - start) * i / steps;
-      for (const lane of [from, to]) {
-        const p = sample(distance, lane).position;
-        positions.push(p.x, p.y + lift, p.z); uv.push(p.x / 3, p.z / 3);
-        const shade = tint ? tint(distance, lane) : 1;
-        colors.push(shade, shade, shade);
-      }
-      if (i < steps) { const j = i * 2; indices.push(j, j + 2, j + 1, j + 1, j + 2, j + 3); }
-    }
-    const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-    geometry.setIndex(indices); geometry.computeVertexNormals();
-    const object = new THREE.Mesh(geometry, mat); object.receiveShadow = true; root.add(object); return object;
-  }
   // A real terrain surface: broad grades, close grass grain and colour variation.
   const groundGeo = new THREE.PlaneGeometry(500, 400, 125, 100); groundGeo.rotateX(-Math.PI / 2);
   const groundPositions = groundGeo.attributes.position, groundColors = [];
   for (let i = 0; i < groundPositions.count; i++) {
     const x = groundPositions.getX(i), z = groundPositions.getZ(i);
     groundPositions.setY(i, terrainHeight(x, z) - 0.06);
+    // Evening grass: a warm, sun-dried cast in the open, greener in the hollows.
     const shade = 0.83 + Math.sin(x * 0.08) * Math.cos(z * 0.055) * 0.09 + random() * 0.1;
-    groundColors.push(shade, shade, shade);
+    const warm = 0.5 + 0.5 * Math.sin(x * 0.031 + z * 0.017);
+    groundColors.push(shade * (1 + warm * 0.08), shade * (1 + warm * 0.02), shade * (0.96 - warm * 0.06));
     groundGeo.attributes.uv.setXY(i, x / 3, z / 3);
   }
   groundGeo.setAttribute('color', new THREE.Float32BufferAttribute(groundColors, 3)); groundGeo.computeVertexNormals();
-  const ground = new THREE.Mesh(groundGeo, grass); ground.receiveShadow = true; root.add(ground);
-  strip(-4.65, 4.65, 0.012, gravel);
-  strip(-ROAD_HALF_WIDTH, ROAD_HALF_WIDTH, 0.04, asphalt, 0, length, (d, lane) => {
-    const line = Math.sign(route.curvature(d)) * 0.85;
-    return 0.92 - Math.exp(-((lane - line) ** 2) / 3) * 0.08;
-  });
-  // Narrow painted edges and flush serrated kerbs leave the road readable.
-  strip(-3.44, -3.34, 0.052, white); strip(3.34, 3.44, 0.052, white);
-  const kerbs = new THREE.InstancedMesh(new THREE.BoxGeometry(0.48, 0.07, 0.82), white, 1800);
-  const dummy = new THREE.Object3D(); let kerbCount = 0;
-  for (let d = 0; d < length; d += 0.82) {
-    const k = route.curvature(d);
-    if (Math.abs(k) < 0.017) continue;
-    for (const side of [-1, 1]) {
-      const s = sample(d, side * 3.65); dummy.position.copy(s.position).add(new THREE.Vector3(0, 0.05, 0));
-      dummy.rotation.set(s.pitch, s.angle, 0); dummy.scale.setScalar(1); dummy.updateMatrix();
-      kerbs.setMatrixAt(kerbCount, dummy.matrix); kerbs.setColorAt(kerbCount++, new THREE.Color(Math.floor(d / 1.64) % 2 ? 0xb14b41 : 0xd5d4c2));
-    }
-  }
-  kerbs.count = kerbCount; kerbs.receiveShadow = true; root.add(kerbs);
+  const ground = new THREE.Mesh(groundGeo, grass); ground.receiveShadow = true; ground.name = 'terrain'; root.add(ground);
 
-  // Low tyre banks, like those in the club's May 2013 photographs.
-  const tireGeo = new THREE.LatheGeometry([new THREE.Vector2(0.18, -0.12), new THREE.Vector2(0.29, -0.12), new THREE.Vector2(0.34, -0.06), new THREE.Vector2(0.34, 0.06), new THREE.Vector2(0.29, 0.12), new THREE.Vector2(0.18, 0.12)], 12);
-  const tires = new THREE.InstancedMesh(tireGeo, rubber, 2200); let tireCount = 0;
-  for (let d = 0; d < length; d += 0.7) {
-    const k = route.curvature(d);
-    if (Math.abs(k) < 0.016) continue;
-    const side = -Math.sign(k);
-    const s = sample(d, side * 5.1);
-    for (let tier = 0; tier < 2; tier++) {
-      dummy.position.copy(s.position).add(new THREE.Vector3(0, 0.15 + tier * 0.24, 0)); dummy.rotation.set(0, s.angle, 0); dummy.scale.setScalar(1); dummy.updateMatrix(); tires.setMatrixAt(tireCount++, dummy.matrix);
-    }
-  }
-  tires.count = tireCount; tires.castShadow = tires.receiveShadow = true; root.add(tires);
-
-  // Approximate grid location from the aerial; exact start/finish is unverified.
-  const grid = new THREE.Group(); root.add(grid);
-  for (let i = 0; i < 12; i++) {
-    const s = sample(-3 - Math.floor(i / 2) * 3.8, i % 2 ? -1.55 : 1.55);
-    const bay = new THREE.Group(); bay.position.copy(s.position).add(new THREE.Vector3(0, 0.06, 0)); bay.rotation.set(s.pitch, s.angle, 0); grid.add(bay);
-    box(white, [0, 0, 1.2], [1.5, 0.015, 0.075], bay);
-    for (const x of [-0.75, 0.75]) box(white, [x, 0, 0], [0.075, 0.015, 2.4], bay);
-  }
-  const finish = sample(0);
-  for (let row = 0; row < 2; row++) for (let i = 0; i < 14; i++) {
-    const s = sample(row * 0.38, -3.25 + i * 0.5);
-    const tile = box((row + i) % 2 ? white : rubber, [s.position.x, s.position.y + 0.06, s.position.z], [0.5, 0.015, 0.38], grid);
-    tile.rotation.set(s.pitch, finish.angle, 0);
-  }
-  mergeStatic(grid, true);
+  // Asphalt, kerbs, paint and the trackside furniture close to the edge.
+  const trackside = buildTrackside(route, root, { anisotropy, phone: coarse, random });
+  const layout = trackLayout();
+  const start = buildStartline(route, root, { layout, clear: trackside.clear, phone: coarse, reducedMotion, random });
 
   // Chain-link fence around the real facility's outer edge, not a cartoon wall.
   const fenceTexture = wireTexture();
@@ -149,27 +95,23 @@ export function createCircuit(scene, { reducedMotion = false, anisotropy = 4 } =
     box(material(0x7e4730), [x + 2, 0.35, -1.1], [0.4, 0.7, 0.45], paddock);
   }
   mergeStatic(paddock);
-  // A working flag mast, trackside distances and a modest, readable meeting sign.
+  // A working flag mast by the paddock.
   const flagAt = planToWorld(280, 370);
   mesh(cylinder, steel, [flagAt.x, flagAt.y + 3.5, flagAt.z], [0.04, 7, 0.04]);
   const flag = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.9, 10, 3), new THREE.MeshStandardMaterial({ color: 0x346987, side: THREE.DoubleSide, roughness: 0.85 }));
   flag.position.copy(flagAt).add(new THREE.Vector3(0.7, 6.3, 0)); root.add(flag);
   const cross = new THREE.Group(); flag.add(cross);
   box(material(0xe3c765), [0, 0, 0.006], [1.4, 0.13, 0.009], cross); box(material(0xe3c765), [-0.23, 0, 0.007], [0.13, 0.9, 0.009], cross);
-  for (const d of [75, 185, 310, 410, 515]) {
-    const s = sample(d, -5.7); const marker = sign('BROMS', 0.9, 0.38); marker.position.copy(s.position).add(new THREE.Vector3(0, 0.75, 0)); marker.rotation.y = s.angle + Math.PI; root.add(marker);
-    mesh(cylinder, steel, [s.position.x, s.position.y + 0.4, s.position.z], [0.03, 0.8, 0.03]);
-  }
   const spectators = [];
-  for (let i = 0; i < 18; i++) {
-    const p = planToWorld(61 + Math.sin(i * 0.2) * 7, 300 + i * 7);
+  for (let i = 0; i < (coarse ? 10 : 18); i++) {
+    const p = planToWorld(61 + Math.sin(i * 0.2) * 7, 300 + i * (coarse ? 12.6 : 7));
     spectators.push({ position: p.toArray(), rotationY: Math.PI / 2, pose: 'stand' });
   }
-  const crowd = createCrowd({ seats: spectators, seed: 2012, hats: 0.15 }); root.add(crowd.root); crowd.setMood('polite');
+  const crowd = createCrowd({ seats: spectators, seed: 2013, hats: 0.15 }); root.add(crowd.root); crowd.setMood('polite');
 
   // The older painting game's genuinely branched trees replace all cone forests.
-  const trees = [], bushes = [], tufts = [];
-  for (let i = 0; i < 550; i++) {
+  const trees = [...trackside.trees], bushes = [], tufts = [];
+  for (let i = 0; i < (coarse ? 420 : 550); i++) {
     const x = (random() - 0.5) * 340, z = (random() - 0.5) * 270;
     const outside = Math.abs(x) > 104 || z > 78 || z < -33 - Math.max(0, x + 22) * 0.38;
     if (!outside || route.distanceToRoad(x, z) < 13) continue;
@@ -182,30 +124,53 @@ export function createCircuit(scene, { reducedMotion = false, anisotropy = 4 } =
     tufts.push({ x: s.position.x, y: s.position.y, z: s.position.z, radius: 0.7 + random(), height: 0.15 + random() * 0.3, count: 18 });
     if (i % 5 === 0) bushes.push({ x: s.position.x, y: s.position.y, z: s.position.z, radius: 0.65 + random() * 0.5 });
   }
-  const nature = buildNature({ trees, bushes, grass: tufts, seed: 2012, reducedMotion, sunDirection: new THREE.Vector3(-40, 55, 30) }); root.add(nature.group);
-  const sky = buildScenicSky({ radius: 330, horizon: 0xc9d2c5, zenith: 0x719bb9, cloudiness: 0.32, reducedMotion }); scene.add(sky.mesh);
+  const nature = buildNature({ trees, bushes, grass: tufts, seed: 2012, reducedMotion, sunDirection: SUN_DIRECTION.clone().multiplyScalar(60) }); root.add(nature.group);
+  const sky = goldenSky({ radius: 330, reducedMotion }); scene.add(sky.mesh);
 
-  const marks = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.10, 0.58), new THREE.MeshBasicMaterial({ color: 0x1c211f, transparent: true, opacity: 0.3, depthWrite: false }), 200);
+  const marks = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.10, 0.58), new THREE.MeshBasicMaterial({ color: 0x1c211f, transparent: true, opacity: 0.3, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }), 200);
   marks.count = 0; marks.frustumCulled = false; root.add(marks); let markIndex = 0;
+  const dummy = new THREE.Object3D();
+  const viewer = new THREE.Vector3(), ahead = new THREE.Vector3();
   return {
     ...route,
+    kerbs: layout.kerbs.map(({ start: from, end, side, kind, inner, outer, pieces }) => ({ start: from, end, side, kind, inner, outer, pieces })),
+    corners: layout.corners,
+    gridSlots: GRID_SLOTS,
+    /** Lane of the barrier's inner face (both sides, whole lap; tyre walls on corner exits). */
+    barrierFace: BARRIER_FACE,
+    surfaceAt,
+    racingLine,
+    celebrationPoint: start.celebrationPoint,
+    markers: trackside.markers,
     skid(distance, lane) {
       for (const side of [-0.83, 0.83]) {
         const s = sample(distance, lane + side); dummy.position.copy(s.position).add(new THREE.Vector3(0, 0.065, 0)); dummy.rotation.set(-Math.PI / 2 + s.pitch, 0, -s.angle); dummy.scale.setScalar(1); dummy.updateMatrix(); marks.setMatrixAt(markIndex++ % 200, dummy.matrix);
       }
       marks.count = Math.min(markIndex, 200); marks.instanceMatrix.needsUpdate = true;
     },
-    reset() { marks.count = markIndex = 0; },
+    reset() { marks.count = markIndex = 0; start.reset(); },
     update(dt, time) {
       nature.update(time); sky.update(time); crowd.update(dt, time);
+      let focus = null;
+      if (camera) {
+        viewer.copy(camera.position);
+        camera.getWorldDirection(ahead); focus = ahead.multiplyScalar(5).add(viewer);
+      }
+      start.update(dt, time, camera ? viewer : null, focus);
       if (!reducedMotion) {
         const p = flag.geometry.attributes.position;
         for (let i = 0; i < p.count; i++) p.setZ(i, Math.sin(p.getX(i) * 4 - time * 3) * (p.getX(i) + 0.7) * 0.08);
         p.needsUpdate = true;
       }
     },
-    cheer() { crowd.react('cheer', 2.3); },
-    dispose() { crowd.dispose(); }
+    /** Red lamps one by one (lit 0..5); out=true turns all off at lights out. */
+    setStartLights(lit, out) { start.setStartLights(lit, out); },
+    cheer() { crowd.react('cheer', 2.3); start.cheer(); },
+    /** Finish: chequered flag at the line, crowd up, confetti. */
+    celebrate(position) { start.celebrate(position); crowd.react('cheer', 4); },
+    /** A waved yellow at the marshal post upstream of an incident. */
+    incident(distance) { start.incident(distance); },
+    dispose() { crowd.dispose(); start.dispose(); }
   };
 }
 

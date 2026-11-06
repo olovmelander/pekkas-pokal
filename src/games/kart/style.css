@@ -1,22 +1,100 @@
 @import '../shared/arcade.css';
 
-.kart-game { --kart-gold: #f8c969; }
+/* Pekkas Gokart HUD: one calm readout per corner, nothing over the kart.
+   Top left: place, lap, time, live delta. Top right: map and standings.
+   Top centre: start lights and banners. Bottom: speedometer between the controls. */
+.kart-game { --kart-gold: #f8c969; --kart-top: max(14px, env(safe-area-inset-top)); --kart-side-w: 150px; --kart-map-h: 118px; --kart-edge: clamp(14px, 2vw, 22px); }
+.kart-game.kart-driving .arcade-hud { visibility: hidden; }
+.kart-game .arcade-toast { top: 27%; }
 .kart-interface { position: absolute; inset: 0; pointer-events: none; color: #fff7e6; font-family: var(--font-body, sans-serif); }
-.kart-race-meta { position: absolute; top: 100px; left: 22px; display: grid; gap: 7px; text-shadow: 0 2px 8px #000; }
-.kart-race-meta strong { font-size: clamp(2rem, 6vw, 3.7rem); font-family: var(--ff-serif, Georgia, serif); font-weight: 400; line-height: 1; }
-.kart-race-meta strong small { font-size: 1rem; color: #e8d9bb; }
-.kart-race-meta span { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; }
-.kart-map { position: absolute; right: 20px; top: 100px; width: 145px; height: 118px; background: #121b1ac4; border: 1px solid #f8c96930; border-radius: 14px; backdrop-filter: blur(8px); }
+.kart-interface[data-state='menu'] :is(.kart-controls, .kart-dashboard, .kart-autogas, .kart-view, .kart-steer-zone, .kart-steer-knob) { visibility: hidden; }
+
+/* Place, lap, time, delta. */
+.kart-race-meta { position: absolute; top: var(--kart-top); left: clamp(16px, 3vw, 40px); display: flex; align-items: flex-start; gap: 12px; text-shadow: 0 2px 10px #000c; }
+.kart-place { display: flex; align-items: baseline; gap: 4px; }
+.kart-place strong { font-family: var(--ff-serif, Georgia, serif); font-weight: 400; font-size: clamp(3rem, 6vw, 4.3rem); line-height: .9; font-variant-numeric: tabular-nums; }
+.kart-place small { font-size: 1rem; color: #e8d9bb; letter-spacing: .06em; }
+.kart-interface[data-mode='time'] .kart-place { flex-direction: column; gap: 2px; }
+.kart-interface[data-mode='time'] .kart-place strong { font-size: clamp(2.1rem, 4.4vw, 3.1rem); }
+.kart-interface[data-mode='time'] .kart-place small { font-size: 9px; letter-spacing: .18em; }
+.kart-race-lines { display: grid; justify-items: start; gap: 4px; padding-top: 5px; }
+.kart-race-lines span { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; }
+.kart-race-lines [data-time] { font-size: 15px; font-weight: 700; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+.kart-delta { padding: 2px 8px; border-radius: 10px; font-size: 12px !important; font-weight: 800; letter-spacing: .04em !important; font-variant-numeric: tabular-nums; text-shadow: none; }
+.kart-delta[data-sign='ahead'] { background: #2c7a48d9; color: #dcffe4; }
+.kart-delta[data-sign='behind'] { background: #a03a2cd9; color: #ffe2db; }
+
+/* Map and standings. */
+.kart-side { position: absolute; top: calc(var(--kart-top) + 54px); right: var(--kart-edge); width: var(--kart-side-w); display: grid; gap: 8px; }
+.kart-map { display: block; width: 100%; height: var(--kart-map-h); background: #121b1ac4; border: 1px solid #f8c96930; border-radius: 14px; backdrop-filter: blur(8px); }
 .kart-map path { fill: none; stroke: #e7d8b74a; stroke-width: 7.5; stroke-linecap: round; stroke-linejoin: round; }
 .kart-map circle { stroke: #182421; stroke-width: 2; }
-.kart-dashboard { position: absolute; bottom: calc(100px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); width: min(280px, 55vw); text-align: center; text-shadow: 0 2px 8px #000; }
-.kart-speed { font-size: 1.8rem; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; }
-.kart-speed small { margin-left: 5px; font-size: .55rem; letter-spacing: .15em; font-weight: 500; }
-.kart-grip { margin: 8px auto 5px; height: 6px; width: 100%; border-radius: 5px; border: 1px solid #ffffff30; background: #101e1acc; overflow: hidden; }
-.kart-grip i { display: block; height: 100%; width: 0; background: #a9c892; box-shadow: 0 0 10px #a9c89266; transition: background .2s; }
-.kart-grip.sliding i { background: #f1946f; box-shadow: 0 0 10px #f1946f88; }
+.kart-map .kart-map-ghost { opacity: .6; stroke-dasharray: 2 2; }
+.kart-board { margin: 0; padding: 6px 9px; list-style: none; background: #121b1ab8; border: 1px solid #f8c96922; border-radius: 12px; font-size: 11px; backdrop-filter: blur(8px); }
+.kart-board[hidden] { display: none; }
+.kart-board li { display: grid; grid-template-columns: 14px 1fr auto; gap: 6px; line-height: 18px; color: #e9e2cf; }
+.kart-board li b { font-weight: 600; opacity: .65; font-variant-numeric: tabular-nums; }
+.kart-board li span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.kart-board li em { font-style: normal; font-variant-numeric: tabular-nums; opacity: .8; }
+.kart-board li.is-you { color: var(--kart-gold); font-weight: 800; }
+.kart-board li.is-you em { opacity: 1; }
+.kart-interface[data-mode='time'] .kart-board li { grid-template-columns: 1fr auto; }
+.kart-board li.is-ghost { color: #dfe7e4; }
+.kart-board li.is-best em { color: var(--kart-gold); opacity: 1; }
+.kart-board .kart-gap { padding: 0 6px; border-radius: 8px; font-weight: 800; opacity: 1; }
+.kart-board .kart-gap[data-sign='ahead'] { background: #2c7a48d9; color: #dcffe4; }
+.kart-board .kart-gap[data-sign='behind'] { background: #a03a2cd9; color: #ffe2db; }
+
+/* Camera view and Autogas toggles. */
+.kart-interface :is(.kart-view, .kart-autogas) { pointer-events: auto; min-width: 44px; min-height: 44px; border: 1px solid #ebd49d45; border-radius: 22px; background: #131d18c9; backdrop-filter: blur(12px); color: #f9e7be; font-size: 10px; font-weight: 700; letter-spacing: .08em; }
+.kart-interface .kart-view { position: absolute; z-index: 2; top: calc(var(--kart-top) + 54px); right: calc(var(--kart-edge) + var(--kart-side-w) + 8px); padding: 0 12px; display: grid; place-items: center; line-height: 1.1; }
+.kart-view small { font-size: 8px; opacity: .55; }
+.kart-interface .kart-autogas { position: absolute; z-index: 2; display: none; right: 20px; bottom: calc(max(18px, env(safe-area-inset-bottom)) + 74px); padding: 0 12px; align-items: center; gap: 6px; }
+.kart-autogas b { font-size: 10px; padding: 2px 6px; border-radius: 8px; background: #ffffff1c; }
+.kart-autogas[aria-pressed='true'] { background: linear-gradient(145deg, #cba052, #7d581f); border-color: #ffe1a2a6; color: #1d170b; }
+.kart-autogas[aria-pressed='true'] b { background: #1d170b30; }
+@media (pointer: coarse) {
+  .kart-interface .kart-autogas { display: inline-flex; }
+  .kart-view small { display: none; }
+}
+
+/* Start lights, the small KÖR! flash, final-lap and wrong-way banners. */
+.kart-signal { position: absolute; top: calc(var(--kart-top) + 56px); left: 50%; transform: translateX(-50%); display: grid; justify-items: center; gap: 8px; text-align: center; }
+.kart-lights { display: flex; gap: 10px; padding: 10px 14px; border-radius: 16px; background: #0c1311eb; border: 1px solid #ffffff1f; box-shadow: 0 8px 30px #0007, inset 0 1px #ffffff12; }
+.kart-lights[hidden] { display: none; }
+.kart-lights-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.kart-lights i { width: 26px; height: 26px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #3b2422, #1d100f); box-shadow: inset 0 2px 5px #000b; transition: background .06s, box-shadow .06s; }
+.kart-lights i.on { background: radial-gradient(circle at 40% 35%, #ffb1a5, #f0291c 52%, #8c0f09); box-shadow: 0 0 18px #ff3b2fd0, inset 0 -2px 4px #6d0904; }
+.kart-flash { font-family: var(--ff-serif, Georgia, serif); font-style: italic; font-size: 34px; line-height: 1; color: #a9ec8c; text-shadow: 0 3px 18px #000c; animation: kart-pop .35s ease-out; }
+.kart-flash[data-kind='jump'] { color: #ff9d8a; font-size: 26px; }
+.kart-flash[hidden], .kart-banner[hidden] { display: none; }
+.kart-banner { padding: 8px 18px; border-radius: 20px; background: #14231eea; border: 1px solid #e9bf5c99; color: #ffe3a1; font-size: 13px; font-weight: 800; letter-spacing: .16em; white-space: nowrap; box-shadow: 0 8px 30px #0005; animation: kart-pop .35s ease-out; }
+.kart-banner[data-kind='warn'] { background: #8a2016ee; border-color: #ffb3a5; color: #fff1ec; animation: kart-pulse .7s ease-in-out infinite alternate; }
+@keyframes kart-pop { from { transform: scale(.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes kart-pulse { from { filter: brightness(1); } to { filter: brightness(1.35); } }
+
+/* Speedometer with the rpm arc, grip meter and one quiet tip. */
+.kart-dashboard { position: absolute; bottom: calc(18px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); width: 200px; text-align: center; text-shadow: 0 2px 8px #000; }
+.kart-gauge { position: relative; width: 150px; height: 98px; margin: 0 auto; }
+.kart-gauge::before { content: ''; position: absolute; inset: 4px 8px -6px; border-radius: 50% 50% 22px 22px; background: radial-gradient(ellipse at 50% 60%, #0a1311c2, #0a131100 72%); }
+.kart-gauge svg { position: relative; display: block; width: 100%; height: 100%; overflow: visible; }
+.kart-gauge path { fill: none; stroke-width: 7; stroke-linecap: round; }
+.kart-gauge-track { stroke: #ffffff26; }
+.kart-gauge-red { stroke: #e2533f; opacity: .6; stroke-dasharray: 12 100; stroke-dashoffset: -88; stroke-linecap: butt !important; }
+.kart-gauge-rpm { stroke: #f5c867; stroke-dasharray: 100 100; stroke-dashoffset: 100; filter: drop-shadow(0 0 4px #f5c86788); }
+.kart-gauge-rpm.is-high { stroke: #ff7a5c; filter: drop-shadow(0 0 5px #ff7a5c99); }
+.kart-speed { position: absolute; left: 0; right: 0; top: 32%; line-height: 1; font-variant-numeric: tabular-nums; }
+.kart-speed b { display: block; font-size: 2.15rem; font-weight: 700; }
+.kart-speed small { display: block; margin-top: 3px; font-size: .55rem; letter-spacing: .15em; font-weight: 500; opacity: .85; }
+.kart-grip { position: relative; margin: 4px auto 6px; height: 14px; width: 120px; border-radius: 7px; border: 1px solid #ffffff30; background: #101e1acc; overflow: hidden; }
+.kart-grip i { display: block; height: 100%; width: 100%; background: #a9c892; box-shadow: 0 0 10px #a9c89266; transition: background .2s; }
+.kart-grip span { position: absolute; inset: 0; display: grid; place-items: center; font-size: 8px; font-weight: 800; letter-spacing: .2em; color: #fffaf0; text-shadow: 0 1px 2px #000, 0 0 4px #000c; }
+.kart-grip[data-mode='slide'] i { background: #f1946f; box-shadow: 0 0 10px #f1946f88; }
+.kart-grip[data-mode='grass'] i { background: #c7a35c; }
 .kart-tip { font-size: 10px; letter-spacing: .05em; color: #fff0ce; }
-.kart-controls { position: absolute; bottom: max(18px, env(safe-area-inset-bottom)); left: 20px; right: 20px; display: flex; align-items: end; justify-content: space-between; gap: 12px; }
+
+/* Driving controls. */
+.kart-controls { position: absolute; z-index: 2; bottom: max(18px, env(safe-area-inset-bottom)); left: 20px; right: 20px; display: flex; align-items: end; justify-content: space-between; gap: 12px; pointer-events: none; }
 .kart-control-group { display: flex; gap: 9px; }
 .kart-controls button { pointer-events: auto; min-width: 65px; min-height: 64px; border: 1px solid #f8c9695c; border-radius: 18px; color: #fff4d8; background: linear-gradient(145deg, #253931eb, #0b1918e8); box-shadow: 0 5px 15px #0004, inset 0 1px 0 #ffffff18; font-size: 23px; touch-action: none; user-select: none; -webkit-user-select: none; }
 .kart-controls button span { display: block; font-size: 10px; letter-spacing: .10em; font-weight: 700; }
@@ -24,23 +102,105 @@
 .kart-controls button[data-control='throttle'] { min-width: 85px; background: linear-gradient(145deg, #cba052, #7d581f); border-color: #ffe1a2a6; color: #1d170b; }
 .kart-controls button:active, .kart-controls button.is-held { transform: translateY(2px); filter: brightness(1.4); }
 .kart-controls button:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
-.kart-countdown { position: absolute; top: 36%; width: 100%; text-align: center; font-family: var(--ff-serif, Georgia, serif); font-size: clamp(5rem, 18vw, 10rem); color: #ffe0a0; text-shadow: 0 5px 50px #0008; }
-.kart-countdown:empty { display: none; }
-.kart-interface[data-state='menu'] .kart-controls, .kart-interface[data-state='menu'] .kart-dashboard { visibility: hidden; }
+
+/* Analog steering: drag a thumb sideways on the left half of a touch screen. */
+.kart-steer-zone { position: absolute; z-index: 1; left: 0; top: 34%; bottom: 0; width: 50%; display: none; pointer-events: auto; touch-action: none; }
+.kart-steer-knob { position: absolute; z-index: 1; width: 66px; height: 66px; margin: -33px 0 0 -33px; border-radius: 50%; border: 2px solid #fff4d860; background: #0d1a1440; opacity: 0; transition: opacity .15s; }
+.kart-steer-knob i { position: absolute; left: 50%; top: 50%; width: 28px; height: 28px; margin: -14px; border-radius: 50%; background: #f8c969cc; transform: translateX(var(--kart-knob, 0px)); }
+.kart-steer-knob.is-on { opacity: 1; }
+@media (pointer: coarse) { .kart-steer-zone { display: block; } }
+
+/* High speed: faint streaks at the screen edge and a soft vignette (never under reduced motion). */
+.kart-speedfx { position: absolute; inset: 0; z-index: 0; overflow: hidden; opacity: 0; pointer-events: none; }
+.kart-speedfx::before { content: ''; position: absolute; inset: -40%; background: repeating-conic-gradient(from 0deg, #fff9e600 0deg 3deg, #fff9e633 3.4deg, #fff9e600 3.9deg 8.5deg); -webkit-mask-image: radial-gradient(circle closest-side, transparent 50%, #000 92%); mask-image: radial-gradient(circle closest-side, transparent 50%, #000 92%); transform: rotate(var(--kart-streak-turn, 0deg)); will-change: transform; }
+.kart-speedfx::after { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 55%, transparent 52%, #04080770 100%); }
+@media (prefers-reduced-motion: reduce) { .kart-speedfx { display: none; } }
+
+/* Phones, portrait. */
 @media (max-width: 600px) {
-  .kart-map { top: 105px; right: 12px; width: 110px; height: 92px; }
-  .kart-race-meta { left: 14px; top: 105px; }
-  .kart-race-meta strong { font-size: 2.5rem; }
+  .kart-game { --kart-top: max(12px, env(safe-area-inset-top)); --kart-side-w: 104px; --kart-map-h: 84px; --kart-edge: 12px; }
+  .kart-game .arcade-toast { top: calc(var(--kart-top) + 212px); }
+  .kart-race-meta { left: 14px; gap: 8px; }
+  .kart-place strong { font-size: 2.7rem; }
+  .kart-race-lines { padding-top: 3px; gap: 3px; }
+  .kart-race-lines span { font-size: 10px; letter-spacing: .12em; }
+  .kart-race-lines [data-time] { font-size: 13px; }
+  .kart-side { top: calc(var(--kart-top) + 50px); gap: 6px; }
+  /* The view toggle moves down, above the steering buttons, leaving the top for lights and banners. */
+  .kart-interface .kart-view { top: auto; right: auto; left: 12px; bottom: calc(max(18px, env(safe-area-inset-bottom)) + 72px); padding: 0 8px; font-size: 9px; }
+  .kart-board { padding: 4px 7px; font-size: 10px; }
+  .kart-board li { line-height: 16px; gap: 4px; grid-template-columns: 11px 1fr auto; }
+  .kart-board li:not([data-near]) { display: none; }
+  /* Lights and banners sit in the free space under the place, left of the map. */
+  .kart-signal { top: calc(var(--kart-top) + 70px); left: 12px; right: calc(var(--kart-edge) + var(--kart-side-w) + 8px); transform: none; }
+  .kart-lights { gap: 7px; padding: 8px 10px; }
+  .kart-lights i { width: 21px; height: 21px; }
+  .kart-banner { padding: 7px 12px; font-size: 11px; letter-spacing: .1em; white-space: normal; }
+  .kart-flash { font-size: 28px; }
   .kart-controls { left: 12px; right: 12px; gap: 8px; }
   .kart-control-group { gap: 7px; }
   .kart-controls button { min-width: 53px; min-height: 62px; border-radius: 16px; }
   .kart-controls button[data-control='throttle'] { min-width: 71px; }
-  .kart-dashboard { bottom: calc(96px + env(safe-area-inset-bottom)); }
+  .kart-controls button small { display: none; }
+  .kart-dashboard { bottom: calc(max(18px, env(safe-area-inset-bottom)) + 70px); width: 130px; }
+  .kart-gauge { width: 112px; height: 73px; }
+  .kart-speed b { font-size: 1.65rem; }
+  .kart-grip { width: 96px; height: 12px; margin-bottom: 4px; }
+  .kart-tip { font-size: 9px; }
+  .kart-interface .kart-autogas { right: 12px; bottom: calc(max(18px, env(safe-area-inset-bottom)) + 72px); padding: 0 8px; font-size: 9px; gap: 4px; }
+  .kart-autogas b { font-size: 9px; padding: 2px 4px; }
 }
+@media (max-width: 600px) and (max-height: 700px) {
+  .kart-tip { display: none; }
+  /* Short phones: the gap above the kart is small, so a two-line toast would
+     cover the road ahead. It uses the free space under the place readout,
+     left of the map, like the start lights do. */
+  .kart-game .arcade-toast { top: calc(var(--kart-top) + 70px); left: 12px; right: calc(var(--kart-edge) + var(--kart-side-w) + 8px); max-width: none; transform: none; padding: 8px 12px; font-size: 12px; }
+  .kart-game .arcade-toast.show { transform: none; }
+}
+
+/* Phones, landscape. */
 @media (max-height: 500px) and (min-width: 600px) {
-  .kart-race-meta { top: 108px; }
-  .kart-map { top: 80px; width: 112px; height: 90px; }
-  .kart-controls { bottom: 10px; }
+  .kart-game { --kart-top: max(8px, env(safe-area-inset-top)); --kart-side-w: 112px; --kart-map-h: 80px; --kart-edge: 14px; }
+  .kart-game .arcade-toast { top: 112px; }
+  .kart-race-meta { left: 16px; }
+  .kart-place strong { font-size: 2.5rem; }
+  .kart-race-lines span { font-size: 10px; }
+  .kart-side { top: calc(var(--kart-top) + 48px); gap: 6px; }
+  .kart-interface .kart-view { top: calc(var(--kart-top) + 48px); }
+  .kart-board { padding: 4px 7px; font-size: 10px; }
+  .kart-board li { line-height: 15px; }
+  .kart-board li:not([data-near]) { display: none; }
+  /* Under the place readout, so the pod never covers the gantry's own light rig. */
+  .kart-signal { top: calc(var(--kart-top) + 50px); left: 16px; transform: none; justify-items: start; }
+  .kart-lights { gap: 6px; padding: 6px 9px; border-radius: 12px; }
+  .kart-lights i { width: 17px; height: 17px; }
+  .kart-flash { font-size: 26px; }
+  .kart-banner { padding: 6px 12px; font-size: 11px; }
+  .kart-controls { bottom: max(10px, env(safe-area-inset-bottom)); }
   .kart-controls button { min-height: 50px; }
-  .kart-dashboard { bottom: 18px; }
+  .kart-controls button small { display: none; }
+  .kart-dashboard { bottom: max(6px, env(safe-area-inset-bottom)); width: 140px; }
+  .kart-gauge { width: 98px; height: 64px; }
+  .kart-speed b { font-size: 1.4rem; }
+  .kart-speed small { margin-top: 1px; font-size: .5rem; }
+  .kart-grip { width: 86px; height: 10px; margin: 1px auto 0; }
+  .kart-grip span { font-size: 7px; }
+  .kart-tip { display: none; }
+  .kart-interface .kart-autogas { right: 20px; bottom: calc(max(10px, env(safe-area-inset-bottom)) + 58px); }
+}
+
+/* Start panel: mode and difficulty as large, plain choices. */
+.kart-setup { display: grid; gap: 10px; margin: 16px 0 6px; text-align: left; }
+.kart-setup fieldset { margin: 0; padding: 0; border: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.kart-setup legend { width: 100%; margin-bottom: 6px; padding: 0; font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: #e9bf5c; }
+.kart-setup label { position: relative; flex: 1 1 0; min-width: 0; cursor: pointer; }
+.kart-setup input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.kart-setup label span { display: grid; align-content: center; min-height: 48px; height: 100%; padding: 8px 12px; border-radius: 14px; border: 1px solid #f0cc7e40; background: #0f1916b0; color: #e9e2cf; font-size: 14px; font-weight: 700; text-align: center; transition: background .15s, border-color .15s; }
+.kart-setup label small { display: block; margin-top: 2px !important; font-size: 10px !important; font-weight: 500; color: #b9c2b8 !important; }
+.kart-setup input:checked + span { background: linear-gradient(145deg, #3b3220, #241d10); border-color: #f4d692; color: #ffe8b0; box-shadow: inset 0 1px #fff2; }
+.kart-setup input:focus-visible + span { outline: 3px solid #fff4bf; outline-offset: 3px; }
+@media (max-height: 520px) and (orientation: landscape) {
+  .kart-setup { grid-template-columns: 1.4fr 1fr; gap: 12px; margin: 10px 0 4px; }
+  .kart-setup label span { min-height: 44px; padding: 6px 8px; font-size: 13px; }
 }

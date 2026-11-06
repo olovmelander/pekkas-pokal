@@ -127,6 +127,27 @@ Triathlon och Ambition. [Spelöversikt, research och testinstruktioner](docs/arc
 beskriver gameplay, källor och vilka regler som är arkadtolkningar. Nya år utan
 spel visas automatiskt under "Kommande".
 
+**Pekkas Gokart (2012)**
+
+Tre varv på Varggropens 665 meter långa bana i kvällssol, mot Jonas, Erik,
+Viktor, Per och Rickard. Karten har riktig gir och sladd: bromsa in i kurvan så
+svänger den, släpp gasen mitt i kurvan så glider baken ut och fånga den med
+motstyrning. Kantstenar skakar, gräset är långsamt och däckvallen studsar.
+Starten sker med fem röda ljus, och den som gasar för tidigt får hjulspinn.
+Välj **Lopp** eller **Tidskörning** mot ett spöke av ditt bästa varv, och
+**Lätt**, **Normal** eller **Svår**.
+
+| | Mobil | Dator |
+| --- | --- | --- |
+| Styr | ← →-knapparna eller dra med tummen på vänstra halvan | ←/→ eller A/D |
+| Gas / broms | GAS och BROMS, eller AUTOGAS | ↑/W och ↓/S/mellanslag |
+| Kameravy | Knappen BAKOM/NÄRA | C |
+
+Kameran sitter lågt bakom karten och vidgas med farten, däcken ryker i
+sladdarna och motorljudet är en encylindrig hyrkartmotor med
+centrifugalkoppling. [Research och gestaltning](src/games/kart/research.md)
+beskriver vad som är belagt och vad som är tolkat.
+
 **Pekkas Fiske (2024)**
 
 Tre kast per fiskeafton på en 60 meter djup sjö i midnattssol. Varje kast har
