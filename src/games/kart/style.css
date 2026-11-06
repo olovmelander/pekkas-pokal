@@ -152,7 +152,11 @@
 }
 @media (max-width: 600px) and (max-height: 700px) {
   .kart-tip { display: none; }
-  .kart-game .arcade-toast { top: calc(var(--kart-top) + 188px); padding: 8px 14px; font-size: 12px; }
+  /* Short phones: the gap above the kart is small, so a two-line toast would
+     cover the road ahead. It uses the free space under the place readout,
+     left of the map, like the start lights do. */
+  .kart-game .arcade-toast { top: calc(var(--kart-top) + 70px); left: 12px; right: calc(var(--kart-edge) + var(--kart-side-w) + 8px); max-width: none; transform: none; padding: 8px 12px; font-size: 12px; }
+  .kart-game .arcade-toast.show { transform: none; }
 }
 
 /* Phones, landscape. */

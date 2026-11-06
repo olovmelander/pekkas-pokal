@@ -125,7 +125,7 @@ export function createEffects(scene, track, { reducedMotion = false, coarse = fa
   const soft = createPool(scene, coarse ? 240 : 420, { core: 0.18 });
   const hot = createPool(scene, coarse ? 70 : 120, { additive: true, core: 0.05 });
   const colors = {
-    smoke: new THREE.Color(0xefede7), dust: new THREE.Color(0xa58e66), clod: new THREE.Color(0x4f5a2c), soil: new THREE.Color(0x5e4a33),
+    smoke: new THREE.Color(0xefede7), dust: new THREE.Color(0xc4ab80), clod: new THREE.Color(0x4f5a2c), soil: new THREE.Color(0x5e4a33),
     exhaust: new THREE.Color(0x4a4c4c), spark: new THREE.Color(0xffb35a).multiplyScalar(2.2), sparkWhite: new THREE.Color(0xfff0c8).multiplyScalar(2.4)
   };
   const memory = new WeakMap();
@@ -217,8 +217,12 @@ export function createEffects(scene, track, { reducedMotion = false, coarse = fa
     const surface = surfaceOf(driver);
     const scale = index === 0 ? 1 : 0.55;
     // Tyre smoke from a sliding rear or wheelspin off the line.
-    const slide = Math.max(finite(driver.slip), finite(driver.wheelspin), driver.skidding ? 0.45 : 0);
-    if (surface !== 'grass' && slide > 0.15 && (speed > 2.5 || finite(driver.wheelspin) > 0.15)) {
+    // Smoke only from real slip at speed, or real wheelspin once the kart is rolling off the line
+    // (a kart held on the grid while revving makes none).
+    const spinning = !driver.held && speed > 0.5 && finite(driver.wheelspin) > 0.3 ? finite(driver.wheelspin) : 0;
+    const sliding = speed > 2.5 ? Math.max(finite(driver.slip), driver.skidding ? 0.45 : 0) : 0;
+    const slide = Math.max(spinning, sliding);
+    if (surface !== 'grass' && slide > 0.15) {
       m.smoke += dt * 44 * slide * scale * (coarse ? 0.7 : 1);
       while (m.smoke >= 1) {
         m.smoke -= 1; m.wheel = 1 - m.wheel;
@@ -243,7 +247,7 @@ export function createEffects(scene, track, { reducedMotion = false, coarse = fa
         const sx = right.x * out, sz = right.z * out;
         if (Math.random() < 0.5) {
           spawn(soft, wheel.x, wheel.y, wheel.z, forward.x * back + sx, 0.7 + Math.random() * 0.9, forward.z * back + sz, {
-            life: 0.8 + Math.random() * 0.6, size0: 0.45, size1: 2.0, alpha: 0.42, color: colors.dust, drag: 1.8, gravity: -0.15, spin: 1
+            life: 0.8 + Math.random() * 0.6, size0: 0.45, size1: 2.0, alpha: 0.7, color: colors.dust, drag: 1.8, gravity: -0.15, spin: 1
           });
         } else {
           spawn(soft, wheel.x, wheel.y, wheel.z, forward.x * back + sx * 1.4, 2.5 + Math.random() * 2.6, forward.z * back + sz * 1.4, {
@@ -254,13 +258,14 @@ export function createEffects(scene, track, { reducedMotion = false, coarse = fa
     } else m.spray = 0;
     // Small exhaust puffs: quicker and darker on the throttle.
     if (index === 0 || s.position.distanceToSquared(cameraPosition) < 20 * 20) {
-      const load = clamp(accel / 3, 0, 1);
+      const load = Number.isFinite(driver.throttle) ? clamp(driver.throttle, 0, 1) * (driver.held ? 0.5 : 1) : clamp(accel / 3, 0, 1);
       m.exhaust -= dt;
       if (m.exhaust <= 0) {
-        m.exhaust = 0.22 - load * 0.13 + Math.random() * 0.05;
+        // Idle: a few tiny, faint puffs at the pipe. On the throttle: quicker and a touch fuller.
+        m.exhaust = 0.34 - load * 0.22 + Math.random() * 0.08;
         const pipe = onKart(s, yaw, 0.9, 0.55, -1.32);
         spawn(soft, pipe.x, pipe.y, pipe.z, -forward.x * 0.6 + right.x * 0.4, 0.35, -forward.z * 0.6 + right.z * 0.4, {
-          life: 0.45 + load * 0.25, size0: 0.08, size1: 0.42 + load * 0.2, alpha: 0.14 + load * 0.16, color: colors.exhaust, drag: 2.5, gravity: -0.4, spin: 1.5
+          life: 0.3 + load * 0.25, size0: 0.05, size1: 0.18 + load * 0.2, alpha: 0.07 + load * 0.13, color: colors.exhaust, drag: 2.5, gravity: -0.4, spin: 1.5
         });
       }
     }
@@ -270,6 +275,7 @@ export function createEffects(scene, track, { reducedMotion = false, coarse = fa
     burst,
     /** Live particle counts, for tests and the debug hook. */
     get counts() { return { soft: soft.count, hot: hot.count }; },
+    set visible(value) { soft.mesh.visible = hot.mesh.visible = !!value; },
     /** Particles for every driver; the first driver also drives the speed overlay. */
     update(dt, drivers, camera) {
       const step = clamp(finite(dt), 0, 0.05);
