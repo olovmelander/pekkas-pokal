@@ -93,7 +93,28 @@ describe('Gokart feel: particles and readouts', () => {
 
   it('formats times and live deltas', () => {
     expect(clockText(59.99)).toBe('0:59.9');
-    expect(deltaText(-0.423)).toBe('−0.42');
-    expect(deltaText(0.3)).toBe('+0.30');
+    expect(deltaText(-0.423)).toBe('−0,42');
+    expect(deltaText(0.3)).toBe('+0,30');
+  });
+});
+
+describe('Gokart feel: control ramps', () => {
+  it('builds digital steering over ~150 ms, lets go faster and falls through zero on a reversal', async () => {
+    const { ramp } = await import('../src/games/kart/input.js');
+    let steer = 0;
+    for (let i = 0; i < 5; i++) steer = ramp(steer, 1, 1 / 60, 0.15, 0.07);
+    expect(steer).toBeGreaterThan(0.4);
+    expect(steer).toBeLessThan(0.7);
+    for (let i = 0; i < 5; i++) steer = ramp(steer, 1, 1 / 60, 0.15, 0.07);
+    expect(steer).toBe(1);
+    let release = steer;
+    for (let i = 0; i < 5; i++) release = ramp(release, 0, 1 / 60, 0.15, 0.07);
+    expect(release).toBe(0);
+    let flip = 1;
+    flip = ramp(flip, -1, 1 / 60, 0.15, 0.07);
+    expect(flip).toBeGreaterThan(0);
+    for (let i = 0; i < 20; i++) flip = ramp(flip, -1, 1 / 60, 0.15, 0.07);
+    expect(flip).toBe(-1);
+    expect(ramp(NaN, 1, NaN, 0.15, 0.07)).toBe(0);
   });
 });

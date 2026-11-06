@@ -210,6 +210,7 @@ export default async function createGokart(container) {
         game.toast('Däckvallen! Styr tillbaka mot asfalten.');
       }
       if (event.type === 'contact' && (event.a === player || event.b === player)) incidents++;
+      if (event.type === 'barrier' && state === 'racing' && event.driver) track.incident?.(event.driver.distance);
     }
     if (state !== 'racing') return;
     drivers.forEach((driver, i) => markFinish(driver, before[i], track.length * laps, elapsed, dt));
@@ -302,6 +303,8 @@ export default async function createGokart(container) {
     model.steering.rotation.z = -steer * 1.8;
     model.wheels.forEach(wheel => { wheel.rotation.x = driver.distance / 0.31; });
     model.frontPivots.forEach(pivot => { pivot.rotation.y = steer; });
+    // The driver leans into the corner and nods under braking (world.js).
+    model.setDriverLean?.(Math.max(-1, Math.min(1, (driver.latAccel || 0) / 11)), Math.max(0, Math.min(1, -(driver.longAccel || 0) / 8)));
     return s;
   }
 
@@ -339,7 +342,7 @@ export default async function createGokart(container) {
 
   game.onFrame((dt, time) => {
     hudClock += dt;
-    const controls = input.read();
+    const controls = input.read(dt);
     if (!frozen) simulate(dt, scriptedInput ?? controls);
     track.update(dt, time);
     positionModel(kart, player);

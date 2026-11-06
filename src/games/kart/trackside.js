@@ -2,6 +2,14 @@ import * as THREE from 'three';
 import { createBatch, trackRibbon, createClearance, faceTrack, canvasTexture, atlasPlane } from './kit.js';
 import { trackLayout, asphaltMaterial, paintMaterial, surfaceMaterial, EDGE_LINE, GRID_SLOTS, KERB_INNER, KERB_OUTER } from './surfaces.js';
 import { ROAD_HALF_WIDTH } from './route.js';
+import * as physics from './physics.js';
+
+/** The drawn kart reaches 1.1 m from its centre line (rear wheels and bumper). */
+const KART_DRAWN_HALF_WIDTH = 1.1;
+/** Inner face of the barrier: where a kart pressed against physics' wall
+ * (its centre at WALL_LANE) touches it with its wheels, not inside it. */
+export const BARRIER_FACE = (Number.isFinite(physics.WALL_LANE) ? physics.WALL_LANE : 4.35) + KART_DRAWN_HALF_WIDTH;
+export const BARRIER_DEPTH = 0.45;
 
 /** Original, invented sponsors only. */
 export const ADVERTS = [
@@ -114,19 +122,21 @@ export function buildTrackside(route, root, { anisotropy = 4, phone = false, ran
   const tireGeo = new THREE.LatheGeometry([
     new THREE.Vector2(0.18, -0.12), new THREE.Vector2(0.31, -0.122), new THREE.Vector2(0.345, -0.05),
     new THREE.Vector2(0.345, 0.05), new THREE.Vector2(0.31, 0.122), new THREE.Vector2(0.18, 0.12)
-  ], phone ? 7 : 9);
+  ], phone ? 6 : 9);
   const tireMaterial = mat(0xffffff, 0.86);
-  const tirePlaces = [];
+  const tirePlaces = [], tyreRanges = [];
   const dummy = new THREE.Object3D();
   const banded = [0xf2efe4, 0xc8372b, 0xf2efe4, 0x2f6fb0];
   for (const corner of layout.corners) {
     const side = -corner.sign;
     for (let d = corner.start - 10; d < corner.end + 12; d += 0.68) {
-      const s = sample(d, side * 5.05);
+      const s = sample(d, side * (BARRIER_FACE + 0.34));
       if (!clear(s.position.x, s.position.z, d, 5.6)) continue;
       const block = Math.floor((d - corner.start) / 2.04);
-      tirePlaces.push({ s, tiers: 3, band: banded[((block % 4) + 4) % 4], bandTier: 1 });
+      // Phones get two tiers (the painted band on top), desktops three.
+      tirePlaces.push({ s, tiers: phone ? 2 : 3, band: banded[((block % 4) + 4) % 4], bandTier: 1 });
     }
+    tyreRanges.push({ side, start: corner.start - 10.3, end: corner.end + 12.3 });
   }
   const tires = new THREE.InstancedMesh(tireGeo, tireMaterial, tirePlaces.length * 3 + 1);
   let tireCount = 0;
@@ -219,13 +229,13 @@ export function buildTrackside(route, root, { anisotropy = 4, phone = false, ran
       for (let d = straight.start + 6; d + 3 < straight.end - 6; d += 3) {
         if (Math.floor((d + side * 13) / 24) % 2) continue;
         if (side > 0 && startZone(d)) continue;
-        const lane = side * 6.1, s = sample(d, lane);
+        const lane = side * (BARRIER_FACE + 1.0), s = sample(d, lane);
         if (!clear(s.position.x, s.position.z, d, 7.2)) continue;
         const i = advert++ % ADVERTS.length;
-        const board = addBoard(d, lane, 2.8, 0.7, advertRect(i), 0.08);
+        const board = addBoard(d, lane, 2.8, 0.7, advertRect(i), 0.48);
         for (const x of [-1.2, 1.2]) {
           const off = new THREE.Vector3(Math.cos(board.facing), 0, -Math.sin(board.facing)).multiplyScalar(x);
-          batch.add(new THREE.BoxGeometry(0.06, 0.12, 0.3), painted, board.at.clone().add(off).setY(board.s.position.y + 0.06).toArray(), [0, board.facing, 0], 1, 0x30383a);
+          batch.add(new THREE.BoxGeometry(0.06, 0.5, 0.06), painted, board.at.clone().add(off).setY(board.s.position.y + 0.25).toArray(), [0, board.facing, 0], 1, 0x30383a);
         }
       }
     }
@@ -236,7 +246,7 @@ export function buildTrackside(route, root, { anisotropy = 4, phone = false, ran
     const side = -corner.sign;
     [3, 2, 1].forEach((n, i) => {
       const d = corner.start - 34 + i * 10;
-      const lane = side * 5.7, s = sample(d, lane);
+      const lane = side * (BARRIER_FACE + 0.95), s = sample(d, lane);
       if (!clear(s.position.x, s.position.z, d, 6.5)) return;
       const board = addBoard(d, lane, 0.62, 0.62, markerRect(n), 0.62);
       batch.add(new THREE.CylinderGeometry(0.035, 0.035, 0.66, 6), steel, [s.position.x, s.position.y + 0.33, s.position.z]);
@@ -250,13 +260,13 @@ export function buildTrackside(route, root, { anisotropy = 4, phone = false, ran
   const conePlaces = [];
   for (const corner of layout.corners) {
     for (const offset of [-5, 0, 5]) {
-      const d = corner.apex + offset, lane = corner.sign * 4.75, s = sample(d, lane);
+      const d = corner.apex + offset, lane = corner.sign * (BARRIER_FACE - 0.24), s = sample(d, lane);
       if (clear(s.position.x, s.position.z, d, 5.4)) conePlaces.push(s);
     }
     // A pair where the exit kerb ends: the classic "don't cut here" marker.
     const exit = layout.kerbs.find(k => k.kind === 'exit' && Math.abs(k.start - (corner.start + (corner.end - corner.start) * 0.55)) < 2);
     if (exit) for (const extra of [0.6, 1.8]) {
-      const s = sample(exit.end + extra, -corner.sign * 4.7);
+      const s = sample(exit.end + extra, -corner.sign * (BARRIER_FACE - 0.24));
       if (clear(s.position.x, s.position.z, exit.end, 5.3)) conePlaces.push(s);
     }
   }
@@ -272,15 +282,53 @@ export function buildTrackside(route, root, { anisotropy = 4, phone = false, ran
   const trees = [];
   for (let d = 118; d < 330; d += 4.2) {
     for (const side of [-1, 1]) {
-      if (random() < 0.35) continue;
+      if (random() < (phone ? 0.6 : 0.35)) continue;
       const lane = side * (9 + random() * 5), s = sample(d, lane);
       if (!clear(s.position.x, s.position.z, d, 9.5)) continue;
       trees.push({ x: s.position.x, y: s.position.y, z: s.position.z, height: 5 + random() * 4.5, type: random() < 0.6 ? 'birch' : 'spruce', haze: 0, details: phone ? { clumps: 12, tiers: 6, arms: 6 } : { clumps: 16, tiers: 7, arms: 7 } });
     }
   }
 
+  /* ---------------------------------------------------------- barrier */
+  // Physics has a wall on both sides of the whole lap. Where there is no
+  // tyre wall it is drawn as interlocking red and white plastic kart-barrier
+  // blocks: one merged mesh, ten triangles a block.
+  const blockLength = 1.5;
+  const barrierProfile = [[0, 0.0], [0, 0.46], [0.06, 0.55], [BARRIER_DEPTH - 0.06, 0.55], [BARRIER_DEPTH, 0.46], [BARRIER_DEPTH, 0.0]];
+  const barrierPositions = [], barrierColors = [], barrierIndex = [];
+  const blockRed = new THREE.Color(0xc23a2e), blockWhite = new THREE.Color(0xe9e6dc);
+  const inTyres = (d, side) => tyreRanges.some(r => r.side === side && (((d - r.start) % length) + length) % length < r.end - r.start);
+  const barrierSpans = [];
+  for (const side of [-1, 1]) {
+    const blocks = Math.round(length / blockLength), step = length / blocks;
+    for (let b = 0; b < blocks; b++) {
+      const d0 = b * step, d1 = d0 + step * 0.985, mid = sample(d0 + step / 2, side * (BARRIER_FACE + BARRIER_DEPTH / 2)).position;
+      if (inTyres(d0 + step / 2, side) || !clear(mid.x, mid.z, d0, BARRIER_FACE - 0.2)) continue;
+      barrierSpans.push({ side, start: d0, end: d0 + step });
+      const color = b % 2 ? blockWhite : blockRed;
+      const base = barrierPositions.length / 3;
+      for (const d of [d0, d1]) for (const [offset, height] of barrierProfile) {
+        const p = sample(d, side * (BARRIER_FACE + offset)).position;
+        barrierPositions.push(p.x, p.y + height, p.z);
+        barrierColors.push(color.r, color.g, color.b);
+      }
+      const cols = barrierProfile.length;
+      for (let c = 0; c < cols - 1; c++) {
+        const a = base + c, n = a + cols;
+        // Faces point away from the solid: towards the road on the inner face.
+        if (side > 0) barrierIndex.push(a, n, a + 1, a + 1, n, n + 1); else barrierIndex.push(a, a + 1, n, a + 1, n + 1, n);
+      }
+    }
+  }
+  const barrierGeometry = new THREE.BufferGeometry();
+  barrierGeometry.setAttribute('position', new THREE.Float32BufferAttribute(barrierPositions, 3));
+  barrierGeometry.setAttribute('color', new THREE.Float32BufferAttribute(barrierColors, 3));
+  barrierGeometry.setIndex(barrierIndex); barrierGeometry.computeVertexNormals();
+  const barrier = new THREE.Mesh(barrierGeometry, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0, side: THREE.DoubleSide }));
+  barrier.name = 'barrier'; barrier.castShadow = barrier.receiveShadow = true; group.add(barrier);
+
   batch.build(group, { name: 'trackside' });
-  return { group, trees, markers, clear, straights, layout };
+  return { group, trees, markers, clear, straights, layout, barrierSpans, tyreRanges };
 }
 
 function advertRect(i) {

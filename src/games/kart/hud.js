@@ -20,7 +20,7 @@ export function clockText(seconds) {
 }
 export function deltaText(seconds) {
   const value = Math.round(finite(seconds) * 100) / 100;
-  return `${value < 0 ? '−' : '+'}${Math.abs(value).toFixed(2)}`;
+  return `${value < 0 ? '−' : '+'}${Math.abs(value).toFixed(2).replace('.', ',')}`;
 }
 
 function loadSetup() {
@@ -106,6 +106,7 @@ export function createKartHud(game, { track, rivals = [], onEvent = () => {} } =
   let previous = { state: 'menu', lap: 1, lightsLit: 0, lightsOut: false, jumpStart: false, hit: 0 };
   let flashUntil = 0, bannerUntil = 0, bannerText = '', wrongClock = 0, wrongWay = false, clock = 0;
   let lastDistance = null;
+  let lapTimes = [];
   // Live lap delta against the best lap: the lap time at every 5 m of the lap.
   const buckets = Math.ceil(track.length / BUCKET) + 1;
   let current = new Float32Array(buckets).fill(NaN), reference = null, referenceTime = Infinity, liveDelta = null, lastBucket = -1, lapStartSeen = 0;
@@ -160,6 +161,7 @@ export function createKartHud(game, { track, rivals = [], onEvent = () => {} } =
     }
     if (info.jumpStart && !previous.jumpStart) onEvent('jump');
     if (state === 'racing' && finite(info.lap, 1) > previous.lap) {
+      if (Number.isFinite(info.lastLap) && info.lastLap > 0) lapTimes.push(info.lastLap);
       const last = finite(info.lap) >= finite(info.laps, 3);
       onEvent(last ? 'final' : 'lap', { lap: info.lap });
       if (last) banner('SISTA VARVET');
@@ -205,18 +207,27 @@ export function createKartHud(game, { track, rivals = [], onEvent = () => {} } =
     const time = info.mode === 'time';
     let html = '';
     if (time) {
+      // Time trial: the ghost gap, the best lap and the latest lap times.
       const trial = info.trial || {};
-      const best = finite(trial.bestLap, finite(info.bestLap, Infinity));
-      const last = finite(trial.lastLap, finite(info.lastLap, NaN));
-      html += `<li data-near><span>Bästa</span><em>${Number.isFinite(best) ? clockText(best) : '–'}</em></li>`;
-      html += `<li data-near><span>Senaste</span><em>${Number.isFinite(last) ? clockText(last) : '–'}</em></li>`;
-      if (trial.ghost) html += `<li data-near class="is-ghost"><span>Spöket</span><em>${clockText(finite(trial.ghost.lapTime))}</em></li>`;
+      const best = Math.min(finite(trial.bestLap, Infinity), finite(info.bestLap, Infinity), ...lapTimes);
+      const ghostTime = typeof trial.ghost === 'number' ? trial.ghost : trial.ghost?.lapTime;
+      if (Number.isFinite(trial.delta)) {
+        html += `<li data-near class="is-ghost"><span>Spöket</span><em class="kart-gap" data-sign="${trial.delta <= 0 ? 'ahead' : 'behind'}">${deltaText(trial.delta)}</em></li>`;
+      } else {
+        html += `<li data-near class="is-ghost"><span>Spöket</span><em>${Number.isFinite(ghostTime) ? clockText(ghostTime) : 'kör ett varv'}</em></li>`;
+      }
+      html += `<li data-near class="is-best"><span>Bästa</span><em>${Number.isFinite(best) ? clockText(best) : '–'}</em></li>`;
+      const shown = lapTimes.slice(-3);
+      shown.forEach((time, i) => {
+        const number = lapTimes.length - shown.length + i + 1;
+        html += `<li${i === shown.length - 1 ? ' data-near' : ''}${time === best ? ' class="is-you"' : ''}><span>Varv ${number}</span><em>${clockText(time)}</em></li>`;
+      });
     } else {
       const you = standings.indexOf(player);
       const pace = Math.max(6, finite(player.speed));
       standings.forEach((driver, i) => {
         const near = Math.abs(i - you) <= 1 || (you === 0 && i === 2) || (you === standings.length - 1 && i === standings.length - 3);
-        const gap = driver === player ? 'DU' : driver.finishTime != null ? 'MÅL' : (Math.abs(finite(driver.distance) - finite(player.distance)) / pace).toFixed(1);
+        const gap = driver === player ? 'DU' : driver.finishTime != null ? 'MÅL' : (Math.abs(finite(driver.distance) - finite(player.distance)) / pace).toFixed(1).replace('.', ',');
         const name = driver === player ? 'Du' : driver.name ?? driver.full ?? 'Rival';
         html += `<li${near ? ' data-near' : ''}${driver === player ? ' class="is-you"' : ''}><b>${i + 1}</b><span>${name}</span><em>${gap}</em></li>`;
       });
@@ -282,7 +293,7 @@ export function createKartHud(game, { track, rivals = [], onEvent = () => {} } =
     reset() {
       previous = { state: 'grid', lap: 1, lightsLit: 0, lightsOut: false, jumpStart: false, hit: 0 };
       current = new Float32Array(buckets).fill(NaN); reference = null; referenceTime = Infinity; liveDelta = null; lastBucket = -1; lapStartSeen = 0;
-      wrongClock = 0; wrongWay = false; bannerUntil = 0; flashUntil = 0; fields.flash.hidden = true; lastDistance = null;
+      wrongClock = 0; wrongWay = false; bannerUntil = 0; flashUntil = 0; fields.flash.hidden = true; lastDistance = null; lapTimes = [];
     },
     update(dt, info, { rpm = 1400, controlsHint = 'HÅLL GAS ELLER ↑ / W FÖR ATT KÖRA' } = {}) {
       const step = clamp(finite(dt), 0, 0.1);

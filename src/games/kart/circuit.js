@@ -5,7 +5,7 @@ import { buildNature, sceneryRandom } from '../shared/scenic.js';
 import { createRoute, terrainHeight } from './route.js';
 import { surfaceMaterial, surfaceAt, trackLayout, racingLine, GRID_SLOTS } from './surfaces.js';
 import { goldenSky, SUN_DIRECTION } from './atmosphere.js';
-import { buildTrackside } from './trackside.js';
+import { buildTrackside, BARRIER_FACE } from './trackside.js';
 import { buildStartline } from './startline.js';
 
 export { surfaceAt, racingLine, GRID_SLOTS };
@@ -136,6 +136,8 @@ export function createCircuit(scene, { reducedMotion = false, anisotropy = 4, ca
     kerbs: layout.kerbs.map(({ start: from, end, side, kind, inner, outer, pieces }) => ({ start: from, end, side, kind, inner, outer, pieces })),
     corners: layout.corners,
     gridSlots: GRID_SLOTS,
+    /** Lane of the barrier's inner face (both sides, whole lap; tyre walls on corner exits). */
+    barrierFace: BARRIER_FACE,
     surfaceAt,
     racingLine,
     celebrationPoint: start.celebrationPoint,

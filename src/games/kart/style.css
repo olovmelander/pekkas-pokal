@@ -40,17 +40,21 @@
 .kart-board li.is-you em { opacity: 1; }
 .kart-interface[data-mode='time'] .kart-board li { grid-template-columns: 1fr auto; }
 .kart-board li.is-ghost { color: #dfe7e4; }
+.kart-board li.is-best em { color: var(--kart-gold); opacity: 1; }
+.kart-board .kart-gap { padding: 0 6px; border-radius: 8px; font-weight: 800; opacity: 1; }
+.kart-board .kart-gap[data-sign='ahead'] { background: #2c7a48d9; color: #dcffe4; }
+.kart-board .kart-gap[data-sign='behind'] { background: #a03a2cd9; color: #ffe2db; }
 
 /* Camera view and Autogas toggles. */
-.kart-view, .kart-autogas { pointer-events: auto; min-width: 44px; min-height: 44px; border: 1px solid #ebd49d45; border-radius: 22px; background: #131d18c9; backdrop-filter: blur(12px); color: #f9e7be; font-size: 10px; font-weight: 700; letter-spacing: .08em; }
-.kart-view { position: absolute; top: calc(var(--kart-top) + 54px); right: calc(var(--kart-edge) + var(--kart-side-w) + 8px); padding: 0 12px; display: grid; place-items: center; line-height: 1.1; }
+.kart-interface :is(.kart-view, .kart-autogas) { pointer-events: auto; min-width: 44px; min-height: 44px; border: 1px solid #ebd49d45; border-radius: 22px; background: #131d18c9; backdrop-filter: blur(12px); color: #f9e7be; font-size: 10px; font-weight: 700; letter-spacing: .08em; }
+.kart-interface .kart-view { position: absolute; z-index: 2; top: calc(var(--kart-top) + 54px); right: calc(var(--kart-edge) + var(--kart-side-w) + 8px); padding: 0 12px; display: grid; place-items: center; line-height: 1.1; }
 .kart-view small { font-size: 8px; opacity: .55; }
-.kart-autogas { position: absolute; display: none; right: 20px; bottom: calc(max(18px, env(safe-area-inset-bottom)) + 74px); padding: 0 12px; align-items: center; gap: 6px; }
+.kart-interface .kart-autogas { position: absolute; z-index: 2; display: none; right: 20px; bottom: calc(max(18px, env(safe-area-inset-bottom)) + 74px); padding: 0 12px; align-items: center; gap: 6px; }
 .kart-autogas b { font-size: 10px; padding: 2px 6px; border-radius: 8px; background: #ffffff1c; }
 .kart-autogas[aria-pressed='true'] { background: linear-gradient(145deg, #cba052, #7d581f); border-color: #ffe1a2a6; color: #1d170b; }
 .kart-autogas[aria-pressed='true'] b { background: #1d170b30; }
 @media (pointer: coarse) {
-  .kart-autogas { display: inline-flex; }
+  .kart-interface .kart-autogas { display: inline-flex; }
   .kart-view small { display: none; }
 }
 
@@ -84,7 +88,7 @@
 .kart-speed small { display: block; margin-top: 3px; font-size: .55rem; letter-spacing: .15em; font-weight: 500; opacity: .85; }
 .kart-grip { position: relative; margin: 4px auto 6px; height: 14px; width: 120px; border-radius: 7px; border: 1px solid #ffffff30; background: #101e1acc; overflow: hidden; }
 .kart-grip i { display: block; height: 100%; width: 100%; background: #a9c892; box-shadow: 0 0 10px #a9c89266; transition: background .2s; }
-.kart-grip span { position: absolute; inset: 0; display: grid; place-items: center; font-size: 8px; font-weight: 800; letter-spacing: .2em; color: #0d1a14; text-shadow: none; }
+.kart-grip span { position: absolute; inset: 0; display: grid; place-items: center; font-size: 8px; font-weight: 800; letter-spacing: .2em; color: #fffaf0; text-shadow: 0 1px 2px #000, 0 0 4px #000c; }
 .kart-grip[data-mode='slide'] i { background: #f1946f; box-shadow: 0 0 10px #f1946f88; }
 .kart-grip[data-mode='grass'] i { background: #c7a35c; }
 .kart-tip { font-size: 10px; letter-spacing: .05em; color: #fff0ce; }
@@ -122,7 +126,8 @@
   .kart-race-lines span { font-size: 10px; letter-spacing: .12em; }
   .kart-race-lines [data-time] { font-size: 13px; }
   .kart-side { top: calc(var(--kart-top) + 50px); gap: 6px; }
-  .kart-view { top: calc(var(--kart-top) + 50px); right: calc(var(--kart-edge) + var(--kart-side-w) + 6px); padding: 0 8px; }
+  /* The view toggle moves down, above the steering buttons, leaving the top for lights and banners. */
+  .kart-interface .kart-view { top: auto; right: auto; left: 12px; bottom: calc(max(18px, env(safe-area-inset-bottom)) + 72px); padding: 0 8px; font-size: 9px; }
   .kart-board { padding: 4px 7px; font-size: 10px; }
   .kart-board li { line-height: 16px; gap: 4px; grid-template-columns: 11px 1fr auto; }
   .kart-board li:not([data-near]) { display: none; }
@@ -142,11 +147,12 @@
   .kart-speed b { font-size: 1.65rem; }
   .kart-grip { width: 96px; height: 12px; margin-bottom: 4px; }
   .kart-tip { font-size: 9px; }
-  .kart-autogas { right: 12px; bottom: calc(max(18px, env(safe-area-inset-bottom)) + 70px); padding: 0 8px; font-size: 9px; gap: 4px; }
+  .kart-interface .kart-autogas { right: 12px; bottom: calc(max(18px, env(safe-area-inset-bottom)) + 72px); padding: 0 8px; font-size: 9px; gap: 4px; }
   .kart-autogas b { font-size: 9px; padding: 2px 4px; }
 }
 @media (max-width: 600px) and (max-height: 700px) {
   .kart-tip { display: none; }
+  .kart-game .arcade-toast { top: calc(var(--kart-top) + 188px); padding: 8px 14px; font-size: 12px; }
 }
 
 /* Phones, landscape. */
@@ -157,7 +163,7 @@
   .kart-place strong { font-size: 2.5rem; }
   .kart-race-lines span { font-size: 10px; }
   .kart-side { top: calc(var(--kart-top) + 48px); gap: 6px; }
-  .kart-view { top: calc(var(--kart-top) + 48px); }
+  .kart-interface .kart-view { top: calc(var(--kart-top) + 48px); }
   .kart-board { padding: 4px 7px; font-size: 10px; }
   .kart-board li { line-height: 15px; }
   .kart-board li:not([data-near]) { display: none; }
@@ -167,11 +173,13 @@
   .kart-controls button { min-height: 50px; }
   .kart-controls button small { display: none; }
   .kart-dashboard { bottom: max(6px, env(safe-area-inset-bottom)); width: 140px; }
-  .kart-gauge { width: 108px; height: 70px; }
-  .kart-speed b { font-size: 1.55rem; }
-  .kart-grip { width: 92px; height: 11px; margin: 2px auto 0; }
+  .kart-gauge { width: 98px; height: 64px; }
+  .kart-speed b { font-size: 1.4rem; }
+  .kart-speed small { margin-top: 1px; font-size: .5rem; }
+  .kart-grip { width: 86px; height: 10px; margin: 1px auto 0; }
+  .kart-grip span { font-size: 7px; }
   .kart-tip { display: none; }
-  .kart-autogas { right: 20px; bottom: calc(max(10px, env(safe-area-inset-bottom)) + 58px); }
+  .kart-interface .kart-autogas { right: 20px; bottom: calc(max(10px, env(safe-area-inset-bottom)) + 58px); }
 }
 
 /* Start panel: mode and difficulty as large, plain choices. */

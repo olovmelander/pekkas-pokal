@@ -3,8 +3,9 @@ import { createCrowd, createPerson, appearanceFor, POSES } from '../shared/peopl
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createBatch, faceTrack, canvasTexture } from './kit.js';
 
-const LAMP_OFF = new THREE.Color(0x2a0806), LAMP_ON = new THREE.Color(1.9, 0.07, 0.03);
-const HALO_OFF = new THREE.Color(0, 0, 0), HALO_ON = new THREE.Color(0.75, 0.06, 0.02);
+// Not tone mapped, so a lit lamp stays a saturated signal red (no bloom pass).
+const LAMP_OFF = new THREE.Color(0x1e0605), LAMP_ON = new THREE.Color(1, 0.04, 0.02);
+const HALO_OFF = new THREE.Color(0, 0, 0), HALO_ON = new THREE.Color(0.55, 0.03, 0.01);
 const FLAGS = ['green', 'yellow', 'chequered', 'blue', 'white'];
 
 /** Start/finish staging: gantry with five red lights, a small grandstand
@@ -25,7 +26,7 @@ export function buildStartline(route, root, { layout, clear, phone = false, redu
   gantry.position.copy(line.position); gantry.rotation.y = line.angle; group.add(gantry);
   gantry.updateMatrixWorld(true);
   const local = gantry.matrixWorld;
-  const span = 5.4, beam = 4.7;
+  const span = 6.25, beam = 4.7;
   for (const side of [-1, 1]) {
     const foot = sample(0, side * span).position.y - line.position.y;
     batch.add(box, steel, [side * span, (foot + beam + 0.55) / 2, 0], [0, 0, 0], [0.26, beam + 0.55 - foot, 0.26], null, local);
@@ -40,17 +41,18 @@ export function buildStartline(route, root, { layout, clear, phone = false, redu
     batch.add(box, steel, a.clone().add(b).multiplyScalar(0.5).toArray(), [0, 0, Math.atan2(0.5, 0.6) * (Math.round(x / 0.6) % 2 ? 1 : -1)], [0.78, 0.04, 0.04], null, local);
   }
   // Banner on both faces of the truss.
-  const banner = canvasTexture(1024, 128, (c) => {
-    c.fillStyle = '#173b32'; c.fillRect(0, 0, 1024, 128);
-    c.fillStyle = '#f2c05c'; c.fillRect(0, 0, 1024, 8); c.fillRect(0, 120, 1024, 8);
+  const bannerWidth = span * 2 - 0.6, bannerHeight = 0.95;
+  const banner = canvasTexture(Math.round(128 * bannerWidth / bannerHeight), 128, (c, w) => {
+    c.fillStyle = '#173b32'; c.fillRect(0, 0, w, 128);
+    c.fillStyle = '#f2c05c'; c.fillRect(0, 0, w, 8); c.fillRect(0, 120, w, 8);
     c.font = '900 64px "Arial Black", Arial, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
-    c.fillStyle = '#f4ecd2'; c.fillText('PEKKAS POKAL · VARGGROPEN', 512, 68);
+    c.fillStyle = '#f4ecd2'; c.fillText('PEKKAS POKAL · VARGGROPEN', w / 2, 68);
   });
   const bannerMaterial = new THREE.MeshStandardMaterial({ map: banner, roughness: 0.7, name: 'banner' });
   // Two single-sided faces, so the text reads the right way from both directions.
   const faces = [0, Math.PI].map((turn) => {
-    const face = new THREE.PlaneGeometry(span * 2 - 0.6, (span * 2 - 0.6) / 8);
-    face.rotateY(turn); face.translate(0, beam + 0.27, turn ? -0.06 : 0.06);
+    const face = new THREE.PlaneGeometry(bannerWidth, bannerHeight);
+    face.rotateY(turn); face.translate(0, beam + 0.36, turn ? -0.065 : 0.065);
     return face;
   });
   const bannerMesh = new THREE.Mesh(mergeGeometries(faces), bannerMaterial); faces.forEach(g => g.dispose());
@@ -64,12 +66,12 @@ export function buildStartline(route, root, { layout, clear, phone = false, redu
     batch.add(box, painted, [(i - 2) * 0.5, rig.y + row + 0.17, rig.z - 0.07], [0, 0, 0], [0.38, 0.03, 0.14], 0x0d0f0e, local);
   }
   const lampGeometry = new THREE.CircleGeometry(0.16, 18);
-  const lampMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, name: 'start-lamps' });
+  const lampMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false, name: 'start-lamps' });
   const lamps = new THREE.InstancedMesh(lampGeometry, lampMaterial, 10);
   // A soft additive glow round each lit lamp: no post-processing involved.
   const haloMaterial = new THREE.MeshBasicMaterial({
     map: canvasTexture(64, 64, (c) => { const g = c.createRadialGradient(32, 32, 4, 32, 32, 31); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.35, 'rgba(255,255,255,.35)'); g.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = g; c.fillRect(0, 0, 64, 64); }),
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, name: 'start-halo'
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, name: 'start-halo'
   });
   const halos = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.85, 0.85), haloMaterial, 10);
   const dummy = new THREE.Object3D();
@@ -123,7 +125,7 @@ export function buildStartline(route, root, { layout, clear, phone = false, redu
   for (let x = -standLength / 2; x <= standLength / 2 + 0.01; x += 1.3) batch.add(box, steel, [x, 0.5, 0.4], [0, 0, 0], [0.05, 0.9, 0.05], null, standMatrix);
 
   const seats = [];
-  const perRow = phone ? 10 : 17;
+  const perRow = phone ? 8 : 17;
   for (let t = 0; t < tiers; t++) {
     for (let i = 0; i < perRow; i++) {
       if (random() < (phone ? 0.12 : 0.18)) continue;
@@ -152,7 +154,7 @@ export function buildStartline(route, root, { layout, clear, phone = false, redu
   });
   const flagMaterial = new THREE.MeshStandardMaterial({ map: flagAtlas, side: THREE.DoubleSide, roughness: 0.9, name: 'flags' });
   const poleMaterial = new THREE.MeshStandardMaterial({ color: 0xd9d6cc, roughness: 0.5, name: 'flag-pole' });
-  const marshalSpots = [{ distance: 1.2, lane: -6.4, start: true }];
+  const marshalSpots = [{ distance: 1.2, lane: -7.1, start: true }];
   for (const corner of layout.corners) {
     for (const lane of [-corner.sign * 7.2, corner.sign * 7.6]) {
       const d = corner.end + 5, s = sample(d, lane);

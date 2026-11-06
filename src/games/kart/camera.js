@@ -33,7 +33,9 @@ export function chaseRig(aspect, speed = 0, reducedMotion = false) {
     fov: Math.min(92, base + boost),
     // How quickly the view swings round to the travel direction, and how far it peeks into a bend.
     follow: lerp(5.5, 10, portrait),
-    peek: 1 - portrait
+    peek: 1 - portrait,
+    // Very wide screens (phones held sideways) are short: aim lower so the kart sits clear of the dashboard.
+    aim: 0.3 - clamp((aspect - 1.75) / 0.4, 0, 1) * 0.3
   };
 }
 
@@ -112,8 +114,10 @@ export function createKartCamera(camera, track, { reducedMotion = false, view = 
       // Travel direction from the kart's own movement; fall back to the kart's heading when slow.
       let wishYaw = kartYaw;
       const moved = Math.hypot(kart.x - previousKart.x, kart.z - previousKart.z);
-      if (!initialized || moved > 6) {
-        previousKart.copy(kart); yaw = kartYaw; yawRate = 0; previousSpeed = speed; accel = 0;
+      // A first frame or a jump (reset, teleport) snaps the rig instead of easing across the map.
+      const snap = !initialized || moved > 6;
+      if (snap) {
+        previousKart.copy(kart); yaw = kartYaw; yawRate = 0; previousSpeed = speed; accel = 0; initialized = false;
       } else if (moved > 0.004 && speed > 1.2) {
         const travel = Math.atan2(kart.x - previousKart.x, kart.z - previousKart.z);
         wishYaw = kartYaw + wrapAngle(travel - kartYaw) * clamp((speed - 1.2) / 3, 0, 1);
@@ -151,15 +155,28 @@ export function createKartCamera(camera, track, { reducedMotion = false, view = 
       const surge = clamp(accel * 0.032, -0.38, 0.26);
       position.copy(kart).addScaledVector(direction, -(rig.distance + surge));
       position.y = kart.y + rig.height - surge * 0.25;
-      if (terrain) position.y = Math.max(position.y, terrain(position.x, position.z) + 0.75);
+      const nominal = position.y;
+      // Swung wide over a kerb or the tyre wall, the camera is eased back towards the road and
+      // lifted over the barrier: it never sits inside the kerb or tyre geometry.
+      const camLane = finite(driver.lane) + (position.x - kart.x) * road.right.x + (position.z - kart.z) * road.right.z;
+      const outside = Math.abs(camLane) - 4.8;
+      if (outside > 0) {
+        position.addScaledVector(road.right, -Math.sign(camLane) * Math.min(outside, 1.6));
+        position.y += Math.min(outside, 2) * 0.35;
+      }
+      // Keep clear of the ground at the camera's own spot, not only at the kart.
+      if (terrain) position.y = Math.max(position.y, terrain(position.x, position.z) + 1.1, kart.y + 1.3);
       // Peek a little into the coming bend, but never enough to lose the kart.
       const bend = finite(track.curvature?.(finite(driver.distance) + rig.ahead + 4));
       target.copy(kart).addScaledVector(direction, rig.ahead).addScaledVector(side, clamp(bend * 9, -0.9, 0.9) * rig.peek);
-      target.y = kart.y + 0.55 + clamp(accel * 0.022, -0.3, 0.16);
+      // A lifted camera looks a little lower, so the kart keeps its place in the frame.
+      target.y = kart.y + rig.aim + clamp(accel * 0.022, -0.3, 0.16) - Math.min(1.2, position.y - nominal) * 0.6;
       if (!initialized) { camera.position.copy(position); initialized = true; }
       // Rigid along the travel direction keeps the kart centred; height eases over crests.
       camera.position.x = position.x; camera.position.z = position.z;
       camera.position.y += (position.y - camera.position.y) * ease(9, step);
+      // Never below the safe height, even while easing over a crest.
+      camera.position.y = Math.max(camera.position.y, position.y - 0.25);
       camera.up.set(0, 1, 0);
       camera.lookAt(target);
       const wishRoll = reducedMotion ? 0 : clamp(yawRate * speed * 0.0042, -0.045, 0.045);

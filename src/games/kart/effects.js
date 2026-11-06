@@ -125,7 +125,7 @@ export function createEffects(scene, track, { reducedMotion = false, coarse = fa
   const soft = createPool(scene, coarse ? 240 : 420, { core: 0.18 });
   const hot = createPool(scene, coarse ? 70 : 120, { additive: true, core: 0.05 });
   const colors = {
-    smoke: new THREE.Color(0xd9d7d0), dust: new THREE.Color(0xa58e66), clod: new THREE.Color(0x4f5a2c), soil: new THREE.Color(0x5e4a33),
+    smoke: new THREE.Color(0xefede7), dust: new THREE.Color(0xa58e66), clod: new THREE.Color(0x4f5a2c), soil: new THREE.Color(0x5e4a33),
     exhaust: new THREE.Color(0x4a4c4c), spark: new THREE.Color(0xffb35a).multiplyScalar(2.2), sparkWhite: new THREE.Color(0xfff0c8).multiplyScalar(2.4)
   };
   const memory = new WeakMap();
@@ -217,29 +217,35 @@ export function createEffects(scene, track, { reducedMotion = false, coarse = fa
     // Tyre smoke from a sliding rear or wheelspin off the line.
     const slide = Math.max(finite(driver.slip), finite(driver.wheelspin), driver.skidding ? 0.45 : 0);
     if (surface !== 'grass' && slide > 0.15 && (speed > 2.5 || finite(driver.wheelspin) > 0.15)) {
-      m.smoke += dt * 30 * slide * scale * (coarse ? 0.7 : 1);
+      m.smoke += dt * 44 * slide * scale * (coarse ? 0.7 : 1);
       while (m.smoke >= 1) {
         m.smoke -= 1; m.wheel = 1 - m.wheel;
         const wheel = onKart(s, yaw, m.wheel ? 0.86 : -0.86, 0.12, -0.8);
-        spawn(soft, wheel.x, wheel.y, wheel.z, forward.x * speed * 0.18 + (Math.random() - 0.5) * 0.8, 0.35 + Math.random() * 0.5, forward.z * speed * 0.18 + (Math.random() - 0.5) * 0.8, {
-          life: 1.1 + Math.random() * 0.6, size0: 0.35, size1: 1.9 + slide, alpha: 0.22 + slide * 0.2, color: colors.smoke, drag: 1.5, gravity: -0.3, spin: 0.9
+        // Carried along with the kart for a moment, so the cloud hangs beside and behind it.
+        const carry = speed * (0.4 + Math.random() * 0.2);
+        spawn(soft, wheel.x, wheel.y, wheel.z, forward.x * carry + (Math.random() - 0.5) * 1.2, 0.35 + Math.random() * 0.6, forward.z * carry + (Math.random() - 0.5) * 1.2, {
+          life: 1.2 + Math.random() * 0.7, size0: 0.45, size1: 2.2 + slide * 1.2, alpha: 0.3 + slide * 0.25, color: colors.smoke, drag: 1.3, gravity: -0.3, spin: 0.9
         });
       }
     } else m.smoke = 0;
     // Grass, dirt and clods kicked up behind the rear wheels.
     if (surface === 'grass' && speed > 2.5) {
-      m.spray += dt * 26 * clamp(speed / 12, 0.2, 1.2) * scale * (coarse ? 0.7 : 1);
+      m.spray += dt * 40 * clamp(speed / 12, 0.25, 1.2) * scale * (coarse ? 0.7 : 1);
       while (m.spray >= 1) {
         m.spray -= 1; m.wheel = 1 - m.wheel;
         const wheel = onKart(s, yaw, m.wheel ? 0.86 : -0.86, 0.08, -0.85);
-        const back = -speed * (0.12 + Math.random() * 0.12);
+        // Thrown up and out by the tyres; the kart's wake carries it along for a moment,
+        // so the spray reads beside and just behind the rear wheels.
+        const back = speed * (0.5 + Math.random() * 0.25);
+        const out = (m.wheel ? 1 : -1) * (0.8 + Math.random() * 1.8);
+        const sx = right.x * out, sz = right.z * out;
         if (Math.random() < 0.5) {
-          spawn(soft, wheel.x, wheel.y, wheel.z, forward.x * back + (Math.random() - 0.5), 0.5 + Math.random() * 0.8, forward.z * back + (Math.random() - 0.5), {
-            life: 0.7 + Math.random() * 0.5, size0: 0.3, size1: 1.4, alpha: 0.34, color: colors.dust, drag: 2.4, gravity: -0.1, spin: 1
+          spawn(soft, wheel.x, wheel.y, wheel.z, forward.x * back + sx, 0.7 + Math.random() * 0.9, forward.z * back + sz, {
+            life: 0.8 + Math.random() * 0.6, size0: 0.45, size1: 2.0, alpha: 0.42, color: colors.dust, drag: 1.8, gravity: -0.15, spin: 1
           });
         } else {
-          spawn(soft, wheel.x, wheel.y, wheel.z, forward.x * back * 1.5 + (Math.random() - 0.5) * 1.6, 1.8 + Math.random() * 2.4, forward.z * back * 1.5 + (Math.random() - 0.5) * 1.6, {
-            life: 0.55 + Math.random() * 0.3, size0: 0.11, size1: 0.07, alpha: 0.95, color: Math.random() < 0.6 ? colors.clod : colors.soil, drag: 0.6, gravity: 9.8, spin: 8
+          spawn(soft, wheel.x, wheel.y, wheel.z, forward.x * back + sx * 1.4, 2.5 + Math.random() * 2.6, forward.z * back + sz * 1.4, {
+            life: 0.7 + Math.random() * 0.35, size0: 0.15, size1: 0.1, alpha: 0.95, color: Math.random() < 0.6 ? colors.clod : colors.soil, drag: 0.6, gravity: 9.8, spin: 8
           });
         }
       }

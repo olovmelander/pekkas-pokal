@@ -13,6 +13,20 @@ const DRIVING = new Set(['grid', 'lights', 'countdown', 'racing']);
 const AUTOGAS_KEY = 'pp-kart-autogas';
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
+/** Moves a digital control towards its target: `rise` seconds from 0 to full,
+ * `fall` seconds from full back to 0. A reversal first falls through zero. */
+export function ramp(current, target, dt, rise, fall) {
+  const now = Number.isFinite(current) ? current : 0;
+  const step = Math.max(0, Math.min(0.05, Number.isFinite(dt) ? dt : 0));
+  if (now !== 0 && (Math.sign(target) !== Math.sign(now) || Math.abs(target) < Math.abs(now))) {
+    const next = now - Math.sign(now) * step / fall;
+    if (Math.sign(target) !== Math.sign(now)) return Math.sign(next) === Math.sign(now) ? next : 0;
+    return Math.abs(next) < Math.abs(target) ? target : next;
+  }
+  const next = now + Math.sign(target - now) * step / rise;
+  return Math.abs(next - now) >= Math.abs(target - now) ? target : next;
+}
+
 function remembered(key, fallback) {
   try { const value = localStorage.getItem(key); return value === null ? fallback : value; } catch { return fallback; }
 }
@@ -29,6 +43,9 @@ export function createKartInput(game, interfaceEl, { onView = null } = {}) {
   let enabled = null;
   let autogas = remembered(AUTOGAS_KEY, 'false') === 'true';
   const analog = { pointerId: null, originX: 0, originY: 0, value: 0 };
+  // Keyboard and button controls ramp: steering builds over ~150 ms and lets go in ~70 ms,
+  // pedals over ~60 ms, so a stab at full lock cannot spin the kart. Analog drag maps directly.
+  const smooth = { steer: 0, throttle: 0, brake: 0, at: 0 };
   const zone = find('.kart-steer-zone');
   const knob = find('.kart-steer-knob');
   const autogasButton = find('[data-toggle="autogas"]');
@@ -144,6 +161,7 @@ export function createKartInput(game, interfaceEl, { onView = null } = {}) {
   });
 
   function clear() {
+    smooth.steer = smooth.throttle = smooth.brake = 0;
     held.clear();
     pointerControls.clear();
     releaseAnalog();
@@ -155,15 +173,21 @@ export function createKartInput(game, interfaceEl, { onView = null } = {}) {
 
   return {
     /** `{ steer: -1..1 (+ = left, towards +lane), throttle: 0..1, brake: 0..1 }` */
-    read() {
-      if (!driving()) return { steer: 0, throttle: 0, brake: 0 };
+    read(dt) {
+      const now = performance.now();
+      const step = Number.isFinite(dt) ? dt : smooth.at ? (now - smooth.at) / 1000 : 0;
+      smooth.at = now;
+      if (!driving()) { smooth.steer = smooth.throttle = smooth.brake = 0; return { steer: 0, throttle: 0, brake: 0 }; }
       const left = pressed('left') || keys.has('ArrowLeft') || keys.has('KeyA');
       const right = pressed('right') || keys.has('ArrowRight') || keys.has('KeyD');
-      const steer = clamp(Number(left) - Number(right) + (analog.pointerId !== null ? analog.value : 0), -1, 1);
       const brake = pressed('brake') || keys.has('ArrowDown') || keys.has('KeyS') || keys.has('Space') ? 1 : 0;
       // Autogas waits for lights out, so it can never cause a jump start.
       const gas = pressed('throttle') || keys.has('ArrowUp') || keys.has('KeyW') || (autogas && state === 'racing');
-      return { steer, throttle: gas ? 1 : 0, brake };
+      smooth.steer = ramp(smooth.steer, Number(left) - Number(right), step, 0.15, 0.07);
+      smooth.throttle = ramp(smooth.throttle, gas ? 1 : 0, step, 0.06, 0.04);
+      smooth.brake = ramp(smooth.brake, brake, step, 0.06, 0.04);
+      const steer = clamp(smooth.steer + (analog.pointerId !== null ? analog.value : 0), -1, 1);
+      return { steer, throttle: smooth.throttle, brake: smooth.brake };
     },
     pressed,
     clear,
