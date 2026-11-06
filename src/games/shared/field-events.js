@@ -18,6 +18,8 @@ const EVENTS = {
 };
 
 export async function createFieldGames(container, config) {
+  // A game can add its own events: { title, verb, rule, create(ctx) } (see uppsala/party.js).
+  const events = { ...EVENTS, ...(config.custom || {}) };
   const a = await createArcade(container, {
     id: config.id, title: config.title, subtitle: `${config.location} · ${config.year}`,
     accent: config.accent, sky: config.theme === 'park' ? '#a7b8aa' : '#b4c9be', fog: '#bec7aa'
@@ -211,14 +213,24 @@ export async function createFieldGames(container, config) {
   const nature = buildNature({ trees, bushes, grass: grasses, seed: config.year, reducedMotion: a.reducedMotion, sunDirection: a.sun?.position });
   const flowers = buildFlowerBorders(THREE, { seed: config.year, park: config.theme === 'park' });
   scene.add(nature.group, flowers.group);
-  const people = [];
+  const people = [], crew = new Map();
   const athlete = createPerson(appearanceFor('Mikael Hägglund', { detail: 'low', outfit: { top: 'jersey', topColor: 0xd8b35f, bottom: 'shorts', bottomColor: 0x35555b } }));
   athlete.root.rotation.y = Math.PI; scene.add(athlete.root); people.push(athlete);
-  ['Erik Vallgren', 'Per Vikman', 'Viktor Jones', 'Henrik Lundqvist'].forEach((name, i) => {
+  const spots = [[6.2, -1, -0.8], [-6.2, -1, 0.8], [6.2, -5, -0.8], [-6.2, -5, 0.8], [6.2, 3, -0.9], [-6.2, -8.5, 0.7], [6.1, -14, -0.6]];
+  ['Erik Vallgren', 'Per Vikman', 'Viktor Jones', 'Henrik Lundqvist', ...(config.crew || [])].forEach((name, i) => {
     const p = createPerson(appearanceFor(name, { detail: 'low', outfit: { top: 'polo', bottom: 'shorts' } }));
-    p.root.position.set(i % 2 ? -6.2 : 6.2, 0.03, -1 - Math.floor(i / 2) * 4); p.root.rotation.y = i % 2 ? 0.8 : -0.8;
-    scene.add(p.root); people.push(p);
+    const [x, z, turn] = spots[i % spots.length];
+    p.root.position.set(x, 0.03, z); p.root.rotation.y = turn;
+    scene.add(p.root); people.push(p); crew.set(name, p);
   });
+  // Custom events move people to their tables; every event starts from here.
+  const homes = people.map((p) => ({ position: p.root.position.clone(), rotation: p.root.rotation.y }));
+  function sendPeopleHome() {
+    people.forEach((p, i) => {
+      p.root.position.copy(homes[i].position); p.root.rotation.set(0, homes[i].rotation, 0);
+      p.setExpression('neutral'); p.lookAt(null);
+    });
+  }
   const rail = document.createElement('div'); rail.className = 'field-progress'; rail.setAttribute('aria-label', 'Grenar'); a.ui.appendChild(rail);
   const stamp = document.createElement('div'); stamp.className = 'field-stamp'; stamp.textContent = `${config.location} · Sommarspelen`; a.ui.appendChild(stamp);
   const controls = document.createElement('div'); controls.className = 'field-console'; controls.hidden = true;
@@ -233,6 +245,7 @@ export async function createFieldGames(container, config) {
   let hurdles = [], cleared = 0, balance = 0, balancePoints = 0, falls = 0, stumble = 0;
   let targetAxis = 0, targetX = 0, targetY = 0, croquetHoops = [], hoopIndex = 0, strokes = 0;
   let projectile, ringTarget, aimMarker, targetBoard, targetReticle, opponentBall, eventSign, aimDots, croquetClub;
+  let custom = null;
   const previewPose = new THREE.Object3D();
   let lastWidth = 0, lastHeight = 0;
   const buttons = { left: false, right: false };
@@ -258,21 +271,33 @@ export async function createFieldGames(container, config) {
   }
   function setupEvent() {
     cancelInput();
-    disposeEvent();
-    kind = config.events[eventIndex]; title.textContent = EVENTS[kind].title;
+    custom?.dispose?.(); custom = null;
+    disposeEvent(); sendPeopleHome();
+    kind = config.events[eventIndex]; title.textContent = events[kind].title;
     attempt = 0; points = []; aim = 0; charge = 0; holding = false; shot = null; time = 0; readyAt = 0;
     runnerZ = 7; jumpAt = -1; jumpData = null; cleared = 0; balance = 0; balancePoints = 0; falls = 0; stumble = 0;
     targetAxis = 0; targetX = 0; targetY = 0; strokes = 0; hoopIndex = 0;
     target = { x: 0, z: -4 }; wind = 0.35;
     athlete.root.position.set(0, 0.02, 7); athlete.root.rotation.set(0, Math.PI, 0);
     projectile = null; ringTarget = null; targetBoard = null; targetReticle = null; opponentBall = null; aimMarker = null; aimDots = null; croquetClub = null;
-    eventSign = label(EVENTS[kind].title, -5.8, 1.5, -13, 2.7, eventWorld);
+    eventSign = label(events[kind].title, -5.8, 1.5, -13, 2.7, eventWorld);
     pole(0.06, 1.6, '#715c3c', -5.8, 0.8, -13, eventWorld);
-    action.textContent = EVENTS[kind].verb;
+    action.textContent = events[kind].verb;
     left.hidden = right.hidden = ['hurdles', 'target', 'jump'].includes(kind);
     action.disabled = kind === 'balance';
     meter.hidden = ['hurdles', 'target', 'jump'].includes(kind); meter.classList.toggle('balance', kind === 'balance');
+    meter.classList.remove('zone', 'plain'); marker.style.width = '';
     fill.style.left = '0'; fill.style.width = '0%'; marker.style.left = '66.67%';
+    if (events[kind].create) {
+      custom = events[kind].create({
+        THREE, a, world: eventWorld, mesh, box, pole, ball, mat, label, athlete, crew,
+        ui: { hint, action, meter, fill, marker }, confetti, finish: (score) => finishEvent(score)
+      });
+      left.hidden = right.hidden = !custom.aim;
+      meter.hidden = custom.meter === false;
+      updateRail(); updateHUD();
+      return;
+    }
     if (['rings', 'boule', 'croquet'].includes(kind)) {
       box(7, 0.03, 20, kind === 'boule' ? '#c1b08c' : '#7b9562', 0, 0.04, -2, eventWorld);
       for (const x of [-3.65, 3.65]) box(0.13, kind === 'boule' ? 0.22 : 0.045, 20, kind === 'boule' ? '#a38050' : '#cbd0ab', x, 0.1, -2, eventWorld);
@@ -368,24 +393,26 @@ export async function createFieldGames(container, config) {
     }
   }
   function updateHUD() {
-    const detail = kind === 'croquet' ? `Bågar ${hoopIndex}/3 · Slag ${strokes}/6` : ['hurdles', 'balance'].includes(kind) ? `${EVENTS[kind].title} · ${eventIndex + 1}/${config.events.length}` : `Försök ${Math.min(attempt + 1, 3)}/3 · Gren ${eventIndex + 1}/${config.events.length}`;
+    if (custom) { a.setHUD('POÄNG', total, custom.detail()); return; }
+    const detail = kind === 'croquet' ? `Bågar ${hoopIndex}/3 · Slag ${strokes}/6` : ['hurdles', 'balance'].includes(kind) ? `${events[kind].title} · ${eventIndex + 1}/${config.events.length}` : `Försök ${Math.min(attempt + 1, 3)}/3 · Gren ${eventIndex + 1}/${config.events.length}`;
     a.setHUD('POÄNG', total, detail);
   }
   function intro() {
     state = 'menu'; controls.hidden = true; setupEvent();
     a.showPanel({ eyebrow: `${config.year} · ${config.location} · Arkadtolkning`, title: config.title,
-      body: `${config.events.length} grenar, en pokal. ${config.events.map((k) => EVENTS[k].title).join(' · ')}. Korta rundor med precision, rytm och balans. Delgrenarna är nygjorda för arkaden; den historiska grenlistan är inte dokumenterad. Rekord: ${a.loadBest() || 0} poäng.`,
+      body: `${config.events.length} grenar, en pokal. ${config.events.map((k) => events[k].title).join(' · ')}. Korta rundor med precision, rytm och balans. ${config.note || 'Delgrenarna är nygjorda för arkaden; den historiska grenlistan är inte dokumenterad.'} Rekord: ${a.loadBest() || 0} poäng.`,
       button: 'TILL FÖRSTA GRENEN', onStart: showEvent });
   }
   function showEvent() {
     setupEvent(); state = 'briefing'; controls.hidden = true;
-    a.showPanel({ eyebrow: `Gren ${eventIndex + 1} av ${config.events.length}`, title: EVENTS[kind].title,
-      body: EVENTS[kind].rule, button: 'JAG ÄR REDO', onStart: () => {
+    a.showPanel({ eyebrow: `Gren ${eventIndex + 1} av ${config.events.length}`, title: events[kind].title,
+      body: events[kind].rule, button: 'JAG ÄR REDO', onStart: () => {
         a.hidePanel(); state = 'play'; time = 0; controls.hidden = false; hint.textContent = instruction();
         (kind === 'balance' ? left : action).focus({ preventScroll: true });
       } });
   }
   function instruction() {
+    if (custom) return custom.instruction();
     if (kind === 'balance') return '← / → eller håll knapparna · håll markören i mitten';
     if (kind === 'hurdles') return 'Mellanslag / tryck HOPPA strax före häcken';
     if (kind === 'jump') return 'Mellanslag / HOPPA precis före den vita plankan';
@@ -399,18 +426,19 @@ export async function createFieldGames(container, config) {
     a.tone(earned >= 70 ? 880 : 440, 0.25, 'sine');
     const last = eventIndex === config.events.length - 1;
     a.showPanel({ eyebrow: `${earned >= 80 ? 'En mästarinsats' : earned >= 50 ? 'Snyggt jobbat' : 'Nästa försök sitter'} · ${earned}/100 poäng`,
-      title: `${EVENTS[kind].title} klar`, body: `<div class="field-result-number">${earned}<small>av 100 poäng</small></div><p>${points.length ? `Försöken: ${points.join(' · ')} poäng. ` : ''}${kind === 'balance' ? `${falls} fall. Små korrigeringar hjälper dig att hålla mitten.` : kind === 'jump' ? 'Ditt bästa av tre hopp räknas. Avståndet mäts från plankan.' : kind === 'croquet' ? `${hoopIndex} av 3 bågar på ${strokes} slag.` : `Totalt ${total} poäng i tävlingen.`}</p>`,
+      title: `${events[kind].title} klar`, body: `<div class="field-result-number">${earned}<small>av 100 poäng</small></div><p>${points.length ? `Försöken: ${points.join(' · ')} poäng. ` : ''}${custom ? custom.summary() : kind === 'balance' ? `${falls} fall. Små korrigeringar hjälper dig att hålla mitten.` : kind === 'jump' ? 'Ditt bästa av tre hopp räknas. Avståndet mäts från plankan.' : kind === 'croquet' ? `${hoopIndex} av 3 bågar på ${strokes} slag.` : `Totalt ${total} poäng i tävlingen.`}</p>`,
       button: last ? 'VISA RESULTAT' : 'NÄSTA GREN', onStart: () => { if (last) finishCup(); else { eventIndex++; showEvent(); } } });
   }
   function finishCup() {
     const previous = a.loadBest() || 0; a.saveBest(total); state = 'final';
     const medal = medalFor(total, config.events.length);
     a.showPanel({ eyebrow: `${config.location} · ${config.year} · ${total > previous ? 'Nytt personbästa!' : 'Ditt resultat'}`, title: `${medal} i ${config.location}`,
-      body: `<div class="field-result-number">${total}<small>av ${config.events.length * 100} poäng</small></div><div class="field-scorecard">${config.events.map((e, i) => `<span>${EVENTS[e].title}</span><b>${results[i]}<small>/100</small></b>`).join('')}</div><p>Guld: 80 poäng i snitt · Silver: 55 · Brons: 30.</p>`,
+      body: `<div class="field-result-number">${total}<small>av ${config.events.length * 100} poäng</small></div><div class="field-scorecard">${config.events.map((e, i) => `<span>${events[e].title}</span><b>${results[i]}<small>/100</small></b>`).join('')}</div><p>Guld: 80 poäng i snitt · Silver: 55 · Brons: 30.</p>`,
       button: 'SPELA IGEN', onStart: () => { eventIndex = 0; total = 0; results = []; showEvent(); } });
   }
   function startAction() {
     if (state !== 'play' || a.paused || shot || time < readyAt) return;
+    if (custom) { if (custom.press() !== false) { holding = true; action.classList.add('held'); } return; }
     if (kind === 'hurdles') { if (jumpAt < 0 || time - jumpAt > 0.9) { jumpAt = time; a.tone(330, 0.08, 'sine'); } return; }
     if (kind === 'jump') { if (jumpAt < 0) launchJump(); return; }
     if (kind === 'target') {
@@ -427,7 +455,8 @@ export async function createFieldGames(container, config) {
     action.classList.remove('held');
     if (!holding) return;
     holding = false;
-    if (state !== 'play' || a.paused) return;
+    if (state !== 'play' || a.paused) { custom?.cancel?.(); return; }
+    if (custom) { custom.release(); return; }
     const power = chargePower(charge);
     const start = kind === 'croquet' ? projectile.position.clone() : new THREE.Vector3(0, kind === 'rings' ? 1.2 : 0.9, 7);
     const destination = kind === 'croquet' ? croquetEnd(start, aim, power) : { x: aim + wind, z: start.z - (3 + power * 12) };
@@ -459,6 +488,7 @@ export async function createFieldGames(container, config) {
     actionPointer = actionKey = null;
     if (holding) charge = 0;
     holding = false; buttons.left = buttons.right = false; action.classList.remove('held');
+    custom?.cancel?.();
     directionControls.forEach((control) => control.cancel());
     if (pointer !== null && action.hasPointerCapture?.(pointer)) action.releasePointerCapture(pointer);
   }
@@ -525,7 +555,9 @@ export async function createFieldGames(container, config) {
     }
     const racing = kind === 'hurdles' || kind === 'jump' || kind === 'balance';
     const follow = state === 'play' && racing ? Math.min(0, athlete.root.position.z) : state === 'play' && kind === 'croquet' ? ((shot ? shot.from.z : projectile.position.z) + target.z) / 2 - 0.4 : 0;
-    if (state === 'play') {
+    if (state === 'play' && custom) {
+      custom.camera(cameraGoal, lookGoal, { portrait, short: h < 500 && !portrait });
+    } else if (state === 'play') {
       const targeting = kind === 'target';
       cameraGoal.set(portrait ? (targeting ? 1.1 : 1.4) : 6.5, targeting ? 7.4 : racing ? 9.5 : 10.5, (targeting ? 13.5 : racing ? 15 : 17.5) + follow);
       lookGoal.set(h < 500 && !portrait ? 2.2 : 0, targeting ? 2.1 : 0.7, follow + (targeting ? -3.5 : racing ? -1 : 0.4));
@@ -543,18 +575,24 @@ export async function createFieldGames(container, config) {
     nature.update(t); sky.update(t); if (!a.reducedMotion) flowers.update(t);
     updateCamera(dt);
     eventSign?.lookAt(camera.position.x, 1.5, camera.position.z);
-    for (let i = 1; i < people.length; i++) {
-      people[i].setPose(state === 'result' || state === 'final' ? POSES.clap(t + i) : POSES.idle(t, undefined, i));
-      people[i].update(dt, t);
-    }
     for (let i = effectBits.length - 1; i >= 0; i--) {
       const b = effectBits[i]; b.age += dt; b.vy -= dt * 5;
       b.mesh.position.x += b.vx * dt; b.mesh.position.y += b.vy * dt; b.mesh.position.z += b.vz * dt; b.mesh.rotation.x += dt * 4;
       if (b.age > 1.4) { eventWorld.remove(b.mesh); b.mesh.geometry.dispose(); effectBits.splice(i, 1); }
     }
+    const direction = (a.keys.has('ArrowRight') || a.keys.has('KeyD') || buttons.right ? 1 : 0) - (a.keys.has('ArrowLeft') || a.keys.has('KeyA') || buttons.left ? 1 : 0);
+    if (custom) {
+      // The event poses and updates everyone it uses, the athlete included.
+      if (state === 'play') { time += dt; custom.update(dt, t, direction); updateHUD(); }
+      custom.animate(dt, t, state);
+      return;
+    }
+    for (let i = 1; i < people.length; i++) {
+      people[i].setPose(state === 'result' || state === 'final' ? POSES.clap(t + i) : POSES.idle(t, undefined, i));
+      people[i].update(dt, t);
+    }
     if (state !== 'play') { athlete.setPose(state === 'result' ? POSES.cheer(t) : POSES.idle(t)); athlete.update(dt, t); return; }
     time += dt;
-    const direction = (a.keys.has('ArrowRight') || a.keys.has('KeyD') || buttons.right ? 1 : 0) - (a.keys.has('ArrowLeft') || a.keys.has('KeyA') || buttons.left ? 1 : 0);
     if (holding) charge += dt;
     aim = clamp(aim + direction * dt * 3.5, -4.4, 4.4);
     if (!meter.classList.contains('balance')) { fill.style.width = `${chargePower(charge) * 100}%`; }
@@ -656,8 +694,12 @@ export async function createFieldGames(container, config) {
     athlete.update(dt, t);
   });
   updateCamera(); intro();
+  // Inspection hook for the browser checks; removed on destroy.
+  const hook = { goTo(i) { eventIndex = clamp(i, 0, config.events.length - 1); showEvent(); }, get state() { return state; }, get kind() { return kind; }, get total() { return total; } };
+  window.__ppField = hook;
   return { destroy() {
-    cancelInput(); people.forEach((p) => { scene.remove(p.root); p.dispose(); }); a.destroy();
+    if (window.__ppField === hook) delete window.__ppField;
+    cancelInput(); custom?.dispose?.(); custom = null; people.forEach((p) => { scene.remove(p.root); p.dispose(); }); a.destroy();
     garden.dispose();
     materials.forEach((material) => material.dispose());
     [grassTexture, gravelTexture, woodTexture].forEach((texture) => texture.dispose());
