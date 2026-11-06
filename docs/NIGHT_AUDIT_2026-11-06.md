@@ -244,6 +244,85 @@ checkpointen. Målningens befintliga modifieringsskydd var korrekt; de
   `pass3-production-landscape/` och `pass3-production-classic.json`
   under `/workspace/pekkas-night/`.
 
+## Fjärde passet — verifierat
+
+Kodcheckpoint: `f30b7a28c23e33971d0cfacdae70241456c84f92`.
+Slutkontroll: 2026-11-06 01:39 UTC.
+
+Pingis, skytte, fäktning och fiske vilar nu under paus, men ritar en ny
+fryst bild vid rotation, återkomst eller återställd WebGL-kontext. Fiskets
+fångstdagbok omfattas också. Spelklockor, bollar/duvor, figurer och beslut
+står stilla. Kontextlyssnare tas bort när spelet stängs. Skyttets asynkrona
+grafikfallback begär en ny bild först efter sin väntan och endast om
+spelet fortfarande lever.
+
+Före rättning gav åtta pausade RAF **968/648/680/304 ritanrop** i
+2019/2022/2023/2024; efter rotation **1200/680/928/312**. Efter rättning
+är motsvarande lugna åttarutorsintervall **noll** i alla fyra. Detta är
+räknat GPU-arbete, inte ett påstående om batteritid eller fysisk mobil-FPS.
+
+Fäktning räknar inte längre paustid som långsam gameplay och sänker därför
+inte grafiknivån medan spelaren läser reglerna. Verkliga callbacks med
+styrda 20 Hz-tidsstämplar bevarade bloom, DPR 2, skuggkarta 2048 och hela
+duelltillståndet under 330 pausade rutor (16,5 s). Vid 500 aktiva rutor
+fungerade den befintliga nedtrappningen fortfarande: nivå 3, bloom av,
+DPR 1,5, skuggkarta 1024. Kontroll med undertryckt ritbudget, inte en
+prestandamätning. Stängning tog bort både väntande RAF och spel-API.
+
+### Bildgranskningen fångade ett ytterligare återställningsfel
+
+Första omritningsprovet passerade sina 29 struktur-/tillståndskontroller,
+men bilderna visade att GPU-bakade miljöreflektioner blev tomma efter
+verklig kontextförlust: fiskarna och geväret mörknade, liksom parkett,
+pist och bordslack. Det var inte tillräckligt att scenen åter ritades.
+Det första resultatet räknas därför inte som godkänd visuell återställning.
+
+De fyra spelen återskapar nu sina egna ljusmiljöer före första tillåtna
+synliga bild. Händelsen sätter bara en väntande flagga; en dold flik bakar
+inte om miljön. Gamla targets frigörs och destroy äger den senaste.
+Avsiktligt bortvalda reflektioner och främmande kartor bevaras. Pingis
+återger sin ursprungliga hallcapture utan spelare, priser, spegel eller
+ändrad matchbelysning/resultattavla; aktuellt scen-/materialtillstånd
+återställs efter bakningen. Hjälparna för skytte/fiske återställer temporärt
+ändrad scen och frigör bakningsresurser även vid fel.
+
+### Fjärde passets verifiering
+
+- **213/213 enhetstester i 31 filer**, ESLint **0 fel/1 310 varningar**,
+  syntaxkontroller och `git diff --check` godkända efter sista produktändring.
+- Bygge och delningssidor godkända. Källor och `dist/src/games` identiska
+  före och efter normaltestet. Inget ombygge medan browsers använde dist.
+- [Ny normalharness](../scripts/check-paused-rendering.mjs): **41/41
+  kontrollgrupper** mot fryst produktion. Fyra spel, telefon 390×844 som
+  roteras till 844×390 och vidgas till 1280×800. Vanlig RAF/rendering,
+  faktiska knappar och befintliga spel-API för start av rally/duva/duell.
+  Det är inte tre separata enhetsprofiler eller fulla matcher.
+- Varje spel genomgick **två riktiga WebGL loss/restore**, synlig respektive
+  dold→synlig. Headless Chromium behöll flikar synliga; därför emulerades
+  endast document-visibility och riktiga visibility-handlers anropades.
+  Ingen verklig bakgrundsflik eller fysisk telefon påstås testad.
+- Efter återställning: rätt fryst tillstånd, omritning följd av noll
+  ritanrop, fungerande fortsättning, inga canvas/ritanrop efter stängning
+  och inga sidfel. Fångstdagbokens egen paus verifierad.
+- **Alla 20 slutbilder öppnade och granskade**: telefon, liggande, vidgad
+  vy, synlig restore samt dold restore för varje spel. Ljus/reflektioner
+  är bevarade, inga nya konkreta bildregressioner hittades.
+- Regressionen jämför 24×24-pixelrutor i samma frysta scen. Före fix var
+  största RGB-medelabsolutförändringen cirka **12,14/23,11/45,80/48,17**
+  för 2019/2022/2023/2024. Efter fix är den **0,02662/0,00231/0/0**,
+  samma utfall vid båda återställningarna; toleransen är 4 RGB-nivåer.
+  Måttet kompletterar bildgranskningen och säger inget om andra grafikkretsar.
+- [Beständig kvalitetsregression](../scripts/check-fencing-paused-perf.mjs)
+  passerade mot dev och produktion med styrd tid enligt metoden ovan.
+  CPU-kontroller av verkliga callbacks/helpers täckte även upprepad
+  restore, null-fallback, exakt target-ägarskap och städning vid throw.
+
+Underlag: `pass4-final-pingis-fencing/`, `pass4-final-shooting-fishing/`,
+`pass4-production-perf.json`, respektive spelpars `.md`-anteckning samt
+`pass4-final-{unit-tests,lint,build}.log` under `/workspace/pekkas-night/`.
+De första mörka återställningsbilderna är bevarade i katalogerna med
+suffix `before-environment` och räknas inte som slutbilder.
+
 ## Fortsättning och begränsningar
 
 ### Fynd som förs till nästa pass
@@ -265,20 +344,15 @@ Nedan skiljs bekräftade, ännu öppna fynd från bredare granskningskandidater.
 Välj nya substantiella kontroller; kör inte hela sviten igen utan ny
 ändring eller konkret kvarstående osäkerhet.
 
-1. **Nytt bekräftat fynd:** Pingis, skytte, fäktning och fiske ritar samma
-   pausbild på varje RAF. Normal Chromium/WebGL-mätning gav respektive
-   968/648/680/304 ritanrop över åtta pausade RAF; efter avslutad rotation
-   1200/680/928/312. Alla gav noll efter stängning och normal ritning vid
-   fortsättning. Detta är onödig pausritning, inte en stängningsläcka.
-   Fäktningens faktiska tick/watchPerf/simulate-callbacks har dessutom
-   CPU-reproducerats vid simulerade 20 fps: 5,5 s paus stänger av bloom,
-   11 s sänker DPR 2→1,5, 16,5 s halverar skuggkartans sida, medan
-   spelklockan står stilla. Ingen fysisk prestandamätning påstås.
-   Nästa pass bör låta pausbilden vila, bevara omritning vid rotation,
-   visibility/contextrestore och flytta fäktningens pausretur före
-   kvalitetsmätningen. Underlag: `pass4-paused-render-evidence.md`,
-   `pass4-paused-render-plan.md`, `paused-render-before.json` och
-   `pass4-fencing-perf-repro.json` under `/workspace/pekkas-night/`.
+1. Pausritningen, fäktningens pausorsakade kvalitetsfall och de fyra
+   spelens förlorade miljöreflektioner är åtgärdade i fjärde passet.
+   **Nytt bildbelagt fynd:** fäktningens coachruta täcker armar och
+   vapenlinje i 844×390 under aktiv handledning, även under den första
+   anfallsvarningen. En riktad placering i kort landskap återstår.
+   Källgranskning visar dessutom samma engångsbakade miljömönster i
+   de åtta nya spelen samt Måleri, Flipper och Lera. Verklig WebGL-
+   återställning/bildbevis för dessa elva är ännu inte utförda i detta
+   checkpoint; eventuell åtgärd kräver sådant belägg.
 2. Triathlon har fortsatt fri passage genom rivaler senare i loppet.
    Startöverlappet är rättat, men personkollisioner eller automatiskt
    undanvikande skulle ändra spelmekanik/drafting och kräver en separat
