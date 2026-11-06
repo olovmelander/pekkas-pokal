@@ -27,7 +27,7 @@ export class Sfx {
       this.ctx = new AC();
       const { ctx } = this;
       this.master = ctx.createGain();
-      this.master.gain.value = 0.36;
+      this.master.gain.value = this.muted ? 0 : 0.36;
       const comp = ctx.createDynamicsCompressor();
       comp.threshold.value = -16;
       comp.ratio.value = 6;
@@ -66,6 +66,12 @@ export class Sfx {
       lfo.start();
     }
     if (this.ctx.state === 'suspended') this.ctx.resume();
+  }
+
+  /** Mute the entire field, including wind and sounds already in flight. */
+  setMuted(muted) {
+    this.muted = !!muted;
+    if (this.master) this.master.gain.setTargetAtTime(this.muted ? 0 : 0.36, this.ctx.currentTime, 0.03);
   }
 
   /** Stereo impulse: exponentially decaying noise that darkens as it dies. */

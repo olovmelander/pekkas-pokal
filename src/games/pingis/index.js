@@ -40,13 +40,14 @@ import { createPost } from './post.js';
 import { guardRenderer, RenderWatchdog, gfxNotice, precompile } from '../shared/gfx.js';
 import { buildHud, MEDAL_NAMES } from './hud.js';
 import { movementKey, sampleFlick } from './input.js';
+import { POINTS_TO_WIN, canReturnBall, matchWinner, playerServes, winBonus } from './rules.js';
+import { isEditableTarget, isNativeControlTarget } from '../shared/keyboard.js';
 
 /** Fill the whole stage on desktop; the camera reframes per aspect. */
 export const layout = 'full';
 
 const HIGHSCORE_KEY = 'pp-pingis-highscore';
 const BEST_KEY = 'pp-pingis-best';
-const POINTS_TO_WIN = 7;
 
 const T = TABLE;
 const HITZ = T.length / 2 + 0.11; // the hit plane, just off each end
@@ -519,6 +520,7 @@ export async function createPingis(container) {
     replayWanted: false,
     medals: [0, 0, 0], // this run
     stats: { rally: 0, smashes: 0, aces: 0 },
+    runRally: 0,
     rallyTier: 0,
     champion: false
   };
@@ -567,7 +569,7 @@ export async function createPingis(container) {
 
   const opp = () => OPPONENTS[state.matchNo - 1];
   const first = (o = opp()) => o.name.split(' ')[0];
-  const myServe = () => Math.floor(state.serves / 2) % 2 === 0;
+  const myServe = () => playerServes(state.serves, state.myPts, state.aiPts);
 
   let fovPunch = 0;
   let shakeT = 0;
@@ -817,9 +819,7 @@ export async function createPingis(container) {
     renderPts();
     afterPoint(mine, smashWin);
 
-    const lead = Math.max(state.myPts, state.aiPts);
-    const diff = Math.abs(state.myPts - state.aiPts);
-    if (lead >= POINTS_TO_WIN && diff >= 2) {
+    if (matchWinner(state.myPts, state.aiPts)) {
       state.decided = true;
       // A replay of the match-winning rally plays first, then the card
       if (!state.replayWanted) after(0.9, () => endMatch(state.myPts > state.aiPts));
@@ -1101,14 +1101,14 @@ export async function createPingis(container) {
        as it drops back to bat height — you step in for a short ball rather
        than waiting behind the end of the table. A whiff just lets it sail
        on; the floor rule scores it when it lands. */
-    if (state.phase === 'rally' && b.floorBounces === 0 && b.bounces >= 1) {
+    if (state.phase === 'rally' && canReturnBall(b.bounces, b.floorBounces)) {
       const meReceiving = b.lastHitter === 'ai';
       const dropping = b.vel.y < 0 && b.pos.y <= CONTACT_Y;
       if (meReceiving && b.pos.z > 0.15 && dropping) playerHit();
       else if (!meReceiving && b.pos.z < -0.15 && dropping) aiHit();
     }
     /* …and a fallback for the long ball that clears the table entirely */
-    if (state.phase === 'rally' && b.floorBounces === 0) {
+    if (state.phase === 'rally' && canReturnBall(b.bounces, b.floorBounces)) {
       if (b.vel.z > 0 && prevZ < HITZ && b.pos.z >= HITZ && b.lastHitter === 'ai') playerHit();
       if (b.vel.z < 0 && prevZ > -HITZ && b.pos.z <= -HITZ && b.lastHitter === 'me') aiHit();
     }
@@ -1222,6 +1222,7 @@ export async function createPingis(container) {
   function afterPoint(mine, smashWin) {
     const rally = state.rallyHits;
     state.stats.rally = Math.max(state.stats.rally, rally);
+    state.runRally = Math.max(state.runRally, rally);
     if (rally > (best.rally || 0)) {
       best.rally = rally;
       saveBest();
@@ -1267,6 +1268,7 @@ export async function createPingis(container) {
   let singleIdx = 0;
 
   function clearRun() {
+    clearInput();
     timers.length = 0;
     state.decided = false;
     state.replayWanted = false;
@@ -1313,6 +1315,7 @@ export async function createPingis(container) {
     state.score = 0;
     state.medals = [0, 0, 0];
     state.stats = { rally: 0, smashes: 0, aces: 0 };
+    state.runRally = 0;
     hud.setScore(0, false);
     showIntro();
   }
@@ -1324,6 +1327,9 @@ export async function createPingis(container) {
     singleIdx = idx;
     state.mode = 'single';
     state.matchNo = idx + 1;
+    state.score = 0;
+    state.runRally = 0;
+    hud.setScore(0, false);
     state.medals = [0, 0, 0];
     state.stats = { rally: 0, smashes: 0, aces: 0 };
     showIntro();
@@ -1415,7 +1421,7 @@ export async function createPingis(container) {
         hud.result({ won, my, ai: them, opp: o, level, why: MEDAL_WHY[level], stats: state.stats, score: state.score, mode: 'single' });
         return;
       }
-      const bonus = 1000 * state.matchNo + (POINTS_TO_WIN - state.aiPts) * 100;
+      const bonus = winBonus(state.matchNo, state.aiPts);
       addScore(bonus, null);
       sfx.fanfare();
       if (state.matchNo >= 3) {
@@ -1477,7 +1483,7 @@ export async function createPingis(container) {
     if (isChamp) {
       best.titles = (best.titles || 0) + 1;
       saveBest();
-      hud.final({ medals: state.medals, opps: OPPONENTS, score: state.score, high, isHigh, rally: state.stats.rally });
+      hud.final({ medals: state.medals, opps: OPPONENTS, score: state.score, high, isHigh, rally: state.runRally });
       return;
     }
     hud.result({
@@ -1668,15 +1674,23 @@ export async function createPingis(container) {
   }
 
   function onKeyDown(e) {
+    if (isEditableTarget(e.target)) return;
     if (e.key === '?' || e.code === 'KeyP' || (e.key === 'Escape' && helpOpen)) {
       e.preventDefault(); e.stopPropagation();
       if (!e.repeat) setHelp(e.key === 'Escape' ? false : !helpOpen);
       return;
     }
     if (helpOpen) {
-      if (e.key === 'Tab') { e.preventDefault(); hud.el.help.querySelector('button').focus(); }
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const stops = [...hud.el.help.querySelectorAll('button, [tabindex="0"]')];
+        const index = stops.indexOf(document.activeElement);
+        const next = index < 0 ? (e.shiftKey ? stops.length - 1 : 0) : (index + (e.shiftKey ? -1 : 1) + stops.length) % stops.length;
+        stops[next]?.focus({ preventScroll: true });
+      }
       return;
     }
+    if (isNativeControlTarget(e.target)) return;
     const movement = movementKey(e);
     if (movement) {
       e.preventDefault();
@@ -1686,8 +1700,6 @@ export async function createPingis(container) {
       return;
     }
     if (e.repeat) return;
-    // Focused menu buttons retain native keyboard activation (including opponent selection).
-    if ((e.key === ' ' || e.key === 'Enter') && e.target.closest?.('button')) return;
     if (e.key === ' ') {
       e.preventDefault();
       sfx.resume();
@@ -1823,9 +1835,10 @@ export async function createPingis(container) {
     // A mouse hovering over the hall steers like a finger held down
     const tracking = dragging || performance.now() - mouseT < 400;
     if (!tracking) {
-      // Keyboard spin: held arrows stand in for the flick
-      me.dragVY = keys.up ? -2.6 : keys.down ? 2.6 : me.dragVY * (1 - 6 * dt);
-      if (!keys.up && !keys.down) me.dragVX *= 1 - 6 * dt;
+      // Both keyboard axes stand in for a flick. Moving sideways must place
+      // the shot too, rather than leaving keyboard players without sidespin.
+      me.dragVY = keys.up || keys.down ? (Number(keys.down) - Number(keys.up)) * 2.6 : me.dragVY * (1 - 6 * dt);
+      me.dragVX = keys.left || keys.right ? (Number(keys.right) - Number(keys.left)) * 2 : me.dragVX * (1 - 6 * dt);
     } else {
       // Flick velocity decays so an old gesture does not spin a later shot
       me.dragVX *= 1 - 2.4 * dt;

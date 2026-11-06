@@ -61,7 +61,7 @@ export function createThrowEvent(kind, ctx) {
   }
   reset();
   return {
-    down() { if (phase === 'aim' && !done) { holding = true; charge = 0; } },
+    down() { if (phase === 'aim' && !done) { holding = true; charge = 0; power = 0.08; } },
     up() {
       if (!holding || phase !== 'aim' || done) return;
       holding = false; phase = 'flight';

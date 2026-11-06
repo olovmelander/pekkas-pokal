@@ -987,10 +987,16 @@ export async function createFishing(container) {
   /* ---- Input ---------------------------------------------------------- */
 
   let dragging = false;
+  const dragPointers = new Set();
   let helpOpen = false;
   let bookOpen = false;
   const REACH = 9;
   const keys = { left: false, right: false };
+  const steeringKeys = new Map();
+  const refreshKeys = () => {
+    keys.left = [...steeringKeys.values()].includes('left');
+    keys.right = [...steeringKeys.values()].includes('right');
+  };
 
   function pointerToNdc(e) {
     const rect = canvasHost.getBoundingClientRect();
@@ -1020,6 +1026,7 @@ export async function createFishing(container) {
       return;
     }
     if (!steering()) return;
+    dragPointers.add(e.pointerId);
     dragging = true;
     canvasHost.setPointerCapture?.(e.pointerId);
     steerTo(e);
@@ -1029,17 +1036,19 @@ export async function createFishing(container) {
     if (!running || helpOpen || bookOpen || !steering()) return;
     // A mouse steers by hovering — on a desktop that is the natural
     // gesture; a finger has to be down
-    if (dragging || (e.pointerType === 'mouse' && steering())) steerTo(e);
+    if ((dragging && dragPointers.has(e.pointerId)) || (e.pointerType === 'mouse' && steering())) steerTo(e);
   }
 
-  function onPointerUp() {
-    dragging = false;
+  function onPointerUp(event) {
+    dragPointers.delete(event.pointerId);
+    dragging = dragPointers.size > 0;
   }
 
   function onKeyDown(e) {
     if (e.target.closest?.('input, textarea, select')) return;
     const k = e.key.toLowerCase();
     if (k === '?' || k === 'p' || (k === 'escape' && (helpOpen || bookOpen))) {
+      if (e.repeat) return;
       if (bookOpen) setBook(false);
       else setHelp(k === '?' || k === 'p' ? !helpOpen : false);
       return;
@@ -1047,12 +1056,12 @@ export async function createFishing(container) {
     if (helpOpen || bookOpen || !running) return;
     if (['arrowleft', 'arrowright', 'a', 'd'].includes(k) && steering()) e.preventDefault();
     if (k === 'arrowleft' || k === 'a') {
-      if (!e.repeat) state.targetX = Math.max(-REACH, state.targetX - 1.4);
-      keys.left = true;
+      if (!e.repeat && !keys.left) state.targetX = Math.max(-REACH, state.targetX - 1.4);
+      steeringKeys.set(e.code || k, 'left'); refreshKeys();
       state.steered = true;
     } else if (k === 'arrowright' || k === 'd') {
-      if (!e.repeat) state.targetX = Math.min(REACH, state.targetX + 1.4);
-      keys.right = true;
+      if (!e.repeat && !keys.right) state.targetX = Math.min(REACH, state.targetX + 1.4);
+      steeringKeys.set(e.code || k, 'right'); refreshKeys();
       state.steered = true;
     } else if (k === ' ' || k === 'enter') {
       if (state.phase === 'idle' || state.phase === 'over') {
@@ -1067,8 +1076,8 @@ export async function createFishing(container) {
 
   function onKeyUp(e) {
     const k = e.key.toLowerCase();
-    if (k === 'arrowleft' || k === 'a') keys.left = false;
-    if (k === 'arrowright' || k === 'd') keys.right = false;
+    steeringKeys.delete(e.code || k);
+    refreshKeys();
   }
 
   const ndc = new THREE.Vector3();
@@ -1149,6 +1158,7 @@ export async function createFishing(container) {
   function setHelp(open) {
     helpOpen = open;
     hud.help.hidden = !open;
+    sfx.setPaused(helpOpen || bookOpen);
     if (open) releaseInput();
   }
 
@@ -1156,13 +1166,15 @@ export async function createFishing(container) {
     bookOpen = open;
     if (open) renderBook(hud, progress, SPECIES, speciesSvg, fmt, fmtKg);
     hud.book.hidden = !open;
+    sfx.setPaused(helpOpen || bookOpen);
     if (open) releaseInput();
   }
 
   function releaseInput() {
+    dragPointers.clear();
     dragging = false;
-    keys.left = false;
-    keys.right = false;
+    steeringKeys.clear();
+    refreshKeys();
   }
 
   function onBlur() {
@@ -1181,6 +1193,7 @@ export async function createFishing(container) {
 
   canvasHost.addEventListener('pointerdown', onPointerDown);
   canvasHost.addEventListener('pointermove', onPointerMove);
+  canvasHost.addEventListener('lostpointercapture', onPointerUp);
   window.addEventListener('pointerup', onPointerUp);
   window.addEventListener('pointercancel', onPointerUp);
   window.addEventListener('blur', onBlur);
@@ -1196,7 +1209,7 @@ export async function createFishing(container) {
   hud.info.addEventListener('click', () => setHelp(!helpOpen));
   hud.helpClose.addEventListener('click', () => setHelp(false));
   hud.mute.addEventListener('click', () => {
-    sfx.muted = !sfx.muted;
+    sfx.setMuted(!sfx.muted);
     hud.mute.classList.toggle('off', sfx.muted);
   });
 
@@ -2195,6 +2208,7 @@ export async function createFishing(container) {
     document.removeEventListener('visibilitychange', onVisibility);
     canvasHost.removeEventListener('pointerdown', onPointerDown);
     canvasHost.removeEventListener('pointermove', onPointerMove);
+    canvasHost.removeEventListener('lostpointercapture', onPointerUp);
     window.removeEventListener('pointerup', onPointerUp);
     window.removeEventListener('pointercancel', onPointerUp);
     window.removeEventListener('blur', onBlur);

@@ -18,5 +18,7 @@ export function nailStrike(phase, previousDepth = 0) {
 
 export function woodScore(kind, completed, remainingSeconds = 0) {
   if (kind === 'stack') return Math.min(1000, Math.round(completed / 16 * 1000));
-  return Math.min(1000, Math.round(completed * 170 + (completed >= 5 ? clamp(remainingSeconds, 0, 30) * 5 : 0)));
+  // Fifteen clean hits take about ten seconds; twelve is a reachable mastery target.
+  const speedBonus = completed >= 5 ? 150 * clamp(remainingSeconds / 18, 0, 1) : 0;
+  return Math.min(1000, Math.round(completed * 170 + speedBonus));
 }

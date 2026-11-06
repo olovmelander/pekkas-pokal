@@ -36,6 +36,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { guardRenderer, postTarget, addSanitize, RenderWatchdog, gfxNotice, precompile } from '../shared/gfx.js';
 import { Sfx } from './audio.js';
 import { createGameClock } from '../shared/game-clock.js';
+import { createPointerSession } from './input.js';
 import { N, H, R_MIN, R_MAX, WALL, ClayBody, ringMaps, glazeMaps, clayMaterial, glazeMaterial } from './clay.js';
 import { mulberry, buildStudio, buildWheel, buildSponge, buildEnvScene, disposeScene } from './studio.js';
 import { buildPotterHand } from './hand.js';
@@ -253,7 +254,7 @@ export async function createClay(container) {
   if (!coarsePointer) {
     hud.smoothKey.textContent = 'håll G';
     hud.doneKey.textContent = 'Enter';
-    hud.skip.textContent = 'Klicka eller mellanslag för att snabbspola';
+    hud.skip.textContent = 'Snabbspola · mellanslag';
   }
   const COACH = coarsePointer
     ? 'Dra fingret mot leran — inåt trycker, utåt drar. Håll GLÄTTA för att jämna.'
@@ -519,9 +520,13 @@ export async function createClay(container) {
   let dragging = false;
   let smoothing = false;
   let keySmooth = false;
+  let buttonKeySmooth = false;
+  const shapePointer = createPointerSession();
+  const smoothPointer = createPointerSession();
   let helpOpen = false;
   let paused = false;
-  let modalFocus = null;
+  let pauseFocus = null;
+  let helpFocus = null;
   let keyboardActive = false;
   let keyboardRow = Math.round(N * 0.5);
   const shapingKeys = new Set();
@@ -680,6 +685,8 @@ export async function createClay(container) {
       <div class="lr-cta"><button class="pb-btn" data-act="start">Sätt igång drejskivan</button></div>`;
     hud.overlay.classList.remove('summary');
     hud.overlay.classList.add('show');
+    syncModal();
+    hud.panel.querySelector('[data-act="start"]')?.focus({ preventScroll: true });
   }
 
   function showSummary(isHigh) {
@@ -702,8 +709,15 @@ export async function createClay(container) {
       <div class="pb-scoreline"><span>${fmt(state.score)}</span><small>poäng · rekord ${fmt(high)}</small></div>
       <div class="lr-cta"><button class="pb-btn" data-act="start">Dreja igen</button></div>`;
     hud.overlay.classList.add('summary', 'show');
-    // Frame the window display in whatever part of the screen the card leaves
+    syncModal();
+    hud.panel.querySelector('[data-act="start"]')?.focus({ preventScroll: true });
+    measureSummary();
+  }
+
+  function measureSummary() {
+    // Re-measure after rotation too: the summary moves from side to bottom.
     const host = canvasHost.getBoundingClientRect();
+    if (!host.width || !host.height) return;
     const card = hud.panel.getBoundingClientRect();
     if (view.portrait) {
       const y1 = Math.max(0.15, (card.top - host.top) / host.height);
@@ -719,9 +733,12 @@ export async function createClay(container) {
   function setThrowHud(on) {
     if (!on) hud.coach.classList.remove('show');
     hud.task.classList.toggle('show', on);
+    hud.task.setAttribute('aria-hidden', String(!on));
     hud.meter.classList.toggle('show', on);
+    hud.meter.setAttribute('aria-hidden', String(!on));
     hud.tools.classList.toggle('show', on);
     if (!on) hud.timer.textContent = '';
+    syncModal();
   }
 
   function startPiece() {
@@ -750,7 +767,9 @@ export async function createClay(container) {
     setThrowHud(true);
     hud.verdict.classList.remove('show');
     setPhaseLabel(p === BONUS ? 'BONUS: POKALEN I GULD' : p.brief);
-    later(() => setPhaseLabel(''), 3400);
+    later(() => {
+      if (piece() === p && (state.phase === 'intro' || state.phase === 'throw')) setPhaseLabel('');
+    }, 3400);
     hud.coach.textContent = COACH;
     hud.coach.classList.toggle('show', state.coached < 1.2);
     // Keramikern points at the new lump and says what he wants
@@ -782,10 +801,7 @@ export async function createClay(container) {
     guide.group.visible = false;
     hand.visible = false;
     sponge.visible = false;
-    dragging = false;
-    brush = null;
-    smoothing = false;
-    keySmooth = false;
+    clearInput();
     contact.visible = false;
     sfx.setShaping(0);
     sfx.wire();
@@ -793,6 +809,8 @@ export async function createClay(container) {
     setPhaseLabel('');
     renderChips();
     hud.skip.classList.add('show');
+    syncModal();
+    hud.skip.focus({ preventScroll: true });
 
     // The fired twin, waiting in the kiln
     body.open = 1;
@@ -833,18 +851,23 @@ export async function createClay(container) {
     hud.verdict.classList.remove('grade-hi', 'grade-mid', 'grade-lo');
     hud.verdict.classList.add(res.grade >= 9 ? 'grade-hi' : res.grade <= 3 ? 'grade-lo' : 'grade-mid');
     hud.verdict.classList.add('show');
+    syncModal();
+    hud.next.focus({ preventScroll: true });
     measureVerdict();
     // Stars land one at a time
     const stars = hud.vStars.querySelectorAll('.lr-star');
     for (let i = 0; i < res.stars; i++) {
       later(() => {
+        if (state.phase !== 'judge' || state.results[state.slot] !== res) return;
         stars[i].classList.add('on', 'pop');
         sfx.star(i);
         // Fresh glaze winks with every star the piece earns
         for (let g = 0; g <= i; g++) emitGlint();
       }, 420 + i * 340);
     }
-    if (res.grade >= 9) later(() => sfx.fanfare(), 420 + res.stars * 340);
+    if (res.grade >= 9) later(() => {
+      if (state.phase === 'judge' && state.results[state.slot] === res) sfx.fanfare();
+    }, 420 + res.stars * 340);
     keramiker.cue('verdict', res.grade);
     renderChips();
   }
@@ -895,6 +918,7 @@ export async function createClay(container) {
 
   function endEvening() {
     state.phase = 'over';
+    syncModal();
     state.t = 0;
     clayGroup.visible = false;
     renderChips();
@@ -982,22 +1006,22 @@ export async function createClay(container) {
 
   function onPointerDown(e) {
     sfx.resume();
-    if (helpOpen || paused) return;
+    if (helpOpen || paused || e.pointerType === 'mouse' && e.button !== 0) return;
+    if (state.phase === 'fire') {
+      e.preventDefault(); state.fast = true; return;
+    }
+    if (state.phase !== 'throw' || !shapePointer.begin(e)) return;
     e.preventDefault();
     keyboardActive = false; shapingKeys.clear();
     canvasHost.setPointerCapture(e.pointerId);
     canvasHost.focus({ preventScroll: true });
-    if (state.phase === 'fire') {
-      state.fast = true;
-      return;
-    }
-    if (state.phase !== 'throw') return;
     dragging = true;
     onPointerMove(e);
   }
 
   function onPointerMove(e) {
     if (paused || helpOpen || state.phase !== 'throw') return;
+    if (shapePointer.active && !shapePointer.owns(e) || keyboardActive && !shapePointer.active) return;
     const p = pointerToClay(e);
     if (!p) return;
     if (!dragging) {
@@ -1007,7 +1031,8 @@ export async function createClay(container) {
     brush = brushFrom(p);
   }
 
-  function onPointerUp() {
+  function onPointerUp(event) {
+    if (!shapePointer.release(event)) return;
     dragging = false;
     brush = null;
   }
@@ -1016,8 +1041,15 @@ export async function createClay(container) {
     hover = null;
   }
 
+  function releaseGesture(target, gesture) {
+    const id = gesture.reset();
+    if (id !== null && target.hasPointerCapture(id)) target.releasePointerCapture(id);
+  }
+
   function clearInput() {
-    dragging = smoothing = keySmooth = false;
+    releaseGesture(canvasHost, shapePointer);
+    releaseGesture(hud.smooth, smoothPointer);
+    dragging = smoothing = keySmooth = buttonKeySmooth = false;
     brush = hover = null;
     shapingKeys.clear();
     hud.smooth.classList.remove('active');
@@ -1027,16 +1059,19 @@ export async function createClay(container) {
   function syncModal() {
     const blocked = paused || helpOpen;
     hud.controlsRoot.inert = blocked;
-    hud.verdict.inert = blocked;
-    hud.overlay.inert = blocked;
+    hud.tools.inert = blocked || !hud.tools.classList.contains('show');
+    hud.skip.inert = blocked || state.phase !== 'fire';
+    hud.verdict.inert = blocked || !hud.verdict.classList.contains('show');
+    hud.overlay.inert = blocked || !hud.overlay.classList.contains('show');
+    hud.help.inert = paused;
     hud.info.inert = paused;
     hud.mute.inert = blocked;
-    canvasHost.inert = blocked;
+    canvasHost.inert = blocked || state.phase === 'idle' || state.phase === 'over';
   }
 
   function setPaused(open) {
     if (paused === open) return;
-    if (open) modalFocus = document.activeElement;
+    if (open) pauseFocus = document.activeElement;
     paused = open;
     clearInput();
     hud.pauseScreen.hidden = !open;
@@ -1044,7 +1079,7 @@ export async function createClay(container) {
     hud.pauseToggle.setAttribute('aria-label', open ? 'Fortsätt dreja' : 'Pausa drejningen');
     hud.pauseToggle.innerHTML = `<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="${open ? 'M8 5l11 7-11 7z' : 'M8 5v14M16 5v14'}"/></svg>`;
     syncModal();
-    if (open) { sfx.silence(); hud.resume.focus({ preventScroll: true }); } else { sfx.resume(); (helpOpen ? hud.helpClose : container.contains(modalFocus) ? modalFocus : canvasHost).focus({ preventScroll: true }); }
+    if (open) { sfx.silence(); hud.resume.focus({ preventScroll: true }); } else { sfx.resume(); (helpOpen ? hud.helpClose : container.contains(pauseFocus) && !pauseFocus.closest('[inert]') ? pauseFocus : canvasHost).focus({ preventScroll: true }); }
   }
 
   function onKeyDown(e) {
@@ -1066,7 +1101,8 @@ export async function createClay(container) {
     if (paused || helpOpen) return;
     const onControl = e.target.closest?.('button, a, input, select, textarea');
     if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) && state.phase === 'throw') {
-      e.preventDefault(); keyboardActive = true; shapingKeys.add(e.key); canvasHost.focus({ preventScroll: true });
+      e.preventDefault(); releaseGesture(canvasHost, shapePointer);
+      keyboardActive = true; shapingKeys.add(e.key); canvasHost.focus({ preventScroll: true });
     } else if ((e.key === 'g' || e.key === 'G') && state.phase === 'throw') {
       e.preventDefault(); keySmooth = true;
     } else if (!onControl && !e.repeat && e.key === ' ' && (state.phase === 'idle' || state.phase === 'over')) {
@@ -1082,17 +1118,18 @@ export async function createClay(container) {
 
   function onKeyUp(e) {
     if (e.key === 'g' || e.key === 'G') keySmooth = false;
+    if (e.key === ' ' || e.key === 'Enter') { buttonKeySmooth = false; smoothing = smoothPointer.active; }
     shapingKeys.delete(e.key);
     if (keyboardActive && !shapingKeys.has('ArrowLeft') && !shapingKeys.has('ArrowRight')) { dragging = false; brush = null; }
   }
 
   function setHelp(open) {
     if (paused) return;
-    if (open) modalFocus = document.activeElement;
+    if (open) helpFocus = document.activeElement;
     helpOpen = open;
     hud.help.hidden = !open;
     clearInput(); syncModal();
-    if (open) { sfx.silence(); hud.helpClose.focus({ preventScroll: true }); } else (container.contains(modalFocus) ? modalFocus : canvasHost).focus({ preventScroll: true });
+    if (open) { sfx.silence(); hud.helpClose.focus({ preventScroll: true }); } else (container.contains(helpFocus) && !helpFocus.closest('[inert]') ? helpFocus : canvasHost).focus({ preventScroll: true });
   }
 
   function onBlur() {
@@ -1103,6 +1140,7 @@ export async function createClay(container) {
   canvasHost.addEventListener('pointerdown', onPointerDown);
   canvasHost.addEventListener('pointermove', onPointerMove);
   canvasHost.addEventListener('pointerleave', onPointerLeave);
+  canvasHost.addEventListener('lostpointercapture', onPointerUp);
   window.addEventListener('pointerup', onPointerUp);
   window.addEventListener('pointercancel', onPointerUp);
   window.addEventListener('keydown', onKeyDown, true);
@@ -1115,24 +1153,32 @@ export async function createClay(container) {
   });
   hud.next.addEventListener('click', nextPiece);
   hud.done.addEventListener('click', finishPiece);
+  hud.skip.addEventListener('click', () => {
+    if (!paused && !helpOpen && state.phase === 'fire') state.fast = true;
+  });
   hud.info.addEventListener('click', () => setHelp(!helpOpen));
   hud.helpClose.addEventListener('click', () => setHelp(false));
   const smoothOn = (e) => {
     e.preventDefault();
     if (paused || helpOpen || state.phase !== 'throw') return;
-    if (e.pointerId !== undefined) hud.smooth.setPointerCapture(e.pointerId);
+    if (e.pointerId !== undefined) {
+      if (!smoothPointer.begin(e)) return;
+      hud.smooth.setPointerCapture(e.pointerId);
+    } else buttonKeySmooth = true;
     smoothing = true;
   };
-  const smoothOff = () => {
-    smoothing = false;
+  const smoothOff = (event) => {
+    if (event.pointerId !== undefined) smoothPointer.release(event);
+    else buttonKeySmooth = false;
+    smoothing = buttonKeySmooth || smoothPointer.active;
   };
   hud.smooth.addEventListener('pointerdown', smoothOn);
   hud.smooth.addEventListener('pointerup', smoothOff);
-  hud.smooth.addEventListener('pointerleave', smoothOff);
+  // Pointer capture lets a thumb drift slightly outside the tool while held.
   hud.smooth.addEventListener('pointercancel', smoothOff);
   hud.smooth.addEventListener('lostpointercapture', smoothOff);
   hud.smooth.addEventListener('keydown', (e) => { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) smoothOn(e); });
-  hud.smooth.addEventListener('keyup', (e) => { if (e.key === ' ' || e.key === 'Enter') smoothOff(); });
+  hud.smooth.addEventListener('keyup', (e) => { if (e.key === ' ' || e.key === 'Enter') smoothOff(e); });
   hud.mute.addEventListener('click', () => {
     sfx.muted = !sfx.muted;
     hud.mute.classList.toggle('off', sfx.muted);
@@ -1290,6 +1336,7 @@ export async function createClay(container) {
       else renderMatch();
     }
     if (state.phase === 'judge') measureVerdict();
+    if (state.phase === 'over' && hud.overlay.classList.contains('show')) measureSummary();
     // Resizing clears the canvas. While paused, redraw only the frozen scene
     // in its new aspect ratio; no simulation, clock, particles or kiln update.
     if (renderReady && (paused || helpOpen) && !document.hidden) {
@@ -2129,6 +2176,7 @@ export async function createClay(container) {
     canvasHost.removeEventListener('pointerdown', onPointerDown);
     canvasHost.removeEventListener('pointermove', onPointerMove);
     canvasHost.removeEventListener('pointerleave', onPointerLeave);
+    canvasHost.removeEventListener('lostpointercapture', onPointerUp);
     window.removeEventListener('pointerup', onPointerUp);
     window.removeEventListener('pointercancel', onPointerUp);
     window.removeEventListener('keydown', onKeyDown, true);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aimKey, stepKeyboardAim, touchAimOffset } from '../src/games/shooting/input.js';
+import { aimKey, createAimKeys, stepKeyboardAim, touchAimOffset } from '../src/games/shooting/input.js';
 
 describe('Shooting keyboard and touch aiming', () => {
   it('keeps diagonal aim speed fair and independent of frame rate', () => {
@@ -39,5 +39,20 @@ describe('Shooting keyboard and touch aiming', () => {
     expect(aimKey({ code: 'ShiftLeft' })).toBe('fine');
     expect(aimKey({ code: 'ShiftRight' })).toBe('fine');
     expect(aimKey({ code: 'Space' })).toBeNull();
+  });
+
+  it('keeps shared actions held until every physical binding has been released', () => {
+    const input = createAimKeys();
+    input.press({ code: 'KeyW' }); input.press({ code: 'ArrowUp' });
+    input.release({ code: 'KeyW' });
+    expect(input.keys.up).toBe(true);
+    input.release({ code: 'ArrowUp' });
+    expect(input.keys.up).toBe(false);
+    input.press({ code: 'ShiftLeft' }); input.press({ code: 'ShiftRight' });
+    input.release({ code: 'ShiftLeft' });
+    expect(input.keys.fine).toBe(true);
+    input.clear();
+    expect(Object.values(input.keys).some(Boolean)).toBe(false);
+    expect(input.press({ code: 'Space' })).toBe(false);
   });
 });

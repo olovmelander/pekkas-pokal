@@ -1292,3 +1292,25 @@
 .pg-ui .pb-info { right: max(112px, calc(env(safe-area-inset-right) + 100px)); }
 @media (max-aspect-ratio: 1/1) { .pg-ui .pg-stroke { bottom: calc(120px + env(safe-area-inset-bottom)); } }
 @media (max-height: 450px) { .pg-ui .pg-stroke { bottom: calc(12px + env(safe-area-inset-bottom)); padding: 6px 10px; } }
+
+/* Rules scroll independently, so the always-visible return button never
+   covers a line of instructions on a short landscape screen. */
+.pg-ui .pb-help-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.pg-ui .pg-help-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  padding: 2px 3px;
+}
+.pg-ui .pg-help-body:focus-visible { outline: 2px solid #f2ca70; outline-offset: -2px; border-radius: 4px; }
+.pg-ui .pb-help-card [data-action='help-close'] {
+  position: static;
+  flex: none;
+  margin-top: 12px;
+}

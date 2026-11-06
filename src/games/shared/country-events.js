@@ -6,6 +6,8 @@ import { buildCountryWorld } from '../farm/world.js';
 import { clamp, landing, precisionScore, advanceBalance, kubbHit, medal } from '../farm/rules.js';
 import { discPosition, throwIsCaught } from '../lundqvist/rules.js';
 import { createCountryEquipment } from './country-equipment.js';
+import { bindHoldControl } from '../farm/input.js';
+import { isNativeControlTarget } from './keyboard.js';
 
 /** Reusable country events used by the 2016 arcade interpretation. */
 export async function createCountryGames(container, config) {
@@ -37,6 +39,7 @@ export async function createCountryGames(container, config) {
   const disposableProps = new Set();
   const controls = document.createElement('div');
   controls.className = 'country-controls';
+  controls.dataset.gameControls = '';
   controls.innerHTML = `<div class="country-round"><span class="country-kicker"></span><strong></strong><span class="country-hint"></span></div>
     <div class="country-meter" aria-hidden="true"><span class="country-zone"></span><i></i></div>
     <div class="country-readout" role="status" aria-live="polite"></div>
@@ -51,6 +54,8 @@ export async function createCountryGames(container, config) {
   const readout = controls.querySelector('.country-readout');
   const actionButton = controls.querySelector('[data-input="action"]');
   const held = { left: false, right: false, action: false };
+  const controlBindings = [];
+  let actionControl;
   let mode = 'title', eventIndex = 0, clock = 0, aim = 0, power = 0.2, charging = false;
   let attempts = 0, scores = [], eventScores = [], target = { x: 0, z: -7 }, wind = 0;
   let projectile = null, marker = null, targetProp = null, flight = null, between = 0, throwStart = 0;
@@ -62,6 +67,7 @@ export async function createCountryGames(container, config) {
   const cameraTarget = new THREE.Vector3(), cameraLook = new THREE.Vector3(0, 1, -2), lookTarget = new THREE.Vector3();
   const isThrow = () => ['bale', 'kubb', 'disc'].includes(config.events[eventIndex].kind);
   function clearInput() {
+    controlBindings.forEach((control) => control.cancel());
     held.left = held.right = held.action = false;
     charging = false;
     controls.querySelectorAll('button').forEach((b) => b.classList.remove('held'));
@@ -83,43 +89,22 @@ export async function createCountryGames(container, config) {
   }
   for (const button of controls.querySelectorAll('[data-input]')) {
     const name = button.dataset.input;
-    game.listen(button, 'pointerdown', (e) => {
-      e.preventDefault();
-      if (mode !== 'playing' || game.paused) return;
-      button.setPointerCapture(e.pointerId);
-      held[name] = true;
-      button.classList.add('held');
-      if (name === 'action') beginCharge();
+    const control = bindHoldControl(game.listen, button, {
+      canStart: () => mode === 'playing' && !game.paused,
+      onDown: () => { held[name] = true; if (name === 'action') beginCharge(); },
+      onUp: () => { held[name] = false; if (name === 'action') release(); },
+      onCancel: () => { held[name] = false; if (name === 'action') charging = false; }
     });
-    game.listen(button, 'pointerup', (e) => {
-      e.preventDefault();
-      held[name] = false;
-      button.classList.remove('held');
-      if (name === 'action') release();
-    });
-    game.listen(button, 'pointercancel', () => { held[name] = false; charging = false; button.classList.remove('held'); });
-    game.listen(button, 'lostpointercapture', () => { held[name] = false; if (name === 'action') charging = false; button.classList.remove('held'); });
-    // Enter activates a focused control without needing pointer events.
-    game.listen(button, 'keydown', (e) => {
-      if (e.code !== 'Enter') return;
-      e.preventDefault();
-      if (e.repeat) return;
-      held[name] = true;
-      if (name === 'action') beginCharge();
-    });
-    game.listen(button, 'keyup', (e) => {
-      if (e.code !== 'Enter') return;
-      held[name] = false;
-      if (name === 'action') release();
-    });
+    controlBindings.push(control);
+    if (name === 'action') actionControl = control;
   }
   game.listen(window, 'keydown', (e) => {
-    if (mode !== 'playing' || game.paused) return;
-    if (['Space', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
-    if (e.code === 'Space' && !e.repeat) { held.action = true; beginCharge(); }
+    if (mode !== 'playing' || game.paused || e.code !== 'Space' || isNativeControlTarget(e.target)) return;
+    e.preventDefault();
+    if (!e.repeat) actionControl.press('global:Space');
   });
   game.listen(window, 'keyup', (e) => {
-    if (e.code === 'Space') { held.action = false; release(); }
+    if (e.code === 'Space') actionControl.release('global:Space');
   });
   game.listen(window, 'blur', clearInput);
   game.listen(game.root, 'arcadepause', clearInput);
@@ -357,7 +342,7 @@ export async function createCountryGames(container, config) {
       meter.style.setProperty('--zone', '50%');
       fill.style.width = '4px';
       fill.style.left = `${clamp(50 + balance.tilt * 37, 0, 100)}%`;
-      hint.textContent = held.action ? 'Du stadgar dig · släpp för att gå vidare' : '← → små motrörelser · håll för att stadga';
+      hint.textContent = held.action ? 'Du stadgar dig · släpp för att gå vidare' : Math.abs(balance.tilt) > 0.35 ? `Lutar ${balance.tilt > 0 ? 'höger — styr ←' : 'vänster — styr →'} · korta tryck` : '← → små motrörelser · håll för att stadga';
       readout.textContent = `${Math.round(balance.cargo)} % ${event.kind === 'bucket' ? 'mjölk' : 'balans'} · ${Math.min(100, Math.round(balance.progress / 18 * 100))} % av sträckan · ${Math.ceil(Math.max(0, 50 - elapsed))} s kvar`;
     }
   }
@@ -398,10 +383,11 @@ export async function createCountryGames(container, config) {
     const total = scores.reduce((a, b) => a + b, 0);
     const previousBest = game.loadBest();
     if (done) game.saveBest(total);
+    game.setHUD(config.title, `${total.toLocaleString('sv-SE')} p`, `Gren ${eventIndex + 1}/3 klar`);
     game.showPanel({
       eyebrow: done ? `${config.place.toUpperCase()} · ${config.year}` : `GREN ${eventIndex + 1} KLAR`,
       title: done ? medal(total) : `${score.toLocaleString('sv-SE')} poäng`,
-      body: done ? `<p>${total.toLocaleString('sv-SE')} poäng av 3 000</p><div class="country-results">${scores.map((s, i) => `<span>${config.events[i].name}</span><b>${s}</b>`).join('')}</div><p class="country-note">${total > previousBest ? 'Nytt personbästa!' : `Personbästa: ${Math.max(previousBest, total).toLocaleString('sv-SE')} poäng`} · Tre nya chanser väntar.</p>` : `<p>${summary}</p><p class="country-note">Nästa gren: ${config.events[eventIndex + 1].name}</p>`,
+      body: done ? `<p>${total.toLocaleString('sv-SE')} poäng av 3 000</p><p class="country-note">${summary}</p><div class="country-results">${scores.map((s, i) => `<span>${config.events[i].name}</span><b>${s}</b>`).join('')}</div><p class="country-note">${total > previousBest ? 'Nytt personbästa!' : `Personbästa: ${Math.max(previousBest, total).toLocaleString('sv-SE')} poäng`} · Tre nya chanser väntar.</p>` : `<p>${summary}</p><p class="country-note">Nästa gren: ${config.events[eventIndex + 1].name}</p>`,
       button: done ? 'Spela igen' : 'Nästa gren',
       onStart: () => {
         if (done) { eventIndex = 0; scores = []; lastHUD = ''; } else eventIndex++;

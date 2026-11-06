@@ -52,7 +52,8 @@ import { buildGrass, buildSeedHeads } from './grass.js';
 import { Particles, Shards, ShotCloud, buildAmbient } from './fx.js';
 import { buildHud, cardHtml, startPanelHtml, endPanelHtml, fmt } from './hud.js';
 import { createGameClock } from '../shared/game-clock.js';
-import { aimKey, stepKeyboardAim, touchAimOffset } from './input.js';
+import { aimKey, createAimKeys, stepKeyboardAim, touchAimOffset } from './input.js';
+import { predictBallistic, stepBallistic } from './ballistics.js';
 
 /** Fill the whole stage: a wide evening vista is this game's hero shot. */
 export const layout = 'full';
@@ -509,7 +510,8 @@ export async function createShooting(container) {
   let tracking = false;
   let activePointer = null;
   let keyboardAim = false;
-  const aimKeys = { left: false, right: false, up: false, down: false, fine: false };
+  const aimInput = createAimKeys();
+  const aimKeys = aimInput.keys;
   const lead = { t: 0, center: new THREE.Vector3(), clay: new THREE.Vector3(), dots: [], radius: 0 };
   const follow = { yaw: 0, pitch: 0 };
   const flare = { t: 0, pos: new THREE.Vector3() };
@@ -888,11 +890,11 @@ export async function createShooting(container) {
    * 1 = the fringe): a centre hit turns a clay to a puff of smoke, a
    * fringe hit only chips it into a few big pieces. Same points either way.
    */
-  function smash(clay, q = 0.5) {
+  function smash(clay, q = 0.5, impact = clay.mesh.position) {
     clay.active = false;
     const m = clay.mesh;
     m.visible = false;
-    const at = m.position.clone();
+    const at = impact.clone();
     const pts = scoreBird(clay.gold);
     markBox(clay, true);
     renderScore();
@@ -1108,9 +1110,7 @@ export async function createShooting(container) {
   const swingAxis = new THREE.Vector3();
 
   function predictClay(clay, t, out) {
-    out.copy(clay.mesh.position).addScaledVector(clay.vel, t);
-    out.y -= 0.5 * GRAVITY * t * t;
-    return out;
+    return predictBallistic(clay.mesh.position, clay.vel, t, out, GRAVITY);
   }
 
   function fire() {
@@ -1146,7 +1146,9 @@ export async function createShooting(container) {
       const dist = at.distanceTo(origin);
       const ang = shotDir.angleTo(tmpV.copy(at).sub(origin));
       const r = (clay.gold ? PATTERN_GOLD : PATTERN) + Math.atan((CLAY_R * clay.mesh.scale.x) / dist);
-      return { clay, at, tof, shotDir, dist, ang, r, origin, hit: ang < r };
+      const velocity = clay.vel.clone();
+      velocity.y -= GRAVITY * tof;
+      return { clay, at, velocity, tof, shotDir, dist, ang, r, origin, hit: ang < r };
     });
     const nearest = records.slice().sort((a, b) => a.ang / a.r - b.ang / b.r)[0];
     const shotDir = nearest ? nearest.shotDir : dir;
@@ -1183,7 +1185,7 @@ export async function createShooting(container) {
       const live = p.records.filter((r) => r.clay.active);
       const hits = live.filter((r) => r.hit);
       if (hits.length) {
-        hits.forEach((r) => smash(r.clay, r.ang / r.r));
+        hits.forEach((r) => smash(r.clay, r.ang / r.r, r.at));
         retrigger(hud.cross, 'confirmed');
         later(() => hud.cross.classList.remove('confirmed'), 260);
       } else if (live.length) {
@@ -1220,7 +1222,7 @@ export async function createShooting(container) {
     // Classify against the bird's own direction of travel ON SCREEN
     const sc = screenOf(rec.at);
     const sp = screenOf(lead.center);
-    const vel = predictClay(rec.clay, rec.tof + 0.15, tmpV2);
+    const vel = predictBallistic(rec.at, rec.velocity, 0.15, tmpV2, GRAVITY);
     const sv = screenOf(vel);
     let vx = sv.x - sc.x;
     let vy = sv.y - sc.y;
@@ -1295,7 +1297,7 @@ export async function createShooting(container) {
     };
   }
 
-  const UI = '.pb-overlay, .pb-mute, .pb-info, .pb-help, .sk-pull';
+  const UI = '.pb-overlay, .pb-mute, .pb-info, .pb-help, .sk-pull, #game-close';
 
   /**
    * On a touch screen the sight rides a thumb's width ABOVE the finger, so
@@ -1362,12 +1364,16 @@ export async function createShooting(container) {
 
   function clearInput() {
     onPointerCancel();
-    Object.keys(aimKeys).forEach(key => { aimKeys[key] = false; });
+    aimInput.clear();
   }
 
   function onBlur() {
     clearInput();
+    sfx.ctx?.suspend();
     if (state.phase !== 'intro' && state.phase !== 'over') setHelp(true);
+  }
+  function onFocus() {
+    if (!document.hidden && !helpOpen) sfx.ctx?.resume();
   }
 
   // Esc closes the help card, not the whole game: caught on the way down,
@@ -1394,7 +1400,7 @@ export async function createShooting(container) {
     if (direction) {
       e.preventDefault();
       if (!keyboardAim) { clearInput(); keyboardAim = true; }
-      aimKeys[direction] = true;
+      aimInput.press(e);
       return;
     }
     if (e.repeat) return;
@@ -1414,13 +1420,13 @@ export async function createShooting(container) {
   }
 
   function onKeyUp(e) {
-    const direction = aimKey(e);
-    if (direction) aimKeys[direction] = false;
+    aimInput.release(e);
   }
 
   function setHelp(open) {
     clearInput();
     helpOpen = open;
+    hudHost.dataset.paused = String(open);
     hud.help.hidden = !open;
     hud.info.setAttribute('aria-expanded', String(open));
     if (open) sfx.ctx?.suspend();
@@ -1434,8 +1440,10 @@ export async function createShooting(container) {
   }
 
   function onMute() {
-    sfx.muted = !sfx.muted;
+    sfx.setMuted(!sfx.muted);
     hud.mute.classList.toggle('off', sfx.muted);
+    hud.mute.setAttribute('aria-pressed', String(sfx.muted));
+    hud.mute.setAttribute('aria-label', sfx.muted ? 'Ljud på' : 'Ljud av');
   }
 
   function onInfo() {
@@ -1452,6 +1460,7 @@ export async function createShooting(container) {
   window.addEventListener('pointercancel', onPointerCancel);
   canvasHost.addEventListener('lostpointercapture', onPointerCancel);
   window.addEventListener('blur', onBlur);
+  window.addEventListener('focus', onFocus);
   window.addEventListener('keydown', onKeyCapture, true);
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', onKeyUp);
@@ -1528,8 +1537,13 @@ export async function createShooting(container) {
   let resizePicture = null;
   function resize() {
     const rect = canvasHost.getBoundingClientRect();
-    view.w = Math.max(1, Math.floor(rect.width));
-    view.h = Math.max(1, Math.floor(rect.height));
+    const width = Math.max(1, Math.floor(rect.width));
+    const height = Math.max(1, Math.floor(rect.height));
+    // Rotation changes the aim ray without any hand movement: discard that
+    // artificial swing and release the old gesture before the next shot.
+    if (view.w !== width || view.h !== height) clearInput();
+    view.w = width;
+    view.h = height;
     view.aspect = view.w / view.h;
     renderer.setPixelRatio(quality.dpr);
     renderer.setSize(view.w, view.h, false);
@@ -1714,8 +1728,7 @@ export async function createShooting(container) {
       if (!clay.active) return;
       anyActive = true;
       const m = clay.mesh;
-      clay.vel.y -= GRAVITY * dt;
-      m.position.addScaledVector(clay.vel, dt);
+      stepBallistic(m.position, clay.vel, dt, GRAVITY);
       m.rotation.y += clay.spin * dt;
       m.rotation.z = Math.sin(t * 2) * 0.2;
       // Off the side of a narrow frame for good: let it go, don't make
@@ -1956,6 +1969,10 @@ export async function createShooting(container) {
     if (document.hidden) onBlur();
     running = !document.hidden;
     last = performance.now();
+    if (sfx.ctx) {
+      if (document.hidden) sfx.ctx.suspend();
+      else if (!helpOpen) sfx.ctx.resume();
+    }
   };
   document.addEventListener('visibilitychange', onVisibility);
 
@@ -2133,6 +2150,7 @@ export async function createShooting(container) {
     window.removeEventListener('pointercancel', onPointerCancel);
     canvasHost.removeEventListener('lostpointercapture', onPointerCancel);
     window.removeEventListener('blur', onBlur);
+    window.removeEventListener('focus', onFocus);
     window.removeEventListener('keydown', onKeyCapture, true);
     window.removeEventListener('keydown', onKeyDown);
     window.removeEventListener('keyup', onKeyUp);

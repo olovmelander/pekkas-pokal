@@ -124,6 +124,7 @@ export default async function createAmbition(container) {
         <p>Alla givpoäng är synliga. Välj ett kort för att granska det, och tryck sedan Spela. Använd mus, touch eller piltangenter i handen och Enter. Prognosen visar bara öppna kort. Spelet väntar medan du läser.</p>
         <button type="button" class="amb-primary" data-action="help">Jag är med</button>
       </section>`;
+    for (const child of shell.children) child.inert = state.help && !child.classList.contains('amb-rulebook');
     if (focusId) {
       const next = shell.querySelector(`[data-card="${focusId}"]:not(:disabled)`) || (hadHandFocus && yourTurn ? shell.querySelector('.amb-hand button:not(:disabled)') : null);
       next?.focus({ preventScroll: true });
@@ -267,11 +268,12 @@ export default async function createAmbition(container) {
         event.preventDefault(); event.stopPropagation(); state.help = false; render();
         shell.querySelector('.amb-help-button')?.focus({ preventScroll: true });
       } else if (event.key === 'Tab') {
+        // The local rulebook owns focus; the arcade shell must not cycle it again.
+        event.preventDefault(); event.stopPropagation();
         const buttons = [...shell.querySelectorAll('.amb-rulebook button')];
-        const index = buttons.indexOf(event.target);
-        if (event.shiftKey && index <= 0 || !event.shiftKey && index === buttons.length - 1) {
-          event.preventDefault(); buttons[event.shiftKey ? buttons.length - 1 : 0]?.focus();
-        }
+        const index = buttons.indexOf(document.activeElement);
+        const next = (index + (event.shiftKey ? -1 : 1) + buttons.length) % buttons.length;
+        buttons[next]?.focus({ preventScroll: true });
       }
       return;
     }
@@ -284,17 +286,17 @@ export default async function createAmbition(container) {
     buttons[next]?.focus({ preventScroll: true });
   });
 
-  let lastAspect = 0;
+  function frameRoom() {
+    const portrait = app.camera.aspect < 0.85;
+    app.camera.position.set(0, portrait ? 8.2 : 5.8, portrait ? 9.7 : 8.2);
+    app.camera.lookAt(0, portrait ? 1.5 : 1.2, portrait ? -0.5 : -0.8);
+    app.camera.fov = portrait ? 49 : 45;
+    app.camera.updateProjectionMatrix();
+  }
+  app.listen(app.root, 'arcaderesize', frameRoom);
+  frameRoom();
   app.onFrame((dt, t) => {
     room.update(dt, t);
-    if (app.camera.aspect !== lastAspect) {
-      lastAspect = app.camera.aspect;
-      const portrait = lastAspect < 0.85;
-      app.camera.position.set(0, portrait ? 8.2 : 5.8, portrait ? 9.7 : 8.2);
-      app.camera.lookAt(0, portrait ? 1.5 : 1.2, portrait ? -0.5 : -0.8);
-      app.camera.fov = portrait ? 49 : 45;
-      app.camera.updateProjectionMatrix();
-    }
     if (state.help || state.phase === 'intro') return;
     state.wait = Math.max(0, state.wait - dt);
     if (state.wait > 0) return;

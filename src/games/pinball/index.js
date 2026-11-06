@@ -20,6 +20,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { guardRenderer, postTarget, addSanitize, RenderWatchdog, gfxNotice, precompile } from '../shared/gfx.js';
 
 import { World, Ball, clamp, closestOnSegment } from './physics.js';
+import { drainDisposition } from './ball-lifecycle.js';
 import { L, buildColliders, createPlayfieldCanvas } from './table.js';
 import { buildTable, createMaterials, machineEnvironment, bakeStatic, ballEnvironment } from './meshes.js';
 import { CAB, ROOM, headTop, buildCabinet, buildGlass } from './cabinet.js';
@@ -432,6 +433,7 @@ export async function createPinball(container, opts = {}) {
     multiball: false,
     jackpotLit: false,
     mbSaveUntil: 0,
+    pendingServes: 0,
 
     // Castle gate: bashed open with 3 hits, or held open by locks/modes
     gate: { hits: 0, until: 0, bashed: false },
@@ -1685,7 +1687,9 @@ export async function createPinball(container, opts = {}) {
    * used for lock replacements, multiball serves and Finalen.
    */
   function serveBall(delay = 600) {
+    state.pendingServes++;
     later(() => {
+      state.pendingServes--;
       if (state.phase !== 'play') return;
       const nb = new Ball(L.ballRadius);
       nb.place(L.laneBallX, L.laneBottomY + L.laneWallR + L.ballRadius + 0.06, 0, 0);
@@ -1776,22 +1780,19 @@ export async function createPinball(container, opts = {}) {
     if (idx >= 0) state.balls.splice(idx, 1);
     b.live = false;
 
-    // A ball riding a wireform still counts as in play
-    const inPlay = state.balls.length + state.riders.length + (state.held ? 1 : 0);
-    if (inPlay >= 1) {
-      // Multiball continues — respawn during the grace window
-      if ((gameClock.now * 1000) < state.mbSaveUntil) {
-        say(['BOLL', 'RÄDDAD'], { prio: 1, dur: 1 });
-        serveBall(400);
-      } else if (inPlay === 1 && state.multiball && !(state.mode && state.mode.wizard)) {
-        endMultiball();
-      }
+    const disposition = drainDisposition(state, gameClock.now * 1000, BALL_SAVE_GRACE);
+    if (disposition === 'replace') {
+      say(['BOLL', 'RÄDDAD'], { prio: 1, dur: 1 });
+      serveBall(400);
+      return;
+    }
+    if (disposition === 'continue' || disposition === 'end-multiball') {
+      if (disposition === 'end-multiball') endMultiball();
       return;
     }
 
-    // Last ball gone. The save has a short hidden grace after its lamp goes
-    // out, as on a real machine: a drain a heartbeat late is still saved.
-    if ((gameClock.now * 1000) < state.ballSaveUntil + BALL_SAVE_GRACE) {
+    // The same grace applies to the last single ball; tilt forfeits the save.
+    if (disposition === 'save') {
       state.saveUsed = true;
       state.ballSaveUntil = 0;
       sfx.save();
@@ -1968,6 +1969,7 @@ export async function createPinball(container, opts = {}) {
     state.multiball = false;
     state.jackpotLit = false;
     state.mbSaveUntil = 0;
+    state.pendingServes = 0;
     state.gate = { hits: 0, until: 0, bashed: false };
     state.castle = { storms: 0, ebLit: false, ebGiven: false };
     state.jackpots = 0;
@@ -2220,7 +2222,7 @@ export async function createPinball(container, opts = {}) {
   }
 
   function doNudge() {
-    if (state.phase !== 'play' || state.tilted) return;
+    if (helpOpen || !running || state.phase !== 'play' || state.tilted) return;
     const now = (gameClock.now * 1000);
     // A cabinet can't be shoved again while it is still rocking back
     if (now - (state.lastNudge || 0) < 320) return;
@@ -2277,6 +2279,7 @@ export async function createPinball(container, opts = {}) {
   function setHelp(open) {
     helpOpen = open;
     hud.help.hidden = !open;
+    sfx.setPaused(open);
     if (open) cancelControls();
   }
 

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   BUDGET, PLAYERS, DEFAULT_SQUAD, validSquad, squadCost, canTransfer,
   pointsFor, scoreSquad, difficulty, performance, RIVALS, rankStandings, undoTransfer,
-  squadForecast, upcomingFixtures, planRival, forecast, playerById, roundVerdict
+  squadForecast, transferForecast, upcomingFixtures, planRival, forecast, playerById, roundVerdict
 } from '../src/games/fantasy/rules.js';
 
 describe('Fantasy squad and season rules', () => {
@@ -14,6 +14,21 @@ describe('Fantasy squad and season rules', () => {
     expect(upcomingFixtures(playerById('brook'), 4, 123)[0].expected).toBe(forecast(playerById('brook'), 4, 123));
     expect(roundVerdict(60, 40).tone).toBe('gold');
     expect(roundVerdict(20, 40).title).toBe('Fotboll är oförutsägbart.');
+  });
+  it('previews the actual team gain when transferring a captain or a normal player', () => {
+    for (const triple of [false, true]) {
+      const before = squadForecast(DEFAULT_SQUAD, 'brook', 0, 123, triple);
+      const preview = transferForecast(DEFAULT_SQUAD, 'brook', 4, 'ash', 0, 123, triple);
+      const next = DEFAULT_SQUAD.slice(); next[4] = 'ash';
+      expect(preview.captain).toBe('ash');
+      expect(preview.expected).toBe(squadForecast(next, 'ash', 0, 123, triple));
+      expect(preview.delta).toBeCloseTo(preview.expected - before);
+      expect(preview.delta).toBeCloseTo((forecast(playerById('ash'), 0, 123) - forecast(playerById('brook'), 0, 123)) * (triple ? 3 : 2));
+      expect(preview.remaining).toBe(BUDGET - squadCost(next));
+      const ordinary = transferForecast(DEFAULT_SQUAD, 'brook', 0, 'reed', 0, 123, triple);
+      expect(ordinary.captain).toBe('brook');
+      expect(ordinary.delta).toBeCloseTo(forecast(playerById('reed'), 0, 123) - forecast(playerById('holt'), 0, 123));
+    }
   });
   it('lets rival managers plan fairly with one legal transfer and one season chip', () => {
     for (const source of RIVALS) {

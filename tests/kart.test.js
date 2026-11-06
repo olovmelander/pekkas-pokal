@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Euler, Vector3, PerspectiveCamera } from 'three';
-import { LAPS, TRACK_HALF_WIDTH, WALL_LANE, steeringFromButtons, clamp, cornerSpeed, trackGap, slipstreamFactor, newDriver, stepDriver, racePosition, raceScore, stepRival, resolveContact, markFinish, raceStandings } from '../src/games/kart/physics.js';
+import { LAPS, TRACK_HALF_WIDTH, WALL_LANE, steeringFromButtons, clamp, cornerSpeed, trackGap, slipstreamFactor, newDriver, stepDriver, racePosition, raceScore, stepRival, resolveContact, markFinish, raceStandings, formatTime, engineFeedback } from '../src/games/kart/physics.js';
 import { createRoute, TRACK_LENGTH, TRACK_PLAN, ROAD_HALF_WIDTH } from '../src/games/kart/route.js';
 
 const drive = (driver, input, curvature = 0, seconds = 1) => {
@@ -199,6 +199,19 @@ describe('gokart handling and race results', () => {
     expect(raceStandings([second, first])[0]).toBe(first);
     const recorded = first.finishTime; markFinish(first, 781, 780, 60, 0.05);
     expect(first.finishTime).toBe(recorded);
+  });
+  it('makes throttle load audible while quietening coasting, braking and the result screen', () => {
+    const loaded = engineFeedback(10, { throttle: true });
+    const coasting = engineFeedback(10);
+    expect(loaded.gain).toBeGreaterThan(coasting.gain * 2);
+    expect(engineFeedback(10, { throttle: true, brake: true })).toEqual(coasting);
+    expect(engineFeedback(16, { throttle: true }).frequency).toBeGreaterThan(loaded.frequency);
+    expect(engineFeedback(16, { throttle: true, active: false }).gain).toBe(0);
+  });
+  it('never displays an impossible sixty-second remainder in the HUD or results', () => {
+    expect(formatTime(59.99)).toBe('0:59.9');
+    expect(formatTime(60.01)).toBe('1:00.0');
+    expect(formatTime(137.95)).toBe('2:17.9');
   });
   it('scores finishing position, time and clean racing', () => {
     expect(raceScore(1, 50, 0)).toBeGreaterThan(raceScore(2, 50, 0));

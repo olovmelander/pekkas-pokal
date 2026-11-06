@@ -13,3 +13,27 @@ export function openingRemaining(pose, elapsed) {
   const duration = pose === 'stagger' ? 0.85 : pose === 'bitten' ? 0.7 : pose === 'recover' ? 0.55 : 0;
   return Math.max(0, duration - elapsed - 0.24);
 }
+
+/** An attack already under way keeps priority over a later opponent wind-up. */
+export function hasAttackPriority(opponentPose) {
+  return opponentPose !== 'telegraph' && opponentPose !== 'attack';
+}
+
+export function attackIsOutOfTurn(opponentPose, startedFirst) {
+  return !startedFirst && !hasAttackPriority(opponentPose);
+}
+
+/** A phrase can award exactly one touch, even when both attack timers cross in one frame. */
+export function claimTouch(state, mine) {
+  if (state.phase !== 'live') return false;
+  state.phase = 'touch';
+  state.phaseT = 0;
+  if (mine) state.myTouches++;
+  else state.foeTouches++;
+  return true;
+}
+
+/** A matching line only protects a blade that is free to defend. */
+export function canParry(pose, guardLine, attackLine) {
+  return pose !== 'lunge' && pose !== 'stagger' && guardLine === attackLine;
+}

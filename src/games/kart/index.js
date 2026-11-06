@@ -2,7 +2,8 @@
 import * as THREE from 'three';
 import { createArcade } from '../shared/arcade.js';
 import { createCircuit, createKart } from './world.js';
-import { LAPS, TRACK_HALF_WIDTH, steeringFromButtons, clamp, cornerSpeed, slipstreamFactor, newDriver, stepDriver, stepRival, resolveContact, markFinish, raceStandings, raceScore } from './physics.js';
+import { createKartCamera } from './camera.js';
+import { LAPS, TRACK_HALF_WIDTH, steeringFromButtons, clamp, cornerSpeed, slipstreamFactor, newDriver, stepDriver, stepRival, resolveContact, markFinish, raceStandings, raceScore, formatTime, engineFeedback } from './physics.js';
 
 export const layout = 'full';
 const RIVALS = [
@@ -69,14 +70,15 @@ export default async function createGokart(container) {
   });
   dots[dots.length - 1].setAttribute('r', '4.5');
   let state = 'menu';
-  const held = new Set();
+  const held = new Map();
   const pointerControls = new Map();
+  const pressed = control => [...held.values(), ...pointerControls.values()].includes(control);
+  const refreshButton = control => find(`[data-control="${control}"]`).classList.toggle('is-held', pressed(control));
   function releasePointer(event) {
     const control = pointerControls.get(event.pointerId);
     if (!control) return;
     pointerControls.delete(event.pointerId);
-    if (![...pointerControls.values()].includes(control)) held.delete(control);
-    find(`[data-control="${control}"]`).classList.toggle('is-held', held.has(control));
+    refreshButton(control);
   }
   interfaceEl.querySelectorAll('[data-control]').forEach((button) => {
     game.listen(button, 'pointerdown', (event) => {
@@ -85,26 +87,30 @@ export default async function createGokart(container) {
       button.setPointerCapture(event.pointerId);
       const { control } = button.dataset;
       pointerControls.set(event.pointerId, control);
-      held.add(control);
-      button.classList.add('is-held');
+      refreshButton(control);
     });
     game.listen(button, 'pointerup', releasePointer);
     game.listen(button, 'pointercancel', releasePointer);
     game.listen(button, 'lostpointercapture', releasePointer);
     game.listen(button, 'keydown', (event) => {
-      if (event.code !== 'Enter' || event.repeat || !['racing', 'countdown'].includes(state) || game.paused) return;
-      event.preventDefault();
-      held.add(button.dataset.control);
-      button.classList.add('is-held');
-    });
-    const releaseKey = () => {
-      if (![...pointerControls.values()].includes(button.dataset.control)) {
-        held.delete(button.dataset.control);
-        button.classList.remove('is-held');
+      // Native UI is ignored by the shared keyboard listener; these are actual driving controls.
+      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'KeyA', 'KeyD', 'KeyW', 'KeyS'].includes(event.code)) {
+        if (['racing', 'countdown'].includes(state) && !game.paused) { event.preventDefault(); keys.add(event.code); }
+        return;
       }
-    };
-    game.listen(button, 'keyup', (event) => { if (event.code === 'Enter') releaseKey(); });
-    game.listen(button, 'blur', releaseKey);
+      if (!['Enter', 'Space'].includes(event.code) || event.repeat || !['racing', 'countdown'].includes(state) || game.paused) return;
+      event.preventDefault();
+      held.set(event.code, button.dataset.control);
+      refreshButton(button.dataset.control);
+    });
+    game.listen(button, 'keyup', event => {
+      if (!['Enter', 'Space'].includes(event.code)) return;
+      event.preventDefault(); held.delete(event.code); refreshButton(button.dataset.control);
+    });
+    game.listen(button, 'blur', () => {
+      for (const [code, control] of held) if (control === button.dataset.control) held.delete(code);
+      refreshButton(button.dataset.control);
+    });
   });
   function clearControls() {
     held.clear();
@@ -114,10 +120,7 @@ export default async function createGokart(container) {
   game.listen(window, 'blur', clearControls);
   game.listen(game.root, 'arcadepause', clearControls);
   game.listen(document, 'visibilitychange', () => { if (document.hidden) clearControls(); });
-  const cameraPosition = new THREE.Vector3();
-  const cameraTarget = new THREE.Vector3();
-  const wishPosition = new THREE.Vector3();
-  const wishTarget = new THREE.Vector3();
+  const chase = createKartCamera(camera, track, { reducedMotion: game.reducedMotion });
   let elapsed = 0;
   let countdown = 3;
   let oldCountdown = -1;
@@ -138,6 +141,7 @@ export default async function createGokart(container) {
     Object.assign(player, newDriver(-19, -1.3));
     opponents.forEach((opponent, i) => Object.assign(opponent, newDriver(-14.5 + i * 3.4, i % 2 ? -1.5 : 1.5)));
     state = 'countdown';
+    chase.reset();
     elapsed = 0;
     countdown = 3;
     oldCountdown = -1;
@@ -190,31 +194,10 @@ export default async function createGokart(container) {
   }
 
   function updateCamera(dt, time) {
-    const portrait = camera.aspect < 0.85;
-    const s = track.sample(player.distance, player.lane * 0.45);
-    if (state === 'menu') {
-      const a = game.reducedMotion ? 0 : time * 0.06;
-      wishPosition.copy(s.position).addScaledVector(s.tangent, -11).addScaledVector(s.right, -8 + Math.sin(a) * 3); wishPosition.y += 7;
-      wishTarget.copy(s.position); wishTarget.y += 0.6;
-    } else {
-      wishPosition.copy(s.position).addScaledVector(s.tangent, portrait ? -15.5 : -11.5);
-      wishPosition.y += portrait ? 9.5 : 6.2;
-      wishTarget.copy(track.sample(player.distance + (portrait ? 8 : 11), player.lane * 0.3).position);
-      wishTarget.y += 0.45;
-    }
-    const smoothing = state === 'menu' ? 0.04 : 1 - Math.exp(-dt * 5);
-    cameraPosition.lerp(wishPosition, smoothing);
-    cameraTarget.lerp(wishTarget, smoothing);
-    camera.position.copy(cameraPosition);
-    camera.lookAt(cameraTarget);
-    camera.fov = (portrait ? 55 : 58) + (game.reducedMotion ? 0 : player.speed * 0.12);
-    camera.updateProjectionMatrix();
-    game.setShadowFocus(s.position.x, s.position.y, s.position.z);
+    const focus = chase.update(player, state, dt, time);
+    game.setShadowFocus(focus.x, focus.y, focus.z);
   }
 
-  const initial = track.sample(player.distance);
-  cameraPosition.copy(initial.position).addScaledVector(initial.tangent, -13); cameraPosition.y += 9;
-  cameraTarget.copy(initial.position);
   positionModel(kart, player);
   opponents.forEach((opponent) => positionModel(opponent.model, opponent));
   updateCamera(1, 0);
@@ -241,9 +224,9 @@ export default async function createGokart(container) {
     if (state === 'racing') {
       elapsed += dt;
       if (elapsed > 0.75) find('.kart-countdown').textContent = '';
-      steer = steeringFromButtons(held.has('left') || keys.has('ArrowLeft') || keys.has('KeyA'), held.has('right') || keys.has('ArrowRight') || keys.has('KeyD'));
-      const throttle = held.has('throttle') || keys.has('ArrowUp') || keys.has('KeyW');
-      const brake = held.has('brake') || keys.has('ArrowDown') || keys.has('KeyS') || keys.has('Space');
+      steer = steeringFromButtons(pressed('left') || keys.has('ArrowLeft') || keys.has('KeyA'), pressed('right') || keys.has('ArrowRight') || keys.has('KeyD'));
+      const throttle = pressed('throttle') || keys.has('ArrowUp') || keys.has('KeyW');
+      const brake = pressed('brake') || keys.has('ArrowDown') || keys.has('KeyS') || keys.has('Space');
       const slipstream = slipstreamFactor(player, opponents, track.length);
       skidClock += dt;
       if (player.skidding && player.speed > 6 && skidClock > 0.06) { track.skid(player.distance, player.lane); skidClock = 0; }
@@ -290,7 +273,11 @@ export default async function createGokart(container) {
       previousPosition = position;
       if (player.finishTime !== null) finish();
     }
-    engine.set(48 + player.speed * 6.5, state === 'racing' ? 0.012 + player.speed * 0.0004 : 0);
+    const sound = engineFeedback(player.speed, {
+      active: state === 'racing', throttle: pressed('throttle') || keys.has('ArrowUp') || keys.has('KeyW'),
+      brake: pressed('brake') || keys.has('ArrowDown') || keys.has('KeyS') || keys.has('Space')
+    });
+    engine.set(sound.frequency, sound.gain);
     tires.set(170 + player.speed * 8, state === 'racing' && player.skidding ? 0.009 : 0);
     track.update(dt, time);
     positionModel(kart, player, steer);
@@ -321,8 +308,4 @@ export default async function createGokart(container) {
   });
 
   return { destroy() { clearControls(); engine.stop(); tires.stop(); track.dispose(); kart.dispose(); opponents.forEach(opponent => opponent.model.dispose()); game.destroy(); } };
-}
-
-function formatTime(seconds) {
-  return `${Math.floor(seconds / 60)}:${(seconds % 60).toFixed(1).padStart(4, '0')}`;
 }

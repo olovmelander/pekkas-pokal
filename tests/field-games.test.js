@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { precisionScore, jumpScore, hoopCrossing, medalFor, chargePower, croquetEnd, fieldThrowScore } from '../src/games/pentathlon/rules.js';
+import { precisionScore, jumpScore, hoopCrossing, hurdleHeight, medalFor, chargePower, croquetEnd, fieldThrowScore } from '../src/games/pentathlon/rules.js';
 
 describe('park tournament rules', () => {
   it('rewards accuracy without negative scores', () => {
@@ -38,6 +38,24 @@ describe('park tournament rules', () => {
     expect(hoopCrossing({ x: 3, z: 2 }, { x: 3, z: -2 }, h)).toBe(false);
     expect(hoopCrossing({ x: 1, z: -2 }, { x: 1, z: 2 }, h)).toBe(false);
     expect(hoopCrossing({ x: 1, z: 2 }, { x: 1, z: 1 }, h)).toBe(false);
+  });
+  it('requires the whole ball to clear the croquet uprights', () => {
+    const hoop = { x: 0, z: 0 };
+    expect(hoopCrossing({ x: 0.52, z: 2 }, { x: 0.52, z: -2 }, hoop)).toBe(true);
+    // The visual ball has radius .23; its centre alone fitting is not a pass.
+    expect(hoopCrossing({ x: 0.54, z: 2 }, { x: 0.54, z: -2 }, hoop)).toBe(false);
+    expect(hoopCrossing({ x: -0.67, z: 2 }, { x: -0.67, z: -2 }, hoop)).toBe(false);
+  });
+  it('judges the same late hurdle clearance at 20, 60 and 120 fps', () => {
+    const crossingTime = 0.75;
+    const heights = [20, 60, 120].map(fps => {
+      const dt = 1 / fps, frameTime = crossingTime + dt * 0.8;
+      const from = 2.55 * (crossingTime - frameTime + dt), to = 2.55 * (crossingTime - frameTime);
+      return hurdleHeight(from, to, 0, frameTime, dt);
+    });
+    heights.forEach(height => { expect(height).toBeCloseTo(0.675); expect(height).toBeGreaterThan(0.65); });
+    expect(hurdleHeight(1, 0.9, 0, 0.2, 0.05)).toBe(0);
+    expect(hurdleHeight(0.1, -0.1, 0, 1.2, 0.05)).toBe(0);
   });
   it('uses the same medal thresholds for both tournament lengths', () => {
     expect(medalFor(400, 5)).toBe('Guld');

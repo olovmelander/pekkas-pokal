@@ -19,6 +19,9 @@ describe('Bondespelen: wood events', () => {
   it('bounds scores and only awards hammer speed bonus after all nails', () => {
     expect(woodScore('stack', 30)).toBe(1000);
     expect(woodScore('hammer', 4, 20)).toBe(680);
-    expect(woodScore('hammer', 5, 10)).toBe(900);
+    expect(woodScore('hammer', 5, 10)).toBe(933);
+    expect(woodScore('hammer', 5, 18)).toBe(1000);
+    expect(woodScore('hammer', 5, 30)).toBe(1000);
+    expect(woodScore('hammer', 5, 0)).toBe(850);
   });
 });

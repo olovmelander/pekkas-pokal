@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { openingRemaining, takeFeint } from '../src/games/fencing/combat-rules.js';
+import { openingRemaining, takeFeint, hasAttackPriority, attackIsOutOfTurn, claimTouch, canParry } from '../src/games/fencing/combat-rules.js';
 
 describe('Fencing attack readability', () => {
   it('changes a feint once, leaving a stable target to read before impact', () => {
@@ -44,5 +44,51 @@ describe('Fencing attack readability', () => {
     expect(openingRemaining('recover', 0.32)).toBe(0);
     expect(openingRemaining('guard', 0)).toBe(0);
     expect(openingRemaining('attack', 0)).toBe(0);
+  });
+
+  it('keeps the first attacker’s priority if the opponent starts during the thrust', () => {
+    const startedFirst = hasAttackPriority('guard');
+    expect(startedFirst).toBe(true);
+    expect(attackIsOutOfTurn('telegraph', startedFirst)).toBe(false);
+    expect(attackIsOutOfTurn('attack', startedFirst)).toBe(false);
+  });
+
+  it('still requires a parry before attacking into an earlier opponent attack', () => {
+    for (const pose of ['telegraph', 'attack']) {
+      const startedFirst = hasAttackPriority(pose);
+      expect(startedFirst).toBe(false);
+      expect(attackIsOutOfTurn('attack', startedFirst)).toBe(true);
+      expect(attackIsOutOfTurn('stagger', startedFirst)).toBe(false);
+    }
+  });
+
+  it('awards only one touch when both attack timers resolve in the same frame', () => {
+    for (const firstMine of [true, false]) {
+      const state = { phase: 'live', phaseT: 8.2, myTouches: 2, foeTouches: 3 };
+      expect(claimTouch(state, firstMine)).toBe(true);
+      expect(claimTouch(state, firstMine)).toBe(false);
+      expect(claimTouch(state, !firstMine)).toBe(false);
+      expect(state.myTouches + state.foeTouches).toBe(6);
+      expect(state.phase).toBe('touch');
+      expect(state.phaseT).toBe(0);
+    }
+  });
+
+  it('cannot award touches during a replay, result, countdown or ceremony', () => {
+    for (const phase of ['ready', 'replay', 'result', 'ceremony']) {
+      const state = { phase, myTouches: 0, foeTouches: 0 };
+      expect(claimTouch(state, true)).toBe(false);
+      expect(state).toEqual({ phase, myTouches: 0, foeTouches: 0 });
+    }
+  });
+
+  it('never advertises a ready guard while the blade is lunging or bound', () => {
+    for (const line of [0, 1, 2]) {
+      expect(canParry('guard', line, line)).toBe(true);
+      expect(canParry('parry', line, line)).toBe(true);
+      expect(canParry('guard', line, (line + 1) % 3)).toBe(false);
+      expect(canParry('lunge', line, line)).toBe(false);
+      expect(canParry('stagger', line, line)).toBe(false);
+    }
   });
 });

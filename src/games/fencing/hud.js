@@ -7,6 +7,8 @@
  * the site stays consistent; the rest is this game's own.
  */
 
+import { createGameClock } from '../shared/game-clock.js';
+
 /* The 2023 tournament: who stood where (competition-data.csv) */
 export const FIELD = [
   { name: 'Per Vikman', place: 1 },
@@ -42,17 +44,16 @@ class Hud {
   constructor(root, el) {
     this.root = root;
     this.el = el;
-    this.timers = new Set();
+    this.clock = createGameClock();
   }
 
   later(fn, ms) {
-    const id = setTimeout(() => {
-      this.timers.delete(id);
-      fn();
-    }, ms);
-    this.timers.add(id);
-    return id;
+    return this.clock.schedule(fn, ms / 1000);
   }
+
+  cancelLater(id) { this.clock.cancel(id); }
+
+  tick(seconds) { this.clock.tick(seconds); }
 
   /** Re-trigger a CSS animation class on an element. */
   pulse(node, cls) {
@@ -184,8 +185,7 @@ class Hud {
   }
 
   dispose() {
-    this.timers.forEach((id) => clearTimeout(id));
-    this.timers.clear();
+    this.clock.destroy();
   }
 }
 
@@ -242,7 +242,7 @@ export function buildHud(root) {
     <div class="fen-screen" id="fen-screen"><div class="fen-panel" id="fen-panel"></div></div>
 
     <button class="pb-info" id="fen-info" aria-label="Paus och spelregler" aria-expanded="false" title="Paus och spelregler (P / ?)"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg></button>
-    <button class="pb-mute" id="fen-mute" aria-label="Ljud på/av">
+    <button class="pb-mute" id="fen-mute" aria-label="Ljud av" aria-pressed="false">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M11 5 6 9H2v6h4l5 4V5Z"/><path class="pb-wave" d="M15.5 8.5a5 5 0 0 1 0 7"/>
       </svg>

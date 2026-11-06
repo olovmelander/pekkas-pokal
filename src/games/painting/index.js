@@ -32,6 +32,7 @@
 import * as THREE from 'three';
 import { Sfx } from './audio.js';
 import { createGameClock } from '../shared/game-clock.js';
+import { isEditableTarget } from '../shared/keyboard.js';
 import {
   mulberry, buildGarden, animateGarden, buildSky, buildEasel, buildBrush, simplifyGarden
 } from './garden.js';
@@ -1190,6 +1191,12 @@ export async function createPainting(container) {
 
   function nextFromReveal() {
     if (state.phase !== 'reveal') return;
+    // The bonus was banked when judging began. Skipping the presentation
+    // must keep it, without letting its stars or applause spill into a new work.
+    clock.clear();
+    tweens.length = 0;
+    hud.pops.replaceChildren();
+    setScore(state.score);
     if (state.workNo < WORKS_PER_GAME) {
       state.workNo++;
       drawSlip();
@@ -1240,6 +1247,7 @@ export async function createPainting(container) {
 
   function startGame() {
     clock.clear();
+    tweens.length = 0;
     hud.pops.replaceChildren();
     sfx.resume();
     state.firstEvening = !Object.keys(bests).length && !gallery.length;
@@ -1364,8 +1372,8 @@ export async function createPainting(container) {
   }
 
   function onPointerDown(e) {
+    if (e.button !== 0 || paused || helpOpen || state.phase !== 'paint') return;
     sfx.resume();
-    if (paused || helpOpen || state.phase !== 'paint') return;
     const uv = canvasUv(e);
     if (!uv) return;
     const id = regionAt(uv.u, uv.v);
@@ -1396,7 +1404,7 @@ export async function createPainting(container) {
   }
 
   function onPaletteDown(e) {
-    if (paused || helpOpen) return;
+    if (e.button !== 0 || paused || helpOpen || state.phase !== 'paint') return;
     sfx.resume();
     e.preventDefault();
     const hit = palette.hit(...paletteXY(e));
@@ -1416,7 +1424,7 @@ export async function createPainting(container) {
   }
 
   function onKeyDown(e) {
-    if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+    if (e.ctrlKey || e.metaKey || e.altKey || isEditableTarget(e.target)) return;
     if (e.key === 'Escape') {
       if (helpOpen) setHelp(false);
       else if (paused) setPaused(false);
@@ -1545,7 +1553,11 @@ export async function createPainting(container) {
   hud.pigments.forEach((button) => {
     // Touch/mouse mixing keeps Space available for painting. Tab users retain
     // the native button activation, including a visible focus ring.
-    on(button, 'pointerdown', (event) => { event.preventDefault(); hud.root.focus({ preventScroll: true }); });
+    on(button, 'pointerdown', (event) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      hud.root.focus({ preventScroll: true });
+    });
     on(button, 'click', () => { sfx.resume(); addDrop(button.dataset.pigment); });
   });
   on(hud.pause, 'click', () => setPaused(true));
@@ -1685,13 +1697,19 @@ export async function createPainting(container) {
   timer.reset();
   raf = requestAnimationFrame(tick);
 
-  const onBlur = () => { if (!['idle', 'over'].includes(state.phase)) setPaused(true); };
+  const onBlur = () => {
+    if (!['idle', 'over'].includes(state.phase)) setPaused(true);
+    sfx.setPaused(true);
+  };
+  const onFocus = () => sfx.setPaused(document.hidden || paused || helpOpen);
   const onVisibility = () => {
     running = !document.hidden;
     if (document.hidden) onBlur();
+    else onFocus();
   };
   document.addEventListener('visibilitychange', onVisibility);
   window.addEventListener('blur', onBlur);
+  window.addEventListener('focus', onFocus);
 
   /* ---- Debug API -------------------------------------------------------- */
 
@@ -1819,6 +1837,7 @@ export async function createPainting(container) {
     document.removeEventListener('visibilitychange', onVisibility);
     window.removeEventListener('keydown', onKeyDown);
     window.removeEventListener('blur', onBlur);
+    window.removeEventListener('focus', onFocus);
     canvasHost.removeEventListener('pointerdown', onPointerDown);
     canvasHost.removeEventListener('pointermove', onPointerMove);
     clock.destroy();

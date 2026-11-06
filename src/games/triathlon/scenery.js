@@ -72,11 +72,16 @@ export function buildCourse(scene) {
   let previous = null;
   return {
     world,
-    dispose() { details.dispose(); },
+    dispose() {
+      details.dispose();
+      // The inactive road material is no longer attached to the scene traversal.
+      const inactive = road.material === asphalt ? trail : asphalt;
+      inactive.map.dispose(); inactive.dispose();
+    },
     update(discipline, distance, remaining, time) {
       if (previous !== discipline) { previous = discipline; road.visible = shoulder.visible = decorations.visible = discipline !== 'swim'; stripes.visible = discipline === 'bike'; road.material = discipline === 'run' ? trail : asphalt; }
       world.position.z = distance; landscape.update(discipline, time); sky.update(time); details.update(discipline, time);
-      finish.position.z = -(distance + remaining) + 2; finish.visible = remaining < 120;
+      finish.position.z = -(distance + remaining); finish.visible = remaining < 120;
     }
   };
 }

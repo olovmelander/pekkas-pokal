@@ -1419,3 +1419,4 @@
 .sk-ui .sk-keyguide b { color: #fae5b6; }
 .sk-ui .pb-info, .sk-ui .pb-mute { width: 44px; height: 44px; }
 .sk-ui .pb-info { right: 112px; }
+.sk-ui[data-paused='true'] *, .sk-ui[data-paused='true'] *::before, .sk-ui[data-paused='true'] *::after { animation-play-state: paused !important; }

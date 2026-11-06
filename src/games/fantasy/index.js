@@ -3,7 +3,7 @@ import { buildStadium } from './world.js';
 import {
   BUDGET, ROUNDS, PLAYERS, CLUBS, POSITIONS, DEFAULT_SQUAD, RIVALS, playerById,
   squadCost, canTransfer, difficulty, forecast, scoreSquad, rankStandings, undoTransfer,
-  squadForecast, upcomingFixtures, planRival, roundVerdict
+  squadForecast, transferForecast, upcomingFixtures, planRival, roundVerdict
 } from './rules.js';
 
 export const layout = 'full';
@@ -78,7 +78,6 @@ export default async function createFantasy(container) {
   function marketHtml() {
     const current = playerById(squad[selected]);
     const options = PLAYERS.filter((p) => p.position === POSITIONS[selected]);
-    const present = forecast(current, round, seed);
     return `<div class="fy-market-heading"><div><span class="fy-eyebrow">TRANSFERMARKNAD</span><h3>${POS_LABEL[current.position]}</h3></div><span class="fy-number">${selected + 1} / 5</span></div>
       <div class="fy-role-picker" aria-label="Välj lagplats">${squad.map((id, i) => `<button type="button" data-action="slot" data-slot="${i}" aria-pressed="${selected === i}" class="${selected === i ? 'active' : ''}">${POSITIONS[i]}<small>${surname(playerById(id).name)}</small></button>`).join('')}</div>
       <p class="fy-hint">${round === 0 ? 'Bygg ditt lag. Du kan byta fritt före premiären.' : 'Ett spelarbyte per omgång. Bytet låses först vid avspark.'}</p>
@@ -91,11 +90,11 @@ export default async function createFantasy(container) {
     if (!active && owned) reason = 'Redan i ditt lag';
     else if (cost > BUDGET) reason = 'Över budget';
     else if (!active && !enabled) reason = 'Ångra det andra bytet först';
-    const delta = forecast(p, round, seed) - present;
+    const { delta, remaining } = transferForecast(squad, captain, selected, p.id, round, seed, tripleActive);
     const fixtures = upcomingFixtures(p, round, seed);
     return `<button class="fy-market-player${active ? ' is-active' : ''}" data-action="buy" data-id="${p.id}" ${enabled ? '' : 'disabled'}>
           <span class="fy-kit-dot" style="--kit:${CLUBS[p.club].color}">${CLUBS[p.club].short}</span>
-          <span class="fy-market-name"><strong>${p.name}</strong><span>${reason}</span><span class="fy-fixture-path" aria-label="Kommande matcher">${fixtures.map((f) => `<i class="fy-fixture fy-fixture-${f.difficulty}" title="Omgång ${f.round + 1}: ${FIXTURE_LABEL[f.difficulty - 1]}, ${f.expected.toFixed(1)} poäng i prognos">${f.round + 1} · ${FIXTURE_LABEL[f.difficulty - 1]}</i>`).join('')}</span>${enabled ? `<em class="fy-delta ${delta >= 0 ? 'positive' : ''}">${delta >= 0 ? '+' : ''}${delta.toFixed(1).replace('.', ',')} p mot ${surname(current.name)}</em>` : ''}</span>
+          <span class="fy-market-name"><strong>${p.name}</strong><span>${reason}</span><span class="fy-fixture-path" aria-label="Kommande matcher">${fixtures.map((f) => `<i class="fy-fixture fy-fixture-${f.difficulty}" title="Omgång ${f.round + 1}: ${FIXTURE_LABEL[f.difficulty - 1]}, ${f.expected.toFixed(1)} poäng i prognos">${f.round + 1} · ${FIXTURE_LABEL[f.difficulty - 1]}</i>`).join('')}</span>${enabled ? `<em class="fy-delta ${delta >= 0 ? 'positive' : ''}">${delta >= 0 ? '+' : ''}${delta.toFixed(1).replace('.', ',')} p för laget · ${money(remaining)} kvar</em>` : ''}</span>
           <span class="fy-market-price">${money(p.price)}<small>${active ? 'I LAGET' : enabled ? 'VÄLJ +' : '—'}</small></span>
         </button>`;
   }).join('')}</div>

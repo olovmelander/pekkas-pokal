@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { guardRenderer } from './gfx.js';
 import { arcadeEnvironment } from './arcade-lighting.js';
+import { isEditableTarget, isNativeControlTarget, isGameControlTarget } from './keyboard.js';
 
 export function createArcade(container, options = {}) {
   const { id = 'arcade', title = 'Pekkas Pokal', subtitle = '', accent = '#e9bf5c', sky = 0x97b4be, fog = sky, lighting = 'outdoor' } = options;
@@ -46,6 +47,7 @@ export function createArcade(container, options = {}) {
   let resumeFocus = null;
   let slowFrames = 0;
   let qualityReduced = false;
+  let renderRequested = true;
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const coarse = matchMedia('(pointer: coarse)').matches;
   const safe = new URLSearchParams(location.search).get('gfx') === 'safe';
@@ -110,6 +112,8 @@ export function createArcade(container, options = {}) {
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
+    root.dispatchEvent(new CustomEvent('arcaderesize', { detail: { width, height } }));
+    renderRequested = true;
   }
   const observer = new ResizeObserver(resize);
   observer.observe(root);
@@ -193,6 +197,7 @@ export function createArcade(container, options = {}) {
     if (dead || paused === value) return;
     if (value) resumeFocus = document.activeElement;
     paused = value;
+    renderRequested = true;
     keys.clear();
     // Games can clear pointer-held controls on the same event as keyboard input.
     root.dispatchEvent(new CustomEvent('arcadepause', { detail: { paused } }));
@@ -208,12 +213,15 @@ export function createArcade(container, options = {}) {
       pausePanel.querySelector('button').focus({ preventScroll: true });
     } else {
       wakeAudio();
-      const target = resumeFocus?.isConnected && !resumeFocus.closest('[inert]') ? resumeFocus : root;
+      const target = resumeFocus?.isConnected && !resumeFocus.closest('[inert]') && resumeFocus !== pauseButton && resumeFocus !== soundButton
+        ? resumeFocus : root;
       target.focus({ preventScroll: true });
     }
   }
   const gameKeys = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ShiftLeft', 'ShiftRight']);
   listen(window, 'keydown', (event) => {
+    // A local dialog or focused game control has already handled this key.
+    if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.code === 'Tab') {
       const buttons = [...root.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), summary, a[href], [tabindex="0"]'), document.querySelector('#game-close')]
         .filter((element) => element && !element.closest('[inert]') && element.getClientRects().length && getComputedStyle(element).visibility !== 'hidden');
@@ -225,26 +233,34 @@ export function createArcade(container, options = {}) {
       }
       return;
     }
-    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLTextAreaElement) return;
+    if (isEditableTarget(event.target)) return;
     if (event.code === 'KeyP' && !event.repeat) { event.preventDefault(); setPaused(!paused); return; }
+    if (isNativeControlTarget(event.target) && !(isGameControlTarget(event.target) && event.code !== 'Space')) return;
     if (paused || !panel.hidden) return;
     if (gameKeys.has(event.code)) event.preventDefault();
     keys.add(event.code);
   });
   listen(window, 'keyup', (event) => keys.delete(event.code));
   listen(window, 'blur', () => { keys.clear(); if (panel.hidden) setPaused(true); });
-  listen(document, 'visibilitychange', () => { if (document.hidden && panel.hidden) setPaused(true); });
+  listen(document, 'visibilitychange', () => {
+    if (document.hidden && panel.hidden) setPaused(true);
+    renderRequested = true;
+  });
+  listen(renderer.domElement, 'webglcontextrestored', () => { renderRequested = true; });
   listen(root, 'pointerdown', wakeAudio, { passive: true });
   listen(root, 'contextmenu', (event) => event.preventDefault());
   listen(pauseButton, 'click', () => setPaused(!paused));
   listen(pausePanel.querySelector('button'), 'click', () => setPaused(false));
-  listen(soundButton, 'click', () => {
+  listen(soundButton, 'click', (event) => {
     muted = !muted;
     try { localStorage.setItem('pp-arcade-muted', String(muted)); } catch { /* private mode */ }
     updateMute();
     root.dispatchEvent(new CustomEvent('arcademute', { detail: { muted } }));
     if (muted) audio?.suspend().catch(() => {});
     else { wakeAudio(); tone(640, 0.08); }
+    // Mouse/touch players can return directly to keyboard steering. Tab and
+    // Space users keep native button focus until they choose to leave it.
+    if (event.detail > 0 && panel.hidden && !paused) root.focus({ preventScroll: true });
   });
   listen(panel.querySelector('button'), 'click', () => {
     if (paused || dead) return;
@@ -263,6 +279,7 @@ export function createArcade(container, options = {}) {
     panel.querySelector('button').textContent = button;
     onStart = action;
     panel.hidden = false;
+    renderRequested = true;
     root.classList.add('arcade-has-panel');
     panel.setAttribute('aria-label', heading);
     syncModal();
@@ -279,6 +296,7 @@ export function createArcade(container, options = {}) {
     toastElement.textContent = '';
     toastUntil = elapsed;
     panel.hidden = true;
+    renderRequested = true;
     root.classList.remove('arcade-has-panel');
     syncModal();
     root.focus({ preventScroll: true });
@@ -323,7 +341,12 @@ export function createArcade(container, options = {}) {
         resize();
       }
     }
-    if (!document.hidden) renderer.render(scene, camera);
+    // Keep one fresh frame after pause, resize or context restore, then let
+    // the GPU rest. DOM focus and audio controls do not need a new 3D frame.
+    if (!paused || renderRequested) {
+      if (!document.hidden) renderer.render(scene, camera);
+      renderRequested = false;
+    }
   }
   function destroy() {
     if (dead) return;
@@ -366,6 +389,7 @@ export function createArcade(container, options = {}) {
   return {
     THREE, scene, camera, renderer, root, ui, keys, sun, ambient, fill, reducedMotion,
     listen, showPanel, hidePanel, setHUD, toast, tone, createVoice, loadBest, saveBest, destroy, setPaused, setShadowFocus,
+    invalidate() { renderRequested = true; },
     onFrame(callback) { callbacks.add(callback); return () => callbacks.delete(callback); },
     get paused() { return paused; },
     get muted() { return muted; }

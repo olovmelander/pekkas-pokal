@@ -1,7 +1,8 @@
 import { createArcade } from '../shared/arcade.js';
 import { buildCourse, makeCourseItem } from './scenery.js';
 import { createAthlete } from './athlete.js';
-import { STAGES, clamp, paceStep, raceProgress, scoreRace, formatTime, rivalAtTime, canDraft } from './rules.js';
+import { frameTriathlon } from './camera.js';
+import { STAGES, clamp, advancePace, passageLane, finishPlace, raceProgress, scoreRace, formatTime, rivalAtTime, canDraft } from './rules.js';
 
 export const layout = 'full';
 
@@ -51,7 +52,7 @@ export default async function createTriathlon(container) {
   const energyTrack = dashboard.querySelector('.tri-energy'), progressBar = dashboard.querySelector('.tri-progress i');
   const progressTrack = dashboard.querySelector('.tri-progress'), help = dashboard.querySelector('.tri-help');
   const stageLabels = [...dashboard.querySelectorAll('.tri-stage')];
-  const held = new Set();
+  const held = new Map();
   const ambience = game.createVoice({ type: 'sine', frequency: 110, gain: 0 });
   const pointerActions = new Map();
   let state = 'intro', stage = 0, distance = 0, elapsed = 0, stageStart = 0, x = 0, stamina = 100;
@@ -77,18 +78,22 @@ export default async function createTriathlon(container) {
     });
     const release = event => {
       pointerActions.delete(event.pointerId);
-      button.classList.toggle('held', [...pointerActions.values()].includes(button.dataset.control) || held.has(button.dataset.control));
+      button.classList.toggle('held', [...pointerActions.values()].includes(button.dataset.control) || [...held.values()].includes(button.dataset.control));
     };
     game.listen(button, 'keydown', event => {
-      if (event.code !== 'Enter' || state !== 'race' || game.paused) return;
-      event.preventDefault(); held.add(button.dataset.control); button.classList.add('held');
+      if (event.code !== 'Space' && codeAction[event.code]) {
+        if (state === 'race' && !game.paused) { event.preventDefault(); game.keys.add(event.code); }
+        return;
+      }
+      if (!['Enter', 'Space'].includes(event.code) || event.repeat || state !== 'race' || game.paused) return;
+      event.preventDefault(); held.set(event.code, button.dataset.control); button.classList.add('held');
     });
-    const releaseKey = () => { held.delete(button.dataset.control); button.classList.toggle('held', [...pointerActions.values()].includes(button.dataset.control)); };
-    game.listen(button, 'keyup', event => { if (event.code === 'Enter') releaseKey(); });
-    game.listen(button, 'blur', releaseKey);
+    const refresh = () => button.classList.toggle('held', [...pointerActions.values(), ...held.values()].includes(button.dataset.control));
+    game.listen(button, 'keyup', event => { if (['Enter', 'Space'].includes(event.code)) { event.preventDefault(); held.delete(event.code); refresh(); } });
+    game.listen(button, 'blur', () => { for (const [code, action] of held) if (action === button.dataset.control) held.delete(code); refresh(); });
     game.listen(button, 'pointerup', release); game.listen(button, 'pointercancel', release); game.listen(button, 'lostpointercapture', release);
   });
-  const pressed = action => held.has(action) || [...pointerActions.values()].includes(action) || Object.entries(codeAction).some(([code, value]) => value === action && game.keys.has(code));
+  const pressed = action => [...held.values()].includes(action) || [...pointerActions.values()].includes(action) || Object.entries(codeAction).some(([code, value]) => value === action && game.keys.has(code));
 
   function removeItems() {
     items.forEach(item => {
@@ -121,7 +126,8 @@ export default async function createTriathlon(container) {
   function start() {
     clearInput(); stage = 0; distance = elapsed = stageStart = x = 0; stamina = 100; exhausted = false;
     slow = gates = drinks = hits = combo = bestCombo = lateralSpeed = 0; ({ speed } = STAGES[0]); previousPlace = 1; feedbackCooldown = 0; splits = []; drafting = false; started = true; state = 'race';
-    rivals.forEach(r => Object.assign(r, rivalAtTime(0, r.duration, r.strengths)));
+    athlete.reset();
+    rivals.forEach(r => { r.athlete.reset(); Object.assign(r, rivalAtTime(0, r.duration, r.strengths)); });
     controls.hidden = dashboard.hidden = false; buildItems(); game.hidePanel();
     game.setHUD(STAGES[0].name, '0:00.0', '1 / 4 · 260 m kvar');
     game.tone(392, 0.16, 'triangle'); game.toast('Starten går! Hitta din rytm.');
@@ -132,7 +138,7 @@ export default async function createTriathlon(container) {
     if (stage === STAGES.length - 1) {
       state = 'result'; controls.hidden = true; callout.classList.remove('on');
       const score = scoreRace({ seconds: elapsed, gates, drinks, hits });
-      const place = 1 + rivals.filter(r => r.progress >= 1).length;
+      const place = finishPlace(elapsed, rivals);
       const newBest = score > best; best = Math.max(best, score); game.saveBest(score);
       game.showPanel({
         eyebrow: `LOMSJÖN · ${place === 1 ? 'GULD' : place === 2 ? 'SILVER' : place === 3 ? 'BRONS' : 'I MÅL'}`,
@@ -152,7 +158,7 @@ export default async function createTriathlon(container) {
     game.showPanel({
       eyebrow: `T${next} · VÄXLINGSOMRÅDET`,
       title: guide.title,
-      body: `<p>${STAGES[stage].name.toLowerCase()} avklarad på <strong>${formatTime(splits[stage])}</strong>. Du har ${Math.round(stamina)} % energi kvar.</p><p>${guide.body}</p><p>← → eller A / D styr. Håll mellanrum eller tempoknappen för fart.</p>`,
+      body: `<p>${STAGES[stage].name.toLowerCase()} avklarad på <strong>${formatTime(splits[stage])}</strong>. Du har ${Math.round(stamina)} % energi kvar.</p><p>${guide.body}</p><p>← → eller A / D styr. Håll mellanslag eller tempoknappen för fart.</p>`,
       button: guide.button,
       onStart() {
         stage = next; distance = 0; stageStart = elapsed; slow = lateralSpeed = 0; ({ speed } = STAGES[stage]); state = 'race';
@@ -162,15 +168,17 @@ export default async function createTriathlon(container) {
     });
   }
 
-  function updateItems(time) {
+  function updateItems(time, previousDistance, previousX) {
     for (const item of items) {
       const rel = item.at - distance;
-      item.mesh.position.set(item.x, 0, -rel + 1);
+      item.mesh.position.set(item.x, 0, -rel);
       item.mesh.visible = !item.resolved && rel > -4 && rel < 110;
       if (item.kind === 'drink') { item.mesh.rotation.y = time; item.mesh.position.y = Math.sin(time * 3 + item.at) * 0.08; }
-      if (item.resolved || rel > 0) continue;
+      if (item.resolved) continue;
+      const crossingX = passageLane(previousDistance, distance, previousX, x, item.at);
+      if (crossingX === null) continue;
       item.resolved = true;
-      if (Math.abs(x - item.x) < (item.kind === 'gate' ? 0.8 : 0.85)) {
+      if (Math.abs(crossingX - item.x) < (item.kind === 'gate' ? 0.8 : 0.85)) {
         if (item.kind === 'gate') {
           gates++; combo++; bestCombo = Math.max(bestCombo, combo); stamina = Math.min(100, stamina + 9); game.toast(combo >= 3 ? `${combo} RENA RINGAR I RAD · +9 ENERGI` : 'Ren linje! +9 energi · +140'); game.tone(660, 0.08, 'sine');
         } else if (item.kind === 'drink') {
@@ -188,32 +196,33 @@ export default async function createTriathlon(container) {
       Object.assign(r, rivalAtTime(elapsed, r.duration, r.strengths));
       const delta = r.distance - distance;
       const visualLane = r.lane + Math.sin(time * 0.17 + r.phase) * 0.3;
-      r.athlete.root.position.set(visualLane, 0, 1 - delta);
+      r.athlete.root.position.set(visualLane, 0, -delta);
       r.athlete.root.visible = r.stage === stage && !r.finished && delta > -12 && delta < 100;
       if (canDraft(stage, distance, x, { ...r, lane: visualLane })) drafting = true;
-      if (r.athlete.root.visible) r.athlete.update(STAGES[r.stage].id, dt, time + r.phase, false);
+      if (r.athlete.root.visible) r.athlete.update(STAGES[r.stage].id, dt, time + r.phase, false, r.speed);
     }
   }
 
   game.onFrame((dt, time) => {
     const discipline = STAGES[stage].id;
     if (state === 'race') {
-      elapsed += dt; slow = Math.max(0, slow - dt); feedbackCooldown = Math.max(0, feedbackCooldown - dt);
+      const previousDistance = distance, previousX = x;
+      drafting = rivals.some(r => canDraft(stage, distance, x, { ...r, lane: r.lane + Math.sin(time * 0.17 + r.phase) * 0.3 }));
       const direction = Number(pressed('right')) - Number(pressed('left'));
       const current = discipline === 'swim' ? Math.sin(elapsed * 0.65) * 0.21 : 0;
       const lateralTarget = direction * (discipline === 'bike' ? 5.8 : 4.8);
       lateralSpeed += (lateralTarget - lateralSpeed) * (1 - Math.exp(-dt * 13));
-      x = clamp(x + (lateralSpeed + current) * dt, -3.85, 3.85);
-      updateRivals(dt, time);
-      const pace = paceStep({ stamina, exhausted, stage, surge: pressed('surge'), drafting, slow }, dt);
-      ({ stamina, exhausted } = pace);
-      speed += (pace.speed - speed) * (1 - Math.exp(-dt * (slow > 0 ? 14 : 6)));
-      distance += speed * dt;
-      athlete.update(discipline, dt, time, pace.pushing);
+      const pace = advancePace({ stamina, exhausted, stage, surge: pressed('surge'), drafting, slow, speed }, dt, STAGES[stage].distance - distance);
+      ({ stamina, exhausted, speed } = pace);
+      x = clamp(x + (lateralSpeed + current) * pace.time, -3.85, 3.85);
+      distance += pace.distance; elapsed += pace.time;
+      slow = Math.max(0, slow - pace.time); feedbackCooldown = Math.max(0, feedbackCooldown - pace.time);
+      updateRivals(pace.time, time);
+      athlete.update(discipline, pace.time, time, pace.pushing, speed);
       athlete.root.position.x = x;
       athlete.root.rotation.z = lateralSpeed * (discipline === 'swim' ? -0.014 : -0.022);
       controls.querySelector('.tri-surge').classList.toggle('pushing', pace.pushing);
-      updateItems(time);
+      updateItems(time, previousDistance, previousX);
       const place = 1 + rivals.filter(r => r.progress > raceProgress(stage, distance)).length;
       if (place < previousPlace && feedbackCooldown === 0) { game.toast(place === 1 ? 'DU TAR LEDNINGEN!' : `FÖRBI! · PLATS ${place}`); game.tone(587, 0.1, 'triangle'); feedbackCooldown = 2; }
       previousPlace = place;
@@ -225,10 +234,7 @@ export default async function createTriathlon(container) {
       rivals.forEach((r, i) => { r.athlete.root.position.set(r.lane, 0, -5 - i * 3); r.athlete.update('swim', dt, time + r.phase, false); });
     }
     ambience.set(48 + speed * 3, state === 'race' && discipline === 'bike' ? 0.004 : 0);
-    const targetX = athlete.root.position.x * 0.35;
-    const portrait = camera.aspect < 0.8;
-    camera.position.set(targetX + (started ? 0 : 2), portrait ? 6.6 : 5.7, portrait ? 12.5 : 10.5);
-    camera.lookAt(targetX, discipline === 'swim' ? 0.2 : 0.9, portrait ? -8 : -10);
+    frameTriathlon(camera, { x: athlete.root.position.x, started, discipline });
     course.update(discipline, distance, STAGES[stage].distance - distance, time);
     displayClock += dt;
     if (displayClock > 0.1) {

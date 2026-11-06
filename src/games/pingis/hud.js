@@ -71,6 +71,7 @@ export function buildHud(root, { mouse }) {
 
     <div class="pb-help" id="pg-help" role="dialog" aria-modal="true" aria-label="Paus och spelregler" hidden>
       <div class="pb-help-card">
+        <div class="pg-help-body" tabindex="0" role="region" aria-label="Spelregler">
         <h3>Paus · så spelar du pingis</h3>
         <p class="pb-help-sub">Pekkas Pingis · Bredbyn 2019</p>
         <ul class="pb-help-list">
@@ -82,8 +83,9 @@ export function buildHud(root, { mouse }) {
           <li><i style="--c:#ffd166"></i><b>Serven</b> Din serve: ${serveHint}. Bollen måste studsa på din sida först — precis som på riktigt.</li>
           <li><i style="--c:#f2c14e"></i><b>Läs bollen</b> Den gyllene ringen visar var bollen studsar, och spårets färg avslöjar skruven innan den gör det.</li>
         </ul>
-        <p class="pb-help-tip">Långa dueller lönar sig: varje slag i rallyt höjer poängen du får när du vinner det. Smash-avslut och serve-ess ger extra. Vinn med 3 bollars marginal för silver, 5 för guld.</p>
+        <p class="pb-help-tip">Först till 7, vinn med två bollars marginal. Serven byts varannan boll; från 6–6 byts den varje boll. Långa dueller, smash-avslut och serve-ess ger extra poäng. Vinn med 3 bollars marginal för silver, 5 för guld.</p>
         <div class="pb-help-keys">←/→ flyttar · håll ↑ = topspin, ↓ = backspin · mellanslag servar · P / ? pausar</div>
+        </div>
         <button class="pb-btn" data-action="help-close">Tillbaka till bordet</button>
       </div>
     </div>

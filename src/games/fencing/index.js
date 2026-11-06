@@ -37,7 +37,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { guardRenderer, postTarget, addSanitize, RenderWatchdog, gfxNotice, precompile } from '../shared/gfx.js';
 import { Sfx } from './audio.js';
-import { takeFeint, openingRemaining } from './combat-rules.js';
+import { takeFeint, openingRemaining, hasAttackPriority, attackIsOutOfTurn, claimTouch, canParry } from './combat-rules.js';
 import { Fencer, Animator, P, POSE_LEN } from './fencer.js';
 import { mulberry, glowTexture, buildSalle, buildEnvScene } from './salle.js';
 import { Sparks, Trail, Flashes, Confetti, starTexture, ringTexture } from './fx.js';
@@ -473,7 +473,7 @@ export async function createFencing(container) {
     if (!state.tutorial || state.coached[key]) return;
     state.coached[key] = true;
     hud.coach(html);
-    clearTimeout(state.coachTimer);
+    hud.cancelLater(state.coachTimer);
     state.coachTimer = hud.later(() => hud.coach(''), ms);
   }
 
@@ -607,8 +607,7 @@ export async function createFencing(container) {
 
   /** `via`: how the referee explains it — 'point', 'parry' (riposte) or 'attack' (right of way). */
   function scoreTouch(mine, points, label, at, via = 'point') {
-    state.phase = 'touch';
-    state.phaseT = 0;
+    if (!claimTouch(state, mine)) return;
     const hitAt = at || (mine ? foe : me).j.torso.getWorldPosition(new THREE.Vector3()).setY(1.2);
     state.lastTouch = { t: gameTime, mine, at: hitAt.clone() };
     logEvent('touch', hitAt, { mine });
@@ -626,7 +625,6 @@ export async function createFencing(container) {
     (mine ? me : foe).express('grin', 1, 1.3);
     (mine ? foe : me).express('frown', 1, 1.3);
     if (mine) {
-      state.myTouches++;
       state.streak++;
       state.stats.bestStreak = Math.max(state.stats.bestStreak, state.streak);
       const streakBonus = state.streak >= 2 ? 50 * (state.streak - 1) : 0;
@@ -641,7 +639,6 @@ export async function createFencing(container) {
       salle.crowd.react('cheer');
       sfx.cheer();
     } else {
-      state.foeTouches++;
       state.streak = 0;
       hud.call('TUSCH EMOT', 'them');
       hud.flash('rgba(255,77,60,0.5)');
@@ -861,6 +858,7 @@ export async function createFencing(container) {
     meS.resolved = false;
     meS.lungeLine = meS.line;
     meS.isFeint = isFeint;
+    meS.hasPriority = !isFeint && hasAttackPriority(ai.pose);
     hud.press(isFeint ? el.feint : el.lunge);
     if (isFeint) sfx.feint();
     else sfx.swish();
@@ -896,7 +894,7 @@ export async function createFencing(container) {
         riposte ? 'RIPOST +175' : feintHit ? 'FINT-TUSCH +150' : '+100', tipMe.clone(), riposte ? 'parry' : 'point');
       return;
     }
-    if (ai.pose === 'telegraph' || ai.pose === 'attack') {
+    if (attackIsOutOfTurn(ai.pose, meS.hasPriority)) {
       // Attacking into an attack: right of way belongs to them
       sparks.burst(tipMe, { n: 8, speed: 1.6, color: new THREE.Color(2.4, 2, 1.6), life: 0.3 });
       hud.sub('VÄGRÄTT TILL MOTSTÅNDAREN', 'red');
@@ -940,7 +938,7 @@ export async function createFencing(container) {
 
   function resolveAiAttack() {
     foe.tipWorld(tipAi);
-    if (meS.pose !== 'lunge' && meS.pose !== 'stagger' && meS.line === ai.line) {
+    if (canParry(meS.pose, meS.line, ai.line)) {
       // Parried! The Nidhogg rule: same line blocks
       ai.pose = 'stagger';
       ai.t = 0;
@@ -1243,6 +1241,7 @@ export async function createFencing(container) {
   function setHelp(open) {
     onPointerUp();
     helpOpen = open;
+    hudHost.dataset.paused = String(open);
     el.help.hidden = !open;
     el.info.setAttribute('aria-expanded', String(open));
     if (open) sfx.ctx?.suspend();
@@ -1251,7 +1250,11 @@ export async function createFencing(container) {
   }
   function onBlur() {
     onPointerUp();
-    if (['intro', 'ready', 'live', 'touch', 'replay'].includes(state.phase)) setHelp(true);
+    sfx.ctx?.suspend();
+    if (['intro', 'ready', 'live', 'touch', 'replay', 'ceremony'].includes(state.phase)) setHelp(true);
+  }
+  function onFocus() {
+    if (!document.hidden && !helpOpen) sfx.ctx?.resume();
   }
 
   const lineDown = (e) => {
@@ -1277,6 +1280,8 @@ export async function createFencing(container) {
     sfx.resume();
     sfx.setMuted(!sfx.muted);
     el.mute.classList.toggle('off', sfx.muted);
+    el.mute.setAttribute('aria-pressed', String(sfx.muted));
+    el.mute.setAttribute('aria-label', sfx.muted ? 'Ljud på' : 'Ljud av');
   };
   const infoClick = () => {
     unfocus();
@@ -1293,6 +1298,7 @@ export async function createFencing(container) {
   window.addEventListener('pointercancel', onPointerUp);
   canvasHost.addEventListener('lostpointercapture', onPointerUp);
   window.addEventListener('blur', onBlur);
+  window.addEventListener('focus', onFocus);
   window.addEventListener('keydown', onKeyDown, true);
   el.panel.addEventListener('click', onPanelClick);
   el.lineBtns.forEach((b) => b.addEventListener('pointerdown', lineDown));
@@ -1580,7 +1586,7 @@ export async function createFencing(container) {
       if (state.phaseT >= 1.5) goLive();
     } else if (ph === 'live') {
       updateAi(dt);
-      updatePlayer(dt);
+      if (state.phase === 'live') updatePlayer(dt);
     } else if (ph === 'touch') {
       meS.t += dt;
       ai.t += dt;
@@ -1601,9 +1607,10 @@ export async function createFencing(container) {
     if (opening > 0) {
       hud.cue(ai.pose === 'stagger' ? 'RIPOST · STÖT NU' : 'ÖPPEN LINJE · STÖT', 'open', opening / openingRemaining(ai.pose, 0));
     } else if (live && (ai.pose === 'telegraph' || ai.pose === 'attack')) {
-      const covered = meS.line === ai.shownLine;
+      const covered = canParry(meS.pose, meS.line, ai.shownLine);
       const duration = ai.pose === 'telegraph' ? ai.tele || opp().telegraph : opp().attackDur * 0.7;
-      hud.cue(`${covered ? 'GARD KLAR' : 'PARERA'} · ${LINE_NAME[ai.shownLine]}`, covered ? 'covered' : 'danger', 1 - ai.t / duration);
+      const action = meS.pose === 'stagger' ? 'BUNDEN KLINGA' : meS.pose === 'lunge' ? 'I STÖT' : covered ? 'GARD KLAR' : 'PARERA';
+      hud.cue(`${action} · ${LINE_NAME[ai.shownLine]}`, covered ? 'covered' : 'danger', 1 - ai.t / duration);
     } else hud.cue('');
     // Glint on the attacking blade
     if (ai.pose === 'telegraph' && live) {
@@ -1615,7 +1622,7 @@ export async function createFencing(container) {
       glint.scale.setScalar((0.5 + k * 0.45) * flick);
       glint.material.rotation = t * 1.5;
       // Where it is going to land, on you
-      const covered = meS.line === ai.shownLine;
+      const covered = canParry(meS.pose, meS.line, ai.shownLine);
       me.j.torso.getWorldPosition(v3);
       threat.position.set(v3.x + 0.24, me.lineWorldY(ai.shownLine), v3.z + 0.25);
       threatMat.color.set(covered ? 0x7fe8ff : 0xff5a46);
@@ -1680,6 +1687,7 @@ export async function createFencing(container) {
   function simulate(realDt) {
     // Pause the pose, the attack window and the replay at precisely the same instant.
     if (helpOpen) return;
+    hud.tick(realDt);
     clock += realDt;
     const t = clock;
     // Hit-stop: the world nearly freezes for a few frames on impact
@@ -1940,6 +1948,7 @@ export async function createFencing(container) {
     window.removeEventListener('pointercancel', onPointerUp);
     canvasHost.removeEventListener('lostpointercapture', onPointerUp);
     window.removeEventListener('blur', onBlur);
+    window.removeEventListener('focus', onFocus);
     window.removeEventListener('keydown', onKeyDown, true);
     hud.dispose();
     if (window.__ppFakt) delete window.__ppFakt;

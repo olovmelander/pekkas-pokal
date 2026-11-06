@@ -83,7 +83,8 @@ function createStack(ctx) {
             support = { x: result.x, width: result.width }; level++;
             tone(result.perfect ? 760 : 430, 0.12, 'triangle');
             toast(result.perfect ? 'Rakt över! Stabilt stöd.' : 'På plats – nästa lager får mindre stöd.');
-            focus?.(Math.max(1, level * 0.28));
+            // Follow the upper layers before they disappear behind the phone HUD.
+            focus?.(Math.max(1, level * 0.45));
           } else {
             misses++; debris.push({ root: active, vx: dropX > support.x ? 2.4 : -2.4, vy: 1.3 });
             tone(160, 0.15, 'triangle'); toast('Utanför stödet! Du får en ny vedbit.');

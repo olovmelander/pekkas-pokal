@@ -26,10 +26,18 @@ export function fieldThrowScore(kind, distance, opponentDistance = 0.92) {
   return Math.min(100, score + (distance < opponentDistance ? 15 : 0));
 }
 
-export function hoopCrossing(from, to, hoop, radius = 0.68) {
+export function hoopCrossing(from, to, hoop, radius = 0.8 - 0.045 - 0.23) {
   if (from.z <= hoop.z || to.z > hoop.z) return false;
   const t = (hoop.z - from.z) / (to.z - from.z);
   return Math.abs(from.x + (to.x - from.x) * t - hoop.x) <= radius;
+}
+
+/** Judge the jump at the crossing itself, independent of the rendered frame. */
+export function hurdleHeight(fromZ, toZ, hurdleZ, jumpAge, dt) {
+  if (fromZ < hurdleZ || toZ >= hurdleZ || fromZ === toZ) return 0;
+  const crossing = clamp((fromZ - hurdleZ) / (fromZ - toZ), 0, 1);
+  const phase = (jumpAge - dt * (1 - crossing)) / 0.9;
+  return phase >= 0 && phase <= 1 ? Math.sin(phase * Math.PI) * 1.35 : 0;
 }
 
 export function medalFor(points, events) {

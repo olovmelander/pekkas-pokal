@@ -19,6 +19,33 @@ export function paceStep({ stamina, exhausted, stage, surge, drafting = false, s
   return { stamina: energy, exhausted: tired, speed, pushing: pushing && !tired };
 }
 
+/** Advance one frame, stopping its clock and energy use at the exact finish. */
+export function advancePace(state, dt, remaining = Infinity) {
+  const step = Math.max(0, dt);
+  const full = paceStep(state, step);
+  const speed = state.speed + (full.speed - state.speed) * (1 - Math.exp(-step * (state.slow > 0 ? 14 : 6)));
+  const travel = speed * step;
+  const fraction = travel > 0 ? clamp(remaining / travel, 0, 1) : 1;
+  const time = step * fraction;
+  const pace = fraction < 1 ? paceStep(state, time) : full;
+  return { ...pace, speed, distance: travel * fraction, time, fraction };
+}
+
+/** Side position when an item is crossed, rather than at the end of the frame. */
+export function passageLane(fromDistance, toDistance, fromLane, toLane, at) {
+  if (at < fromDistance || at > toDistance || toDistance <= fromDistance) return null;
+  return fromLane + (toLane - fromLane) * (at - fromDistance) / (toDistance - fromDistance);
+}
+
+export function finishPlace(seconds, rivals) {
+  return 1 + rivals.filter(rival => rival.duration < seconds).length;
+}
+
+/** Cadence integrates elapsed motion; pressing tempo never changes the phase. */
+export function advanceMotion(phase, speed, baseSpeed, dt) {
+  return (phase + Math.max(0, speed) / baseSpeed * 8 * Math.max(0, dt)) % (Math.PI * 2);
+}
+
 export function raceProgress(stage, distance) {
   return clamp((stage + clamp(distance / STAGES[stage].distance, 0, 1)) / 3, 0, 1);
 }
@@ -32,7 +59,7 @@ export function rivalAtTime(elapsed, duration, strengths = [1, 1, 1]) {
     const split = duration * weights[stage] / total;
     if (time < split || stage === STAGES.length - 1) {
       const distance = STAGES[stage].distance * clamp(time / split, 0, 1);
-      return { stage, distance, progress: raceProgress(stage, distance), finished: elapsed >= duration };
+      return { stage, distance, speed: STAGES[stage].distance / split, progress: raceProgress(stage, distance), finished: elapsed >= duration };
     }
     time -= split;
   }

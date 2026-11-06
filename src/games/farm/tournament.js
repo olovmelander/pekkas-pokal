@@ -6,13 +6,15 @@ import { createRifleEvent } from './rifle-event.js';
 import { createThrowEvent } from './throw-events.js';
 import { createWoodEvent } from './wood-events.js';
 import { clamp } from './rules.js';
+import { bindHoldControl } from './input.js';
+import { isNativeControlTarget } from '../shared/keyboard.js';
 
 export const FARM_EVENTS = [
   { kind: 'rifle', title: 'Luftgevärsskytte', verb: 'SKJUT', instructions: 'Tio skott på ringtavlan. Dra siktet med fingret eller musen och tryck SKJUT. Piltangenter eller WASD siktar på dator; mellanslag skjuter. Andningen flyttar siktet lite — välj ditt ögonblick.' },
   { kind: 'stack', title: 'Vedstapling', verb: 'SLÄPP VEDEN', instructions: 'Bygg vedstapeln så högt du kan på 30 sekunder. Tryck när veden ligger mitt över stapeln. Överhäng gör nästa lager smalare. En miss går att hämta igen — ta det lugnt och träffa rent.' },
   { kind: 'boot', title: 'Kasta stövel', verb: 'LADDA KAST', instructions: 'Tre kast — ditt längsta räknas. Välj utkastvinkel med ← →. Håll KAST eller mellanslag för kraft och släpp. En hög båge ser fin ut, men rätt vinkel ger längre kast.' },
   { kind: 'horseshoe', title: 'Kasta hästsko', verb: 'LADDA KAST', instructions: 'Tre hästskor, tre avstånd. Sikta med ← →. Håll KAST eller mellanslag för kraft och släpp. Få hästskon runt pinnen för full poäng; nära räknas också.' },
-  { kind: 'hammer', title: 'Spika spik', verb: 'SLÅ!', instructions: 'Slå ner spikarna i plankan så fort du kan. Tryck när kraftmarkören är mitt i det ljusa träffområdet. Rena hammarslag driver spiken djupare. Fem spikar eller 30 sekunder avgör grenen.' }
+  { kind: 'hammer', title: 'Spika spik', verb: 'SLÅ!', instructions: 'Slå ner spikarna i plankan så fort du kan. Tryck när kraftmarkören är mitt i det ljusa träffområdet. Rena hammarslag driver spiken djupare. Fem spikar eller 30 sekunder avgör grenen. Klara alla fem inom 12 sekunder för full poäng.' }
 ];
 
 export async function createFarmTournament(container) {
@@ -32,15 +34,19 @@ export async function createFarmTournament(container) {
     p.root.position.set(6 + i * 0.85, 0, -4 + (i % 2) * 1.4); p.root.rotation.y = -Math.PI / 2; scene.add(p.root); return p;
   });
   const controls = document.createElement('div'); controls.className = 'country-controls farm-controls'; controls.hidden = true;
+  controls.dataset.gameControls = '';
   controls.innerHTML = '<div class="country-round"><span class="country-kicker"></span><strong></strong><span class="country-hint"></span></div><div class="country-meter"><span class="country-zone"></span><i></i></div><div class="country-readout" role="status" aria-live="polite"></div><div class="farm-vertical" hidden><button type="button" data-input="up" aria-label="Sikta uppåt">↑</button><button type="button" data-input="down" aria-label="Sikta nedåt">↓</button></div><div class="country-actions"><button type="button" data-input="left" aria-label="Vänster">←</button><button type="button" data-input="action" class="country-action farm-action">SKJUT</button><button type="button" data-input="right" aria-label="Höger">→</button></div>';
   game.ui.appendChild(controls);
   const progress = document.createElement('div'); progress.className = 'farm-progress'; progress.setAttribute('aria-label', 'Kvällens fem grenar'); game.ui.appendChild(progress);
   const hint = controls.querySelector('.country-hint'), readout = controls.querySelector('.country-readout'), fill = controls.querySelector('.country-meter i');
   const meter = controls.querySelector('.country-meter'), action = controls.querySelector('[data-input="action"]');
   const held = { left: false, right: false, up: false, down: false, action: false };
+  const controlBindings = [];
+  let actionControl;
   let mode = 'intro', index = 0, event = null, scores = [], elapsed = 0, focusHeight = 1, trackZ = 0, dragging = false;
   const total = () => scores.reduce((sum, score) => sum + score, 0);
   const clearInput = () => {
+    controlBindings.forEach((control) => control.cancel());
     Object.keys(held).forEach((key) => { held[key] = false; });
     controls.querySelectorAll('button').forEach((b) => b.classList.remove('held'));
     dragging = false; event?.cancel?.();
@@ -104,7 +110,7 @@ export async function createFarmTournament(container) {
     game.showPanel({
       eyebrow: done ? 'BILLSTA · BONDESPELEN 2015' : `${FARM_EVENTS[index].title.toUpperCase()} KLAR`,
       title: done ? medal : `${points.toLocaleString('sv-SE')} poäng`,
-      body: done ? `<p>${total().toLocaleString('sv-SE')} av 5 000 poäng</p><div class="country-results">${scores.map((s, i) => `<span>${FARM_EVENTS[i].title}</span><b>${s}</b>`).join('')}</div><p class="country-note">${total() > best ? 'Nytt personbästa!' : `Personbästa: ${Math.max(total(), best).toLocaleString('sv-SE')} poäng`}</p>` : `<p>${summary}</p><p class="country-note">Nästa gren: ${FARM_EVENTS[index + 1].title}</p>`,
+      body: done ? `<p>${total().toLocaleString('sv-SE')} av 5 000 poäng</p><p class="country-note">${summary}</p><div class="country-results">${scores.map((s, i) => `<span>${FARM_EVENTS[i].title}</span><b>${s}</b>`).join('')}</div><p class="country-note">${total() > best ? 'Nytt personbästa!' : `Personbästa: ${Math.max(total(), best).toLocaleString('sv-SE')} poäng`}</p>` : `<p>${summary}</p><p class="country-note">Nästa gren: ${FARM_EVENTS[index + 1].title}</p>`,
       button: done ? 'Spela igen' : 'Nästa gren',
       onStart: () => { if (done) { scores = []; index = 0; } else index++; briefing(); }
     });
@@ -113,24 +119,23 @@ export async function createFarmTournament(container) {
   function up() { const wasHeld = held.action; held.action = false; if (wasHeld && mode === 'playing' && !game.paused) event?.up(); }
   for (const button of controls.querySelectorAll('[data-input]')) {
     const name = button.dataset.input;
-    game.listen(button, 'pointerdown', (e) => {
-      e.preventDefault(); if (mode !== 'playing' || game.paused) return;
-      button.setPointerCapture(e.pointerId); button.classList.add('held');
-      if (name === 'action') down(); else held[name] = true;
+    const control = bindHoldControl(game.listen, button, {
+      canStart: () => mode === 'playing' && !game.paused,
+      onDown: () => { if (name === 'action') down(); else held[name] = true; },
+      onUp: () => { if (name === 'action') up(); else held[name] = false; },
+      onCancel: () => { held[name] = false; if (name === 'action') event?.cancel?.(); }
     });
-    game.listen(button, 'pointerup', (e) => {
-      e.preventDefault(); button.classList.remove('held'); if (name === 'action') up(); else held[name] = false;
-    });
-    game.listen(button, 'pointercancel', clearInput);
-    game.listen(button, 'lostpointercapture', () => { if (name === 'action' && held.action) { held.action = false; event?.cancel?.(); } else held[name] = false; button.classList.remove('held'); });
-    game.listen(button, 'keydown', (e) => {
-      if (e.code !== 'Enter') return; e.preventDefault(); if (e.repeat || game.paused) return;
-      if (name === 'action') down(); else held[name] = true;
-    });
-    game.listen(button, 'keyup', (e) => { if (e.code === 'Enter') { if (name === 'action') up(); else held[name] = false; } });
+    controlBindings.push(control);
+    if (name === 'action') actionControl = control;
   }
-  game.listen(window, 'keydown', (e) => { if (mode === 'playing' && !game.paused && e.code === 'Space') { e.preventDefault(); if (!e.repeat) down(); } });
-  game.listen(window, 'keyup', (e) => { if (e.code === 'Space') up(); });
+  game.listen(window, 'keydown', (e) => {
+    if (mode !== 'playing' || game.paused || e.code !== 'Space' || isNativeControlTarget(e.target)) return;
+    e.preventDefault();
+    if (!e.repeat) actionControl.press('global:Space');
+  });
+  game.listen(window, 'keyup', (e) => {
+    if (e.code === 'Space') actionControl.release('global:Space');
+  });
   game.listen(game.root, 'arcadepause', clearInput); game.listen(window, 'blur', clearInput);
   game.listen(document, 'visibilitychange', clearInput);
   const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2(), hit = new THREE.Vector3();

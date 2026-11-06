@@ -3,7 +3,8 @@ import { createPerson, appearanceFor, POSES } from './people.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildNature, buildScenicSky } from './scenic.js';
 import { buildFieldGarden, buildFlowerBorders } from './field-garden.js';
-import { clamp, precisionScore, jumpScore, hoopCrossing, medalFor, chargePower, croquetEnd, fieldThrowScore } from '../pentathlon/rules.js';
+import { isNativeControlTarget } from './keyboard.js';
+import { clamp, precisionScore, jumpScore, hoopCrossing, hurdleHeight, medalFor, chargePower, croquetEnd, fieldThrowScore } from '../pentathlon/rules.js';
 
 const EVENTS = {
   rings: { title: 'Ringkast', verb: 'HÅLL & SLÄPP', rule: 'Sikta med pilarna. Håll för kraft, släpp för att kasta. Den prickade bågen visar kastet och den vita markören på mätaren visar lagom längd. En ring runt pinnen ger 100 poäng. Tre försök.' },
@@ -254,6 +255,7 @@ export async function createFieldGames(container, config) {
     eventWorld.clear(); effectBits.length = 0;
   }
   function setupEvent() {
+    cancelInput();
     disposeEvent();
     kind = config.events[eventIndex]; title.textContent = EVENTS[kind].title;
     attempt = 0; points = []; aim = 0; charge = 0; holding = false; shot = null; time = 0; readyAt = 0;
@@ -384,7 +386,7 @@ export async function createFieldGames(container, config) {
     return '← / → sikta · håll & släpp mellanslag eller knappen';
   }
   function finishEvent(score) {
-    state = 'result'; holding = false; controls.hidden = true;
+    state = 'result'; cancelInput(); controls.hidden = true;
     const earned = clamp(Math.round(score), 0, 100); total += earned; results.push(earned); updateHUD();
     a.tone(earned >= 70 ? 880 : 440, 0.25, 'sine');
     const last = eventIndex === config.events.length - 1;
@@ -443,25 +445,53 @@ export async function createFieldGames(container, config) {
     if (projectile) projectile.position.set(0, kind === 'rings' ? 1.2 : 0.24, 7);
     updateTargets(); hint.textContent = instruction();
   }
-  function cancelInput() { if (holding) charge = 0; holding = false; buttons.left = buttons.right = false; action.classList.remove('held'); }
+  let actionPointer = null, actionKey = null;
+  function cancelInput() {
+    const pointer = actionPointer;
+    actionPointer = actionKey = null;
+    if (holding) charge = 0;
+    holding = false; buttons.left = buttons.right = false; action.classList.remove('held');
+    if (pointer !== null && action.hasPointerCapture?.(pointer)) action.releasePointerCapture(pointer);
+  }
+  function pressKey(code) {
+    if (actionKey !== null || actionPointer !== null || state !== 'play' || a.paused) return;
+    actionKey = code; startAction();
+  }
+  function releaseKey(code) {
+    if (actionKey !== code) return;
+    actionKey = null; releaseAction();
+  }
   const keyDown = (e) => {
+    if (isNativeControlTarget(e.target)) return;
     if (e.code === 'Space' && state === 'play') {
       e.preventDefault();
-      if (!e.repeat && !e.target.closest?.('.field-buttons')) startAction();
+      if (!e.repeat && !e.target.closest?.('.field-buttons')) pressKey(e.code);
     }
   };
   a.listen(window, 'keydown', keyDown);
-  a.listen(window, 'keyup', (e) => { if (e.code === 'Space') releaseAction(); });
+  a.listen(window, 'keyup', (e) => { if (e.code === 'Space' || e.code === 'Enter') releaseKey(e.code); });
   a.listen(window, 'blur', cancelInput);
   a.listen(a.root, 'arcadepause', cancelInput);
   a.listen(document, 'visibilitychange', () => { if (document.hidden) cancelInput(); });
-  a.listen(action, 'pointerdown', (e) => { e.preventDefault(); action.setPointerCapture(e.pointerId); startAction(); });
-  a.listen(action, 'pointerup', (e) => { e.preventDefault(); releaseAction(); });
-  a.listen(action, 'pointercancel', cancelInput);
-  a.listen(action, 'lostpointercapture', () => { if (holding) cancelInput(); });
+  a.listen(action, 'pointerdown', (e) => {
+    e.preventDefault();
+    if (actionPointer !== null || actionKey !== null || state !== 'play' || a.paused || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    actionPointer = e.pointerId; action.setPointerCapture(e.pointerId); startAction();
+  });
+  a.listen(action, 'pointerup', (e) => {
+    e.preventDefault();
+    if (e.pointerId !== actionPointer) return;
+    actionPointer = null; releaseAction();
+  });
+  a.listen(action, 'pointercancel', (e) => { if (e.pointerId === actionPointer) cancelInput(); });
+  a.listen(action, 'lostpointercapture', (e) => { if (e.pointerId === actionPointer) cancelInput(); });
   // Enter and Space activate a focused button without synthetic pointer events.
-  a.listen(action, 'keydown', (e) => { if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); if (!e.repeat) startAction(); } });
-  a.listen(action, 'keyup', (e) => { if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); releaseAction(); } });
+  a.listen(action, 'keydown', (e) => { if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); if (!e.repeat) pressKey(e.code); } });
+  a.listen(action, 'keyup', (e) => { if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); releaseKey(e.code); } });
+  a.listen(controls, 'keydown', (e) => {
+    if (!e.target.closest?.('.field-buttons') || state !== 'play' || a.paused) return;
+    if (['ArrowLeft', 'ArrowRight', 'KeyA', 'KeyD'].includes(e.code)) { e.preventDefault(); a.keys.add(e.code); }
+  });
   [[left, 'left'], [right, 'right']].forEach(([button, side]) => {
     a.listen(button, 'pointerdown', (e) => { e.preventDefault(); button.setPointerCapture(e.pointerId); buttons[side] = true; });
     ['pointerup', 'pointercancel', 'lostpointercapture'].forEach((event) => a.listen(button, event, () => { buttons[side] = false; }));
@@ -489,11 +519,12 @@ export async function createFieldGames(container, config) {
       cameraGoal.set(portrait ? 4 : 10, portrait ? 24 : 19, portrait ? 28 : 24);
       lookGoal.set(0, 0, -4);
     }
-    const blend = a.reducedMotion ? 1 : 1 - Math.exp(-dt * 4);
+    const blend = a.reducedMotion || a.paused ? 1 : 1 - Math.exp(-dt * 4);
     camera.position.lerp(cameraGoal, blend);
     cameraLook.lerp(lookGoal, blend);
     camera.lookAt(cameraLook);
   }
+  a.listen(a.root, 'arcaderesize', () => updateCamera());
   a.onFrame((dt, t) => {
     nature.update(t); sky.update(t); if (!a.reducedMotion) flowers.update(t);
     updateCamera(dt);
@@ -573,7 +604,8 @@ export async function createFieldGames(container, config) {
       athlete.root.position.set(0, height + 0.05, runnerZ);
       for (const h of hurdles) if (!h.passed && previousZ >= h.z && runnerZ < h.z) {
         h.passed = true;
-        if (height > 0.65) { cleared++; a.tone(600 + cleared * 50, 0.08, 'sine'); a.toast(`Rent! ${cleared}/6`); } else { h.group.rotation.x = -1.15; stumble = 0.7; a.tone(130, 0.15, 'triangle'); a.toast('Riven häck – hoppa lite tidigare.'); }
+        const crossingHeight = jumpAt < 0 ? 0 : hurdleHeight(previousZ, runnerZ, h.z, time - jumpAt, dt);
+        if (crossingHeight > 0.65) { cleared++; a.tone(600 + cleared * 50, 0.08, 'sine'); a.toast(`Rent! ${cleared}/6`); } else { h.group.rotation.x = -1.15; stumble = 0.7; a.tone(130, 0.15, 'triangle'); a.toast('Riven häck – hoppa lite tidigare.'); }
       }
       const next = hurdles.find((h) => !h.passed);
       hint.textContent = next ? `${runnerZ - next.z < 1.65 ? 'HOPPA NU!' : 'Nästa häck'} · ${Math.max(0, runnerZ - next.z).toFixed(1)} m · ${cleared}/6 rena` : 'Sista metrarna – mot mål!';

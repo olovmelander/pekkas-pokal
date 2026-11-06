@@ -15,7 +15,7 @@ Research läst 2026-11-05:
 2. **Vedstapling:** rörlig ved släpps ovanpå en växande stapel under 30 sekunder. Överlapp bestämmer stabilitet och nästa lagers bredd. Träffar mitt över stapeln återställer lite marginal, missar kostar tid men stoppar inte grenen.
 3. **Stövelkast:** välj vinkel och släpp vid rätt kraft. En synlig gummistövel flyger med samma rörelseekvation som avståndsmätningen; kameran följer kastet. Bästa av tre försök räknas.
 4. **Hästskokast:** riktning och kraft styr ett precisionskast mot en riktig pinne. Ringern, avståndet och kraftindikatorn gör återkopplingen tydlig.
-5. **Spika spik:** fem synliga spikar i en träplanka. Slå nära kraftmätarens mitt för djupare slag; hammaren träffar aktuell spik och flisor hoppar upp. 30 sekunder eller fem färdiga spikar avslutar grenen. Snabbare färdigställande ger bonus.
+5. **Spika spik:** fem synliga spikar i en träplanka. Slå nära kraftmätarens mitt för djupare slag; hammaren träffar aktuell spik och flisor hoppar upp. 30 sekunder eller fem färdiga spikar avslutar grenen. Snabbare färdigställande ger bonus. Fem spikar inom 12 sekunder ger full poäng, ett mål som går att nå med 15 rena slag även på en telefon med 20 bilder per sekund.
 
 Alla grenar ger högst 1 000 poäng, sammanlagt 5 000. Turneringen har instruktion före varje gren, resultat mellan grenarna, medalj, sparat rekord och omspel. Grenarna finns i den egna modulen `tournament.js`; 2016 års spel använder fortsatt `shared/country-events.js`.
 

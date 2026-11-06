@@ -140,3 +140,19 @@ export function racePosition(distance, opponents) {
 export function raceScore(position, seconds, incidents = 0) {
   return Math.max(0, Math.round((7 - position) * 1000 + Math.max(0, 100 - seconds) * 35 + Math.max(0, 500 - incidents * 100)));
 }
+
+/** A loaded engine is audible; lifting/braking quietens it without fake shifts. */
+export function engineFeedback(speed, { throttle = false, brake = false, active = true } = {}) {
+  const moving = clamp(speed, 0, 20);
+  const load = throttle && !brake;
+  return {
+    frequency: 48 + moving * 6.5 + (load ? 3 + 12 * (1 - moving / 20) : 0),
+    gain: active ? (load ? 0.012 + moving * 0.0004 : 0.004 + moving * 0.00012) : 0
+  };
+}
+
+/** Tenths are truncated, preventing a false 0:60.0 at the minute boundary. */
+export function formatTime(seconds) {
+  const tenths = Math.floor(Math.max(0, seconds) * 10);
+  return `${Math.floor(tenths / 600)}:${String(Math.floor(tenths / 10) % 60).padStart(2, '0')}.${tenths % 10}`;
+}

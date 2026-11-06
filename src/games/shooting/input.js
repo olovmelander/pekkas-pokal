@@ -10,6 +10,31 @@ export function aimKey(event) {
   return ({ ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down', ShiftLeft: 'fine', ShiftRight: 'fine' })[event.code || event.key] || null;
 }
 
+/** Keep each physical binding held until that same key is released. */
+export function createAimKeys() {
+  const held = new Map();
+  const keys = { left: false, right: false, up: false, down: false, fine: false };
+  function sync() {
+    const actions = new Set(held.values());
+    Object.keys(keys).forEach(action => { keys[action] = actions.has(action); });
+  }
+  return {
+    keys,
+    press(event) {
+      const action = aimKey(event);
+      if (!action) return false;
+      held.set(event.code || event.key, action);
+      sync();
+      return true;
+    },
+    release(event) {
+      held.delete(event.code || event.key);
+      sync();
+    },
+    clear() { held.clear(); sync(); }
+  };
+}
+
 export function stepKeyboardAim(aim, keys, seconds) {
   const x = Number(!!keys.right) - Number(!!keys.left);
   const y = Number(!!keys.up) - Number(!!keys.down);

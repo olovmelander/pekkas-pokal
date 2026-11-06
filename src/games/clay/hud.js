@@ -76,10 +76,10 @@ export function buildHud(root) {
         <button class="lr-tool" id="lr-smooth"><span>GLÄTTA</span><small id="lr-smooth-key">håll</small></button>
         <button class="lr-tool primary" id="lr-done"><span>KLAR — BRÄNN!</span><small id="lr-done-key"></small></button>
       </div>
-      <div class="lr-skip" id="lr-skip">Tryck för att snabbspola</div>
+      <button type="button" class="lr-skip" id="lr-skip">Snabbspola bränningen</button>
     </div>
 
-    <div class="lr-card lr-verdict" id="lr-verdict">
+    <div class="lr-card lr-verdict" id="lr-verdict" role="region" aria-labelledby="lr-v-name">
       <div class="lr-kicker" id="lr-v-kicker"></div>
       <h3 id="lr-v-name"></h3>
       <div class="lr-grade"><b id="lr-v-grade">0</b><small>/10</small></div>
@@ -87,7 +87,7 @@ export function buildHud(root) {
       <blockquote id="lr-v-words"></blockquote>
       <div class="lr-lines" id="lr-v-lines"></div>
       <div class="lr-badge" id="lr-v-badge" hidden></div>
-      <button class="pb-btn" id="lr-next">Nästa alster</button>
+      <button class="pb-btn" id="lr-next" aria-describedby="lr-v-name lr-v-words lr-v-lines">Nästa alster</button>
     </div>
 
     <button class="lr-pause-toggle" id="lr-pause-toggle" aria-label="Pausa drejningen" aria-pressed="false"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg></button>

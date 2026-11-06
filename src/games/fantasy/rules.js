@@ -75,6 +75,15 @@ export function squadForecast(squad, captain, round, seed, triple = false) {
     (id === captain ? triple ? 3 : 2 : 1), 0);
 }
 
+/** An incoming captain keeps the armband, so compare the whole team's gain. */
+export function transferForecast(squad, captain, slot, incoming, round, seed, triple = false) {
+  const next = squad.slice(); next[slot] = incoming;
+  const nextCaptain = captain === squad[slot] ? incoming : captain;
+  const expected = squadForecast(next, nextCaptain, round, seed, triple);
+  return { expected, delta: expected - squadForecast(squad, captain, round, seed, triple),
+    remaining: BUDGET - squadCost(next), captain: nextCaptain };
+}
+
 export function upcomingFixtures(player, round, seed, count = 3) {
   return Array.from({ length: Math.min(count, ROUNDS - round) }, (_, offset) => ({
     round: round + offset,

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeStaticMeshes } from './mesh-batch.js';
 import { createPerson, appearanceFor, POSES } from '../shared/people.js';
+import { STAGES, advanceMotion } from './rules.js';
 
 function buildBike(color) {
   const root = new THREE.Group();
@@ -55,10 +56,15 @@ export function createAthlete(scene, name, color, player = false) {
     const ripple = new THREE.Mesh(new THREE.RingGeometry(0.44, 0.465, 26), new THREE.MeshBasicMaterial({ color: 0xd5f5e7, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false }));
     ripple.rotation.x = -Math.PI / 2; wake.add(ripple); return ripple;
   });
+  let phase = 0, wheelAngle = 0;
   return {
     root,
-    update(discipline, dt, time, effort) {
-      const phase = time * (effort ? 12 : 8);
+    reset() { phase = wheelAngle = 0; },
+    update(discipline, dt, time, effort, actualSpeed) {
+      const baseSpeed = STAGES.find(leg => leg.id === discipline).speed;
+      const speed = actualSpeed ?? baseSpeed * (effort ? 1.5 : 1);
+      phase = advanceMotion(phase, speed, baseSpeed, dt);
+      wheelAngle = (wheelAngle + speed * Math.max(0, dt) / 0.39) % (Math.PI * 2);
       helmet.visible = bike.root.visible = discipline === 'bike';
       wake.visible = discipline === 'swim';
       marker.visible = discipline !== 'swim';
@@ -86,7 +92,7 @@ export function createAthlete(scene, name, color, player = false) {
           thighL: [-0.85 + Math.sin(phase) * 0.5, 0, 0], thighR: [-0.85 - Math.sin(phase) * 0.5, 0, 0],
           shinL: [1.1 - Math.sin(phase) * 0.5, 0, 0], shinR: [1.1 + Math.sin(phase) * 0.5, 0, 0]
         });
-        bike.wheels.forEach(wheel => { wheel.rotation.x = phase * 2; });
+        bike.wheels.forEach(wheel => { wheel.rotation.x = wheelAngle; });
       } else {
         person.root.rotation.set(0, Math.PI, 0); person.root.position.set(0, Math.abs(Math.sin(phase)) * 0.09, 0);
         const pose = POSES.brisk(phase);
@@ -96,6 +102,6 @@ export function createAthlete(scene, name, color, player = false) {
       }
       person.update(dt, time);
     },
-    dispose() { person.dispose(); }
+    dispose() { helmet.geometry.dispose(); helmet.material.dispose(); person.dispose(); }
   };
 }

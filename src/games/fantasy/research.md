@@ -95,3 +95,7 @@ Slutbilden använde 120 draw calls, 781 764 trianglar, 61 geometrier och
 25 texturer inklusive den gemensamma miljöreflektionen. Den sista inramningen
 med entréer och träd tillförde cirka 33 000 trianglar. De siffrorna är
 renderingskostnad, inte ett uppmätt löfte om bildfrekvens på telefon.
+
+### Nattgranskning 6 november
+
+Transfermarknadens prognosskillnad räknar nu lagets verkliga förändring, inklusive den kapten/trippelkapten som följer med lagplatsen. Samtidigt visas kvarvarande budget efter bytet. Regressionen jämför med `squadForecast()` för det faktiska nya laget; en mobil browserkontroll verifierade transfern, fem hela omgångar, slutresultat och omstart. Budget, resultatmodell och rivalernas regler är oförändrade.

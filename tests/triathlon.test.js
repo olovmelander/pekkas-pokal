@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { paceStep, raceProgress, scoreRace, formatTime, STAGES, rivalAtTime, canDraft } from '../src/games/triathlon/rules.js';
+import { paceStep, advancePace, passageLane, finishPlace, advanceMotion, raceProgress, scoreRace, formatTime, STAGES, rivalAtTime, canDraft } from '../src/games/triathlon/rules.js';
 
 describe('triathlon pacing', () => {
   it('follows the user-confirmed swim, run, cycle order for Lomsjön 2017', () => {
@@ -106,5 +106,54 @@ describe('triathlon independent opponents', () => {
     expect(canDraft(2, 100, 0, { ...r, finished: true })).toBe(false);
     expect(canDraft(2, 115, 0, r)).toBe(false);
     expect(canDraft(2, 100, 2, r)).toBe(false);
+  });
+});
+
+
+describe('triathlon precise crossings and motion', () => {
+  it('ends the frame clock and energy use at the actual finish crossing', () => {
+    const state = { stamina: 70, exhausted: false, speed: 17, stage: 2, surge: false };
+    const movement = advancePace(state, 0.05, 0.34);
+    expect(movement.time).toBeCloseTo(0.02, 10);
+    expect(movement.distance).toBeCloseTo(0.34, 10);
+    expect(movement.stamina).toBeCloseTo(70.2, 10);
+    const elapsed = 88.97 + movement.time;
+    expect(finishPlace(elapsed, [{ duration: 89 }, { duration: 96 }])).toBe(1);
+    expect(finishPlace(89.01, [{ duration: 89 }, { duration: 96 }])).toBe(2);
+  });
+
+  it('uses the same crossing time on a coarse or fine frame at steady pace', () => {
+    const finish = dt => {
+      let seconds = 0, distance = 0;
+      while (distance < 1) {
+        const frame = advancePace({ stamina: 100, exhausted: false, speed: 17, stage: 2, surge: false }, dt, 1 - distance);
+        seconds += frame.time; distance += frame.distance;
+      }
+      return seconds;
+    };
+    expect(finish(0.05)).toBeCloseTo(finish(1 / 144), 9);
+  });
+
+  it('does not award a late swerve after passing a bottle', () => {
+    const lane = passageLane(99.95, 101.2, 0.90, 0.61, 100);
+    expect(lane).toBeCloseTo(0.8884, 6);
+    expect(Math.abs(lane)).toBeGreaterThan(0.85);
+  });
+
+  it('does not reject a valid bottle when steering away after crossing it', () => {
+    const lane = passageLane(99.95, 101.2, 0.80, 1.09, 100);
+    expect(lane).toBeCloseTo(0.8116, 6);
+    expect(Math.abs(lane)).toBeLessThan(0.85);
+    expect(passageLane(100.1, 101, 0, 0, 100)).toBeNull();
+    expect(passageLane(98, 99, 0, 0, 100)).toBeNull();
+  });
+
+  it('keeps arm and pedal phases continuous through effort changes and pauses', () => {
+    const phase = advanceMotion(0, 8.5, 8.5, 10);
+    expect(advanceMotion(phase, 12, 8.5, 0)).toBe(phase);
+    const next = advanceMotion(phase, 12, 8.5, 1 / 60);
+    expect((next - phase + Math.PI * 2) % (Math.PI * 2)).toBeLessThan(0.2);
+    const fine = advanceMotion(advanceMotion(phase, 12, 8.5, 0.025), 12, 8.5, 0.025);
+    expect(fine).toBeCloseTo(advanceMotion(phase, 12, 8.5, 0.05), 12);
   });
 });

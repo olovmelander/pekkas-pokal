@@ -26,3 +26,9 @@
 - `tests/game-clock.test.js`: paus, tidsfönster, avbokning, omstart och städning.
 - Rotation under paus är även visuellt kontrollerad mot produktionsbygget: bord och efterbehandling finns kvar och aktiv tid/fas är oförändrade.
 - Tre bollar har avfyrats med riktiga Space-händelser genom dränering, bonus, slutresultat, namn/topplista och UI-omstart. Nästa spel börjar med boll 1 och poäng 0. Detta separata funktionstest använder aktiv testklocka utan rendering.
+
+## Nattgranskning 6 november
+
+- Multiballräddningen ersätter nu även den sista synliga bollen och räknar väntande serveringar som bollar i spel. Flera täta dräneringar kan därmed inte avsluta bollen innan redan räddade bollar har återkommit.
+- Tilt förbrukar räddningen. Strategipaus tystar hela ljudbussen; nudge ändrar inte spelet under pausen.
+- Fyra nya lifecycle-regressioner täcker samtidiga dräneringar, väntande serveringar när fönstret slutar, wireforms/val av gren och tilt. Browsern verifierade tre samtidiga räddningar, paus av kön, återkomst och ett separat naturligt tre-bollsspel via riktiga Space-avfyrningar till resultat, topplista och omstart.
