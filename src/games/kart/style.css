@@ -1,0 +1,46 @@
+@import '../shared/arcade.css';
+
+.kart-game { --kart-gold: #f8c969; }
+.kart-interface { position: absolute; inset: 0; pointer-events: none; color: #fff7e6; font-family: var(--font-body, sans-serif); }
+.kart-race-meta { position: absolute; top: 100px; left: 22px; display: grid; gap: 7px; text-shadow: 0 2px 8px #000; }
+.kart-race-meta strong { font-size: clamp(2rem, 6vw, 3.7rem); font-family: var(--ff-serif, Georgia, serif); font-weight: 400; line-height: 1; }
+.kart-race-meta strong small { font-size: 1rem; color: #e8d9bb; }
+.kart-race-meta span { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; }
+.kart-map { position: absolute; right: 20px; top: 100px; width: 145px; height: 118px; background: #121b1ac4; border: 1px solid #f8c96930; border-radius: 14px; backdrop-filter: blur(8px); }
+.kart-map path { fill: none; stroke: #e7d8b74a; stroke-width: 7.5; stroke-linecap: round; stroke-linejoin: round; }
+.kart-map circle { stroke: #182421; stroke-width: 2; }
+.kart-dashboard { position: absolute; bottom: calc(100px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); width: min(280px, 55vw); text-align: center; text-shadow: 0 2px 8px #000; }
+.kart-speed { font-size: 1.8rem; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; }
+.kart-speed small { margin-left: 5px; font-size: .55rem; letter-spacing: .15em; font-weight: 500; }
+.kart-grip { margin: 8px auto 5px; height: 6px; width: 100%; border-radius: 5px; border: 1px solid #ffffff30; background: #101e1acc; overflow: hidden; }
+.kart-grip i { display: block; height: 100%; width: 0; background: #a9c892; box-shadow: 0 0 10px #a9c89266; transition: background .2s; }
+.kart-grip.sliding i { background: #f1946f; box-shadow: 0 0 10px #f1946f88; }
+.kart-tip { font-size: 10px; letter-spacing: .05em; color: #fff0ce; }
+.kart-controls { position: absolute; bottom: max(18px, env(safe-area-inset-bottom)); left: 20px; right: 20px; display: flex; align-items: end; justify-content: space-between; gap: 12px; }
+.kart-control-group { display: flex; gap: 9px; }
+.kart-controls button { pointer-events: auto; min-width: 65px; min-height: 64px; border: 1px solid #f8c9695c; border-radius: 18px; color: #fff4d8; background: linear-gradient(145deg, #253931eb, #0b1918e8); box-shadow: 0 5px 15px #0004, inset 0 1px 0 #ffffff18; font-size: 23px; touch-action: none; user-select: none; -webkit-user-select: none; }
+.kart-controls button span { display: block; font-size: 10px; letter-spacing: .10em; font-weight: 700; }
+.kart-controls button small { display: block; margin-top: 4px; opacity: .55; font-size: 9px; }
+.kart-controls button[data-control='throttle'] { min-width: 85px; background: linear-gradient(145deg, #cba052, #7d581f); border-color: #ffe1a2a6; color: #1d170b; }
+.kart-controls button:active, .kart-controls button.is-held { transform: translateY(2px); filter: brightness(1.4); }
+.kart-controls button:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.kart-countdown { position: absolute; top: 36%; width: 100%; text-align: center; font-family: var(--ff-serif, Georgia, serif); font-size: clamp(5rem, 18vw, 10rem); color: #ffe0a0; text-shadow: 0 5px 50px #0008; }
+.kart-countdown:empty { display: none; }
+.kart-interface[data-state='menu'] .kart-controls, .kart-interface[data-state='menu'] .kart-dashboard { visibility: hidden; }
+@media (max-width: 600px) {
+  .kart-map { top: 105px; right: 12px; width: 110px; height: 92px; }
+  .kart-race-meta { left: 14px; top: 105px; }
+  .kart-race-meta strong { font-size: 2.5rem; }
+  .kart-controls { left: 12px; right: 12px; gap: 8px; }
+  .kart-control-group { gap: 7px; }
+  .kart-controls button { min-width: 53px; min-height: 62px; border-radius: 16px; }
+  .kart-controls button[data-control='throttle'] { min-width: 71px; }
+  .kart-dashboard { bottom: calc(96px + env(safe-area-inset-bottom)); }
+}
+@media (max-height: 500px) and (min-width: 600px) {
+  .kart-race-meta { top: 108px; }
+  .kart-map { top: 80px; width: 112px; height: 90px; }
+  .kart-controls { bottom: 10px; }
+  .kart-controls button { min-height: 50px; }
+  .kart-dashboard { bottom: 18px; }
+}

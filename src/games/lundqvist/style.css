@@ -1,0 +1,12 @@
+@import '../farm/style.css';
+.country-lundqvist { --country-gold:#b8d5ad; }
+.country-lundqvist .country-controls { background:linear-gradient(160deg,#15332cde,#122623ed); border-color:#b8d5ad44; }
+.country-lundqvist .country-actions .country-action { background:linear-gradient(140deg,#d7e8bd,#8dbca3); }
+.country-lundqvist .country-controls { width:min(500px,calc(100% - 28px)); }
+.country-lundqvist .country-meter { height:10px; }
+.country-lundqvist .country-zone { border-inline:1px solid #fff; background:#e2edbc66; }
+.country-lundqvist .country-round strong { letter-spacing:-.02em; }
+@media (max-height:560px) and (min-width:600px) {
+  .country-lundqvist .country-controls { left:auto; right:14px; width:320px; transform:none; }
+  .country-lundqvist .country-hint { display:block; font-size:10px; }
+}

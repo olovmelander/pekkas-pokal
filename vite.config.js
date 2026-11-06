@@ -1,6 +1,20 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
-import { readdirSync, writeFileSync, mkdirSync, existsSync } from 'fs';
+import { readdirSync, writeFileSync, mkdirSync, existsSync, cpSync } from 'fs';
+
+/** Games are deliberately lazy-loaded from their stable module URLs. Keep the
+ * local production build as complete as the GitHub Pages deployment. */
+function arcadeAssets() {
+  return {
+    name: 'arcade-static-assets',
+    closeBundle() {
+      for (const folder of ['games', 'scripts', 'styles', 'data']) {
+        cpSync(resolve(__dirname, 'src', folder), resolve(__dirname, 'dist/src', folder), { recursive: true });
+      }
+      cpSync(resolve(__dirname, 'competition-data.csv'), resolve(__dirname, 'dist/competition-data.csv'));
+    }
+  };
+}
 
 /**
  * Lists the years that have a photo in public/photos/ so the app can load them
@@ -26,7 +40,7 @@ function photoManifest() {
 }
 
 export default defineConfig({
-  plugins: [photoManifest()],
+  plugins: [photoManifest(), arcadeAssets()],
 
   // Base path for GitHub Pages - repository name.
   // PAGES_BASE overrides it, so the same build can target a mirror repo

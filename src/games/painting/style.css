@@ -1815,8 +1815,10 @@
   }
 
   .pm-ui.pm-wide .pm-palette-wrap {
-    height: auto;
-    flex: 1 1 auto;
+    /* An explicit basis avoids a canvas intrinsic-size feedback loop when a
+       tall phone rotates: its previous bitmap height must not size this row. */
+    height: clamp(80px, 30vh, 155px);
+    flex: 0 1 auto;
     min-height: 90px;
   }
 
@@ -1921,6 +1923,54 @@
 .pm-ui .pm-actions {
   position: relative;
   z-index: 2;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 44px minmax(64px, 0.8fr) minmax(90px, 1.2fr);
+}
+
+.pm-ui .pm-actions .pm-btn { min-width: 0; padding-inline: 8px; gap: 5px; letter-spacing: 0.06em; }
+.pm-ui .pm-actions .pm-undo { padding: 0; }
+.pm-ui .pm-pigments { position: absolute; inset: 0; pointer-events: none; }
+.pm-ui .pm-pigment {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: white;
+  text-shadow: 0 1px 3px #000, 0 0 5px #000;
+  font-size: 12px;
+  font-weight: 800;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+.pm-ui .pm-pigment:focus-visible { outline: 2px solid #fff0bc; outline-offset: 2px; background: #fff2; }
+.pm-ui .pm-pause-button {
+  position: absolute;
+  right: 160px;
+  top: max(8px, env(safe-area-inset-top));
+  z-index: 40;
+  width: 40px;
+  height: 44px;
+  border: 1px solid #fff2;
+  border-radius: 50%;
+  color: #f2d596;
+  background: #171914b8;
+  font-size: 20px;
+}
+.pm-ui.pm-tall .pm-clockbox { left: 82px; transform: none; padding-inline: 7px; gap: 4px; }
+.pm-ui.pm-tall .pm-work { max-width: 30px; font-size: 8px; }
+.pm-ui.pm-paused *, .pm-ui.pm-paused *::before, .pm-ui.pm-paused *::after { animation-play-state: paused !important; }
+.pm-ui .pm-pause-panel { z-index: 55; }
+@media (max-width: 360px) {
+  .pm-ui .pm-pause-button { right: 12px; top: 64px; }
+}
+@media (max-height: 560px) {
+  .pm-ui.pm-wide .pm-actions kbd { display: none; }
+  .pm-ui.pm-wide .pm-actions .pm-btn { font-size: 0.7rem; }
 }
 
 @media (max-height: 360px) {

@@ -1231,3 +1231,6 @@
     padding: 6px 18px 12px;
   }
 }
+
+/* Leave the current rule visible after the opening explanation fades. */
+.fiske-ui .fg-phase.fi-phase-compact { padding: .3rem .7rem; font-size: .62rem; background: rgba(6, 18, 30, .78); border-color: rgba(218, 244, 230, .45); }

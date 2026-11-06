@@ -37,6 +37,9 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { guardRenderer, postTarget, addSanitize, RenderWatchdog, gfxNotice, precompile } from '../shared/gfx.js';
 import { Sfx } from './audio.js';
+import { takeFeint, openingRemaining, hasAttackPriority, attackIsOutOfTurn, claimTouch, canParry } from './combat-rules.js';
+import { isActionButtonEvent } from './input.js';
+import { hasCommandModifier } from '../shared/keyboard.js';
 import { Fencer, Animator, P, POSE_LEN } from './fencer.js';
 import { mulberry, glowTexture, buildSalle, buildEnvScene } from './salle.js';
 import { Sparks, Trail, Flashes, Confetti, starTexture, ringTexture } from './fx.js';
@@ -155,6 +158,7 @@ function save(key, value) {
 export async function createFencing(container) {
   const canvasHost = document.createElement('div');
   canvasHost.className = 'pb-canvas';
+  canvasHost.tabIndex = -1;
   container.appendChild(canvasHost);
   const hudHost = document.createElement('div');
   hudHost.className = 'pb-ui fen';
@@ -202,16 +206,23 @@ export async function createFencing(container) {
   const camera = new THREE.PerspectiveCamera(36, 1, 0.2, 60);
 
   // Reflections: a pre-filtered stand-in of this very room
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  const envScene = buildEnvScene();
-  const envRT = pmrem.fromScene(envScene, 0.04);
+  function bakeEnvironment() {
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const envScene = buildEnvScene();
+    try {
+      return pmrem.fromScene(envScene, 0.04);
+    } finally {
+      envScene.traverse((o) => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) o.material.dispose();
+      });
+      pmrem.dispose();
+    }
+  }
+  let envRT = bakeEnvironment();
+  let environmentRestorePending = false;
   scene.environment = envRT.texture;
   scene.environmentIntensity = 0.6;
-  envScene.traverse((o) => {
-    if (o.geometry) o.geometry.dispose();
-    if (o.material) o.material.dispose();
-  });
-  pmrem.dispose();
 
   /* ---- World ---- */
   let fencerName = load(KEY_FENCER, 'Olov Melander');
@@ -335,6 +346,7 @@ export async function createFencing(container) {
   bloom.enabled = gfx.floatRT;
   composer.addPass(new OutputPass());
   let usePost = !gfx.safe;
+  let needsRedraw = true;
 
   /* ---- Black-frame watchdog: step down until the picture lives ---- */
   const watchdog = new RenderWatchdog(
@@ -360,7 +372,10 @@ export async function createFencing(container) {
         });
       }
     ],
-    { onStep: () => gfxNotice(container, 'Grafiken förenklades för att fungera på den här enheten.') }
+    { onStep: () => {
+      needsRedraw = true;
+      gfxNotice(container, 'Grafiken förenklades för att fungera på den här enheten.');
+    } }
   );
 
   /* ---- State ---------------------------------------------------------- */
@@ -471,7 +486,7 @@ export async function createFencing(container) {
     if (!state.tutorial || state.coached[key]) return;
     state.coached[key] = true;
     hud.coach(html);
-    clearTimeout(state.coachTimer);
+    hud.cancelLater(state.coachTimer);
     state.coachTimer = hud.later(() => hud.coach(''), ms);
   }
 
@@ -605,8 +620,7 @@ export async function createFencing(container) {
 
   /** `via`: how the referee explains it — 'point', 'parry' (riposte) or 'attack' (right of way). */
   function scoreTouch(mine, points, label, at, via = 'point') {
-    state.phase = 'touch';
-    state.phaseT = 0;
+    if (!claimTouch(state, mine)) return;
     const hitAt = at || (mine ? foe : me).j.torso.getWorldPosition(new THREE.Vector3()).setY(1.2);
     state.lastTouch = { t: gameTime, mine, at: hitAt.clone() };
     logEvent('touch', hitAt, { mine });
@@ -624,7 +638,6 @@ export async function createFencing(container) {
     (mine ? me : foe).express('grin', 1, 1.3);
     (mine ? foe : me).express('frown', 1, 1.3);
     if (mine) {
-      state.myTouches++;
       state.streak++;
       state.stats.bestStreak = Math.max(state.stats.bestStreak, state.streak);
       const streakBonus = state.streak >= 2 ? 50 * (state.streak - 1) : 0;
@@ -639,7 +652,6 @@ export async function createFencing(container) {
       salle.crowd.react('cheer');
       sfx.cheer();
     } else {
-      state.foeTouches++;
       state.streak = 0;
       hud.call('TUSCH EMOT', 'them');
       hud.flash('rgba(255,77,60,0.5)');
@@ -853,12 +865,13 @@ export async function createFencing(container) {
   /* ---- Combat resolution (timings as measured in v1) ------------------ */
 
   function playerLunge(isFeint) {
-    if (state.phase !== 'live' || meS.pose === 'lunge' || meS.pose === 'stagger') return;
+    if (helpOpen || state.phase !== 'live' || meS.pose === 'lunge' || meS.pose === 'stagger') return;
     meS.pose = isFeint ? 'feint' : 'lunge';
     meS.t = 0;
     meS.resolved = false;
     meS.lungeLine = meS.line;
     meS.isFeint = isFeint;
+    meS.hasPriority = !isFeint && hasAttackPriority(ai.pose);
     hud.press(isFeint ? el.feint : el.lunge);
     if (isFeint) sfx.feint();
     else sfx.swish();
@@ -894,7 +907,7 @@ export async function createFencing(container) {
         riposte ? 'RIPOST +175' : feintHit ? 'FINT-TUSCH +150' : '+100', tipMe.clone(), riposte ? 'parry' : 'point');
       return;
     }
-    if (ai.pose === 'telegraph' || ai.pose === 'attack') {
+    if (attackIsOutOfTurn(ai.pose, meS.hasPriority)) {
       // Attacking into an attack: right of way belongs to them
       sparks.burst(tipMe, { n: 8, speed: 1.6, color: new THREE.Color(2.4, 2, 1.6), life: 0.3 });
       hud.sub('VÄGRÄTT TILL MOTSTÅNDAREN', 'red');
@@ -938,7 +951,7 @@ export async function createFencing(container) {
 
   function resolveAiAttack() {
     foe.tipWorld(tipAi);
-    if (meS.pose !== 'lunge' && meS.pose !== 'stagger' && meS.line === ai.line) {
+    if (canParry(meS.pose, meS.line, ai.line)) {
       // Parried! The Nidhogg rule: same line blocks
       ai.pose = 'stagger';
       ai.t = 0;
@@ -992,15 +1005,10 @@ export async function createFencing(container) {
       }
       case 'telegraph': {
         const tele = ai.tele || o.telegraph;
-        if (ai.willFeint && ai.t > tele * 0.62 && ai.shownLine === ai.line) {
+        if (takeFeint(ai, tele, rand)) {
           // The switch: the real attack moves to another line late
-          let other = Math.floor(rand() * 3);
-          while (other === ai.line) other = Math.floor(rand() * 3);
-          ai.line = other;
-          ai.shownLine = other;
-          ai.switchT = 0.25;
           sfx.feint();
-          hud.sub(`BYTER TILL ${LINE_NAME[other]}!`, 'red');
+          hud.sub(`BYTER TILL ${LINE_NAME[ai.line]}!`, 'red');
         }
         if (ai.t >= tele) {
           ai.pose = 'attack';
@@ -1126,6 +1134,7 @@ export async function createFencing(container) {
   /* ---- Input ---------------------------------------------------------- */
 
   function setLine(i) {
+    if (helpOpen) return;
     if (state.phase !== 'live' && state.phase !== 'ready' && state.phase !== 'intro') return;
     if (i === meS.line) return;
     meS.line = i;
@@ -1176,20 +1185,43 @@ export async function createFencing(container) {
   }
 
   function onKeyDown(e) {
-    const k = e.key;
-    if (k === '?' || (k === 'Escape' && helpOpen)) {
-      setHelp(k === '?' ? !helpOpen : false);
+    if (hasCommandModifier(e)) {
+      // Space's native click happens on release, possibly after Ctrl was let go.
+      // Cancel only our action buttons' activation while leaving other shortcuts alone.
+      if ((e.key === ' ' || e.key === 'Enter') && e.target.closest?.('.fen-pad button')) e.preventDefault();
       return;
     }
-    if (helpOpen || e.repeat) return;
+    const k = e.key;
+    if (k === '?' || k.toLowerCase() === 'p' || (k === 'Escape' && helpOpen)) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!e.repeat) setHelp(k === 'Escape' ? false : !helpOpen);
+      return;
+    }
+    if (helpOpen) {
+      if (k === 'Tab') { e.preventDefault(); el.helpClose.focus(); }
+      return;
+    }
+    if (e.repeat) {
+      // A held native button can synthesize click(detail=0) on repeated
+      // Enter, or on Space release. The first keydown already acted.
+      if ((k === ' ' || k === 'Enter') && e.target.closest?.('.fen-pad button')) e.preventDefault();
+      return;
+    }
     if (state.phase === 'replay' || state.phase === 'ceremony') {
-      skipReplay();
+      if (k === ' ' || k === 'Enter' || k === 'Escape') {
+        e.preventDefault(); e.stopPropagation(); skipReplay();
+      }
       return;
     }
     if (k === ' ' || k === 'Enter') {
+      const button = e.target.closest?.('button');
+      if (button && !el.lineBtns.includes(button) && button !== el.lunge && button !== el.feint) return;
       e.preventDefault();
-      if (el.screen.classList.contains('show')) primary();
-      else if (k === ' ') playerLunge(false);
+      if (button?.dataset.line !== undefined) setLine(Number(button.dataset.line));
+      else if (button === el.feint) playerLunge(true);
+      else if (el.screen.classList.contains('show')) primary();
+      else playerLunge(false);
       return;
     }
     if (k === 'ArrowUp' || k === 'w' || k === 'W') {
@@ -1206,41 +1238,64 @@ export async function createFencing(container) {
   // Vertical swipes anywhere on the piste also move the guard
   let swipe = null;
   function onPointerDown(e) {
+    if (helpOpen || e.isPrimary === false || (e.pointerType === 'mouse' && e.button !== 0)) return;
     sfx.resume();
     if (state.phase === 'replay' || state.phase === 'ceremony') {
       skipReplay();
       return;
     }
-    swipe = { y: e.clientY, line: meS.line };
+    swipe = { id: e.pointerId, y: e.clientY };
+    canvasHost.setPointerCapture?.(e.pointerId);
   }
   function onPointerMove(e) {
-    if (!swipe) return;
+    if (helpOpen || !swipe || e.pointerId !== swipe.id) return;
     const dy = e.clientY - swipe.y;
     if (Math.abs(dy) > 36) {
       setLine(Math.max(0, Math.min(2, meS.line + (dy < 0 ? -1 : 1))));
       swipe.y = e.clientY;
     }
   }
-  function onPointerUp() {
+  function onPointerUp(e) {
+    if (e && swipe && e.pointerId !== swipe.id) return;
+    const id = swipe?.id;
     swipe = null;
+    if (id !== undefined && canvasHost.hasPointerCapture?.(id)) canvasHost.releasePointerCapture(id);
   }
 
   function setHelp(open) {
+    onPointerUp();
     helpOpen = open;
+    needsRedraw = true;
+    hudHost.dataset.paused = String(open);
     el.help.hidden = !open;
+    el.info.setAttribute('aria-expanded', String(open));
+    if (open) sfx.ctx?.suspend();
+    else sfx.resume();
+    if (!document.hidden && document.hasFocus()) (open ? el.helpClose : canvasHost).focus({ preventScroll: true });
+  }
+  function onBlur() {
+    onPointerUp();
+    sfx.ctx?.suspend();
+    if (['intro', 'ready', 'live', 'touch', 'replay', 'ceremony'].includes(state.phase)) setHelp(true);
+  }
+  function onFocus() {
+    if (!document.hidden && !helpOpen) sfx.ctx?.resume();
   }
 
   const lineDown = (e) => {
+    if (helpOpen || !isActionButtonEvent(e)) return;
     e.preventDefault();
     sfx.resume();
     setLine(Number(e.currentTarget.dataset.line));
   };
   const lungeDown = (e) => {
+    if (helpOpen || !isActionButtonEvent(e)) return;
     e.preventDefault();
     sfx.resume();
     playerLunge(false);
   };
   const feintDown = (e) => {
+    if (helpOpen || !isActionButtonEvent(e)) return;
     e.preventDefault();
     sfx.resume();
     playerLunge(true);
@@ -1250,6 +1305,8 @@ export async function createFencing(container) {
     sfx.resume();
     sfx.setMuted(!sfx.muted);
     el.mute.classList.toggle('off', sfx.muted);
+    el.mute.setAttribute('aria-pressed', String(sfx.muted));
+    el.mute.setAttribute('aria-label', sfx.muted ? 'Ljud på' : 'Ljud av');
   };
   const infoClick = () => {
     unfocus();
@@ -1263,11 +1320,17 @@ export async function createFencing(container) {
   canvasHost.addEventListener('pointerdown', onPointerDown);
   window.addEventListener('pointermove', onPointerMove);
   window.addEventListener('pointerup', onPointerUp);
-  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('pointercancel', onPointerUp);
+  canvasHost.addEventListener('lostpointercapture', onPointerUp);
+  window.addEventListener('blur', onBlur);
+  window.addEventListener('focus', onFocus);
+  window.addEventListener('keydown', onKeyDown, true);
   el.panel.addEventListener('click', onPanelClick);
-  el.lineBtns.forEach((b) => b.addEventListener('pointerdown', lineDown));
-  el.lunge.addEventListener('pointerdown', lungeDown);
-  el.feint.addEventListener('pointerdown', feintDown);
+  for (const type of ['pointerdown', 'click']) {
+    el.lineBtns.forEach((b) => b.addEventListener(type, lineDown));
+    el.lunge.addEventListener(type, lungeDown);
+    el.feint.addEventListener(type, feintDown);
+  }
   el.mute.addEventListener('click', muteClick);
   el.info.addEventListener('click', infoClick);
   el.helpClose.addEventListener('click', helpCloseClick);
@@ -1407,7 +1470,7 @@ export async function createFencing(container) {
     }
   }
 
-  function updateCamera(dt, t) {
+  function updateCamera(dt, t, snap = false) {
     if (camCut === 'intro') {
       // Start on the opponent's mask, then let the rate carry us out
       foe.j.head.getWorldPosition(v3);
@@ -1421,14 +1484,14 @@ export async function createFencing(container) {
       camCut = '';
     }
     cameraGoal(t);
-    const k = 1 - Math.exp(-goal.rate * dt);
+    const k = snap ? 1 : 1 - Math.exp(-goal.rate * dt);
     cam.pos.lerp(goal.pos, k);
     cam.look.lerp(goal.look, k);
     cam.fov += (goal.fov - cam.fov) * k;
     cam.roll += (goal.roll - cam.roll) * k;
     cam.shift.lerp(goal.shift, k);
     camera.position.copy(cam.pos);
-    if (shake.power > 0.001) {
+    if (shake.power > 0.001 && dt > 0) {
       shake.power = Math.max(0, shake.power - dt * 4);
       const s = shake.power * 0.05;
       camera.position.x += (Math.random() - 0.5) * s;
@@ -1458,6 +1521,7 @@ export async function createFencing(container) {
 
   /* ---- Sizing --------------------------------------------------------- */
 
+  let resizePicture = null;
   function resize() {
     const rect = canvasHost.getBoundingClientRect();
     const w = Math.max(1, Math.floor(rect.width));
@@ -1474,6 +1538,8 @@ export async function createFencing(container) {
     camera.updateProjectionMatrix();
     salle.setMoteScale(rtSize.y * 0.05);
     hudHost.dataset.orient = aspect < 0.9 ? 'portrait' : 'landscape';
+    needsRedraw = true;
+    resizePicture?.();
   }
   const ro = new ResizeObserver(resize);
   ro.observe(canvasHost);
@@ -1548,7 +1614,7 @@ export async function createFencing(container) {
       if (state.phaseT >= 1.5) goLive();
     } else if (ph === 'live') {
       updateAi(dt);
-      updatePlayer(dt);
+      if (state.phase === 'live') updatePlayer(dt);
     } else if (ph === 'touch') {
       meS.t += dt;
       ai.t += dt;
@@ -1565,6 +1631,15 @@ export async function createFencing(container) {
 
   function updateTelegraph(dt, t) {
     const live = state.phase === 'live';
+    const opening = live ? openingRemaining(ai.pose, ai.t) : 0;
+    if (opening > 0) {
+      hud.cue(ai.pose === 'stagger' ? 'RIPOST · STÖT NU' : 'ÖPPEN LINJE · STÖT', 'open', opening / openingRemaining(ai.pose, 0));
+    } else if (live && (ai.pose === 'telegraph' || ai.pose === 'attack')) {
+      const covered = canParry(meS.pose, meS.line, ai.shownLine);
+      const duration = ai.pose === 'telegraph' ? ai.tele || opp().telegraph : opp().attackDur * 0.7;
+      const action = meS.pose === 'stagger' ? 'BUNDEN KLINGA' : meS.pose === 'lunge' ? 'I STÖT' : covered ? 'GARD KLAR' : 'PARERA';
+      hud.cue(`${action} · ${LINE_NAME[ai.shownLine]}`, covered ? 'covered' : 'danger', 1 - ai.t / duration);
+    } else hud.cue('');
     // Glint on the attacking blade
     if (ai.pose === 'telegraph' && live) {
       const k = ai.t / (ai.tele || opp().telegraph);
@@ -1575,7 +1650,7 @@ export async function createFencing(container) {
       glint.scale.setScalar((0.5 + k * 0.45) * flick);
       glint.material.rotation = t * 1.5;
       // Where it is going to land, on you
-      const covered = meS.line === ai.shownLine;
+      const covered = canParry(meS.pose, meS.line, ai.shownLine);
       me.j.torso.getWorldPosition(v3);
       threat.position.set(v3.x + 0.24, me.lineWorldY(ai.shownLine), v3.z + 0.25);
       threatMat.color.set(covered ? 0x7fe8ff : 0xff5a46);
@@ -1638,6 +1713,9 @@ export async function createFencing(container) {
 
   /** One step of the world. Kept apart from rendering so tests can step it. */
   function simulate(realDt) {
+    // Pause the pose, the attack window and the replay at precisely the same instant.
+    if (helpOpen) return;
+    hud.tick(realDt);
     clock += realDt;
     const t = clock;
     // Hit-stop: the world nearly freezes for a few frames on impact
@@ -1700,8 +1778,12 @@ export async function createFencing(container) {
     const frameDt = Math.min(0.5, Math.max(0, (now - last) / 1000));
     last = now;
     if (!running) return;
-    watchPerf(frameDt);
-    if (!frozen) simulate(realDt);
+    if (helpOpen && !needsRedraw) return;
+    // A paused repaint must not advance poses or count toward quality loss.
+    if (!helpOpen) {
+      watchPerf(frameDt);
+      if (!frozen) simulate(realDt);
+    }
     if (renderBudget <= 0) return;
     renderBudget--;
     if (camOverride) {
@@ -1713,23 +1795,40 @@ export async function createFencing(container) {
     }
     renderer.info.reset();
     drawFrame();
-    watchdog.afterFrame();
+    if (!helpOpen) watchdog.afterFrame();
   }
 
   function drawFrame() {
+    if (environmentRestorePending) {
+      const previous = envRT;
+      envRT = bakeEnvironment();
+      // Keep a watchdog-disabled environment disabled.
+      if (scene.environment === previous.texture) scene.environment = envRT.texture;
+      previous.dispose();
+      environmentRestorePending = false;
+    }
     if (usePost) composer.render();
     else renderer.render(scene, camera);
+    needsRedraw = false;
   }
 
   const onVisibility = () => {
+    if (document.hidden) onBlur();
     running = !document.hidden;
     last = performance.now();
+    if (running) needsRedraw = true;
     if (sfx.ctx) {
       if (document.hidden) sfx.ctx.suspend();
-      else sfx.ctx.resume();
+      else if (!helpOpen) sfx.ctx.resume();
     }
   };
   document.addEventListener('visibilitychange', onVisibility);
+  const onContextRestored = () => {
+    // Stay idle in a hidden tab; rebuild only when a frame is permitted.
+    environmentRestorePending = true;
+    needsRedraw = true;
+  };
+  renderer.domElement.addEventListener('webglcontextrestored', onContextRestored);
 
   // Every grip the hands will take, solved now rather than mid-bout (the
   // fencers solve theirs whenever they are dressed)
@@ -1754,6 +1853,10 @@ export async function createFencing(container) {
   // With the composer in use three draws into a render target (linear, no
   // tone mapping) — compile those program variants, not the screen ones
   await precompile(renderer, scene, camera, usePost ? { target: composer.renderTarget1 } : {});
+  resizePicture = () => {
+    updateCamera(0, clock, true);
+    if (running && !document.hidden) drawFrame();
+  };
   hidden.forEach((o) => {
     o.visible = false;
   });
@@ -1887,10 +1990,20 @@ export async function createFencing(container) {
     running = false;
     ro.disconnect();
     document.removeEventListener('visibilitychange', onVisibility);
+    renderer.domElement.removeEventListener('webglcontextrestored', onContextRestored);
     canvasHost.removeEventListener('pointerdown', onPointerDown);
     window.removeEventListener('pointermove', onPointerMove);
     window.removeEventListener('pointerup', onPointerUp);
-    window.removeEventListener('keydown', onKeyDown);
+    window.removeEventListener('pointercancel', onPointerUp);
+    canvasHost.removeEventListener('lostpointercapture', onPointerUp);
+    window.removeEventListener('blur', onBlur);
+    window.removeEventListener('focus', onFocus);
+    window.removeEventListener('keydown', onKeyDown, true);
+    for (const type of ['pointerdown', 'click']) {
+      el.lineBtns.forEach((b) => b.removeEventListener(type, lineDown));
+      el.lunge.removeEventListener(type, lungeDown);
+      el.feint.removeEventListener(type, feintDown);
+    }
     hud.dispose();
     if (window.__ppFakt) delete window.__ppFakt;
     gfx.dispose();

@@ -7,6 +7,8 @@
  * the site stays consistent; the rest is this game's own.
  */
 
+import { createGameClock } from '../shared/game-clock.js';
+
 /* The 2023 tournament: who stood where (competition-data.csv) */
 export const FIELD = [
   { name: 'Per Vikman', place: 1 },
@@ -42,17 +44,16 @@ class Hud {
   constructor(root, el) {
     this.root = root;
     this.el = el;
-    this.timers = new Set();
+    this.clock = createGameClock();
   }
 
   later(fn, ms) {
-    const id = setTimeout(() => {
-      this.timers.delete(id);
-      fn();
-    }, ms);
-    this.timers.add(id);
-    return id;
+    return this.clock.schedule(fn, ms / 1000);
   }
+
+  cancelLater(id) { this.clock.cancel(id); }
+
+  tick(seconds) { this.clock.tick(seconds); }
 
   /** Re-trigger a CSS animation class on an element. */
   pulse(node, cls) {
@@ -139,7 +140,17 @@ class Hud {
   }
 
   setLine(line) {
-    this.el.lineBtns.forEach((b, i) => b.classList.toggle('on', i === line));
+    this.el.lineBtns.forEach((b, i) => {
+      b.classList.toggle('on', i === line);
+      b.setAttribute('aria-pressed', String(i === line));
+    });
+  }
+
+  cue(text, tone = '', remaining = 0) {
+    this.el.cue.hidden = !text;
+    this.el.cue.dataset.tone = tone;
+    this.el.cueText.textContent = text;
+    this.el.cueMeter.style.transform = `scaleX(${Math.max(0, Math.min(1, remaining))})`;
   }
 
   /** Mark the line an attack is coming in; covered = your guard is already there. */
@@ -174,8 +185,7 @@ class Hud {
   }
 
   dispose() {
-    this.timers.forEach((id) => clearTimeout(id));
-    this.timers.clear();
+    this.clock.destroy();
   }
 }
 
@@ -212,6 +222,7 @@ export function buildHud(root) {
     <div class="fen-combo" id="fen-combo"></div>
     <div class="fen-pops" id="fen-pops"></div>
     <div class="fen-coach" id="fen-coach" hidden></div>
+    <div class="fen-cue" id="fen-cue" hidden><strong id="fen-cue-text"></strong><span><i id="fen-cue-meter"></i></span></div>
 
     <div class="fen-replay" id="fen-replay" hidden>
       <span class="fen-rec"></span> REPRIS <small>· tryck för att hoppa över</small>
@@ -230,27 +241,27 @@ export function buildHud(root) {
 
     <div class="fen-screen" id="fen-screen"><div class="fen-panel" id="fen-panel"></div></div>
 
-    <button class="pb-info" id="fen-info" aria-label="Så spelar du">?</button>
-    <button class="pb-mute" id="fen-mute" aria-label="Ljud på/av">
+    <button class="pb-info" id="fen-info" aria-label="Paus och spelregler" aria-expanded="false" title="Paus och spelregler (P / ?)"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg></button>
+    <button class="pb-mute" id="fen-mute" aria-label="Ljud av" aria-pressed="false">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M11 5 6 9H2v6h4l5 4V5Z"/><path class="pb-wave" d="M15.5 8.5a5 5 0 0 1 0 7"/>
       </svg>
     </button>
 
-    <div class="pb-help" id="fen-help" hidden>
+    <div class="pb-help" id="fen-help" role="dialog" aria-modal="true" aria-label="Paus och spelregler" hidden>
       <div class="pb-help-card">
-        <h3>Så fäktas du</h3>
+        <h3>Paus · så fäktas du</h3>
         <p class="pb-help-sub">Pekkas Fäktning · Stockholm 2023</p>
         <ul class="pb-help-list">
           <li><i style="--c:#7fd8e8"></i><b>Tre linjer</b> HÖG, MITT och LÅG. Din gard i samma linje som motståndarens anfall parerar det automatiskt — som i Nidhogg.</li>
           <li><i style="--c:#ff7a6b"></i><b>Läs anfallet</b> Klingan blänker och linjeknappen lyser rött i den linje anfallet kommer i. De bättre fäktarna byter linje i sista stund.</li>
-          <li><i style="--c:#f2c14e"></i><b>Parad → Ripost</b> En parad får motståndaren att vackla. STÖT i det läget är nästan alltid tusch — och ger extra poäng.</li>
+          <li><i style="--c:#f2c14e"></i><b>Parad → Ripost</b> En parad får motståndaren att vackla. Den gröna mätaren visar tiden du har att börja stöten innan öppningen stängs.</li>
           <li><i style="--c:#5eead4"></i><b>Finten</b> FINT är ett anfall som inte menas. Går motståndaren på den binds klingan — stöt i öppen linje!</li>
           <li><i style="--c:#c9a7ff"></i><b>Rätten till anfall</b> Att stöta rakt in i ett påbörjat anfall slutar illa — den som började har vägrätt. Parera först.</li>
           <li><i style="--c:#d9a05b"></i><b>Turneringen</b> Först till 5 tusch per match. Kvartsfinal mot Mikael, semifinal mot Rickard, final mot mästaren Per Vikman.</li>
         </ul>
         <p class="pb-help-tip">Poäng: tusch 100 · ripost 175 · fint-tusch 150 · parad 25 · +50 per tusch i rad · matchvinst 500 + 100 per tusch i marginal · vit match (5–0) +300.</p>
-        <div class="pb-help-keys">Gard: ↑/↓ eller 1–3 · Stöt: mellanslag · Fint: F · Kortet: ? eller Esc</div>
+        <div class="pb-help-keys">Gard: ↑/↓ eller 1–3 · Stöt: mellanslag · Fint: F · Paus: P / ? · Tillbaka: Esc</div>
         <button class="pb-btn" id="fen-help-close">Tillbaka till pisten</button>
       </div>
     </div>
@@ -265,6 +276,7 @@ export function buildHud(root) {
     meN: q('#fen-me-n'), foeN: q('#fen-foe-n'),
     call: q('#fen-call'), sub: q('#fen-sub'), combo: q('#fen-combo'),
     pops: q('#fen-pops'), coach: q('#fen-coach'), replay: q('#fen-replay'),
+    cue: q('#fen-cue'), cueText: q('#fen-cue-text'), cueMeter: q('#fen-cue-meter'),
     lines: q('#fen-lines'), lineBtns: Array.from(root.querySelectorAll('.fen-line')),
     attack: q('#fen-attack'), feint: q('#fen-feint'), lunge: q('#fen-lunge'), keys: q('#fen-keys'),
     screen: q('#fen-screen'), panel: q('#fen-panel'),

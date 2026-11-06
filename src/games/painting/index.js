@@ -31,6 +31,8 @@
 
 import * as THREE from 'three';
 import { Sfx } from './audio.js';
+import { createGameClock } from '../shared/game-clock.js';
+import { isEditableTarget } from '../shared/keyboard.js';
 import {
   mulberry, buildGarden, animateGarden, buildSky, buildEasel, buildBrush, simplifyGarden
 } from './garden.js';
@@ -236,10 +238,7 @@ export async function createPainting(container) {
    * wet paint: a tiny scene of the same sky over a lawn-coloured ground,
    * prefiltered once. Fresh oil picks up the sky; bare linen does not.
    */
-  let envRT = null;
-  // PMREM renders in half floats; a GPU that cannot render to them would
-  // hand back garbage for a reflection, so it is skipped there (and in safe mode)
-  if (gfx.floatRT && !gfx.safe) {
+  function bakeEnvironment() {
     const envScene = new THREE.Scene();
     const sky = buildSky();
     envScene.add(sky);
@@ -251,16 +250,50 @@ export async function createPainting(container) {
     ground.position.y = -1;
     envScene.add(ground);
     const pmrem = new THREE.PMREMGenerator(renderer);
-    envRT = pmrem.fromScene(envScene, 0.04);
-    pmrem.dispose();
-    envScene.traverse((o) => {
-      if (o.geometry) o.geometry.dispose();
-      if (o.material) {
-        if (o.material.map) o.material.map.dispose();
-        o.material.dispose();
-      }
-    });
+    try {
+      return pmrem.fromScene(envScene, 0.04);
+    } finally {
+      pmrem.dispose();
+      envScene.traverse((o) => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) {
+          if (o.material.map) o.material.map.dispose();
+          o.material.dispose();
+        }
+      });
+    }
+  }
+  let envRT = null;
+  // PMREM renders in half floats; a GPU that cannot render to them would
+  // hand back garbage for a reflection, so it is skipped there (and in safe mode)
+  if (gfx.floatRT && !gfx.safe) {
+    envRT = bakeEnvironment();
     scene.environment = envRT.texture;
+  }
+  /*
+   * A restored WebGL context brings back the geometry and the image
+   * textures, but the prefiltered sky lived only in a render target and
+   * comes back black: the whole garden and the wet paint go dull. It is
+   * baked again before the first visible frame (never in a hidden tab), and
+   * only if the garden still uses it — safe mode and the watchdog's last
+   * step go without on purpose and stay that way.
+   */
+  let environmentRestorePending = false;
+  // ...and one frame is owed even while paused: a restored canvas is blank
+  let redrawPending = false;
+  function restoreEnvironment() {
+    const previous = envRT;
+    if (!previous) return;
+    // The old target's GPU objects died with the old context; deleting them
+    // again would only make WebGL warn. Drop the reference instead.
+    envRT = null;
+    if (scene.environment !== previous.texture) return;
+    try {
+      envRT = bakeEnvironment();
+    } catch {
+      renderer.setRenderTarget(null);
+    }
+    scene.environment = envRT ? envRT.texture : null;
   }
 
   /* World */
@@ -402,7 +435,6 @@ export async function createPainting(container) {
     lastSecond: -1,
     results: [],
     lastToast: 0,
-    timers: [],
     matchedNow: false,
     returnCard: 'start'
   };
@@ -425,11 +457,11 @@ export async function createPainting(container) {
   if (!Array.isArray(gallery)) gallery = [];
   hud.hi.textContent = fmt(high);
 
-  const later = (fn, ms) => {
-    const id = setTimeout(fn, ms);
-    state.timers.push(id);
-    return id;
-  };
+  let helpOpen = false;
+  let paused = false;
+  let modalFocus = null;
+  const clock = createGameClock();
+  const later = (fn, ms) => clock.schedule(fn, ms / 1000);
 
   /* ---- Layout & camera -------------------------------------------------- */
 
@@ -570,8 +602,20 @@ export async function createPainting(container) {
     s.setProperty('--pm-fh', `${L.free.h}px`);
     const pr = hud.palette.getBoundingClientRect();
     palette.resize(pr.width, pr.height, window.devicePixelRatio || 1);
+    hud.pigments.forEach((button) => {
+      const well = palette.wellPos(button.dataset.pigment);
+      button.style.left = `${well.x}px`;
+      button.style.top = `${well.y}px`;
+    });
     sizeRefCanvases();
     if (rig.t >= 1) setShot(rig.name, 0);
+    // Resizing clears both canvases. Repaint the frozen pose after a phone
+    // rotation without advancing the active clock, strokes or delayed verdict.
+    if (paused || helpOpen) {
+      palette.update(0);
+      updateCamera(0, clock.now);
+      drawFrame();
+    }
   }
 
   /* ---- HUD helpers ----------------------------------------------------- */
@@ -710,7 +754,7 @@ export async function createPainting(container) {
       const p = painted[i];
       const cls = p ? (paintedDE[i] < MATCH_DE ? 'hit' : 'done') : i === state.selected ? 'sel' : '';
       const bg = p ? ` style="--c:${rgbToCss(p)}"` : '';
-      return `<button class="pm-dot ${cls}" data-i="${i}"${bg} title="${esc(rg.name)}" aria-label="${esc(rg.name)}"></button>`;
+      return `<button class="pm-dot ${cls}" data-i="${i}"${bg} title="${esc(rg.name)}" aria-label="${esc(rg.name)}${p ? ', redan målad' : ''}" aria-pressed="${i === state.selected}" ${p ? 'disabled' : ''}></button>`;
     }).join('');
     const done = painted.filter(Boolean).length;
     hud.count.textContent = `${done}/${work.regions.length}`;
@@ -750,6 +794,16 @@ export async function createPainting(container) {
         else sfx.colder();
       }
     }
+    hud.pigments.forEach((button) => {
+      const pigment = PIGMENTS.find((p) => p.key === button.dataset.pigment);
+      // The painted palette already draws its droplet badges; keep a single
+      // visible count while the button exposes the same recipe to assistive tools.
+      button.textContent = '';
+      button.setAttribute('aria-label', `${pigment.name}: ${drops[pigment.key]} droppar. Lägg till en droppe.`);
+      button.disabled = state.phase !== 'paint' || drops[pigment.key] >= MAX_DROPS;
+    });
+    hud.undo.disabled = !history.length;
+    hud.wipe.disabled = !total();
     state.advice = advice;
     updateTip();
   }
@@ -788,7 +842,7 @@ export async function createPainting(container) {
   }
 
   function addDrop(key) {
-    if (state.phase !== 'paint') return;
+    if (paused || helpOpen || state.phase !== 'paint') return;
     const pi = PIGMENTS.findIndex((p) => p.key === key);
     if (drops[key] >= MAX_DROPS) {
       sfx.bump();
@@ -813,7 +867,7 @@ export async function createPainting(container) {
   }
 
   function undo() {
-    if (state.phase !== 'paint' || !history.length) return;
+    if (paused || helpOpen || state.phase !== 'paint' || !history.length) return;
     const before = currentDE();
     setDrops(history.pop());
     palette.setDrops(drops);
@@ -822,7 +876,7 @@ export async function createPainting(container) {
   }
 
   function wipe() {
-    if (state.phase !== 'paint' || !total()) return;
+    if (paused || helpOpen || state.phase !== 'paint' || !total()) return;
     history.push({ ...drops });
     setDrops({ r: 0, y: 0, b: 0, w: 0, k: 0 });
     palette.wipe();
@@ -832,7 +886,7 @@ export async function createPainting(container) {
 
   /** Tapping a dab on the palette rim mixes that colour up again. */
   function loadDab(dabDrops) {
-    if (state.phase !== 'paint') return;
+    if (paused || helpOpen || state.phase !== 'paint') return;
     const before = currentDE();
     history.push({ ...drops });
     setDrops(dabDrops);
@@ -891,12 +945,13 @@ export async function createPainting(container) {
   /* ---- Painting --------------------------------------------------------- */
 
   function applyPaint() {
-    if (state.phase !== 'paint' || state.selected < 0) return;
+    if (paused || helpOpen || state.phase !== 'paint' || state.selected < 0) return;
     if (!total()) {
       toast('Paletten är tom — droppa lite pigment först');
       return;
     }
     const idx = state.selected;
+    if (painted[idx]) return;
     const target = hexToRgb(work.regions[idx].color);
     const d = colourDistance(mixed, target);
     const acc = accuracy(d);
@@ -1027,7 +1082,7 @@ export async function createPainting(container) {
   }
 
   function finishWork(reason) {
-    if (state.phase !== 'paint') return;
+    if (paused || helpOpen || state.phase !== 'paint') return;
     setPhase('judging');
     live.finish();
     brushState.on = 0;
@@ -1167,6 +1222,12 @@ export async function createPainting(container) {
 
   function nextFromReveal() {
     if (state.phase !== 'reveal') return;
+    // The bonus was banked when judging began. Skipping the presentation
+    // must keep it, without letting its stars or applause spill into a new work.
+    clock.clear();
+    tweens.length = 0;
+    hud.pops.replaceChildren();
+    setScore(state.score);
     if (state.workNo < WORKS_PER_GAME) {
       state.workNo++;
       drawSlip();
@@ -1216,6 +1277,9 @@ export async function createPainting(container) {
   }
 
   function startGame() {
+    clock.clear();
+    tweens.length = 0;
+    hud.pops.replaceChildren();
     sfx.resume();
     state.firstEvening = !Object.keys(bests).length && !gallery.length;
     state.score = 0;
@@ -1327,7 +1391,6 @@ export async function createPainting(container) {
 
   /* ---- Input ------------------------------------------------------------ */
 
-  let helpOpen = false;
   const ray = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
 
@@ -1340,8 +1403,8 @@ export async function createPainting(container) {
   }
 
   function onPointerDown(e) {
+    if (e.button !== 0 || paused || helpOpen || state.phase !== 'paint') return;
     sfx.resume();
-    if (helpOpen || state.phase !== 'paint') return;
     const uv = canvasUv(e);
     if (!uv) return;
     const id = regionAt(uv.u, uv.v);
@@ -1354,7 +1417,7 @@ export async function createPainting(container) {
   }
 
   function onPointerMove(e) {
-    if (e.pointerType !== 'mouse' || state.phase !== 'paint') return;
+    if (paused || helpOpen || e.pointerType !== 'mouse' || state.phase !== 'paint') return;
     const uv = canvasUv(e);
     const id = uv ? regionAt(uv.u, uv.v) : -1;
     const h = id >= 0 && !painted[id] ? id : -1;
@@ -1372,6 +1435,7 @@ export async function createPainting(container) {
   }
 
   function onPaletteDown(e) {
+    if (e.button !== 0 || paused || helpOpen || state.phase !== 'paint') return;
     sfx.resume();
     e.preventDefault();
     const hit = palette.hit(...paletteXY(e));
@@ -1391,13 +1455,43 @@ export async function createPainting(container) {
   }
 
   function onKeyDown(e) {
-    if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return;
+    if (e.ctrlKey || e.metaKey || e.altKey || isEditableTarget(e.target)) return;
+    if (e.key === 'Escape') {
+      if (helpOpen) setHelp(false);
+      else if (paused) setPaused(false);
+      else if (hud.overlay.dataset.card === 'zoom') openGallery();
+      else if (hud.overlay.dataset.card === 'gallery') closeGallery();
+      else return;
+      e.preventDefault();
+      return;
+    }
+    if (e.code === 'KeyP' && !e.repeat) {
+      e.preventDefault();
+      if (!helpOpen) setPaused(!paused);
+      return;
+    }
+    if (e.key === '?' && !e.repeat) { e.preventDefault(); setHelp(!helpOpen); return; }
+    if (e.key === 'Tab') {
+      const scope = helpOpen ? hud.help : paused ? hud.pausePanel : hud.root;
+      const controls = [...new Set([...scope.querySelectorAll('button:not(:disabled)'), hud.mute, document.querySelector('#game-close')])]
+        .filter((el) => el && !el.closest('[inert]') && el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden');
+      const i = controls.indexOf(document.activeElement);
+      if (controls.length) {
+        e.preventDefault();
+        const next = i < 0 ? (e.shiftKey ? controls.length - 1 : 0) : (i + (e.shiftKey ? -1 : 1) + controls.length) % controls.length;
+        controls[next].focus({ preventScroll: true });
+      }
+      return;
+    }
+    if (paused || helpOpen || e.repeat) return;
     const n = parseInt(e.key, 10);
     if (n >= 1 && n <= PIGMENTS.length) {
+      e.preventDefault();
       sfx.resume();
       addDrop(PIGMENTS[n - 1].key);
     } else if (e.key === ' ' || e.key === 'Enter') {
-      if (e.target && e.target.tagName === 'BUTTON' && e.key === 'Enter') return;
+      // Focused buttons keep their native Space/Enter activation.
+      if (e.target?.closest('button')) return;
       e.preventDefault();
       sfx.resume();
       if (state.phase === 'paint') applyPaint();
@@ -1405,19 +1499,14 @@ export async function createPainting(container) {
       else if (state.phase === 'reveal') nextFromReveal();
       else if (state.phase === 'idle' && hud.overlay.dataset.card === 'start') startGame();
       else if (state.phase === 'over' && hud.overlay.dataset.card === 'final') startGame();
-    } else if (e.key === 'w' || e.key === 'W') {
-      wipe();
-    } else if (e.key === 'z' || e.key === 'Z' || e.key === 'Backspace') {
-      undo();
+    } else if (e.key.toLowerCase() === 'w') {
+      e.preventDefault(); wipe();
+    } else if (e.key.toLowerCase() === 'z' || e.key === 'Backspace') {
+      e.preventDefault(); undo();
     } else if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && state.phase === 'paint') {
+      e.preventDefault();
       const j = nextUnpainted(state.selected, e.key === 'ArrowRight' ? 1 : -1);
       if (j >= 0) select(j);
-    } else if (e.key === '?') {
-      setHelp(!helpOpen);
-    } else if (e.key === 'Escape') {
-      if (helpOpen) setHelp(false);
-      else if (hud.overlay.dataset.card === 'zoom') openGallery();
-      else if (hud.overlay.dataset.card === 'gallery') closeGallery();
     }
   }
 
@@ -1429,9 +1518,35 @@ export async function createPainting(container) {
     }
   }
 
+  function syncPause() {
+    const blocked = helpOpen || paused;
+    hud.root.classList.toggle('pm-paused', blocked);
+    const modal = helpOpen ? hud.help : paused ? hud.pausePanel : null;
+    for (const child of hud.root.children) {
+      if (child === hud.help || child === hud.pausePanel || child === hud.mute) continue;
+      child.inert = blocked || (!!hud.overlay.dataset.card && (child === hud.panel || child === hud.ref));
+    }
+    hud.pausePanel.inert = helpOpen;
+    sfx.setPaused(blocked);
+    if (modal) modal.querySelector('button').focus({ preventScroll: true });
+    else {
+      const target = modalFocus?.isConnected && !modalFocus.closest('[inert]') ? modalFocus : hud.root;
+      target.focus({ preventScroll: true });
+    }
+  }
   function setHelp(open) {
+    if (open && !helpOpen && !paused) modalFocus = document.activeElement;
     helpOpen = open;
     hud.help.hidden = !open;
+    syncPause();
+  }
+  function setPaused(value) {
+    if (paused === value) return;
+    if (value && !helpOpen) modalFocus = document.activeElement;
+    paused = value;
+    hud.pausePanel.hidden = !value;
+    hud.pause.setAttribute('aria-pressed', String(value));
+    syncPause();
   }
 
   const on = (el, ev, fn, opts) => el.addEventListener(ev, fn, opts);
@@ -1462,10 +1577,22 @@ export async function createPainting(container) {
   on(hud.ref, 'click', () => hud.root.classList.remove('pm-ref-open'));
   on(hud.dots, 'click', (e) => {
     const b = e.target.closest('.pm-dot');
-    if (!b || state.phase !== 'paint') return;
+    if (!b || paused || helpOpen || state.phase !== 'paint') return;
     const i = Number(b.dataset.i);
     if (!painted[i]) select(i);
   });
+  hud.pigments.forEach((button) => {
+    // Touch/mouse mixing keeps Space available for painting. Tab users retain
+    // the native button activation, including a visible focus ring.
+    on(button, 'pointerdown', (event) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      hud.root.focus({ preventScroll: true });
+    });
+    on(button, 'click', () => { sfx.resume(); addDrop(button.dataset.pigment); });
+  });
+  on(hud.pause, 'click', () => setPaused(true));
+  on(hud.resume, 'click', () => setPaused(false));
   on(hud.info, 'click', () => setHelp(true));
   on(hud.helpClose, 'click', () => setHelp(false));
   on(hud.mute, 'click', () => {
@@ -1502,14 +1629,29 @@ export async function createPainting(container) {
   timer.connect(document);
   const brushPos = new THREE.Vector3();
 
+  function drawFrame() {
+    if (environmentRestorePending && !document.hidden) {
+      environmentRestorePending = false;
+      restoreEnvironment();
+    }
+    renderer.render(scene, camera);
+    redrawPending = false;
+  }
+
   function tick() {
     raf = requestAnimationFrame(tick);
     // No rAF timestamp: update() reads performance.now(), the same clock the
     // timer was started on, so the first delta cannot come out negative
     timer.update();
     const dt = Math.min(Math.max(timer.getDelta(), 0), MAX_STEP);
-    if (!running) return;
-    const t = timer.getElapsed();
+    if (!running || document.hidden) return;
+    if (paused || helpOpen) {
+      // Repaint the frozen garden, without advancing anything
+      if (redrawPending) drawFrame();
+      return;
+    }
+    clock.tick(dt);
+    const t = clock.now;
 
     if (!helpOpen && state.phase === 'paint') {
       state.timeLeft -= dt;
@@ -1577,7 +1719,7 @@ export async function createPainting(container) {
     hat.rotation.y = Math.sin(t * 0.3) * 0.05 + Math.sin(hatHop * 14) * 0.2 * hatHop;
 
     updateCamera(dt, t);
-    renderer.render(scene, camera);
+    drawFrame();
     watchdog.afterFrame();
   }
 
@@ -1600,10 +1742,24 @@ export async function createPainting(container) {
   timer.reset();
   raf = requestAnimationFrame(tick);
 
+  const onBlur = () => {
+    if (!['idle', 'over'].includes(state.phase)) setPaused(true);
+    sfx.setPaused(true);
+  };
+  const onFocus = () => sfx.setPaused(document.hidden || paused || helpOpen);
   const onVisibility = () => {
     running = !document.hidden;
+    if (document.hidden) onBlur();
+    else onFocus();
   };
   document.addEventListener('visibilitychange', onVisibility);
+  window.addEventListener('blur', onBlur);
+  window.addEventListener('focus', onFocus);
+  const onContextRestored = () => {
+    if (envRT) environmentRestorePending = true;
+    redrawPending = true;
+  };
+  renderer.domElement.addEventListener('webglcontextrestored', onContextRestored);
 
   /* ---- Debug API -------------------------------------------------------- */
 
@@ -1730,9 +1886,12 @@ export async function createPainting(container) {
     timer.dispose();
     document.removeEventListener('visibilitychange', onVisibility);
     window.removeEventListener('keydown', onKeyDown);
+    window.removeEventListener('blur', onBlur);
+    window.removeEventListener('focus', onFocus);
+    renderer.domElement.removeEventListener('webglcontextrestored', onContextRestored);
     canvasHost.removeEventListener('pointerdown', onPointerDown);
     canvasHost.removeEventListener('pointermove', onPointerMove);
-    state.timers.forEach(clearTimeout);
+    clock.destroy();
     clearTimeout(state.lastToast);
     clearTimeout(deltaTimer);
     delete window.__ppMaleri;

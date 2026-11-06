@@ -178,6 +178,94 @@
    */
   const GAMES = [
     {
+      year: 2011,
+      title: 'Pekkas Fantasy',
+      competition: 'Fantasy Premier League',
+      tagline: 'Bygg ditt lag, välj kapten och jaga ligaguldet under fem omgångar.',
+      icon: '⚽',
+      colors: ['#326d59', '#091e23'],
+      cover: 'games/fantasy.webp',
+      coverBlur: 'data:image/webp;base64,UklGRooAAABXRUJQVlA4IH4AAABQBQCdASoYABEAPxFys1MsJiSisBgIAYAiCWQAnTMJwapl/oQV9BaJisuWhSqAxd13MAAA/uL0rOehvgDl3ksbsg3jNVDCvoHyCJzXTQV3ii51PyHXvYlOBPC6RGlydkYXZ0EbZdU0naHUPz/KWsB/kIThVtclcgVB9gcAAAA=',
+      module: 'src/games/fantasy/index.js'
+    },
+    {
+      year: 2012,
+      title: 'Pekkas Gokart',
+      competition: 'Gokart',
+      tagline: 'Tre varv i Varggropen. Hitta bromspunkten, ta innern och vinn loppet.',
+      icon: '🏎️',
+      colors: ['#ad6335', '#17242b'],
+      cover: 'games/kart.webp',
+      coverBlur: 'data:image/webp;base64,UklGRnQAAABXRUJQVlA4IGgAAAAwBACdASoYABEAPxF6uFMsJ6WiqAqpgCIJQAAFzTSyWBM/Tl4uddbuRQAA/sMgnvmgytGrXxrz2zHN7Wx/zQ9YOl7GazpYKlafXGP9YsU8aVGG7Azwrgd/uBc8nMHFNqKuDRd9bYKAAA==',
+      module: 'src/games/kart/index.js'
+    },
+    {
+      year: 2013,
+      title: 'Pekkas Femkamp',
+      competition: 'Femkamp',
+      tagline: 'Fem grenar i Kroksta — precision, fart och balans avgör pokalen.',
+      icon: '🏅',
+      colors: ['#6c8651', '#18291c'],
+      cover: 'games/pentathlon.webp',
+      coverBlur: 'data:image/webp;base64,UklGRnoAAABXRUJQVlA4IG4AAAAwBACdASoYABEAPwVwrlArpqQisAwBcCCJQAFf/CMDoR0BrKbiNJXoCEAA/TsLSnsZJJSdbNJBD7SgRd2yTNvvps8n5foPo3MAcctLSx7H9GEIjsgksGM0sCc9R/uxnS/1iiGTrAe5ZpF7j8gAAA==',
+      module: 'src/games/pentathlon/index.js'
+    },
+    {
+      year: 2014,
+      title: 'Pekkas Parkmästare',
+      competition: 'Mångkamp Uppsala',
+      tagline: 'Boule, krocket och ringkast i Uppsalas gyllene park.',
+      icon: '⛲',
+      colors: ['#8a7950', '#183b34'],
+      cover: 'games/uppsala.webp',
+      coverBlur: 'data:image/webp;base64,UklGRpoAAABXRUJQVlA4II4AAADQBACdASoYABEAPxFwslMsJaQisBgIAYAiCWI3AAOgrhACtofSW0AclmUUVdA4AAD2SqYouY+3yVODOrwnyh3dYkjLBG+hxGISi59phiE39SxFgcAt86yX+zLsgJTrxlUowSsGIYXMJVQ2gjSSmf9ETVZnMb4873egJzocYlAWfkICaIL9K50sL3DZiAAA',
+      module: 'src/games/uppsala/index.js'
+    },
+    {
+      year: 2015,
+      title: 'Pekkas Bondespel',
+      competition: 'Bondespelen',
+      tagline: 'Luftgevär, vedstapling, stövelkast, hästskor och spikning i Billsta.',
+      icon: '🌾',
+      colors: ['#ac7534', '#38251c'],
+      cover: 'games/farm.webp',
+      coverBlur: 'data:image/webp;base64,UklGRooAAABXRUJQVlA4IH4AAADQAwCdASoYABEAPxF4tlOsJyUiqAqpgCIJQBWAAN3R6zsPh7t+hAAA/rQOjiVfKK8AGTaQgRR9V0kwOLm1z0+Fc7OwJntEGA2SanOBvCQ7qvxGw6hyoFGcjxdjjqIjOFb58IFYmm2ppNGXKhH5l30Ozs7PA7wQZt5qMLgAAAA=',
+      module: 'src/games/farm/index.js'
+    },
+    {
+      year: 2016,
+      title: 'Pekkas Gårdskamp',
+      competition: 'Mångkamp Lundqvist',
+      tagline: 'Fäll kubben, sätt discen och håll balansen i Idbyn.',
+      icon: '🪵',
+      colors: ['#4f827d', '#162b2a'],
+      cover: 'games/lundqvist.webp',
+      coverBlur: 'data:image/webp;base64,UklGRoAAAABXRUJQVlA4IHQAAADQBACdASoYABEAPxF8slQsJ6QjKAqpgCIJQBlAAkckrbGGiw4UbZoDenAWIK56gAD+iTZu/IjARFS7QQmU+loW3khKyqecU3sYm5V1mbnpyPgD3Af3QtHeZ4ggyyQFtSQ1ZX5YbaO7vlIStGDJUKtsAAAAAA==',
+      module: 'src/games/lundqvist/index.js'
+    },
+    {
+      year: 2017,
+      title: 'Pekkas Triathlon',
+      competition: 'Triathlon',
+      tagline: 'Simma, spring och cykla runt Lomsjön — spara kraft till spurten.',
+      icon: '🏊',
+      colors: ['#39818b', '#172e35'],
+      cover: 'games/triathlon.webp',
+      coverBlur: 'data:image/webp;base64,UklGRmwAAABXRUJQVlA4IGAAAABQBACdASoYABEAPxF0rVAsJyQisBgMAYAiCWMAuwAQ71ROa8inzXk6pKGAAP7HKwF63uEdS6owfs8kjTikd1SgQ/xnENhZc+UHnc6uHqaS1EJxnjow0IwGYLZf1a96AAA=',
+      module: 'src/games/triathlon/index.js'
+    },
+    {
+      year: 2018,
+      title: 'Pekkas Ambition',
+      competition: 'Kortspel Ambition',
+      tagline: 'Ett stick för mycket kan kosta segern. Läs bordet på Kungsholmen.',
+      icon: '♠️',
+      colors: ['#3d6e5c', '#171d22'],
+      cover: 'games/ambition.webp',
+      coverBlur: 'data:image/webp;base64,UklGRnQAAABXRUJQVlA4IGgAAADQAwCdASoYABEAPxF8tFQsJ6SjKAqpgCIJQBf9gQJHgbUFqjGu2AAA/s3EiTu+VGIojn69032wHj0FLWKMePpp1LEGzPNb28o2tRJihXjOjO1I6QXdZ1r8hPTedsLrIxy+RV5OAgAAAA==',
+      module: 'src/games/ambition/index.js'
+    },
+    {
       year: 2026,
       title: 'Pekkas Lerskulptur',
       competition: 'Lerskulptur',
@@ -1118,7 +1206,7 @@
       .map((c) => ({ year: c.year, name: c.winner }));
 
     const load = () =>
-      import(new URL('src/scripts/trophy.js', document.baseURI).href)
+      import(/* @vite-ignore */ new URL('src/scripts/trophy.js', document.baseURI).href)
         .then((mod) => mod.mountTrophy(canvas, { winners, reducedMotion: prefersReducedMotion() }))
         .then((trophy) => {
           App.trophy = trophy;
@@ -3880,9 +3968,12 @@
   function initOverlays() {
     $('#game-close').addEventListener('click', closeOverlay);
     document.addEventListener('keydown', (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key === 'Escape' && !$('#game-stage').hidden) {
-        e.preventDefault();
-        closeOverlay();
+        // Game handlers on window can dismiss help or a local dialog first.
+        setTimeout(() => {
+          if (!e.defaultPrevented && !$('#game-stage').hidden) closeOverlay();
+        }, 0);
       }
     });
   }

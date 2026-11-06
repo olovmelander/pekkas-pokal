@@ -71,6 +71,9 @@ export function buildHud(root) {
       </div>
       <div class="pm-palette-wrap">
         <canvas class="pm-palette" id="pm-palette" aria-label="Paletten: tryck på ett pigment för att lägga i en droppe"></canvas>
+        <div class="pm-pigments" role="group" aria-label="Pigment, lägg till en droppe">
+          ${['r', 'y', 'b', 'w', 'k'].map((key) => `<button type="button" class="pm-pigment" data-pigment="${key}" aria-label="Lägg till pigment"></button>`).join('')}
+        </div>
         <div class="pm-keys" aria-hidden="true">1 Krapplack · 2 Kadmiumgul · 3 Ultramarin · 4 Titanvit · 5 Benswart</div>
       </div>
       <div class="pm-actions">
@@ -86,7 +89,7 @@ export function buildHud(root) {
     </section>
 
     <div class="pm-callout" id="pm-callout"></div>
-    <div class="pm-toast" id="pm-toast"></div>
+    <div class="pm-toast" id="pm-toast" role="status" aria-live="polite"></div>
     <div class="pm-pops" id="pm-pops"></div>
 
     <div class="pm-overlay" id="pm-overlay">
@@ -161,9 +164,13 @@ export function buildHud(root) {
       </div>
     </div>
 
+    <button class="pm-pause-button" id="pm-pause" aria-label="Pausa spelet (P)" aria-pressed="false"><svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M3 2h3v12H3zm7 0h3v12h-3z"/></svg></button>
+    <div class="pb-help pm-pause-panel" id="pm-pause-panel" hidden role="dialog" aria-modal="true" aria-labelledby="pm-pause-title">
+      <div class="pb-help-card"><h3 id="pm-pause-title">Penseln vilar</h3><p>Din tavla och tiden väntar på dig.</p><button class="pb-btn" id="pm-resume">Fortsätt måla</button></div>
+    </div>
     <button class="pb-info pm-info" id="pm-info" aria-label="Så spelar du">?</button>
 
-    <div class="pb-help" id="pm-help" hidden>
+    <div class="pb-help" id="pm-help" hidden role="dialog" aria-modal="true" aria-label="Så målar du">
       <div class="pb-help-card">
         <h3>Så målar du</h3>
         <p class="pb-help-sub">Pekkas Måleri · Terrassvägen 47, 2021</p>
@@ -176,7 +183,7 @@ export function buildHud(root) {
           <li><i style="--c:#ffd166"></i><b>Domen</b> 95 sekunder per verk, tre verk per kväll. Mikael Hägglund sätter betyg 1–10 och upp till tre stjärnor. Ditt bästa per verk och dina målningar sparas på enheten.</li>
         </ul>
         <p class="pb-help-tip">Skriet av Munch ligger alltid i hatten — det var verket som faktiskt vann 2021, Olov Melanders tolkning.</p>
-        <div class="pb-help-keys">1–5 pigment · mellanslag målar · W torkar · Z ångrar · ←/→ byter yta</div>
+        <div class="pb-help-keys">1–5 pigment · mellanslag målar · W torkar · Z ångrar · ←/→ byter yta · P pausar</div>
         <button class="pb-btn" id="pm-help-close">Tillbaka till staffliet</button>
       </div>
     </div>
@@ -199,7 +206,8 @@ export function buildHud(root) {
     region: q('#pm-region'), count: q('#pm-count'),
     meter: q('#pm-meter'), meterFill: q('#pm-meter-fill'), meterMark: q('#pm-meter-mark'),
     hint: q('#pm-hint'), delta: q('#pm-delta'),
-    palette: q('#pm-palette'),
+    palette: q('#pm-palette'), pigments: [...root.querySelectorAll('[data-pigment]')],
+    pause: q('#pm-pause'), pausePanel: q('#pm-pause-panel'), resume: q('#pm-resume'),
     undo: q('#pm-undo'), wipe: q('#pm-wipe'), apply: q('#pm-apply'),
     callout: q('#pm-callout'), toast: q('#pm-toast'), pops: q('#pm-pops'),
     overlay: q('#pm-overlay'),
@@ -217,14 +225,21 @@ export function buildHud(root) {
   };
 
   /** Show one salon card (or none). */
+  root.tabIndex = -1;
   hud.showCard = (name) => {
     root.querySelectorAll('.pm-card').forEach((c) => c.classList.toggle('show', c.dataset.card === name));
     hud.overlay.classList.toggle('show', !!name);
     hud.overlay.dataset.card = name || '';
+    hud.panel.inert = !!name;
+    hud.ref.inert = !!name;
     if (name) {
       const card = root.querySelector(`.pm-card[data-card="${name}"]`);
-      if (card) card.scrollTop = 0;
-    }
+      if (card) {
+        card.scrollTop = 0;
+        const target = card.querySelector('button:not(:disabled)') || root;
+        target.focus({ preventScroll: true });
+      }
+    } else root.focus({ preventScroll: true });
   };
   return hud;
 }

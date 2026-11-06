@@ -1,0 +1,64 @@
+/* The same warm gold, ivory and serif as the original Pokal games. */
+.arcade { position: absolute; inset: 0; overflow: hidden; isolation: isolate; color: #fff8e9; background: #14211e; font-family: var(--ff-sans, system-ui, sans-serif); --arcade-accent: #e9bf5c; }
+.arcade *, .arcade *::before, .arcade *::after { box-sizing: border-box; }
+.arcade [hidden] { display: none !important; }
+.arcade-canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.arcade-vignette { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, #08100e70, transparent 18%, transparent 78%, #08100e55); }
+.arcade-ui { position: absolute; inset: 0; pointer-events: none; }
+.arcade button, .arcade input, .arcade select, .arcade a { pointer-events: auto; }
+.arcade button { font: inherit; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.arcade button:focus-visible, .arcade input:focus-visible, .arcade select:focus-visible { outline: 3px solid #fff4bf; outline-offset: 4px; }
+.arcade button:disabled { cursor: default; opacity: .4; }
+.arcade-hud { position: absolute; top: max(18px, env(safe-area-inset-top)); left: clamp(16px, 3vw, 40px); max-width: calc(100% - 230px); display: flex; flex-direction: column; gap: 5px; text-shadow: 0 2px 15px #000b; }
+.arcade-label { font-size: 10px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: #f0d395; }
+.arcade-value { font-family: var(--ff-serif, Georgia, serif); font-size: clamp(24px, 3.8vw, 42px); font-weight: 500; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.arcade-detail { max-width: 550px; font-size: 12px; line-height: 1.5; color: #fff3d9; }
+.arcade-tools { position: absolute; top: max(14px, env(safe-area-inset-top)); right: 65px; display: flex; gap: 6px; z-index: 42; }
+.arcade-tools button { min-height: 40px; padding: 0 12px; border-radius: 22px; border: 1px solid #ebd49d45; background: #131d18c9; backdrop-filter: blur(12px); color: #f9e7be; font-size: 11px; font-weight: 600; }
+.arcade-toast { position: absolute; top: 23%; left: 50%; max-width: min(85%, 520px); transform: translate(-50%, -8px); opacity: 0; transition: .2s ease; border: 1px solid #e9bf5c88; background: #14231eea; border-radius: 25px; padding: 12px 22px; color: #ffe3a1; text-align: center; font-size: 14px; font-weight: 700; box-shadow: 0 8px 35px #0004; z-index: 12; }
+.arcade-toast.show { opacity: 1; transform: translate(-50%, 0); }
+.arcade-overlay, .arcade-pause { position: absolute; inset: 0; z-index: 30; pointer-events: auto; display: grid; place-items: center; padding: 74px 20px 24px; overflow-y: auto; overscroll-behavior: contain; background: radial-gradient(ellipse at 50% 40%, #121b1744, #070d0ab0); }
+.arcade-pause { z-index: 40; backdrop-filter: blur(8px); background: #0b151bd4; }
+.arcade-panel { width: min(100%, 540px); margin: auto; padding: clamp(24px, 4vw, 42px); border: 1px solid #f0cc7e55; border-radius: 22px; background: linear-gradient(145deg, #202c29ef, #101916f5); box-shadow: 0 24px 90px #0006, inset 0 1px #fff1; text-align: center; }
+.arcade-eyebrow { display: block; margin-bottom: 15px; color: #e9bf5c; font-family: var(--ff-mono, monospace); font-size: 10px; line-height: 1.7; text-transform: uppercase; letter-spacing: .2em; }
+.arcade-panel h2 { margin: 0 0 18px; font-family: var(--ff-serif, Georgia, serif); font-size: clamp(30px, 5vw, 52px); line-height: 1.04; letter-spacing: -.035em; font-weight: 400; font-style: italic; color: #f4d692; text-wrap: balance; }
+.arcade-body, .arcade-panel p { font-size: 14px; line-height: 1.7; color: #d6d9cc; }
+.arcade-body p { margin: 10px 0; }
+.arcade-body strong, .arcade-body b { color: #fff2cb; }
+.arcade-body ul, .arcade-body ol { text-align: left; margin: 16px 0; padding-left: 20px; }
+.arcade-body li + li { margin-top: 7px; }
+.arcade-body small { display: block; font-size: 11px; line-height: 1.5; color: #acb8ae; margin-top: 12px; }
+.arcade-primary { min-height: 48px; margin-top: 23px; padding: 13px 30px; border: 1px solid #ffe5ab; border-radius: 28px; color: #2a200c; background: var(--metal-gold, linear-gradient(140deg, #fbe3a7, #d2a344)); box-shadow: 0 8px 24px #e3b95725, inset 0 1px #fff9; font-size: 14px; font-weight: 700; }
+.arcade-primary:hover { filter: brightness(1.1); }
+.arcade-primary:active { transform: translateY(1px); }
+.arcade-panel-foot { display: block; margin-top: 20px; color: #84978c; font-size: 8px; letter-spacing: .18em; }
+/* A start, instruction or result dialog owns the screen: the game's own HUD,
+   dashboards and controls fade out behind it instead of peeking out beside
+   it (the title twice, a timer under the dialog's edge). */
+.arcade-ui > :not(.arcade-overlay):not(.arcade-pause):not(.arcade-tools):not(.arcade-toast) { transition: opacity .25s ease; }
+.arcade-has-panel .arcade-ui > :not(.arcade-overlay):not(.arcade-pause):not(.arcade-tools):not(.arcade-toast) { opacity: 0; }
+.arcade-is-paused .arcade-ui > :not(.arcade-pause):not(.arcade-tools) { pointer-events: none; }
+.arcade-is-paused .arcade-ui > :not(.arcade-pause):not(.arcade-tools) button { pointer-events: none; }
+.arcade-controls { position: absolute; left: 18px; right: 18px; bottom: max(18px, env(safe-area-inset-bottom)); display: flex; gap: 10px; justify-content: center; }
+.arcade-controls button { min-width: 54px; min-height: 54px; border: 1px solid #efd69766; border-radius: 18px; background: #14231ee8; color: #f9e7be; padding: 12px 20px; font-weight: 700; touch-action: none; user-select: none; }
+@media (max-width: 600px) {
+  .arcade-hud { top: max(16px, env(safe-area-inset-top)); left: 15px; max-width: calc(100% - 156px); }
+  .arcade-label { font-size: 8px; letter-spacing: .1em; }
+  .arcade-value { font-size: 24px; }
+  .arcade-detail { font-size: 10px; }
+  .arcade-tools { right: 58px; gap: 4px; top: max(13px, env(safe-area-inset-top)); }
+  .arcade-tools button { font-size: 9px; padding: 0 8px; min-height: 36px; }
+  .arcade-panel { padding: 24px 22px; border-radius: 18px; }
+  .arcade-body { font-size: 13px; }
+  .arcade-overlay, .arcade-pause { padding: 76px 14px 20px; }
+}
+@media (max-height: 520px) and (orientation: landscape) {
+  .arcade-overlay, .arcade-pause { padding: 62px 20px 16px; }
+  .arcade-panel { width: min(100%, 680px); padding: 20px 28px; }
+  .arcade-panel h2 { font-size: 30px; margin-bottom: 10px; }
+  .arcade-eyebrow { margin-bottom: 8px; }
+  .arcade-body { font-size: 12px; line-height: 1.45; }
+  .arcade-primary { margin-top: 14px; }
+  .arcade-panel-foot { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .arcade *, .arcade *::before { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }

@@ -53,7 +53,7 @@
   position: absolute;
   top: var(--lr-safe-top);
   left: 14px;
-  right: 162px; /* clear ?, mute and the site's close button */
+  right: 212px; /* clear pause, help, mute and the site's close button */
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -576,6 +576,13 @@
 }
 
 .lr-skip {
+  border: 1px solid rgba(255, 214, 170, 0.35);
+  border-radius: 999px;
+  background: rgba(30, 17, 10, 0.7);
+  padding: 10px 18px;
+  min-height: 44px;
+  touch-action: manipulation;
+  cursor: pointer;
   position: absolute;
   left: 50%;
   bottom: calc(var(--lr-safe-bottom) + 6px);
@@ -584,7 +591,7 @@
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: rgba(251, 238, 224, 0.5);
+  color: rgba(251, 238, 224, 0.85);
   opacity: 0;
   transition: opacity 0.4s ease 0.8s;
 }
@@ -1355,4 +1362,23 @@
   .lr-ui.lr-wide .lr-verdict .lr-badge {
     margin-top: 4px;
   }
+}
+
+/* Pause and reachable star milestones stay separate from the sculpting tools. */
+.lr-pause-toggle { position:absolute; z-index:35; top:max(10px,env(safe-area-inset-top)); right:158px; width:44px; height:44px; border:1px solid #ebc69755; border-radius:50%; background:#2a1a12b8; color:#f4d8ac; font-size:18px; cursor:pointer; pointer-events:auto; }
+.lr-pause-screen { position:absolute; inset:0; z-index:80; display:grid; place-items:center; padding:24px; background:#170e0bd9; backdrop-filter:blur(9px); pointer-events:auto; }
+.lr-pause-screen[hidden] { display:none; }
+.lr-pause-screen .pb-help-card { max-width:380px; text-align:center; }
+.lr-pause-screen p { margin:16px 0; color:#d6c2ac; line-height:1.65; }
+.lr-coach { bottom:calc(var(--lr-safe-bottom) + 144px); }
+.lr-ui.lr-wide .lr-coach { bottom:calc(var(--lr-safe-bottom) + 154px); }
+.lr-next-star { margin-top:4px; min-height:12px; font-size:10px; letter-spacing:.03em; color:#ecd2a4; text-shadow:0 2px 10px #321c10; text-align:center; }
+.lr-ui .pb-canvas:focus-visible, .lr-pause-toggle:focus-visible { outline:2px solid #edcf8e; outline-offset:-3px; }
+@media(max-width:500px) { .lr-pause-toggle { right:158px; width:40px; height:40px; } .lr-top { right:208px; gap:8px; } .lr-next-star { font-size:9px; } }
+@media(max-height:560px) and (min-width:600px) { .lr-ui.lr-wide .lr-coach { bottom:calc(var(--lr-safe-bottom) + 148px); } }
+
+/* Focus must enter the start/summary button in the same turn it appears.
+   Keep the visual fade, but do not animate focusability via visibility. */
+.lr-ui .lr-overlay.show {
+  transition: opacity var(--t-med), visibility 0s;
 }

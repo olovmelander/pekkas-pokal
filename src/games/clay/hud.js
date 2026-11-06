@@ -49,7 +49,7 @@ export function buildHud(root) {
         <div class="lr-best" id="lr-best"></div>
       </div>
 
-      <div class="lr-meter" id="lr-meter">
+      <div class="lr-meter" id="lr-meter" role="progressbar" aria-label="Likhet med formen" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
         <div class="lr-meter-bar">
           <i id="lr-meter-fill"></i>
           <span class="lr-tick" style="left:60%"></span>
@@ -61,8 +61,8 @@ export function buildHud(root) {
           <b id="lr-meter-val">0%</b>
           <span class="lr-meter-stars" id="lr-meter-stars">${starsHtml(0)}</span>
         </div>
+        <div class="lr-next-star" id="lr-next-star"></div>
       </div>
-
       <div class="lr-phase" id="lr-phase"></div>
       <div class="pb-toast" id="lr-toast"></div>
 
@@ -76,10 +76,10 @@ export function buildHud(root) {
         <button class="lr-tool" id="lr-smooth"><span>GLÄTTA</span><small id="lr-smooth-key">håll</small></button>
         <button class="lr-tool primary" id="lr-done"><span>KLAR — BRÄNN!</span><small id="lr-done-key"></small></button>
       </div>
-      <div class="lr-skip" id="lr-skip">Tryck för att snabbspola</div>
+      <button type="button" class="lr-skip" id="lr-skip">Snabbspola bränningen</button>
     </div>
 
-    <div class="lr-card lr-verdict" id="lr-verdict">
+    <div class="lr-card lr-verdict" id="lr-verdict" role="region" aria-labelledby="lr-v-name">
       <div class="lr-kicker" id="lr-v-kicker"></div>
       <h3 id="lr-v-name"></h3>
       <div class="lr-grade"><b id="lr-v-grade">0</b><small>/10</small></div>
@@ -87,18 +87,22 @@ export function buildHud(root) {
       <blockquote id="lr-v-words"></blockquote>
       <div class="lr-lines" id="lr-v-lines"></div>
       <div class="lr-badge" id="lr-v-badge" hidden></div>
-      <button class="pb-btn" id="lr-next">Nästa alster</button>
+      <button class="pb-btn" id="lr-next" aria-describedby="lr-v-name lr-v-words lr-v-lines">Nästa alster</button>
     </div>
 
+    <button class="lr-pause-toggle" id="lr-pause-toggle" aria-label="Pausa drejningen" aria-pressed="false"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg></button>
+    <section class="lr-pause-screen" id="lr-pause-screen" role="dialog" aria-modal="true" aria-labelledby="lr-pause-title" hidden>
+      <div class="pb-help-card"><span class="lr-kicker">ATELJÉN VÄNTAR</span><h3 id="lr-pause-title">Ta en paus.</h3><p>Leran, klockan och ugnen väntar här. Fortsätt när du är redo.</p><button class="pb-btn" id="lr-resume">Fortsätt dreja</button></div>
+    </section>
     <button class="pb-info" id="lr-info" aria-label="Så spelar du">?</button>
 
-    <div class="pb-help" id="lr-help" hidden>
+    <div class="pb-help" id="lr-help" role="dialog" aria-modal="true" aria-label="Så drejar du" hidden>
       <div class="pb-help-card">
         <h3>Så drejar du</h3>
         <p class="pb-help-sub">Pekkas Lerskulptur</p>
         <ul class="pb-help-list">
           <li><i style="--c:#5eead4"></i><b>Uppdraget</b> Keramikern visar en form — dess silhuett hänger som streckat spöke över drejskivan. Det färgade bandet visar skillnaden: varmt där leran ska tryckas in, kallt där den ska dras ut.</li>
-          <li><i style="--c:#d9a05b"></i><b>Forma</b> Dra mot leran för att trycka in, dra utåt för att dra ut — vid precis den höjd du rör. Ryck inte: drar du för hårt slår leran och blir ojämn.</li>
+          <li><i style="--c:#d9a05b"></i><b>Forma</b> Dra mot leran för att trycka in, dra utåt för att dra ut — vid precis den höjd du rör. Med tangentbord väljer ↑ ↓ höjd; ← trycker in och → drar ut. Ryck inte: drar du för hårt slår leran och blir ojämn.</li>
           <li><i style="--c:#f2c14e"></i><b>Glätta</b> Håll GLÄTTA (eller G) så jämnar svampen ut kurvorna och drejränderna.</li>
           <li><i style="--c:#ff7a6b"></i><b>Tiden</b> 75 sekunder per alster. Går tiden ut åker det in i ugnen som det är.</li>
           <li><i style="--c:#8fe3f2"></i><b>Bränn</b> Tryck KLAR när du är nöjd. Ugnen, glasyren, betyg 1–10 och keramikerns dom — sen ställs alstret i fönstret.</li>
@@ -106,7 +110,7 @@ export function buildHud(root) {
           <li><i style="--c:#6f9b5a"></i><b>Poängen</b> Likhet i kvadrat × 1 000, plus tidsbonus om likheten når 60 %.</li>
         </ul>
         <p class="pb-help-tip">Snabb och lik vinner: en tidig 90-procentare slår en sen perfektionist.</p>
-        <div class="pb-help-keys">Forma: dra på skivan · Glätta: håll G · Bränn: KLAR eller Enter · Kortet: ? eller Esc</div>
+        <div class="pb-help-keys">Forma: dra på skivan eller ← → · Höjd: ↑ ↓ · Glätta: håll G · Bränn: Enter · Paus: P · Hjälp: ?</div>
         <button class="pb-btn" id="lr-help-close">Tillbaka till ateljén</button>
       </div>
     </div>
@@ -123,7 +127,7 @@ export function buildHud(root) {
     score: q('#lr-score'), hi: q('#lr-hi'), chips: q('#lr-chips'), timer: q('#lr-timer'),
     task: q('#lr-task'), kicker: q('#lr-kicker'), name: q('#lr-name'), brief: q('#lr-brief'),
     diff: q('#lr-diff'), best: q('#lr-best'),
-    meter: q('#lr-meter'), meterFill: q('#lr-meter-fill'), meterVal: q('#lr-meter-val'), meterStars: q('#lr-meter-stars'),
+    meter: q('#lr-meter'), nextStar: q('#lr-next-star'), meterFill: q('#lr-meter-fill'), meterVal: q('#lr-meter-val'), meterStars: q('#lr-meter-stars'),
     phase: q('#lr-phase'), toast: q('#lr-toast'),
     temp: q('#lr-temp'), tempVal: q('#lr-temp-val'), tempLabel: q('#lr-temp-label'),
     tools: q('#lr-tools'), smooth: q('#lr-smooth'), done: q('#lr-done'), skip: q('#lr-skip'),
@@ -132,7 +136,7 @@ export function buildHud(root) {
     vStars: q('#lr-v-stars'), vWords: q('#lr-v-words'), vLines: q('#lr-v-lines'), vBadge: q('#lr-v-badge'),
     next: q('#lr-next'),
     overlay: q('#lr-overlay'), panel: q('#lr-panel'),
-    info: q('#lr-info'), help: q('#lr-help'), helpClose: q('#lr-help-close'), mute: q('#lr-mute')
+    pauseToggle: q('#lr-pause-toggle'), pauseScreen: q('#lr-pause-screen'), resume: q('#lr-resume'), controlsRoot: q('.lr-hud'), info: q('#lr-info'), help: q('#lr-help'), helpClose: q('#lr-help-close'), mute: q('#lr-mute')
   };
 }
 

@@ -1409,3 +1409,14 @@
   }
 }
 
+
+/* Confirm the impact at the sight after the real pellet flight, not at trigger time. */
+.sk-ui .sk-cross.shot::before { border-color: #ffe0a1; box-shadow: 0 0 15px #f7cc7755; }
+.sk-ui .sk-cross.confirmed::before { border-color: #bff5bd; box-shadow: 0 0 0 5px #bff5bd22, 0 0 18px #a2eaae66; }
+.sk-ui .sk-cross.confirmed i { background: #bff5bd; }
+.sk-ui .sk-keyguide { position: absolute; left: 50%; bottom: calc(15px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: max-content; max-width: calc(100% - 30px); padding: 8px 15px; border: 1px solid #f0d7a13d; border-radius: 18px; background: #1c231adb; color: #d4dbc9; text-align: center; font-size: 11px; letter-spacing: .02em; pointer-events: none; }
+.sk-ui .sk-keyguide[hidden] { display: none; }
+.sk-ui .sk-keyguide b { color: #fae5b6; }
+.sk-ui .pb-info, .sk-ui .pb-mute { width: 44px; height: 44px; }
+.sk-ui .pb-info { right: 112px; }
+.sk-ui[data-paused='true'] *, .sk-ui[data-paused='true'] *::before, .sk-ui[data-paused='true'] *::after { animation-play-state: paused !important; }
