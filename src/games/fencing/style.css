@@ -1165,3 +1165,25 @@
 .fen[data-orient='portrait'] .fen-cue { bottom: calc(var(--safe-b) + 177px); width: min(240px, 68vw); }
 .fen[data-orient='portrait'] .fen-coach { bottom: calc(var(--safe-b) + 242px); }
 @media (max-height: 450px) and (orientation: landscape) { .fen .fen-cue { bottom: calc(var(--safe-b) + 14px); padding: 7px 10px; } }
+
+/* Short landscape phones: the fencers' arms and blade line fill the middle
+   of the screen, so the coach steps out of the way to the top left, under
+   the score and the scoreboard's left edge, above the guard buttons. */
+@media (max-height: 450px) and (orientation: landscape) {
+  .fen .fen-coach {
+    left: 14px;
+    top: calc(var(--safe-t) + 70px);
+    bottom: auto;
+    transform: none;
+    max-width: min(250px, 31vw);
+    padding: 0.45rem 0.75rem;
+    font-size: 0.76rem;
+    line-height: 1.35;
+    text-align: left;
+  }
+  .fen .fen-coach.show { animation-name: fen-coach-side; }
+}
+
+@keyframes fen-coach-side {
+  0% { opacity: 0; transform: translateY(-8px); }
+}
