@@ -167,8 +167,12 @@
   .kart-board { padding: 4px 7px; font-size: 10px; }
   .kart-board li { line-height: 15px; }
   .kart-board li:not([data-near]) { display: none; }
-  .kart-signal { top: calc(var(--kart-top) + 48px); }
-  .kart-lights i { width: 22px; height: 22px; }
+  /* Under the place readout, so the pod never covers the gantry's own light rig. */
+  .kart-signal { top: calc(var(--kart-top) + 50px); left: 16px; transform: none; justify-items: start; }
+  .kart-lights { gap: 6px; padding: 6px 9px; border-radius: 12px; }
+  .kart-lights i { width: 17px; height: 17px; }
+  .kart-flash { font-size: 26px; }
+  .kart-banner { padding: 6px 12px; font-size: 11px; }
   .kart-controls { bottom: max(10px, env(safe-area-inset-bottom)); }
   .kart-controls button { min-height: 50px; }
   .kart-controls button small { display: none; }

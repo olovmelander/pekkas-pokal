@@ -99,11 +99,14 @@ export function createKartCamera(camera, track, { reducedMotion = false, view = 
 
       if (state === 'menu' || state === 'result') {
         // A slow orbit: wide over the field in the menu, close round the kart after the flag.
+        // After the flag: a slow TV orbit round the finish line (world's celebration point) or the kart.
         const close = state === 'result';
-        const angle = reducedMotion ? 0.9 : time * (close ? 0.18 : 0.06);
-        const reach = close ? 6.5 : 13;
-        position.set(kart.x + Math.sin(kartYaw + Math.PI + angle) * reach, kart.y + (close ? 2.3 : 7), kart.z + Math.cos(kartYaw + Math.PI + angle) * reach);
-        target.copy(kart); target.y += close ? 0.7 : 0.6;
+        const pivot = close && track.celebrationPoint?.isVector3 ? track.celebrationPoint : null;
+        const centre = pivot ?? kart;
+        const angle = reducedMotion ? 0.9 : time * (close ? 0.16 : 0.06);
+        const reach = pivot ? 9 : close ? 6.5 : 13;
+        position.set(centre.x + Math.sin(kartYaw + Math.PI + angle) * reach, centre.y + (pivot ? 2.6 : close ? 2.3 : 7), centre.z + Math.cos(kartYaw + Math.PI + angle) * reach);
+        target.copy(centre); target.y += pivot ? 0.4 : close ? 0.7 : 0.6;
         if (!initialized) { camera.position.copy(position); initialized = true; yaw = kartYaw; previousKart.copy(kart); }
         camera.position.lerp(position, ease(close ? 1.6 : 2.5, step));
         camera.up.set(0, 1, 0); camera.lookAt(target);

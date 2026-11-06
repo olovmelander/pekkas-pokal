@@ -194,7 +194,9 @@ export function createEffects(scene, track, { reducedMotion = false, coarse = fa
     if (hit > m.hit + 0.3 && !handled.has(driver) && near) {
       handled.add(driver);
       if (Math.abs(finite(driver.lane)) > WALL_LANE - 0.45) {
-        const wall = track.sample(finite(driver.distance) + 0.6, Math.sign(driver.lane) * (Math.abs(driver.lane) + 0.85)).position;
+        // On the barrier's visible face (world: track.barrierFace), at the kart's side.
+        const face = Number.isFinite(track.barrierFace) ? track.barrierFace : Math.abs(driver.lane) + 0.85;
+        const wall = track.sample(finite(driver.distance) + 0.6, Math.sign(driver.lane) * (face - 0.05)).position;
         burst('sparks', point.copy(wall).setY(wall.y + 0.35), { strength: clamp(speed / 12, 0.4, 1.3), direction: forward.set(Math.sin(yaw), 0, Math.cos(yaw)) });
       } else {
         let other = null, best = 9;
