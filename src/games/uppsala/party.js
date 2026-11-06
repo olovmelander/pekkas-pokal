@@ -162,7 +162,8 @@ function createBeerPong(ctx) {
   athlete.root.position.set(-0.22, 0.02, 6.86); athlete.root.rotation.set(0, Math.PI, 0);
   const host = crew.get('Erik Vallgren');
   host?.root.position.set(0.04, 0.02, 3.5); host?.root.rotation.set(0, 0, 0);
-  const spots = [[-1.05, 4.95], [1.08, 5.4], [0.98, 3.72], [-0.95, 3.8], [1.42, 6.55], [-1.45, 6.35]];
+  // Out of the camera's way: two at the sides of the table, two behind the rack, two back by the thrower.
+  const spots = [[-1.35, 4.6], [1.35, 4.9], [1.25, 3.5], [-1.2, 3.42], [1.95, 6.05], [-2.0, 5.75]];
   const fans = [...crew.values()].filter((p) => p !== host);
   const centre = { x: 0, z: 5.05 };
   fans.forEach((p, i) => {
@@ -336,7 +337,7 @@ function createBeerPong(ctx) {
       });
     },
     camera(goal, lookAt, { portrait, short }) {
-      if (portrait) { goal.set(0.25, 2.6, 8.2); lookAt.set(0, 0.82, 4.45); } else { goal.set(0.55, 2.45, 7.9); lookAt.set(short ? 0.55 : 0, 0.84, 4.4); }
+      if (portrait) { goal.set(0.2, 3.0, 8.3); lookAt.set(0, 0.78, 4.6); } else { goal.set(0.4, 2.85, 7.6); lookAt.set(short ? 0.6 : 0, 0.78, 4.55); }
     },
     summary: () => `${sunk} av 6 muggar på ${used} ${used === 1 ? 'boll' : 'bollar'}.${sunk === 6 && used < PONG.balls ? ` ${PONG.balls - used} ${PONG.balls - used === 1 ? 'boll' : 'bollar'} kvar gav bonus.` : ' Hela bordet ger 85 poäng, och varje boll som blir över ger fem till.'}`,
     dispose() { clearDrops(world, drops); }
