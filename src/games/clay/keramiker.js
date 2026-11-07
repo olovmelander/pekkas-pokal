@@ -42,7 +42,8 @@ import { createPerson, POSES, emptyPose, WALK_STRIDE, WALK_STRIDES } from '../sh
 /** The studio is built a touch over life size; she matches its props. */
 export const KERAMIKER_HEIGHT = 1.98;
 
-const LOOK = {
+/** Her look in the shared people system (tools/blender fits her hair to it). */
+export const KERAMIKER_LOOK = {
   name: 'Keramikern',
   height: KERAMIKER_HEIGHT,
   build: 'slim',
@@ -54,6 +55,7 @@ const LOOK = {
   face: { jaw: 0.9, chin: 0.94, nose: 0.92, noseLen: 0.94, brow: 0.9, cheek: 1.05, lips: 1.14, headW: 0.97 },
   outfit: { top: 'apron', topColor: 0xe4dccb, accent: 0x3a5570, bottom: 'trousers', bottomColor: 0x2f3440, shoes: 'leather', shoeColor: 0x3b2618 }
 };
+const LOOK = KERAMIKER_LOOK;
 
 /**
  * Her long brown hair and her beret are modelled in Blender 5.2

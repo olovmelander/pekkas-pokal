@@ -285,7 +285,8 @@ ugnen, trådsnittet och glasyrens pling har egna ljud.
 
 **Andra uppgraderingen.** Keramikern är nu en riktig person ur spelens
 gemensamma personsystem: linneskjorta med uppkavlade ärmar under ett
-lerfläckat förkläde, svart basker och långt brunt hår. Hon
+lerfläckat förkläde, svart basker och långt brunt hår (håret och baskern är
+modellerade i Blender 5.2 och följer huvudet när hon nickar och vrider sig). Hon
 pekar på varje ny lerklump, står med armarna i kors och följer dina händer
 medan du drejar, nickar när en stjärna trillar in, höjer ögonbrynen vid tre och
 rynkar pannan när leran slår. Medan ugnen bränner står hon med händerna i
@@ -936,7 +937,10 @@ maskinens spolar en i taget, och ljuden kommer från det håll där de händer.
 **Personerna i spelen**
 
 Alla figurer i spelen kommer från ett gemensamt personsystem i
-`src/games/shared/people*.js`, helt byggt i kod utan modellfiler. Varje
+`src/games/shared/people*.js`, helt byggt i kod utan modellfiler. Ett undantag:
+keramikerns långa bruna hår och svarta basker i Lerskulptur är modellerade i
+Blender 5.2, anpassade efter hennes eget huvud och skinnade mot personsystemets
+skelett (se `tools/blender/`). Varje
 deltagares utseende utgår från ett gruppfoto: Ludvig har rakat huvud och långt
 kopparrött skägg, Niklas och Viktor bär keps, och bara Henrik och Viktor har
 glasögon – ingen av deltagarna har solglasögon. Var och en har ett eget ansikte
@@ -1029,7 +1033,7 @@ får rätt titel och bild i förhandsvisningen och sedan leder vidare till sidan
 | `src/games/shared/` | Delat av alla spel: `gfx` (grafikvakten: tålig efterbehandling, NaN-skydd, svart-bild-vakt, förkompilering, `?gfx=safe`), `people` med `people-*` (personsystemet: skelett, händer och grepp, ansikten, utseenden, poser, gång, publik) |
 | `src/games/pinball/` | Flipperspelet: `physics` (2D-kollision), `table` (layout + banans grafik), `meshes` (3D), `cabinet` (skåpet, toppboxen och glaset), `room` (arkadhallen), `showcase` (kameraturen före start), `dmd` (punktmatrisen), `fx` (gnistor, bollspår), `audio` (syntetiskt ljud), `hud` (paneler), `scores` (topplistan), `index` (spelloop) |
 | `src/games/fishing/` | Fiskespelet: `species` (procedurella fiskar), `world` (sjö, vattenshader), `scenery` (stranden, udden, speglingarna), `boat` (klinkbyggda ekan), `angler` (Erik i ekan, IK mot spöet), `fx` (stänk, bubblor, glimtar), `hud` (paneler, fångstdagbok), `progress` (uppdrag och rekord), `audio` (syntetiskt ljud), `index` (spelloop) |
-| `src/games/clay/` | Drejspelet: `studio` (ateljé, ugn, drejskiva), `hand` (spelarens hand på leran), `clay` (krukans nät och material), `keramiker` (keramikern och domen), `guide` (målets guider i 3D), `fx` (stänk, glöd, värmedaller), `hud` (paneler, dom, kvällens utställning), `audio` (syntetiskt ljud), `index` (lerfysik + spelloop) |
+| `src/games/clay/` | Drejspelet: `studio` (ateljé, ugn, drejskiva), `hand` (spelarens hand på leran), `clay` (krukans nät och material), `keramiker` (keramikern och domen, hår och basker i `keramikern.glb` från `tools/blender/`), `guide` (målets guider i 3D), `fx` (stänk, glöd, värmedaller), `hud` (paneler, dom, kvällens utställning), `audio` (syntetiskt ljud), `index` (lerfysik + spelloop) |
 | `src/games/fencing/` | Fäktspelet: `salle` (fäktsal, ljusvolymer, publik), `fencer` (fäktarna, domaren och masken på personsystemet), `fx` (gnistor, klingspår, konfetti), `hud` (paneler, slutspelsträd), `audio` (syntetiskt ljud), `index` (duell-AI + spelloop) |
 | `src/games/shooting/` | Skyttespelet: `range` (fält, lerduvor), `forest` (skogsbrynet), `gang` (2022 års gäng på fikastolarna), `sky` (himmelsshader och moln), `gun` (bockbössan i PBR), `grass` (instansierad äng med vind), `fx` (skärvor, damm, haglsvärm), `hud` (25-kortet, spökstapeln, slutkortet), `audio` (syntetiskt ljud), `index` (banor + spelloop) |
 | `src/games/pingis/` | Pingisspelet: `hall` (bygdegård, bord), `foe` (motståndaren och racketen), `crowd` (publiken på personsystemet), `scoreboard` (fällbara siffror), `fx` (bollspår, ringar, gnistor), `post` (bloom, gradering, spegelgolv), `hud` (paneler, scoutingkort), `audio` (syntetiskt ljud), `index` (fysik, AI och spelloop) |

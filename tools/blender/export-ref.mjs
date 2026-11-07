@@ -3,16 +3,15 @@
 import fs from 'node:fs';
 import * as THREE from 'three';
 import { createPerson } from '../../src/games/shared/people.js';
-import { KERAMIKER_HEIGHT } from '../../src/games/clay/keramiker.js';
-const src = fs.readFileSync(new URL('../../src/games/clay/keramiker.js', import.meta.url), 'utf8');
-const lookSrc = src.slice(src.indexOf('const LOOK = {') + 'const LOOK = '.length, src.indexOf('};', src.indexOf('const LOOK = {')) + 1).replace('KERAMIKER_HEIGHT', String(KERAMIKER_HEIGHT));
-const LOOK = Function(`return (${lookSrc});`)();
+import { KERAMIKER_HEIGHT, KERAMIKER_LOOK } from '../../src/games/clay/keramiker.js';
+
+const LOOK = { ...KERAMIKER_LOOK };
 LOOK.hair = { style: 'buzz', color: LOOK.hair.color };
 const person = createPerson(LOOK);
 person.root.updateMatrixWorld(true);
 const g = person.mesh.geometry;
 const pos = g.attributes.position, idx = g.index, si = g.attributes.skinIndex, sw = g.attributes.skinWeight;
-const bones = person.skeleton.bones;
+const { bones } = person.skeleton;
 const headI = bones.findIndex((b) => b.name === 'head'), neckI = bones.findIndex((b) => b.name === 'neck');
 let obj = '# keramiker bind pose, metres, +Y up, facing +Z\n';
 for (let i = 0; i < pos.count; i++) obj += `v ${pos.getX(i).toFixed(5)} ${pos.getY(i).toFixed(5)} ${pos.getZ(i).toFixed(5)}\n`;
@@ -35,4 +34,5 @@ for (const name of ['headTop', 'face']) { const v = new THREE.Vector3(); person.
 const box = new THREE.Box3();
 headVerts.forEach((i) => box.expandByPoint(new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i))));
 fs.writeFileSync(new URL('./ref/info.json', import.meta.url), JSON.stringify({ height: KERAMIKER_HEIGHT, scale: person.scale, joints, sockets, headBox: { min: box.min.toArray(), max: box.max.toArray() }, headVertexCount: headVerts.length, vertexCount: pos.count, headBone: headI, neckBone: neckI, bones: bones.map((b) => b.name) }, null, 1));
+// eslint-disable-next-line no-console
 console.log('ok', pos.count, idx.count / 3, headVerts.length, JSON.stringify({ joints, sockets, box: [box.min.toArray(), box.max.toArray()] }));
