@@ -36,6 +36,7 @@
  */
 
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { createPerson, POSES, emptyPose, WALK_STRIDE, WALK_STRIDES } from '../shared/people.js';
 
 /** The studio is built a touch over life size; she matches its props. */
@@ -53,6 +54,72 @@ const LOOK = {
   face: { jaw: 0.9, chin: 0.94, nose: 0.92, noseLen: 0.94, brow: 0.9, cheek: 1.05, lips: 1.14, headW: 0.97 },
   outfit: { top: 'apron', topColor: 0xe4dccb, accent: 0x3a5570, bottom: 'trousers', bottomColor: 0x2f3440, shoes: 'leather', shoeColor: 0x3b2618 }
 };
+
+/**
+ * Her long brown hair and her beret are modelled in Blender 5.2
+ * (tools/blender/keramiker_hair.py, fitted to her own head from people.js)
+ * and shipped as keramikern.glb in her model space. Load it while the game
+ * loads; null (no file, offline, a bad file) falls back to the shared
+ * people's long hair and the beret built in code below.
+ */
+export async function loadKeramikerLook(url = new URL('./keramikern.glb', import.meta.url).href) {
+  try {
+    const gltf = await new GLTFLoader().loadAsync(url);
+    const found = {};
+    gltf.scene.traverse((o) => { if (o.isMesh) found[o.name] = o.geometry; });
+    if (!found.KeramikerHair || !found.KeramikerBeret) return null;
+    return { hair: found.KeramikerHair, beret: found.KeramikerBeret };
+  } catch {
+    return null;
+  }
+}
+
+const ramp = (a, b, x) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+
+/**
+ * Skin a modelled piece to her skeleton. The beret rides the head; the hair
+ * rides the head down to the jaw and blends into the neck and chest below,
+ * so the ends bend with her instead of cutting through her shoulders when
+ * she nods or turns. Vertex colours become RGB like the people's own, so the
+ * shared skin and cloth materials draw it with the shader they already use.
+ */
+function skinToHead(person, source, material, falls) {
+  const g = source.clone();
+  const col = g.getAttribute('color');
+  if (col && col.itemSize === 4) {
+    const rgb = new Float32Array(col.count * 3);
+    for (let i = 0; i < col.count; i++) { rgb[i * 3] = col.getX(i); rgb[i * 3 + 1] = col.getY(i); rgb[i * 3 + 2] = col.getZ(i); }
+    g.setAttribute('color', new THREE.BufferAttribute(rgb, 3));
+  }
+  const list = person.skeleton.bones;
+  const index = (name) => Math.max(0, list.indexOf(person.bones[name]));
+  const head = index('head'), neck = index('neck'), chest = index('chest');
+  person.root.updateMatrixWorld(true);
+  const jointY = (name) => new THREE.Vector3().setFromMatrixPosition(person.bones[name].matrixWorld).y - person.root.position.y;
+  const headY = jointY('head'), neckY = jointY('neck');
+  const pos = g.getAttribute('position'), n = pos.count;
+  const skinIndex = new Uint16Array(n * 4), skinWeight = new Float32Array(n * 4);
+  for (let i = 0; i < n; i++) {
+    const y = pos.getY(i);
+    const wHead = falls ? ramp(neckY - 0.01, headY - 0.02, y) : 1;
+    const wChest = falls ? (1 - wHead) * ramp(neckY - 0.01, neckY - 0.08, y) : 0;
+    skinIndex.set([head, neck, chest, 0], i * 4);
+    skinWeight.set([wHead, 1 - wHead - wChest, wChest, 0], i * 4);
+  }
+  g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(skinIndex, 4));
+  g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(skinWeight, 4));
+  const mesh = new THREE.SkinnedMesh(g, material);
+  mesh.castShadow = mesh.receiveShadow = true;
+  mesh.frustumCulled = false;
+  const body = person.mesh;
+  body.parent.add(mesh);
+  mesh.position.copy(body.position); mesh.quaternion.copy(body.quaternion); mesh.scale.copy(body.scale);
+  mesh.bind(body.skeleton, body.bindMatrix);
+  return mesh;
+}
 
 /* Upper-body channels a layer may own; legs and hips stay with the base (idle/walk). */
 const UPPER = ['spine', 'chest', 'neck', 'head', 'shoulderL', 'upperArmL', 'forearmL', 'handL', 'shoulderR', 'upperArmR', 'forearmR', 'handR'];
@@ -309,18 +376,26 @@ const LAYERS = [
  * @param {THREE.Vector3} [o.kilnHandle] the door handle, in the hinge's space
  * @param {THREE.Vector3} [o.kilnBack]   where she steps back to, clear of the door and the piece's flight
  * @param {THREE.Vector3} [o.greet]      where she welcomes you on the start screen (by the wheel)
+ * @param {{hair: THREE.BufferGeometry, beret: THREE.BufferGeometry}|null} [o.look] from loadKeramikerLook()
  */
 export function createKeramiker({
-  home, judge, wheel, banding, bandingRadius, kilnDoor, kilnSpot = null, kilnHinge = null, kilnHandle = null, kilnBack = null, greet = null
+  home, judge, wheel, banding, bandingRadius, kilnDoor, kilnSpot = null, kilnHinge = null, kilnHandle = null, kilnBack = null, greet = null,
+  look = null
 }) {
-  const person = createPerson(LOOK);
+  // With the modelled hair she wears a close brown crop under it, so no skin
+  // shows between the locks; without it, the shared long hair.
+  const modelled = !!(look && look.hair && look.beret);
+  const person = createPerson(modelled ? { ...LOOK, hair: { style: 'buzz', color: LOOK.hair.color } } : LOOK);
   smearApron(person);
   const { root, bones, sockets } = person;
   const s = person.scale;
   const blob = blobShadow(s);
   root.add(blob.mesh);
-  const beret = buildBeret(s);
-  person.attach(beret, 'headTop', { position: [-0.006 * s, -0.028 * s, -0.004 * s], rotation: [-0.16, 0, -0.3] });
+  const worn = modelled
+    ? [skinToHead(person, look.hair, person.materials.skin, true), skinToHead(person, look.beret, person.materials.cloth, false)]
+    : [];
+  const beret = modelled ? null : buildBeret(s);
+  if (beret) person.attach(beret, 'headTop', { position: [-0.006 * s, -0.028 * s, -0.004 * s], rotation: [-0.16, 0, -0.3] });
   // Solve every grip she will use now, while the game loads (each first
   // setGrip runs a 5–50 ms finger solve that people.js then caches), so
   // none of them costs a hitch mid-game
@@ -824,9 +899,13 @@ export function createKeramiker({
     dispose() {
       rib.geometry.dispose();
       rib.material.dispose();
-      beret.geometry.dispose();
-      beret.children[0].geometry.dispose();
-      beret.material.dispose();
+      if (beret) {
+        beret.geometry.dispose();
+        beret.children[0].geometry.dispose();
+        beret.material.dispose();
+      }
+      // The modelled pieces share her materials (person.dispose releases them).
+      worn.forEach((mesh) => { mesh.removeFromParent(); mesh.geometry.dispose(); });
       root.remove(blob.mesh);
       blob.mesh.geometry.dispose();
       blob.mesh.material.dispose();

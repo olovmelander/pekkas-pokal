@@ -44,7 +44,7 @@ import { buildPotterHand } from './hand.js';
 import { buildFx, HeatHazeShader } from './fx.js';
 import { buildGuide } from './guide.js';
 import { buildHud, drawDiff, silhouetteSvg, starsHtml } from './hud.js';
-import { createKeramiker } from './keramiker.js';
+import { createKeramiker, loadKeramikerLook } from './keramiker.js';
 
 export const layout = 'full';
 
@@ -475,7 +475,10 @@ export async function createClay(container) {
   const behind = new THREE.Vector3(-DIR_REVEAL.x, 0, -DIR_REVEAL.z).normalize();
   const camLeft = new THREE.Vector3(behind.z, 0, -behind.x);
   studio.group.updateMatrixWorld(true);
+  // Her Blender-modelled hair and beret (null falls back to the shared people's hair).
+  const keramikerLook = await loadKeramikerLook();
   const keramiker = createKeramiker({
+    look: keramikerLook,
     home: new THREE.Vector3(2.8, 0, -2.25),
     judge: studio.reveal.clone().setY(0).addScaledVector(behind, 0.8).addScaledVector(camLeft, 0.32),
     wheel: new THREE.Vector3(0, wheel.headY + 1, 0),
