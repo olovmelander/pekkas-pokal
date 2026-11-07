@@ -468,9 +468,9 @@ export async function createClay(container) {
 
   /* ---- Keramikern -------------------------------------------------------- */
 
-  // He waits by the kiln while you throw, and judges from the far side of
+  // She waits by the kiln while you throw, and judges from the far side of
   // the banding wheel, facing the reveal camera — stepped a little to its
-  // left so a wide piece does not hide him, and clear of the piece's flight
+  // left so a wide piece does not hide her, and clear of the piece's flight
   // from the kiln, which lands from the right
   const behind = new THREE.Vector3(-DIR_REVEAL.x, 0, -DIR_REVEAL.z).normalize();
   const camLeft = new THREE.Vector3(behind.z, 0, -behind.x);
@@ -487,7 +487,7 @@ export async function createClay(container) {
     kilnHinge: studio.kiln.hinge,
     kilnHandle: studio.kiln.handle,
     kilnBack: studio.kiln.group.localToWorld(new THREE.Vector3(-1.25, 0, 0.95)).setY(0),
-    // On the start screen he waits by the wheel, right of the lump, to welcome you
+    // On the start screen she waits by the wheel, right of the lump, to welcome you
     greet: new THREE.Vector3(1.45, 0, -1.55)
   });
   scene.add(keramiker.root);
@@ -806,7 +806,7 @@ export async function createClay(container) {
     }, 3400);
     hud.coach.textContent = COACH;
     hud.coach.classList.toggle('show', state.coached < 1.2);
-    // Keramikern points at the new lump and says what he wants
+    // Keramikern points at the new lump and says what she wants
     keramiker.clearVerdict();
     keramiker.cue('intro');
   }
@@ -1310,8 +1310,8 @@ export async function createClay(container) {
         REVEAL_LOOK.y += 0.17;
         frameIn(REVEAL_LOOK, DIR_REVEAL, 0.66, 0.68, 0.94, verdictFree);
       } else if (ph === 'judge') {
-        // Beside the card, centred between the piece and keramikern (he stands
-        // on its left), so the card never covers him on a narrower window
+        // Beside the card, centred between the piece and keramikern (she stands
+        // on its left), so the card never covers her on a narrower window
         REVEAL_LOOK.x -= 0.25;
         REVEAL_LOOK.y += 0.06;
         frameIn(REVEAL_LOOK, DIR_REVEAL, 0.86, 0.8, 0.9, verdictFree);
@@ -1930,9 +1930,9 @@ export async function createClay(container) {
   }
 
   /**
-   * Keramikern (keramiker.js) gets the moment each frame: what he should be
+   * Keramikern (keramiker.js) gets the moment each frame: what she should be
    * watching while you throw — your hand on the clay, or the clay itself —
-   * the fired piece while he judges, and where the viewer is.
+   * the fired piece while she judges, and where the viewer is.
    */
   function updateKeramiker(dt, t) {
     const ph = state.phase;
@@ -1945,7 +1945,7 @@ export async function createClay(container) {
       pieceMid.copy(fired.mesh.position);
       pieceMid.y += H * fired.mesh.scale.y * 0.5;
     }
-    // Fast-forwarded firing: he hurries too, so he still meets the piece at the banding wheel
+    // Fast-forwarded firing: she hurries too, so she still meets the piece at the banding wheel
     keramiker.update(ph === 'fire' && state.fast ? dt * 2.5 : dt, t, {
       phase: ph,
       opened: ph === 'fire' && state.t >= FIRE.open,

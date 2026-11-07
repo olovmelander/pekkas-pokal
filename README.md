@@ -285,14 +285,14 @@ ugnen, trådsnittet och glasyrens pling har egna ljud.
 
 **Andra uppgraderingen.** Keramikern är nu en riktig person ur spelens
 gemensamma personsystem: linneskjorta med uppkavlade ärmar under ett
-lerfläckat förkläde, svart basker, runda glasögon och grått helskägg. Han
+lerfläckat förkläde, svart basker och långt brunt hår. Hon
 pekar på varje ny lerklump, står med armarna i kors och följer dina händer
 medan du drejar, nickar när en stjärna trillar in, höjer ögonbrynen vid tre och
-rynkar pannan när leran slår. Medan ugnen bränner står han med händerna i
-sidorna; sedan kliver han fram till drejskivan, lutar sig över alstret med
+rynkar pannan när leran slår. Medan ugnen bränner står hon med händerna i
+sidorna; sedan kliver hon fram till drejskivan, lutar sig över alstret med
 knytnäven under hakan och fäller domen med hela ansiktet — båda armarna i
 luften för en tia, en arm i luften för 8 och 9, tummen upp för godkänt, en
-axelryckning för rustikt och en långsam huvudskakning för resten, medan han
+axelryckning för rustikt och en långsam huvudskakning för resten, medan hon
 pratar. Din hand på leran har fått riktiga fingrar och en uppkavlad ärm, och
 möblerna mjuka kontaktskuggor. Grafiken är härdad för riktiga grafikkort:
 skuggkameran omfattar hela rummet, shaderna klarar sig utan NaN, glansen på
@@ -310,8 +310,8 @@ när man sitter vid drejskivan. Leran ger efter under fingrarna med en liten
 vulst, blir blankare där handen nyss gått, och slicker stänker av skivan.
 
 Keramikern lägger armarna i kors på riktigt, visar tummen upp och pekar med de
-nya händerna, plockar fram en buxbomsskrapa ur förklädesfickan medan han väntar
-och stänger själv ugnsluckan. I mobilens stående läge syns hela hans huvud när
+nya händerna, plockar fram en buxbomsskrapa ur förklädesfickan medan hon väntar
+och stänger själv ugnsluckan. I mobilens stående läge syns hela hennes huvud när
 domen läses upp. Glasyrerna har fått egna ytor – järnprickig honung, flammig
 kobolt, krackelerad seladon och glasyr som runnit i droppar mot foten – och
 ateljén har fått torkande krukor, glasyrhinkar och ett olivträd.
