@@ -1,0 +1,458 @@
+/* ==========================================================================
+   Pekkas Pokal — Spel: arkaden (affischer per år) och spelscenen
+   Spelens egna HUD-stilar ligger i game-hud.css och src/games/<spel>/style.css.
+   ========================================================================== */
+
+/* ---------------------------------------------------------------- arkaden */
+
+.game-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
+  grid-auto-flow: dense;
+  gap: var(--sp-4);
+}
+
+/* Det senaste spelet får en dubbel affisch */
+.game-grid > .game-card.featured {
+  grid-column: span 2;
+  grid-row: span 2;
+}
+
+.game-card {
+  --g1: #2a2416;
+  --g2: #0f0e0b;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 340px;
+  padding: var(--sp-5);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  isolation: isolate;
+  color: #f7f1e6;
+  text-align: left;
+  text-decoration: none;
+  background:
+    radial-gradient(120% 90% at 85% 0%, color-mix(in srgb, var(--g1) 90%, white 10%), transparent 70%),
+    linear-gradient(170deg, var(--g1), var(--g2));
+  border: 1px solid rgba(255, 240, 210, 0.1);
+  box-shadow: var(--shadow-1);
+  transition: transform var(--t-med) var(--ease-out), box-shadow var(--t-med), border-color var(--t-med);
+}
+
+.game-card.featured {
+  min-height: 520px;
+  padding: var(--sp-6);
+}
+
+.game-cover {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  overflow: hidden;
+}
+
+/* Medan stillbilden laddar: en suddig miniatyr av samma bild (--blur sätts
+   per spel i GAMES), så kortet aldrig står tomt och inget hoppar */
+.game-cover::before {
+  content: '';
+  position: absolute;
+  inset: -24px;
+  background: var(--blur, none) var(--focus, 50% 50%) / cover no-repeat;
+  filter: blur(10px) saturate(1.15);
+}
+
+.game-cover img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: var(--focus, 50% 50%);
+  opacity: 0;
+  transition: opacity 0.6s var(--ease-out), transform 1.2s var(--ease-out), filter var(--t-med);
+}
+
+.game-cover.is-loaded img {
+  opacity: 1;
+}
+
+/* När bilden tonat in behövs inte miniatyren (och dess suddlager) längre */
+.game-cover.is-loaded::before {
+  visibility: hidden;
+  transition: visibility 0s linear 0.7s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-cover img {
+    transition: none;
+  }
+}
+
+.game-shade {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(180deg, rgba(8, 7, 5, 0) 25%, rgba(8, 7, 5, 0.55) 55%, rgba(8, 7, 5, 0.92) 100%),
+    linear-gradient(90deg, rgba(8, 7, 5, 0.35), transparent 60%);
+}
+
+.game-emblem {
+  position: absolute;
+  top: 18%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: clamp(4rem, 8vw, 6rem);
+  line-height: 1;
+  z-index: -1;
+  filter: drop-shadow(0 20px 30px rgba(0, 0, 0, 0.5));
+  opacity: 0.9;
+}
+
+.game-card:has(.game-cover img) .game-emblem {
+  display: none;
+}
+
+.game-year-big {
+  position: absolute;
+  top: var(--sp-4);
+  left: var(--sp-5);
+  font-family: var(--ff-serif);
+  font-size: clamp(2.6rem, 2rem + 2vw, 3.6rem);
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: transparent;
+  -webkit-text-stroke: 1px rgba(255, 244, 222, 0.55);
+  font-variation-settings: 'opsz' 144;
+  transition: color var(--t-med), -webkit-text-stroke-color var(--t-med);
+}
+
+.game-card.featured .game-year-big {
+  font-size: clamp(3.4rem, 2.4rem + 4vw, 6rem);
+  top: var(--sp-5);
+  left: var(--sp-6);
+}
+
+.game-badge {
+  position: absolute;
+  top: var(--sp-4);
+  right: var(--sp-4);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  background: rgba(10, 9, 7, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 240, 210, 0.16);
+  color: #f2d48a;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.game-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #7cc2a8;
+  box-shadow: 0 0 8px #7cc2a8;
+}
+
+.game-info {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  max-width: 36rem;
+}
+
+/* En mörk slöja som följer textblocket, hur högt det än blir: texten håller
+   AA-kontrast även över ljusa partier i stillbilden (lampor, himmel, sjö) */
+.game-info::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  top: -3.5rem;
+  bottom: -3rem;
+  left: -100vw;
+  right: -100vw;
+  background: linear-gradient(180deg, rgba(8, 7, 5, 0), rgba(8, 7, 5, 0.5) 3.5rem);
+  pointer-events: none;
+}
+
+.game-comp {
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #e9c977;
+}
+
+.game-title {
+  font-family: var(--ff-serif);
+  font-size: var(--text-xl);
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+}
+
+.game-card.featured .game-title {
+  font-size: var(--text-2xl);
+  font-style: italic;
+  font-weight: 400;
+}
+
+.game-tagline {
+  font-size: var(--text-sm);
+  color: rgba(247, 241, 230, 0.78);
+  line-height: 1.5;
+}
+
+.game-play {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: var(--sp-3);
+  padding: 0.55rem 1.1rem;
+  border-radius: var(--r-pill);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: #1d1404;
+  background: var(--metal-gold);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset, 0 10px 24px -10px rgba(233, 191, 92, 0.7);
+  transition: transform var(--t-fast) var(--ease-out), box-shadow var(--t-fast);
+}
+
+.game-play svg {
+  transition: transform var(--t-fast) var(--ease-out);
+}
+
+.game-card.playable {
+  cursor: pointer;
+}
+
+.game-card.playable:hover {
+  transform: translateY(-4px);
+  border-color: rgba(233, 191, 92, 0.45);
+  box-shadow: var(--shadow-2), 0 0 0 1px rgba(233, 191, 92, 0.25), 0 30px 60px -30px rgba(233, 191, 92, 0.35);
+}
+
+.game-card.playable:hover .game-cover img {
+  transform: scale(1.05);
+}
+
+.game-card.playable:hover .game-year-big {
+  color: rgba(255, 244, 222, 0.92);
+  -webkit-text-stroke-color: transparent;
+}
+
+.game-card.playable:hover .game-play svg {
+  transform: translateX(3px);
+}
+
+.game-card.playable:active {
+  transform: translateY(-1px) scale(0.99);
+}
+
+/* Kommande år: små, lugna brickor */
+.game-soon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr));
+  gap: var(--sp-3);
+}
+
+.game-soon {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: var(--sp-3);
+  align-items: center;
+  padding: var(--sp-4);
+  border-radius: var(--r-md);
+  border: 1px dashed var(--border-strong);
+  color: var(--text-2);
+}
+
+.game-soon .soon-year {
+  grid-row: span 2;
+  font-family: var(--ff-serif);
+  font-size: 1.6rem;
+  font-weight: 300;
+  color: transparent;
+  -webkit-text-stroke: 1px var(--border-strong);
+  letter-spacing: -0.03em;
+}
+
+.game-soon .soon-title {
+  font-family: var(--ff-serif);
+  font-weight: 500;
+  color: var(--text-1);
+  line-height: 1.2;
+}
+
+.game-soon .soon-sub {
+  font-size: var(--text-2xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+/* --------------------------------------------------------------- spelscenen */
+
+body.game-open {
+  overflow: hidden;
+}
+
+.game-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: #070605;
+  display: flex;
+  overscroll-behavior: none;
+  animation: stage-in 0.45s var(--ease-out) both;
+}
+
+.game-stage[hidden] {
+  display: none;
+}
+
+@keyframes stage-in {
+  from {
+    opacity: 0;
+    transform: scale(1.02);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.game-mount {
+  position: relative;
+  isolation: isolate;
+  flex: 1;
+  min-width: 0;
+}
+
+.game-instance {
+  position: absolute;
+  inset: 0;
+}
+
+.game-close {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: 12px;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  color: #efe6d4;
+  background: rgba(14, 12, 9, 0.66);
+  border: 1px solid rgba(255, 240, 210, 0.16);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: color var(--t-fast), transform var(--t-med) var(--ease-spring), border-color var(--t-fast);
+}
+
+.game-close:hover {
+  color: var(--gold);
+  border-color: rgba(233, 191, 92, 0.5);
+  transform: rotate(90deg);
+}
+
+/* Laddkortet: spelets affisch medan Three.js och scenen byggs */
+.game-loading {
+  --g1: #2a2416;
+  --g2: #0f0e0b;
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-5);
+  background:
+    radial-gradient(80% 60% at 50% 30%, color-mix(in srgb, var(--g1) 80%, transparent), transparent 75%),
+    linear-gradient(180deg, var(--g2), #070605);
+  color: #d8cfbf;
+  text-align: center;
+}
+
+.game-loading[hidden] {
+  display: none;
+}
+
+.game-loading-card {
+  display: grid;
+  justify-items: center;
+  gap: var(--sp-3);
+  max-width: 30rem;
+}
+
+.game-loading-year {
+  font-family: var(--ff-serif);
+  font-size: clamp(3.4rem, 2.4rem + 4vw, 5.6rem);
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: transparent;
+  -webkit-text-stroke: 1px rgba(255, 244, 222, 0.5);
+}
+
+.game-loading-title {
+  font-family: var(--ff-serif);
+  font-size: var(--text-xl);
+  font-weight: 400;
+  font-style: italic;
+  color: #f7f1e6;
+}
+
+.game-loading-tagline {
+  font-size: var(--text-sm);
+  color: rgba(247, 241, 230, 0.7);
+}
+
+.game-spinner {
+  width: 42px;
+  height: 42px;
+  margin: var(--sp-4) 0 var(--sp-2);
+  border-radius: 50%;
+  border: 2px solid rgba(233, 191, 92, 0.18);
+  border-top-color: #e9bf5c;
+  animation: spin 0.9s linear infinite;
+}
+
+#game-loading-text {
+  font-family: var(--ff-mono);
+  font-size: var(--text-2xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(247, 241, 230, 0.55);
+}
+
+.game-loading .btn {
+  margin-top: var(--sp-3);
+}
+
+@media (max-width: 760px) {
+  .game-grid > .game-card.featured {
+    grid-column: auto;
+    grid-row: auto;
+    min-height: 420px;
+    padding: var(--sp-5);
+  }
+
+  .game-card {
+    min-height: 300px;
+  }
+}

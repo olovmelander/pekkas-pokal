@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="sv" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Pekkas Pokal — Tävlingen sedan 2011</title>
+
+    <meta name="description" content="Pekkas Pokal — den årliga tävlingen mellan vänner sedan 2011. Medaljliga, krönika, utmärkelser, statistik, sångbok och ett spel för varje år." />
+    <meta name="theme-color" content="#0b0c0f" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f4efe5" media="(prefers-color-scheme: light)" />
+    <meta name="color-scheme" content="dark light" />
+    <link rel="manifest" href="manifest.json" />
+    <link rel="icon" href="favicon.png" type="image/png" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <link rel="canonical" href="https://olovmelander.github.io/pekkas-pokal/" />
+
+    <!-- Delningskort -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Pekkas Pokal" />
+    <meta property="og:title" content="Pekkas Pokal" />
+    <meta property="og:description" content="Den årliga tävlingen mellan vänner sedan 2011. Medaljliga, krönika, utmärkelser, statistik och ett spel för varje år." />
+    <meta property="og:url" content="https://olovmelander.github.io/pekkas-pokal/" />
+    <meta property="og:image" content="https://olovmelander.github.io/pekkas-pokal/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:locale" content="sv_SE" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Pekkas Pokal" />
+    <meta name="twitter:description" content="Den årliga tävlingen mellan vänner sedan 2011. Medaljliga, krönika, utmärkelser, statistik och ett spel för varje år." />
+    <meta name="twitter:image" content="https://olovmelander.github.io/pekkas-pokal/og-image.png" />
+
+    <!-- Typografi: Fraunces (rubriker, siffror), Schibsted Grotesk (gränssnitt), JetBrains Mono (koordinater) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Schibsted+Grotesk:wght@400..800&family=JetBrains+Mono:wght@400&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Leaflet -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+
+    <!-- Three.js r187 — hämtas först när pokalen eller ett spel behöver den -->
+
+
+    <!-- Stilar -->
+
+    <script>
+      // Temat sätts före första målningen så sidan inte blinkar: sparat val
+      // vinner, annars följer vi systemets inställning.
+      (function () {
+        var t = null;
+        try {
+          t = localStorage.getItem('pp-theme');
+        } catch (e) {}
+        if (t !== 'light' && t !== 'dark') {
+          t = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        }
+        document.documentElement.setAttribute('data-theme', t);
+      })();
+    </script>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.187.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.187.0/examples/jsm/"
+        }
+      }
+    </script>
+    <script type="module" crossorigin src="/pekkas-pokal/assets/main-DCtgnNGP.js"></script>
+    <link rel="stylesheet" crossorigin href="/pekkas-pokal/assets/main-CKSpcWQQ.css">
+  </head>
+
+  <body>
+    <div class="atmosphere" aria-hidden="true"></div>
+
+    <!-- Laddskärm -->
+    <div id="loading-screen" role="status" aria-live="polite">
+      <img class="loader-mark" src="brand/mark.png" width="112" height="73" alt="" />
+      <div class="loader-title">Pekkas Pokal</div>
+      <div class="loader-bar"><span></span></div>
+      <div id="loading-status" class="loader-status">Laddar resultat…</div>
+    </div>
+
+    <a class="skip-link" href="#main" id="skip-link">Hoppa till innehåll</a>
+
+    <!-- Sidhuvud -->
+    <header class="site-header" id="site-header">
+      <div class="header-inner">
+        <a class="brand" href="#/" id="brand-home" aria-label="Pekkas Pokal — till översikten">
+          <img class="brand-mark" src="brand/mark.png" width="52" height="34" alt="" />
+          <span class="brand-text">
+            <span class="brand-name">Pekkas Pokal</span>
+            <span class="brand-sub" id="year-range">63.29°N 18.73°E · sedan 2011</span>
+          </span>
+        </a>
+
+        <nav class="top-nav" aria-label="Huvudmeny">
+          <a class="nav-link" href="#/" data-view="overview">Översikt</a>
+          <a class="nav-link" href="#/medaljliga" data-view="medals">Medaljliga</a>
+          <a class="nav-link" href="#/historik" data-view="history">Historik</a>
+          <a class="nav-link" href="#/utmarkelser" data-view="achievements">Utmärkelser</a>
+          <a class="nav-link" href="#/statistik" data-view="stats">Statistik</a>
+          <a class="nav-link" href="#/sangbok" data-view="songs">Sångbok</a>
+          <a class="nav-link" href="#/spel" data-view="games">Spel</a>
+          <span class="nav-indicator" aria-hidden="true"></span>
+        </nav>
+
+        <div class="header-actions">
+          <button id="theme-toggle" class="icon-btn" type="button" aria-label="Byt till ljust tema" title="Byt tema">
+            <svg class="icon-sun" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+            </svg>
+            <svg class="icon-moon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Innehåll -->
+    <main id="main" class="page" tabindex="-1">
+      <!-- ============ ÖVERSIKT ============ -->
+      <section id="view-overview" class="view active" aria-label="Översikt">
+        <div class="hero">
+          <div class="hero-copy">
+            <p class="eyebrow hero-eyebrow">
+              <span class="live-dot" aria-hidden="true"></span>
+              <span>Regerande mästare</span>
+              <span class="sep" aria-hidden="true"></span>
+              <a id="hero-year" class="hero-year-link" href="#/historik">—</a>
+            </p>
+            <h1 class="champion-name gilded" id="hero-champion">—</h1>
+            <p class="champion-meta" id="hero-champion-meta">—</p>
+            <ul class="champion-medals" id="hero-champion-medals" aria-label="Mästarens meriter"></ul>
+            <div class="hero-actions">
+              <a class="btn" href="#/medaljliga">
+                Medaljligan
+                <svg class="arrow" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+              </a>
+              <a class="btn ghost" href="#/spel" id="hero-play">Spela årets spel</a>
+            </div>
+          </div>
+
+          <div class="hero-stage" id="hero-stage" aria-hidden="true">
+            <svg class="hero-contours" id="hero-contours" viewBox="0 0 800 800" preserveAspectRatio="xMidYMid slice"></svg>
+            <div class="hero-halo"></div>
+            <svg class="hero-trophy-fallback" viewBox="0 0 200 240">
+              <defs>
+                <linearGradient id="tg-gold" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stop-color="#fbe7ab" />
+                  <stop offset="0.35" stop-color="#e9bf5c" />
+                  <stop offset="0.65" stop-color="#b4832a" />
+                  <stop offset="0.82" stop-color="#f3d78a" />
+                  <stop offset="1" stop-color="#6e4a12" />
+                </linearGradient>
+                <linearGradient id="tg-plinth" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stop-color="#2a2620" />
+                  <stop offset="1" stop-color="#0e0d0b" />
+                </linearGradient>
+              </defs>
+              <path d="M48 34h104v18c0 34-20 60-52 66-32-6-52-32-52-66Z" fill="url(#tg-gold)" />
+              <path d="M48 44c-26 0-34 34-6 46l8 3M152 44c26 0 34 34 6 46l-8 3" fill="none" stroke="url(#tg-gold)" stroke-width="8" stroke-linecap="round" />
+              <path d="M92 118h16l4 34H88Z" fill="url(#tg-gold)" />
+              <ellipse cx="100" cy="156" rx="30" ry="7" fill="url(#tg-gold)" />
+              <rect x="56" y="164" width="88" height="56" rx="4" fill="url(#tg-plinth)" />
+              <rect x="74" y="182" width="52" height="16" rx="2" fill="url(#tg-gold)" opacity="0.9" />
+            </svg>
+            <canvas class="hero-trophy-canvas" id="trophy-canvas"></canvas>
+            <span class="hero-coords">63.29000°N · 18.73000°E</span>
+          </div>
+        </div>
+
+        <div class="ledger" id="kpi-grid" role="list" aria-label="Nyckeltal"></div>
+
+        <div class="hero-band">
+          <section class="card countdown-card reveal" aria-labelledby="countdown-heading">
+            <p class="eyebrow" id="countdown-heading">Nästa tävling <span class="tag" id="countdown-tag">prognos</span></p>
+            <div class="countdown" id="countdown" role="timer" aria-live="off">
+              <div class="count-seg"><span class="count-num" id="cd-days">–</span><span class="count-label">dagar</span></div>
+              <div class="count-sep" aria-hidden="true"></div>
+              <div class="count-seg"><span class="count-num" id="cd-hours">–</span><span class="count-label">tim</span></div>
+              <div class="count-sep" aria-hidden="true"></div>
+              <div class="count-seg"><span class="count-num" id="cd-mins">–</span><span class="count-label">min</span></div>
+            </div>
+            <p class="countdown-note" id="countdown-note">—</p>
+          </section>
+
+          <section class="card ticker-card reveal" aria-labelledby="ticker-heading">
+            <p class="eyebrow" id="ticker-heading">Visste du att…</p>
+            <p class="ticker-text" id="fact-ticker" aria-live="polite">—</p>
+            <div class="ticker-foot">
+              <div class="ticker-dots" id="ticker-dots" role="group" aria-label="Välj fakta"></div>
+              <div class="ticker-nav">
+                <button class="icon-btn" type="button" id="ticker-prev" aria-label="Föregående fakta">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+                </button>
+                <button class="icon-btn" type="button" id="ticker-next" aria-label="Nästa fakta">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="grid-2">
+          <section class="card chart-card reveal">
+            <div class="card-head">
+              <h2>Vinster per deltagare</h2>
+              <p class="card-sub">Alla segrar sedan starten</p>
+            </div>
+            <div class="chart-wrap tall"><canvas id="wins-chart" role="img" aria-label="Stapeldiagram: antal segrar per deltagare"></canvas></div>
+          </section>
+
+          <section class="card chart-card reveal">
+            <div class="card-head">
+              <h2>Deltagande per år</h2>
+              <p class="card-sub">Antal startande i varje upplaga</p>
+            </div>
+            <div class="chart-wrap tall"><canvas id="participation-chart" role="img" aria-label="Linjediagram: antal deltagare per år"></canvas></div>
+          </section>
+        </div>
+
+        <section class="card map-card reveal">
+          <div class="card-head row">
+            <div>
+              <h2>Tävlingskartan</h2>
+              <p class="card-sub">Från Höga kusten till Barcelona</p>
+            </div>
+            <button id="map-tour-btn" class="btn ghost small" type="button" aria-pressed="false">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+              <span>Starta rundtur</span>
+            </button>
+          </div>
+          <div id="map" role="region" aria-label="Karta över tävlingsplatser"></div>
+          <p class="map-hint">Nyp med två fingrar för att zooma och flytta kartan.</p>
+        </section>
+      </section>
+
+      <!-- ============ MEDALJLIGA ============ -->
+      <section id="view-medals" class="view" aria-labelledby="medals-title">
+        <header class="view-head">
+          <p class="eyebrow">Medaljliga</p>
+          <h1 id="medals-title">Guld väger <em>tyngst</em></h1>
+          <p class="view-sub">Olympisk sortering — flest guld först, sedan silver, sedan brons. Klicka på ett namn för hela profilen.</p>
+        </header>
+
+        <div class="podium" id="podium"></div>
+
+        <section class="card table-card reveal">
+          <div class="card-head"><h2>Fullständig tabell</h2><p class="card-sub">Klicka på en kolumnrubrik för att sortera.</p></div>
+          <div class="table-scroll">
+            <table class="medal-table" id="medal-table">
+              <thead>
+                <tr>
+                  <th class="rank-col sortable" data-sort="rank" aria-sort="descending" scope="col" tabindex="0">#<span class="sort-arrow"></span></th>
+                  <th class="name-col sortable" data-sort="name" aria-sort="none" scope="col" tabindex="0">Deltagare<span class="sort-arrow"></span></th>
+                  <th class="num-col sortable" data-sort="gold" aria-sort="none" scope="col" tabindex="0"><span class="medal-dot gold"></span>Guld<span class="sort-arrow"></span></th>
+                  <th class="num-col sortable" data-sort="silver" aria-sort="none" scope="col" tabindex="0"><span class="medal-dot silver"></span>Silver<span class="sort-arrow"></span></th>
+                  <th class="num-col sortable" data-sort="bronze" aria-sort="none" scope="col" tabindex="0"><span class="medal-dot bronze"></span>Brons<span class="sort-arrow"></span></th>
+                  <th class="num-col sortable" data-sort="total" aria-sort="none" scope="col" tabindex="0">Totalt<span class="sort-arrow"></span></th>
+                  <th class="bar-col" scope="col">Fördelning</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="card chart-card reveal">
+          <div class="card-head">
+            <h2>Medaljracet</h2>
+            <p class="card-sub">Medaljer sammanlagt, år för år. Prickarna visar när de kom. Tryck på en linje eller ett namn för att följa någon annan.</p>
+          </div>
+          <div class="chart-wrap tall"><canvas id="medal-chart" role="img" aria-label="Linjediagram: medaljer sammanlagt per år"></canvas></div>
+        </section>
+      </section>
+
+      <!-- ============ HISTORIK ============ -->
+      <section id="view-history" class="view" aria-labelledby="history-title">
+        <header class="view-head">
+          <p class="eyebrow">Historik</p>
+          <h1 id="history-title">Krönikan</h1>
+          <p class="view-sub" id="history-sub">Varje upplaga sedan starten — gren, plats, pall och arrangörer.</p>
+        </header>
+        <div class="timeline" id="timeline"></div>
+      </section>
+
+      <!-- ============ UTMÄRKELSER ============ -->
+      <section id="view-achievements" class="view" aria-labelledby="ach-title">
+        <header class="view-head">
+          <p class="eyebrow">Utmärkelser</p>
+          <h1 id="ach-title">Ärans <em>galleri</em></h1>
+          <p class="view-sub">Prestationer, kuriosa och evig ära — räknat ur varje resultat sedan 2011.</p>
+        </header>
+
+        <div class="ach-summary" id="ach-summary"></div>
+
+        <h2 class="section-heading">Deltagarna <small>Sorterat på poäng</small></h2>
+        <div class="participant-grid" id="participant-ach-grid"></div>
+
+        <h2 class="section-heading">Alla utmärkelser <small id="ach-count"></small></h2>
+        <div class="ach-filter-bar">
+          <div class="chip-row" id="ach-category-filters" role="group" aria-label="Filtrera utmärkelser per kategori"></div>
+        </div>
+        <p class="ach-legend">
+          Poängen följer sällsyntheten:
+          <span class="ach-legend-r rarity-common">Vanlig 10</span>
+          <span class="ach-legend-r rarity-rare">Sällsynt 25</span>
+          <span class="ach-legend-r rarity-epic">Episk 50</span>
+          <span class="ach-legend-r rarity-legendary">Legendarisk 100</span>
+          <span class="ach-legend-r rarity-mythic">Mytisk 250</span>
+          <span class="ach-legend-note">Titlar har en innehavare åt gången och kan byta ägare. Bara kända placeringar räknas, och covidåret 2020 hoppas över.</span>
+        </p>
+        <div class="ach-grid" id="ach-grid"></div>
+        <details class="ach-locked" id="ach-locked">
+          <summary>
+            <span id="ach-locked-label">Ännu inte upplåsta</span>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+          </summary>
+          <div class="ach-grid" id="ach-locked-grid"></div>
+        </details>
+      </section>
+
+      <!-- ============ STATISTIK ============ -->
+      <section id="view-stats" class="view" aria-labelledby="stats-title">
+        <header class="view-head">
+          <p class="eyebrow">Statistik</p>
+          <h1 id="stats-title">Siffrorna <em>bakom</em> pokalen</h1>
+          <p class="view-sub" id="stats-sub">Djupdyk i alla år av prestige. Filtrera på deltagare och år.</p>
+        </header>
+
+        <div class="card filter-card reveal">
+          <div class="filter-group">
+            <span class="filter-label" id="fl-participants">Deltagare</span>
+            <div class="chip-row" id="filter-participants" role="group" aria-labelledby="fl-participants"></div>
+          </div>
+          <div class="filter-group">
+            <span class="filter-label" id="fl-years">År</span>
+            <div class="chip-row" id="filter-years" role="group" aria-labelledby="fl-years"></div>
+          </div>
+          <div class="filter-actions">
+            <button class="btn ghost small" type="button" id="filter-reset">Återställ filter</button>
+          </div>
+        </div>
+
+        <div class="competitor-grid" id="competitor-grid"></div>
+
+        <div class="grid-2">
+          <section class="card chart-card reveal">
+            <div class="card-head">
+              <h2>Placering per år</h2>
+              <p class="card-sub">Lägre är bättre — 1 är seger</p>
+            </div>
+            <div class="chart-wrap tall"><canvas id="trend-chart" role="img" aria-label="Linjediagram: placering per år"></canvas></div>
+          </section>
+          <section class="card chart-card reveal">
+            <div class="card-head">
+              <h2>Snittplacering</h2>
+              <p class="card-sub">Genomsnittlig placering över valda år. Längst stapel är bäst — 1:a betyder seger varje gång. Ljusare stapel: färre än tre starter.</p>
+            </div>
+            <div class="chart-wrap tall"><canvas id="avg-chart" role="img" aria-label="Liggande stapeldiagram: snittplacering, bäst först"></canvas></div>
+          </section>
+        </div>
+
+        <section class="card reveal" style="margin-top: var(--sp-5)">
+          <div class="card-head">
+            <h2>Resultatmatris</h2>
+            <p class="card-sub">Placering per deltagare och år — guld, silver och brons markerade</p>
+          </div>
+          <div class="table-scroll">
+            <div id="heatmap"></div>
+          </div>
+          <div class="heatmap-legend" id="heatmap-legend"></div>
+        </section>
+
+        <div class="grid-2">
+          <section class="card reveal" id="h2h-card">
+            <div class="card-head">
+              <h2>Duellen</h2>
+              <p class="card-sub">Vem har placerat sig högst när ni båda ställt upp?</p>
+            </div>
+            <div class="h2h-pickers">
+              <label class="h2h-picker">
+                <span class="filter-label">Deltagare 1</span>
+                <select id="h2h-a" class="select"></select>
+              </label>
+              <span class="h2h-vs" aria-hidden="true">mot</span>
+              <label class="h2h-picker">
+                <span class="filter-label">Deltagare 2</span>
+                <select id="h2h-b" class="select"></select>
+              </label>
+            </div>
+            <div id="h2h-result" aria-live="polite"></div>
+          </section>
+
+          <section class="card chart-card reveal">
+            <div class="card-head">
+              <h2>Elo-rating genom åren</h2>
+              <p class="card-sub">
+                Varje tävling räknas som en serie dueller — alla startar på 1500. Att slå ett stort startfält ger mer än att slå ett litet.
+              </p>
+            </div>
+            <div class="chart-wrap tall"><canvas id="elo-chart" role="img" aria-label="Linjediagram: Elo-rating per år"></canvas></div>
+            <div class="elo-standings" id="elo-standings"></div>
+          </section>
+        </div>
+      </section>
+
+      <!-- ============ SÅNGBOK ============ -->
+      <section id="view-songs" class="view" aria-labelledby="songs-title">
+        <header class="view-head">
+          <p class="eyebrow">Sångbok</p>
+          <h1 id="songs-title">Sjung <em>med</em></h1>
+          <p class="view-sub">Snapsvisor, ramsor och officiella låtar — ur föreningens arkiv.</p>
+        </header>
+        <div class="songbook">
+          <nav class="song-picker" id="song-picker" aria-label="Sånger"></nav>
+          <article class="song-sheet" id="song-sheet" aria-live="polite"></article>
+        </div>
+      </section>
+
+      <!-- ============ SPEL ============ -->
+      <section id="view-games" class="view" aria-labelledby="games-title">
+        <header class="view-head">
+          <p class="eyebrow">Spel</p>
+          <h1 id="games-title">Arkaden</h1>
+          <p class="view-sub">Ett spel per år, byggt kring årets gren. Spela på telefonen eller datorn — inget att installera.</p>
+        </header>
+        <div class="game-grid" id="game-grid"></div>
+        <h2 class="section-heading" id="games-soon-heading">Kommande <small>Spelen för de här åren är inte byggda än</small></h2>
+        <div class="game-soon-grid" id="game-soon-grid"></div>
+      </section>
+
+      <!-- ============ ÅRETS SIDA (#/ar/<år>) — byggs av renderYearPage ============ -->
+      <section id="view-year" class="view page-view" aria-labelledby="year-title"></section>
+
+      <!-- ============ PROFIL (#/deltagare/<namn>) — byggs av renderProfile ============ -->
+      <section id="view-person" class="view page-view" aria-labelledby="person-title"></section>
+    </main>
+
+    <!-- Spelscen i helskärm -->
+    <div class="game-stage" id="game-stage" role="dialog" aria-modal="true" aria-labelledby="game-loading-title" hidden>
+      <button class="game-close" id="game-close" type="button" aria-label="Stäng spelet">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
+      </button>
+      <div class="game-mount" id="game-mount"></div>
+      <div class="game-loading" id="game-loading">
+        <div class="game-loading-card">
+          <span class="game-loading-year" id="game-loading-year"></span>
+          <h2 class="game-loading-title" id="game-loading-title">Spel</h2>
+          <p class="game-loading-tagline" id="game-loading-tagline"></p>
+          <div class="game-spinner" aria-hidden="true"></div>
+          <p id="game-loading-text">Bygger scenen…</p>
+        </div>
+      </div>
+    </div>
+
+    <footer class="site-footer">
+      <div class="footer-brand">
+        <img src="brand/mark.png" width="40" height="26" alt="" loading="lazy" />
+        <div>
+          <strong>Pekkas Pokal</strong>
+          <span><span id="footer-count">—</span> tävlingar sedan 2011 — och räknar uppåt</span>
+        </div>
+      </div>
+      <span class="footer-coords">63.29000°N 18.73000°E</span>
+    </footer>
+
+    <!-- Mobil flikrad -->
+    <nav class="tab-bar" aria-label="Huvudmeny">
+      <a class="tab-item" href="#/" data-view="overview">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V21h5v-6h4v6h5V9.5" /></svg>
+        <span>Översikt</span>
+      </a>
+      <a class="tab-item" href="#/medaljliga" data-view="medals">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="15" r="5" /><path d="m9 11-4-8h5l2.5 5L15 3h5l-4.1 8" /></svg>
+        <span>Medaljer</span>
+      </a>
+      <a class="tab-item" href="#/historik" data-view="history">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></svg>
+        <span>Historik</span>
+      </a>
+      <a class="tab-item" href="#/utmarkelser" data-view="achievements">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="9" r="6" /><path d="m8.5 14-2 7 5.5-3 5.5 3-2-7" /></svg>
+        <span>Ära</span>
+      </a>
+      <a class="tab-item" href="#/statistik" data-view="stats">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg>
+        <span>Statistik</span>
+      </a>
+      <a class="tab-item" href="#/sangbok" data-view="songs">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
+        <span>Sånger</span>
+      </a>
+      <a class="tab-item" href="#/spel" data-view="games">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 11h4M8 9v4M15 11h.01M18 13h.01" /><path d="M17.32 6H6.68a4.68 4.68 0 0 0-4.65 4.13l-.87 7A2.5 2.5 0 0 0 3.64 20c1.1 0 2.08-.72 2.4-1.78L6.6 16h10.8l.56 2.22A2.5 2.5 0 0 0 20.36 20a2.5 2.5 0 0 0 2.48-2.87l-.87-7A4.68 4.68 0 0 0 17.32 6Z" /></svg>
+        <span>Spel</span>
+      </a>
+    </nav>
+
+    <!-- Bibliotek -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+
+    <!-- Appen -->
+    <script src="src/data/achievements.js"></script>
+    <script src="src/data/achievement-icons.js"></script>
+    <script src="src/data/songs.js"></script>
+    <script src="src/scripts/achievement-engine.js"></script>
+  </body>
+</html>

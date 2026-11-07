@@ -1,0 +1,1489 @@
+/* ==========================================================================
+   Pekkas Pokal — Sidor: årets sida (#/ar/<år>) och profilen (#/deltagare/<namn>)
+   --------------------------------------------------------------------------
+   Två egna vyer i stället för modaler. Samma material som resten av sidan:
+   Fraunces för rubriker och siffror, guld bara där det betyder något
+   (pallen, medaljer, det som går att klicka på) och kort på varm yta.
+   ========================================================================== */
+
+/* ---------- Länkar som förut var knappar ---------- */
+a.person-link,
+a.tl-year,
+a.tl-more,
+.pop-year,
+.hero-year-link {
+  text-decoration: none;
+}
+
+.hero-year-link {
+  color: inherit;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 45%, transparent);
+  transition: color var(--t-fast), border-color var(--t-fast);
+}
+
+.hero-year-link:hover {
+  color: var(--text-gold);
+  border-color: currentColor;
+}
+
+.leaflet-popup-content .pop-year {
+  font-weight: 700;
+  color: var(--text-gold);
+}
+
+.leaflet-popup-content .pop-year:hover {
+  text-decoration: underline;
+}
+
+/* ---------- Sidskal ---------- */
+.page-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin: var(--sp-3) 0 var(--sp-5);
+  min-height: 44px;
+}
+
+.page-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 44px;
+  padding: 0 var(--sp-4) 0 var(--sp-2);
+  margin-left: calc(var(--sp-2) * -1);
+  border-radius: var(--r-pill);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-2);
+  text-decoration: none;
+  transition: color var(--t-fast), background var(--t-fast);
+}
+
+.page-back:hover {
+  color: var(--text-gold);
+  background: color-mix(in srgb, var(--gold) 8%, transparent);
+}
+
+.page-back svg {
+  transition: transform var(--t-fast) var(--ease-out);
+}
+
+.page-back:hover svg {
+  transform: translateX(-3px);
+}
+
+.page-share {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+.page-share-status {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-gold);
+  text-align: right;
+}
+
+/* Gick det varken att dela eller kopiera visas adressen, färdig att markera */
+.page-share-status.is-url {
+  font-family: var(--ff-mono);
+  font-weight: 400;
+  color: var(--text-1);
+  user-select: all;
+  overflow-wrap: anywhere;
+}
+
+.page-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--sp-5);
+}
+
+.page-col {
+  display: grid;
+  gap: var(--sp-5);
+  min-width: 0;
+}
+
+.page-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.page-h2 {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--text-lg);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.page-card > .page-h2 {
+  margin-bottom: var(--sp-4);
+}
+
+.page-card-sub {
+  flex-basis: 100%;
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.page-count {
+  padding: 1px 8px;
+  border-radius: var(--r-pill);
+  background: var(--surface-strong);
+  font-family: var(--ff-sans);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--text-2);
+}
+
+.page-kicker,
+.page-col-label {
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.page-kicker {
+  color: var(--text-gold);
+}
+
+.page-col-label {
+  color: var(--text-2);
+}
+
+.page-tag {
+  display: inline-flex;
+  align-items: center;
+  margin-left: var(--sp-2);
+  padding: 0 7px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border-strong);
+  font-family: var(--ff-sans);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  font-style: normal;
+  letter-spacing: 0.06em;
+  line-height: 1.6;
+  text-transform: uppercase;
+  white-space: nowrap;
+  vertical-align: 2px;
+  color: var(--text-2);
+}
+
+.page-tag.new {
+  border-color: color-mix(in srgb, var(--accent-3) 55%, transparent);
+  color: color-mix(in srgb, var(--accent-3) 72%, var(--text-1));
+}
+
+.page-empty {
+  color: var(--text-2);
+  font-size: var(--text-sm);
+}
+
+.page-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  margin-top: var(--sp-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-gold);
+  text-decoration: none;
+}
+
+.page-more:hover svg {
+  transform: translateX(3px);
+}
+
+.page-more svg {
+  transition: transform var(--t-fast) var(--ease-out);
+}
+
+/* Placering som mynt: metall för pallen, en ring för resten */
+.page-pos {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-family: var(--ff-serif);
+  font-size: 0.86rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--text-2);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+.page-pos.gold,
+.page-pos.silver,
+.page-pos.bronze {
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.55) inset, 0 -1px 0 rgba(0, 0, 0, 0.25) inset, 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+.page-pos.gold {
+  background: var(--metal-gold);
+  color: rgba(40, 26, 4, 0.88);
+}
+
+.page-pos.silver {
+  background: var(--metal-silver);
+  color: rgba(30, 34, 42, 0.88);
+}
+
+.page-pos.bronze {
+  background: var(--metal-bronze);
+  color: rgba(50, 22, 6, 0.88);
+}
+
+.elo-delta {
+  min-width: 3.2em;
+  text-align: right;
+  font-family: var(--ff-serif);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.elo-delta.up {
+  color: color-mix(in srgb, var(--success) 75%, var(--text-1));
+}
+
+.elo-delta.down {
+  color: var(--danger);
+}
+
+/* ==========================================================================
+   ÅRETS SIDA
+   ========================================================================== */
+
+.yp-hero {
+  margin: 0 0 var(--sp-6);
+  max-width: 62rem;
+}
+
+.yp-eyebrow {
+  color: var(--text-gold);
+}
+
+.yp-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 clamp(var(--sp-3), 2vw, var(--sp-5));
+  margin-top: var(--sp-2);
+  font-weight: 400;
+}
+
+.yp-year {
+  font-size: clamp(3.6rem, 2rem + 6.4vw, 7.4rem);
+  font-weight: 300;
+  line-height: 0.95;
+  letter-spacing: -0.045em;
+  font-variation-settings: 'opsz' 144;
+  font-variant-numeric: lining-nums;
+  background: var(--metal-gold);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+:root[data-theme='light'] .yp-year {
+  background: linear-gradient(160deg, #c99634 0%, #8d6214 45%, #b4832a 70%, #6e4a12 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+/* Inställt år: årtalet i kontur, som i krönikan */
+.yp-hero.is-off .yp-year,
+:root[data-theme='light'] .yp-hero.is-off .yp-year {
+  background: none;
+  color: color-mix(in srgb, var(--text-1) 6%, transparent);
+  -webkit-text-stroke: 1px color-mix(in srgb, var(--text-2) 70%, transparent);
+}
+
+.yp-name {
+  font-size: var(--text-2xl);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: var(--text-1);
+}
+
+.yp-lede {
+  margin-top: var(--sp-4);
+  font-size: var(--text-lg);
+  color: var(--text-2);
+}
+
+.yp-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-5);
+  margin: var(--sp-4) 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-2);
+}
+
+.yp-meta li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.yp-ico {
+  display: inline-grid;
+  color: var(--text-gold);
+}
+
+.yp-ico svg {
+  width: 17px;
+  height: 17px;
+}
+
+.yp-hosts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-1) var(--sp-3);
+  margin-top: var(--sp-3);
+}
+
+.yp-hosts .person-link {
+  font-weight: 600;
+}
+
+/* ---------- Pallen ---------- */
+.yp-podium {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+  gap: clamp(var(--sp-2), 1.6vw, var(--sp-4));
+  margin: 0;
+  padding: var(--sp-2) 0 0;
+  list-style: none;
+}
+
+/* Andra, första, tredje från vänster — men uppläst i rätt ordning */
+.yp-place {
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  text-align: center;
+}
+
+.yp-place.p1 {
+  grid-column: 2;
+}
+
+.yp-place.p2 {
+  grid-column: 1;
+}
+
+.yp-place.p3 {
+  grid-column: 3;
+}
+
+.yp-podium-avatar {
+  display: grid;
+  place-items: center;
+  width: clamp(54px, 5.6vw, 72px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  font-family: var(--ff-serif);
+  font-size: clamp(1rem, 0.85rem + 0.6vw, 1.35rem);
+  font-weight: 600;
+  text-decoration: none;
+  color: rgba(40, 26, 4, 0.85);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 -2px 0 rgba(0, 0, 0, 0.2) inset, 0 14px 30px -12px rgba(0, 0, 0, 0.55);
+  transition: transform var(--t-med) var(--ease-spring);
+}
+
+.yp-podium-avatar:hover {
+  transform: translateY(-3px) rotate(-4deg);
+}
+
+.p1 .yp-podium-avatar {
+  width: clamp(66px, 7vw, 90px);
+  background: var(--metal-gold);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 -2px 0 rgba(0, 0, 0, 0.2) inset, 0 0 0 5px rgba(233, 191, 92, 0.14), 0 18px 40px -12px rgba(233, 191, 92, 0.45);
+}
+
+.p2 .yp-podium-avatar {
+  background: var(--metal-silver);
+  color: rgba(30, 34, 42, 0.85);
+}
+
+.p3 .yp-podium-avatar {
+  background: var(--metal-bronze);
+  color: rgba(50, 22, 6, 0.85);
+}
+
+.yp-podium-names {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 2.6em;
+  font-family: var(--ff-serif);
+  font-size: var(--text-md);
+  font-weight: 500;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.p1 .yp-podium-names {
+  font-size: var(--text-lg);
+  font-style: italic;
+}
+
+.yp-podium-block {
+  position: relative;
+  width: 100%;
+  display: grid;
+  place-items: start center;
+  padding-top: var(--sp-3);
+  border-radius: var(--r-md) var(--r-md) 4px 4px;
+  font-family: var(--ff-serif);
+  font-size: clamp(1.9rem, 1.3rem + 2vw, 3.2rem);
+  font-weight: 300;
+  line-height: 1;
+  color: rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+  transform-origin: bottom;
+  animation: podium-rise 0.8s var(--ease-out) both;
+  box-shadow: 0 2px 0 rgba(255, 255, 255, 0.55) inset, 0 24px 44px -26px rgba(0, 0, 0, 0.7);
+}
+
+.p1 .yp-podium-block {
+  height: 124px;
+  background: var(--metal-gold);
+  animation-delay: 0.12s;
+}
+
+.p2 .yp-podium-block {
+  height: 92px;
+  background: var(--metal-silver);
+}
+
+.p3 .yp-podium-block {
+  height: 68px;
+  background: var(--metal-bronze);
+  animation-delay: 0.24s;
+}
+
+/* ---------- Alla resultat ---------- */
+.yp-results {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.yp-row {
+  display: grid;
+  grid-template-columns: 30px 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2);
+  border-radius: var(--r-sm);
+}
+
+.yp-row + .yp-row {
+  box-shadow: 0 -1px 0 var(--border);
+}
+
+.yp-row.top {
+  background: color-mix(in srgb, var(--gold) 6%, transparent);
+  box-shadow: none;
+}
+
+.yp-row.top + .yp-row.top {
+  margin-top: 2px;
+}
+
+.yp-person {
+  min-width: 0;
+  font-weight: 500;
+}
+
+/* ---------- Kolumnen bredvid ---------- */
+.yp-photo {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.yp-photo img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+}
+
+.yp-game {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  text-decoration: none;
+  color: var(--text-1);
+  border-color: color-mix(in srgb, var(--gold) 22%, var(--border));
+}
+
+.yp-game:hover {
+  border-color: color-mix(in srgb, var(--gold) 50%, var(--border));
+}
+
+.yp-game-cover {
+  display: block;
+  aspect-ratio: 1100 / 773;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 30% 20%, color-mix(in srgb, var(--g1) 85%, white 8%), transparent 70%),
+    var(--g2);
+}
+
+.yp-game-cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform var(--t-slow) var(--ease-out);
+}
+
+.yp-game:hover .yp-game-cover img {
+  transform: scale(1.035);
+}
+
+.yp-game-emblem {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  font-size: 4rem;
+}
+
+.yp-game-body {
+  display: grid;
+  gap: var(--sp-1);
+  padding: var(--sp-4) clamp(var(--sp-4), 2vw, var(--sp-5)) var(--sp-5);
+}
+
+.yp-game-title {
+  font-family: var(--ff-serif);
+  font-size: var(--text-xl);
+  font-style: italic;
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+.yp-game-tagline {
+  color: var(--text-2);
+  font-size: var(--text-sm);
+}
+
+.yp-game-play {
+  justify-self: start;
+  margin-top: var(--sp-3);
+}
+
+.yp-game:hover .yp-game-play svg {
+  transform: translateX(3px);
+}
+
+.yp-fact-list {
+  display: grid;
+  gap: var(--sp-4);
+  margin: 0;
+}
+
+.yp-fact {
+  display: grid;
+  gap: 2px;
+  padding-left: var(--sp-4);
+  border-left: 2px solid color-mix(in srgb, var(--gold) 45%, transparent);
+}
+
+.yp-fact dt {
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-gold);
+}
+
+.yp-fact dd {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.yp-fact .person-link {
+  font-weight: 600;
+}
+
+.yp-song-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.yp-song {
+  display: grid;
+  gap: 2px;
+  min-height: 44px;
+  padding: var(--sp-3) 0;
+  border-top: 1px solid var(--border);
+  text-decoration: none;
+  color: var(--text-1);
+}
+
+.yp-song-list li:first-child .yp-song {
+  padding-top: 0;
+  border-top: none;
+}
+
+.yp-song-title {
+  font-family: var(--ff-serif);
+  font-size: var(--text-md);
+  font-weight: 500;
+  transition: color var(--t-fast);
+}
+
+.yp-song:hover .yp-song-title {
+  color: var(--text-gold);
+}
+
+.yp-song-sub {
+  font-size: var(--text-xs);
+  color: var(--text-2);
+}
+
+.yp-map {
+  position: relative;
+  z-index: 1;
+  height: 220px;
+  overflow: hidden;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+}
+
+/* Samma toning av kartplattorna som på översiktens karta */
+.yp-map .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.85) saturate(0.4) sepia(0.2);
+}
+
+:root[data-theme='light'] .yp-map .leaflet-tile-pane {
+  filter: saturate(0.5) sepia(0.16) contrast(0.95) brightness(1.02);
+}
+
+.yp-coords {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--sp-1) var(--sp-3);
+  margin-top: var(--sp-3);
+  font-size: var(--text-xs);
+  color: var(--text-2);
+}
+
+.yp-attrib a {
+  color: inherit;
+  text-underline-offset: 2px;
+}
+
+.yp-attrib a:hover {
+  color: var(--text-gold);
+}
+
+/* ---------- Föregående / nästa ---------- */
+.page-pager {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: stretch;
+  gap: var(--sp-4);
+  margin-top: var(--sp-7);
+  padding-top: var(--sp-5);
+  border-top: 1px solid var(--border);
+}
+
+.pager-link {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  padding: var(--sp-4) var(--sp-5);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+  box-shadow: var(--shadow-1);
+  text-decoration: none;
+  color: var(--text-1);
+  transition: border-color var(--t-med), transform var(--t-med) var(--ease-out);
+}
+
+.pager-link.next {
+  justify-items: end;
+  text-align: right;
+}
+
+.pager-link:hover {
+  border-color: color-mix(in srgb, var(--gold) 40%, var(--border));
+}
+
+.pager-link.prev:hover {
+  transform: translateX(-3px);
+}
+
+.pager-link.next:hover {
+  transform: translateX(3px);
+}
+
+.pager-link.is-empty {
+  visibility: hidden;
+}
+
+.pager-dir {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.pager-year {
+  font-family: var(--ff-serif);
+  font-size: var(--text-xl);
+  line-height: 1.15;
+  font-variant-numeric: lining-nums;
+}
+
+.pager-name {
+  font-size: var(--text-sm);
+  color: var(--text-2);
+}
+
+.pager-gap {
+  align-self: center;
+  max-width: 11rem;
+  text-align: center;
+  font-size: var(--text-xs);
+  font-style: italic;
+  color: var(--text-2);
+}
+
+/* ==========================================================================
+   PROFILEN
+   ========================================================================== */
+
+.prof-hero {
+  display: flex;
+  align-items: center;
+  gap: clamp(var(--sp-4), 3vw, var(--sp-6));
+  margin: 0 0 var(--sp-6);
+}
+
+.prof-avatar {
+  width: clamp(84px, 9vw, 124px);
+  height: auto;
+  aspect-ratio: 1;
+  font-size: clamp(1.6rem, 1.1rem + 1.6vw, 2.6rem);
+  border-width: 2px;
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--text-1) 4%, transparent), 0 22px 50px -22px rgba(0, 0, 0, 0.6);
+}
+
+.prof-avatar.is-champion {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 6px rgba(233, 191, 92, 0.14), 0 22px 50px -18px rgba(233, 191, 92, 0.45);
+}
+
+.prof-hero-text {
+  min-width: 0;
+}
+
+.prof-eyebrow {
+  color: var(--text-gold);
+}
+
+.prof-name {
+  margin-top: var(--sp-2);
+  font-size: clamp(2.4rem, 1.5rem + 3.4vw, 4.6rem);
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variation-settings: 'opsz' 144;
+}
+
+.prof-name .first {
+  font-style: italic;
+}
+
+.prof-name .last {
+  font-weight: 300;
+  color: var(--text-2);
+}
+
+/* Regerande mästare får förnamnet förgyllt, som på översikten */
+.prof-avatar.is-champion + .prof-hero-text .first {
+  background: var(--metal-gold);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  padding-right: 0.06em;
+}
+
+:root[data-theme='light'] .prof-avatar.is-champion + .prof-hero-text .first {
+  background: linear-gradient(160deg, #c99634 0%, #8d6214 45%, #b4832a 70%, #6e4a12 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+/* ---------- Nyckeltalen ---------- */
+.page-ledger {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin: 0 0 var(--sp-6);
+  border-top: 1px solid var(--border-strong);
+  border-bottom: 1px solid var(--border);
+}
+
+.page-kpi {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--sp-4);
+}
+
+.page-kpi + .page-kpi::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 22%;
+  bottom: 22%;
+  width: 1px;
+  background: var(--border);
+}
+
+.page-kpi-label {
+  margin-bottom: var(--sp-1);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.page-kpi-value {
+  font-family: var(--ff-serif);
+  font-size: clamp(1.5rem, 1.1rem + 1.2vw, 2.2rem);
+  font-weight: 400;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-variation-settings: 'opsz' 96;
+  white-space: nowrap;
+}
+
+.page-kpi-sub {
+  display: flex;
+  gap: var(--sp-2);
+  font-size: var(--text-xs);
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.page-medal {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ---------- Placering per år ---------- */
+.prof-chart {
+  position: relative;
+  height: 280px;
+}
+
+/* ---------- År för år ---------- */
+.prof-years {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.prof-years li + li {
+  border-top: 1px solid var(--border);
+}
+
+.prof-year {
+  display: grid;
+  grid-template-columns: 3.3rem minmax(0, 1fr) auto 30px;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: 56px;
+  padding: var(--sp-2);
+  border-radius: var(--r-sm);
+  text-decoration: none;
+  color: var(--text-1);
+  transition: background var(--t-fast);
+}
+
+.prof-year:hover {
+  background: color-mix(in srgb, var(--gold) 6%, transparent);
+}
+
+.prof-year-num {
+  font-family: var(--ff-serif);
+  font-size: var(--text-lg);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.prof-year-body {
+  display: grid;
+  min-width: 0;
+}
+
+.prof-year-comp {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color var(--t-fast);
+}
+
+.prof-year:hover .prof-year-comp {
+  color: var(--text-gold);
+}
+
+.prof-year-meta {
+  font-size: var(--text-xs);
+  color: var(--text-2);
+}
+
+/* ---------- Medaljer och utmärkelser ---------- */
+.prof-coins {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-4);
+}
+
+.prof-coin {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: var(--sp-3) var(--sp-2);
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--text-1) 3%, transparent);
+}
+
+.prof-coin .medal-disc {
+  width: 30px;
+  height: 30px;
+}
+
+.prof-coin-num {
+  font-family: var(--ff-serif);
+  font-size: var(--text-xl);
+  line-height: 1;
+  font-variant-numeric: lining-nums;
+}
+
+.prof-coin-label {
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.prof-ach-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.prof-ach {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-top: 1px solid var(--border);
+}
+
+.prof-ach-text {
+  display: grid;
+  min-width: 0;
+}
+
+.prof-ach-name {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.prof-ach-year {
+  margin-left: 8px;
+  font-family: var(--ff-mono);
+  font-size: 0.6875rem;
+  font-weight: 400;
+  color: var(--text-3);
+}
+
+.prof-ach-desc {
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  color: var(--text-2);
+}
+
+.prof-ach-pts {
+  font-family: var(--ff-serif);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-gold);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* ---------- Inbördes möten ---------- */
+.prof-h2h-label {
+  margin: var(--sp-4) 0 var(--sp-1);
+  font-family: var(--ff-sans);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.prof-h2h .page-card-head + .prof-h2h-label {
+  margin-top: 0;
+}
+
+.prof-h2h-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.prof-h2h-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 56px 3em;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: 44px;
+  padding: 4px 0;
+  border-top: 1px solid var(--border);
+  font-size: var(--text-sm);
+}
+
+.prof-h2h-list .prof-h2h-row:first-child {
+  border-top: none;
+}
+
+.prof-h2h-avatar {
+  width: 28px;
+  height: 28px;
+  font-size: 0.66rem;
+}
+
+.prof-h2h-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prof-h2h-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--danger) 35%, transparent);
+  overflow: hidden;
+}
+
+.prof-h2h-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--metal-gold);
+}
+
+.prof-h2h-score {
+  text-align: right;
+  font-family: var(--ff-serif);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--text-2);
+}
+
+.prof-h2h-score.up {
+  color: color-mix(in srgb, var(--success) 75%, var(--text-1));
+}
+
+.prof-h2h-score.down {
+  color: var(--danger);
+}
+
+/* ---------- Spelen ---------- */
+.prof-game-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr));
+  gap: var(--sp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.prof-game {
+  display: grid;
+  gap: var(--sp-2);
+  height: 100%;
+  padding: var(--sp-2) var(--sp-2) var(--sp-3);
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  text-decoration: none;
+  color: var(--text-1);
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+
+.prof-game:hover {
+  border-color: color-mix(in srgb, var(--gold) 40%, var(--border));
+  background: color-mix(in srgb, var(--gold) 5%, transparent);
+}
+
+.prof-game > svg {
+  display: none;
+  color: var(--text-2);
+  transition: transform var(--t-fast) var(--ease-out), color var(--t-fast);
+}
+
+.prof-game:hover > svg {
+  color: var(--text-gold);
+  transform: translateX(3px);
+}
+
+.prof-game-thumb {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1100 / 773;
+  overflow: hidden;
+  border-radius: var(--r-sm);
+  font-size: 2rem;
+  background: linear-gradient(150deg, var(--g1), var(--g2));
+}
+
+.prof-game-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform var(--t-slow) var(--ease-out);
+}
+
+.prof-game:hover .prof-game-thumb img {
+  transform: scale(1.04);
+}
+
+.prof-game-text {
+  display: grid;
+  min-width: 0;
+  padding: 0 var(--sp-1);
+}
+
+.prof-game-title {
+  font-family: var(--ff-serif);
+  font-size: var(--text-md);
+  font-weight: 500;
+}
+
+.prof-game-meta {
+  font-size: var(--text-xs);
+  color: var(--text-2);
+}
+
+/* ==========================================================================
+   Responsivt
+   ========================================================================== */
+
+@media (max-width: 1024px) {
+  .page-ledger {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .page-ledger .page-kpi:nth-child(4)::before {
+    display: none;
+  }
+
+  .page-ledger .page-kpi:nth-child(n + 4) {
+    border-top: 1px solid var(--border);
+  }
+}
+
+/* En kolumn: kolumnerna löses upp så att korten kan ordnas om — pallen
+   först, sedan bild och spel, fakta, resultatlistan och sist kartan. */
+@media (max-width: 860px) {
+  .page-grid {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--sp-4);
+  }
+
+  .page-col {
+    display: contents;
+  }
+
+  .prof-chart-card {
+    order: 1;
+  }
+
+  .prof-years-card {
+    order: 2;
+  }
+
+  .prof-honours {
+    order: 3;
+  }
+
+  .prof-h2h {
+    order: 4;
+  }
+
+  .prof-games {
+    order: 5;
+  }
+
+  .yp-podium-card {
+    order: 1;
+  }
+
+  .yp-photo {
+    order: 2;
+  }
+
+  .yp-game {
+    order: 3;
+  }
+
+  .yp-facts {
+    order: 4;
+  }
+
+  .yp-results-card {
+    order: 5;
+  }
+
+  .yp-songs {
+    order: 6;
+  }
+
+  .yp-map-card {
+    order: 7;
+  }
+
+  /* Spelkortet blir liggande: bild till vänster, text till höger */
+  .yp-game {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    align-items: center;
+  }
+
+  .yp-game-cover {
+    height: 100%;
+    aspect-ratio: auto;
+    min-height: 170px;
+  }
+}
+
+@media (max-width: 760px) {
+  .page-bar {
+    margin: 0 0 var(--sp-4);
+  }
+
+  .yp-hero,
+  .prof-hero {
+    margin-bottom: var(--sp-5);
+  }
+
+  .yp-meta {
+    gap: var(--sp-1) var(--sp-4);
+    font-size: var(--text-sm);
+  }
+
+  .prof-chart {
+    height: 230px;
+  }
+
+  .page-pager {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--sp-3);
+    margin-top: var(--sp-6);
+  }
+
+  .pager-gap {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    max-width: none;
+  }
+
+  .pager-gap:empty {
+    display: none;
+  }
+
+  .pager-link {
+    padding: var(--sp-3) var(--sp-4);
+  }
+}
+
+@media (max-width: 560px) {
+  .page-ledger {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .page-ledger .page-kpi:nth-child(4)::before {
+    display: block;
+  }
+
+  .page-ledger .page-kpi:nth-child(odd)::before {
+    display: none;
+  }
+
+  .page-ledger .page-kpi:nth-child(n + 3) {
+    border-top: 1px solid var(--border);
+  }
+
+  .page-kpi {
+    padding: var(--sp-3) var(--sp-3) var(--sp-3) 0;
+  }
+
+  .page-kpi:nth-child(even) {
+    padding-left: var(--sp-4);
+  }
+
+  .prof-hero {
+    gap: var(--sp-4);
+  }
+
+  .yp-game {
+    display: block;
+  }
+
+  .yp-game-cover {
+    aspect-ratio: 1100 / 773;
+    min-height: 0;
+  }
+
+  .yp-row {
+    grid-template-columns: 30px 30px minmax(0, 1fr) auto;
+    gap: var(--sp-2);
+    padding: var(--sp-2) 6px;
+  }
+
+  .yp-avatar {
+    width: 30px;
+    height: 30px;
+    font-size: 0.7rem;
+  }
+
+  .prof-year {
+    grid-template-columns: 2.9rem minmax(0, 1fr) auto 30px;
+    gap: var(--sp-2);
+  }
+
+  /* Spelen som rader: liten bild, titel, pil */
+  .prof-game-list {
+    grid-template-columns: 1fr;
+    gap: var(--sp-1);
+  }
+
+  .prof-game {
+    grid-template-columns: 76px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-2);
+    border-color: transparent;
+  }
+
+  .prof-game > svg {
+    display: block;
+  }
+
+  .prof-game-thumb {
+    border-radius: var(--r-xs);
+    font-size: 1.4rem;
+  }
+}
+
+/* Telefon på högkant med smal skärm: Dela blir en rund ikonknapp */
+@media (max-width: 380px) {
+  .page-share-btn span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .page-share-btn {
+    width: 44px;
+    padding: 0;
+  }
+}
+
+/* Pekskärm: alla tryckytor minst 44 px */
+@media (pointer: coarse) {
+  .page-share-btn,
+  .yp-game-play {
+    min-height: 44px;
+  }
+
+  .yp-hosts .person-link,
+  .yp-fact .person-link,
+  .yp-person .person-link,
+  .yp-podium-names .person-link,
+  .prof-h2h-name .person-link {
+    display: inline-block;
+    padding: 10px 0;
+    margin: -10px 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .yp-podium-block {
+    animation: none;
+  }
+
+  .pager-link:hover,
+  .yp-game:hover .yp-game-cover img {
+    transform: none;
+  }
+}

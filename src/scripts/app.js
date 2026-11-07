@@ -1,0 +1,4375 @@
+/**
+ * Pekkas Pokal — Application
+ *
+ * Single, dependency-light app module. Loads the competition CSV,
+ * derives statistics, and renders every view: Översikt, Medaljliga,
+ * Historik, Utmärkelser, Statistik, Sångbok och Spel.
+ *
+ * Navigation is hash-routed (#/medaljliga, #/deltagare/viktor-jones,
+ * #/spel/2024 …) so every view, profile, year and game has a link that can
+ * be shared, and the back button closes what was opened on top.
+ */
+(function () {
+  'use strict';
+
+  /* ======================================================================
+     Utilities
+     ====================================================================== */
+
+  const $ = (sel, root) => (root || document).querySelector(sel);
+  const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
+
+  const esc = (s) =>
+    String(s == null ? '' : s).replace(
+      /[&<>"']/g,
+      (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
+    );
+
+  const CSS_FALLBACKS = {
+    '--gold': '#e9bf5c',
+    '--gold-hi': '#fbe7ab',
+    '--gold-deep': '#b4832a',
+    '--silver': '#cfd4dc',
+    '--bronze': '#d39468',
+    '--accent-2': '#8fb3d9',
+    '--chart-grid': 'rgba(255,236,200,0.1)',
+    '--chart-tick': '#a39b8c',
+    '--chart-muted': 'rgba(196,186,168,0.32)',
+    '--chart-focus': '#e9bf5c',
+    '--text-3': '#9a9285',
+    '--surface-solid': '#15171d',
+    '--border-strong': 'rgba(255,236,200,0.15)',
+    '--text-1': '#f4efe6',
+    '--text-2': '#b6ae9f'
+  };
+
+  const cssVar = (name) =>
+    getComputedStyle(document.documentElement).getPropertyValue(name).trim() ||
+    CSS_FALLBACKS[name] ||
+    '#888888';
+
+  function shortName(fullName) {
+    const parts = fullName.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0];
+    return `${parts[0]} ${parts[parts.length - 1].charAt(0)}.`;
+  }
+
+  function initials(fullName) {
+    return fullName
+      .trim()
+      .split(/\s+/)
+      .map((p) => p.charAt(0).toUpperCase())
+      .slice(0, 2)
+      .join('');
+  }
+
+  function nameHue(name) {
+    let h = 0;
+    for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
+    return h;
+  }
+
+  /** Initialer på en rund bricka, tonad efter namnet. */
+  function avatarHTML(name, cls) {
+    return `<span class="avatar${cls ? ` ${cls}` : ''}" style="--hue:${nameHue(name)}" aria-hidden="true">${esc(initials(name))}</span>`;
+  }
+
+  /** "Viktor Jones" → "viktor-jones", "Hägglund" → "hagglund" */
+  function slugify(str) {
+    return String(str)
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  }
+
+  const prefersReducedMotion = () =>
+    !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+  const ORDINALS = ['', 'första', 'andra', 'tredje', 'fjärde', 'femte', 'sjätte', 'sjunde', 'åttonde', 'nionde', 'tionde'];
+
+  /**
+   * Alla tal på sidan går genom den här: decimalkomma, tunt mellanrum som
+   * tusentalsavgränsare och riktigt minustecken (sv-SE).
+   *   formatNumber(1523)             → "1 523"
+   *   formatNumber(3.857, 1)         → "3,9"
+   *   formatNumber(35, { sign: true }) → "+35", formatNumber(-9, …) → "−9"
+   */
+  const NUMBER_FORMATS = {};
+  function formatNumber(n, opts) {
+    if (n == null || Number.isNaN(n)) return '—';
+    const o = typeof opts === 'number' ? { decimals: opts } : opts || {};
+    const d = o.decimals == null ? null : o.decimals;
+    const key = `${d}|${o.sign ? 1 : 0}`;
+    if (!NUMBER_FORMATS[key]) {
+      NUMBER_FORMATS[key] = new Intl.NumberFormat('sv-SE', {
+        ...(d == null ? {} : { minimumFractionDigits: d, maximumFractionDigits: d }),
+        ...(o.sign ? { signDisplay: 'exceptZero' } : {})
+      });
+    }
+    return NUMBER_FORMATS[key].format(n);
+  }
+
+  /** Svenska ordningstal i kortform: 1:a, 2:a, 3:e … 11:e, 21:a. */
+  function ordinalShort(n) {
+    const r100 = n % 100;
+    const r10 = n % 10;
+    return `${n}:${(r10 === 1 || r10 === 2) && r100 !== 11 && r100 !== 12 ? 'a' : 'e'}`;
+  }
+
+  /* ======================================================================
+     App state
+     ====================================================================== */
+
+  const App = {
+    data: null,
+    stats: null,
+    event: null,
+    facts: [],
+    elo: null, // { current: [...], history: {id: {year: rating}}, years: [] }
+    h2h: { a: null, b: null },
+    achievements: null, // { byName: {name: [ids]}, defs: [...] }
+    charts: {},
+    chartBuilders: {},
+    map: null,
+    mapTiles: null,
+    mapProvider: 0,
+    mapTileTimer: null,
+    mapMarkers: [],
+    tourTimer: null,
+    tickerTimer: null,
+    tickerIndex: 0,
+    countdownTimer: null,
+    photos: null,
+    medalSort: { key: 'rank', dir: 1 },
+    filters: { participants: new Set(), years: new Set() },
+    achCategory: 'all',
+    currentView: null,
+    appliedHash: null,
+    pageKey: null, // vilken vy eller sida (år, profil) som visas — styr scrollen
+    pages: {}, // senast byggda års- och profilsida, så bakåt inte bygger om dem
+    yearMap: null,
+    game: null,
+    gameYear: null,
+    gameLoadingYear: null,
+    gameToken: 0,
+    lastFocusBeforeGame: null,
+    trophy: null,
+    trophyLoading: false,
+    booted: false,
+    tickerPaused: false,
+    showSong: null
+  };
+
+  /* ======================================================================
+     Spelen — ett per år
+     ====================================================================== */
+
+  /**
+   * One game per year. Entries without a `module` render as coming soon —
+   * add one here as each year's game gets built.
+   */
+  /**
+   * `colors` tonar affischen och laddkortet; `cover` är en stillbild ur
+   * spelet (public/games/) — saknas den visas emblemet i stället.
+   * `coverBlur` är samma bild 24 px bred (base64), suddig bakom kortet tills
+   * stillbilden laddat; `coverFocus` håller motivet i bild på smala kort.
+   */
+  const GAMES = [
+    {
+      year: 2011,
+      title: 'Pekkas Fantasy',
+      competition: 'Fantasy Premier League',
+      tagline: 'Bygg ditt lag, välj kapten och jaga ligaguldet under fem omgångar.',
+      icon: '⚽',
+      colors: ['#326d59', '#091e23'],
+      cover: 'games/fantasy.webp',
+      coverBlur: 'data:image/webp;base64,UklGRooAAABXRUJQVlA4IH4AAABQBQCdASoYABEAPxFys1MsJiSisBgIAYAiCWQAnTMJwapl/oQV9BaJisuWhSqAxd13MAAA/uL0rOehvgDl3ksbsg3jNVDCvoHyCJzXTQV3ii51PyHXvYlOBPC6RGlydkYXZ0EbZdU0naHUPz/KWsB/kIThVtclcgVB9gcAAAA=',
+      module: 'src/games/fantasy/index.js'
+    },
+    {
+      year: 2012,
+      title: 'Pekkas Gokart',
+      competition: 'Gokart',
+      tagline: 'Tre varv i Varggropen. Hitta bromspunkten, ta innern och vinn loppet.',
+      icon: '🏎️',
+      colors: ['#ad6335', '#17242b'],
+      cover: 'games/kart.webp',
+      coverBlur: 'data:image/webp;base64,UklGRnQAAABXRUJQVlA4IGgAAAAwBACdASoYABEAPxF6uFMsJ6WiqAqpgCIJQAAFzTSyWBM/Tl4uddbuRQAA/sMgnvmgytGrXxrz2zHN7Wx/zQ9YOl7GazpYKlafXGP9YsU8aVGG7Azwrgd/uBc8nMHFNqKuDRd9bYKAAA==',
+      module: 'src/games/kart/index.js'
+    },
+    {
+      year: 2013,
+      title: 'Pekkas Femkamp',
+      competition: 'Femkamp',
+      tagline: 'Fem grenar i Kroksta — precision, fart och balans avgör pokalen.',
+      icon: '🏅',
+      colors: ['#6c8651', '#18291c'],
+      cover: 'games/pentathlon.webp',
+      coverBlur: 'data:image/webp;base64,UklGRnoAAABXRUJQVlA4IG4AAAAwBACdASoYABEAPwVwrlArpqQisAwBcCCJQAFf/CMDoR0BrKbiNJXoCEAA/TsLSnsZJJSdbNJBD7SgRd2yTNvvps8n5foPo3MAcctLSx7H9GEIjsgksGM0sCc9R/uxnS/1iiGTrAe5ZpF7j8gAAA==',
+      module: 'src/games/pentathlon/index.js'
+    },
+    {
+      year: 2014,
+      title: 'Pekkas Parkmästare',
+      competition: 'Mångkamp Uppsala',
+      tagline: 'Beerpong, flipcup, boule, krocket och ringkast i Uppsalas gyllene park.',
+      icon: '⛲',
+      colors: ['#8a7950', '#183b34'],
+      cover: 'games/uppsala.webp',
+      coverBlur: 'data:image/webp;base64,UklGRtQAAABXRUJQVlA4IMgAAAAQBACdASoYABEAPrVQoUwnJKMiKAqo4BaJQBdmUAAmRCaEpBScRiZXfgD+J5F7dvIgVhYDYc7B4CunjpDAUVzO4IWYaU/eSOrp4aPaCgzjcCubj2nnC3/Yv6JkRXH7j5IOCgjnTR38Wmx2YuFHMuYKvfuqO1WNfwP+DrKY7Su//2Fush+ytak3LBPsQUhjZx+uJLt5/b8EsGsX0j2joSD0WNTazIi7wdVPyuDHj4XiR4ge8RORZK0wjXaYasEQD03NBuoGU4AAAA==',
+      module: 'src/games/uppsala/index.js'
+    },
+    {
+      year: 2015,
+      title: 'Pekkas Bondespel',
+      competition: 'Bondespelen',
+      tagline: 'Luftgevär, vedstapling, stövelkast, hästskor och spikning i Billsta.',
+      icon: '🌾',
+      colors: ['#ac7534', '#38251c'],
+      cover: 'games/farm.webp',
+      coverBlur: 'data:image/webp;base64,UklGRooAAABXRUJQVlA4IH4AAADQAwCdASoYABEAPxF4tlOsJyUiqAqpgCIJQBWAAN3R6zsPh7t+hAAA/rQOjiVfKK8AGTaQgRR9V0kwOLm1z0+Fc7OwJntEGA2SanOBvCQ7qvxGw6hyoFGcjxdjjqIjOFb58IFYmm2ppNGXKhH5l30Ozs7PA7wQZt5qMLgAAAA=',
+      module: 'src/games/farm/index.js'
+    },
+    {
+      year: 2016,
+      title: 'Pekkas Gårdskamp',
+      competition: 'Mångkamp Lundqvist',
+      tagline: 'Fäll kubben, sätt discen och håll balansen i Idbyn.',
+      icon: '🪵',
+      colors: ['#4f827d', '#162b2a'],
+      cover: 'games/lundqvist.webp',
+      coverBlur: 'data:image/webp;base64,UklGRoAAAABXRUJQVlA4IHQAAADQBACdASoYABEAPxF8slQsJ6QjKAqpgCIJQBlAAkckrbGGiw4UbZoDenAWIK56gAD+iTZu/IjARFS7QQmU+loW3khKyqecU3sYm5V1mbnpyPgD3Af3QtHeZ4ggyyQFtSQ1ZX5YbaO7vlIStGDJUKtsAAAAAA==',
+      module: 'src/games/lundqvist/index.js'
+    },
+    {
+      year: 2017,
+      title: 'Pekkas Triathlon',
+      competition: 'Triathlon',
+      tagline: 'Simma, spring och cykla runt Lomsjön — spara kraft till spurten.',
+      icon: '🏊',
+      colors: ['#39818b', '#172e35'],
+      cover: 'games/triathlon.webp',
+      coverBlur: 'data:image/webp;base64,UklGRmwAAABXRUJQVlA4IGAAAABQBACdASoYABEAPxF0rVAsJyQisBgMAYAiCWMAuwAQ71ROa8inzXk6pKGAAP7HKwF63uEdS6owfs8kjTikd1SgQ/xnENhZc+UHnc6uHqaS1EJxnjow0IwGYLZf1a96AAA=',
+      module: 'src/games/triathlon/index.js'
+    },
+    {
+      year: 2018,
+      title: 'Pekkas Ambition',
+      competition: 'Kortspel Ambition',
+      tagline: 'Ett stick för mycket kan kosta segern. Läs bordet på Kungsholmen.',
+      icon: '♠️',
+      colors: ['#3d6e5c', '#171d22'],
+      cover: 'games/ambition.webp',
+      coverBlur: 'data:image/webp;base64,UklGRnQAAABXRUJQVlA4IGgAAADQAwCdASoYABEAPxF8tFQsJ6SjKAqpgCIJQBf9gQJHgbUFqjGu2AAA/s3EiTu+VGIojn69032wHj0FLWKMePpp1LEGzPNb28o2tRJihXjOjO1I6QXdZ1r8hPTedsLrIxy+RV5OAgAAAA==',
+      module: 'src/games/ambition/index.js'
+    },
+    {
+      year: 2026,
+      title: 'Pekkas Lerskulptur',
+      competition: 'Lerskulptur',
+      tagline: 'Dreja tre alster i Barcelona-ateljén — keramikern dömer likheten.',
+      icon: '🏺',
+      colors: ['#7a3f22', '#170e09'],
+      cover: 'games/clay.webp',
+      coverBlur:
+        'data:image/webp;base64,UklGRqAAAABXRUJQVlA4IJQAAABwBACdASoYABEAPt1cpUyopSOiMAgBEBuJQBYj5oa2AW9SDyhRXzGqsylzMAD+o3UfRqs+ErfkbmsEIqEzmZ2LUdc5+CbQmjqjf9OBpeTp1bubRPRm/SVEvCukAVUnthB8U0esFnyHsPs6HS9TeQQsm6Bcv/bfgdHnW48CATQJNE9H8F6xZKi2h1VpREe/Ho/HgAAA',
+      coverFocus: '62% 50%',
+      module: 'src/games/clay/index.js'
+    },
+    {
+      year: 2021,
+      title: 'Pekkas Måleri',
+      competition: 'Målning',
+      tagline: 'Dra en lapp ur hatten, blanda färgen och låt Hägglund döma.',
+      icon: '🎨',
+      colors: ['#a8482a', '#191a2e'],
+      cover: 'games/painting.webp',
+      coverBlur:
+        'data:image/webp;base64,UklGRqoAAABXRUJQVlA4IJ4AAABwBQCdASoYABEAPt1kqU+opaOiKAqpEBuJZAC293+A78L84zIuPAyzVK8hOZOXWmmEcs2wAP5I70uiL/dMxy0f5uGKlufD9KhMegpkJusa2Jf5HOv+ILDo8leBSh1AnUzwQpNFGsYv4YfngBm5Z/XjMFY2sxAusvJOSAFzXv/Rlgv0UrEHEzdnSCHdph8oO1wBVcb36na8FvNFADoAAA==',
+      module: 'src/games/painting/index.js'
+    },
+    {
+      year: 2019,
+      title: 'Pekkas Pingis',
+      competition: 'Pingis',
+      tagline: 'Olympia i Bredbyn — flicka topspin och slå hela 2019 års pall.',
+      icon: '🏓',
+      colors: ['#8e1f28', '#150a0b'],
+      cover: 'games/pingis.webp',
+      coverBlur:
+        'data:image/webp;base64,UklGRp4AAABXRUJQVlA4IJIAAABQBQCdASoYABEAPt1kqE+opSOiKAqpEBuJZACxHxAv/gF4kV87JTKSQpc3U9TokleB/AAA/vKmsYfFwlsyMdXekhHh6v/RPYlgXc68B4L0M1eJmydUSMp8Tqb6rt9MizlS/Xn6fq/cvaVJMM3aSI5QBCJgYYt8SrlBWDv55rxPkOAcJfQbDpPb5Duy4mubsPAAAA==',
+      coverFocus: '58% 50%',
+      module: 'src/games/pingis/index.js'
+    },
+    {
+      year: 2022,
+      title: 'Pekkas Lerduvor',
+      competition: 'Skytte',
+      tagline: 'PULL! 24 duvor över Arnäsvalls fält — och till sist guldduvan.',
+      icon: '🥏',
+      colors: ['#9a6a24', '#1a160d'],
+      cover: 'games/shooting.webp',
+      coverBlur:
+        'data:image/webp;base64,UklGRo4AAABXRUJQVlA4IIIAAABQBACdASoYABEAPt1iqU+opSOiKAqpEBuJQBdgAiOztRSnyoCqd5aqvA7AAP6+D+i5MTQc0lg/8YDTg5ALNXyxldM6657OltiFH2bTZ8vVyPL9cLZj07j8dnO+l7QAZcMFUCXW8bVExdJL6Kjhsf0chBKoj4Ba4G1Q+fuTZzI28gAA',
+      module: 'src/games/shooting/index.js'
+    },
+    {
+      year: 2023,
+      title: 'Pekkas Fäktning',
+      competition: 'Fäktning',
+      tagline: 'En garde på pisten i Stockholm — parera, ripostera och stöt dig till pokalen.',
+      icon: '🤺',
+      colors: ['#34446e', '#0c0e18'],
+      cover: 'games/fencing.webp',
+      coverBlur:
+        'data:image/webp;base64,UklGRrQAAABXRUJQVlA4IKgAAAAQBQCdASoYABEAPt1kqk+opSOiKAqpEBuJQBdl6RAU60bDBgHj19nZ3+oOqnabrXWQAP7djBXFEwFDNkxUgwOwxf/nuTlXRZzjPmadRVa6hskCIQsFOTWBvl4bWyLJsCf2Gpd6qSzUywpAth7tNUa/Lw/Zv01blVy209gZnKoDdtalDztEVtRzGAsrJuRcoAejHAItnNhIIoIm7QfrHK5ILaDlai7gAAA=',
+      coverFocus: '44% 50%',
+      module: 'src/games/fencing/index.js'
+    },
+    {
+      year: 2024,
+      title: 'Pekkas Fiske',
+      competition: 'Fisketävling',
+      tagline: 'Sänk draget djupt, kroka storgäddan och fånga allt på vägen upp.',
+      icon: '🎣',
+      colors: ['#245e69', '#091317'],
+      cover: 'games/fishing.webp',
+      coverBlur:
+        'data:image/webp;base64,UklGRq4AAABXRUJQVlA4IKIAAACQBACdASoYABEAPt1YpE2opKMiMBgMARAbiWMAnQAQ1/MEw7Xzp0Oc9t+6W6AA/rYfMLjjvkU2QbdTJ1LRIixebU8F4+/JX7JCD319aDBy5CSkAD7CipN5o3M62AKp65hcNSYwWZhPp3VGPzg4IhMZaL2oKmbFHcSi9J7nopm17NRCQyrl+uIAgCoWN+zV7c0CQW52Gw0+0JWdoZh4y3pUNAA=',
+      module: 'src/games/fishing/index.js'
+    },
+    {
+      year: 2025,
+      title: 'Pekkas Pokal Flipper',
+      competition: 'Flipper',
+      tagline: 'Ett fullstort flipperspel i 3D. Tre bollar, fem mål och en pokal.',
+      icon: '🎯',
+      colors: ['#4e2475', '#11091a'],
+      cover: 'games/pinball.webp',
+      coverBlur:
+        'data:image/webp;base64,UklGRoAAAABXRUJQVlA4IHQAAABwBACdASoYABEAPt1iqk8opaOiKAqpEBuJQBhmghu+VGekbsZscsIyEqFdwAD+8w2YBEEFMG65ytpU+qENMVB1PkndwTvr+JfUTfPcQ87T5f3vQuwVZkfSnvmOSg8uO1Gswu9E6p8VyKlWCAtvQFRxDIQAAA==',
+      module: 'src/games/pinball/index.js'
+    }
+  ];
+
+  const gameRoute = (year) => `#/spel/${year}`;
+  /** Adresserna till årets sida och en deltagares profilsida. */
+  const yearHash = (year) => `#/ar/${year}`;
+  const personHash = (id) => {
+    const p = App.data.participants.find((x) => x.id === id);
+    return `#/deltagare/${p ? slugify(p.name) : id}`;
+  };
+
+  /* ======================================================================
+     Data loading & processing
+     ====================================================================== */
+
+  const FIXED_COLUMNS = ['År', 'Datum', 'Tävling', 'Plats', 'Arrangör 3:a', 'Arrangör näst sist'];
+
+  function parseCSV(text) {
+    const lines = text.trim().split(/\r?\n/);
+    const parseLine = (line) => {
+      const out = [];
+      let cur = '';
+      let quoted = false;
+      for (const ch of line) {
+        if (ch === '"') quoted = !quoted;
+        else if (ch === ',' && !quoted) {
+          out.push(cur.trim());
+          cur = '';
+        } else cur += ch;
+      }
+      out.push(cur.trim());
+      return out;
+    };
+
+    const headers = parseLine(lines[0]).map((h) => h.trim());
+    const rows = [];
+    for (let i = 1; i < lines.length; i++) {
+      if (!lines[i].trim()) continue;
+      const values = parseLine(lines[i]);
+      const row = {};
+      headers.forEach((h, idx) => (row[h] = values[idx] != null ? values[idx] : ''));
+      rows.push(row);
+    }
+    return { headers, rows };
+  }
+
+  function processData(headers, rows) {
+    const participantNames = headers.filter((h) => h && !FIXED_COLUMNS.includes(h));
+
+    const participants = participantNames.map((name, i) => ({
+      id: `p${i + 1}`,
+      name: name.trim(),
+      nickname: shortName(name)
+    }));
+
+    const idByName = {};
+    participants.forEach((p) => (idByName[p.name] = p.id));
+
+    const competitions = [];
+    rows.forEach((row) => {
+      const rawYear = row['År'] || row['Datum'];
+      const year = parseInt(String(rawYear).split('-')[0], 10);
+      const name = (row['Tävling'] || '').trim();
+      if (!year || !name) return;
+
+      const dateStr = (row['Datum'] || '').trim();
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? new Date(`${dateStr}T12:00:00`) : null;
+
+      const isCovid = name.toLowerCase() === 'covid';
+      const scores = {};
+      // Empty cells, kept apart from '-': where the list has gaps (2014 and
+      // 2015 only list the podium, 2023 lacks fifth and sixth) they are unknown
+      // placings rather than absences. AchievementEngine decides which.
+      const blank = [];
+      let winner = null;
+      let participantCount = 0;
+
+      if (!isCovid) {
+        participantNames.forEach((pName) => {
+          const v = (row[pName] || '').trim();
+          if (!v) blank.push(idByName[pName]);
+          if (v && v !== '-') {
+            const pos = parseInt(v, 10);
+            if (!isNaN(pos)) {
+              scores[idByName[pName]] = pos;
+              participantCount++;
+              if (pos === 1) winner = pName.trim();
+            }
+          }
+        });
+      }
+
+      competitions.push({
+        id: `c${competitions.length + 1}`,
+        year,
+        date,
+        name: isCovid ? 'Covid' : name,
+        location: (row['Plats'] || '').trim(),
+        winner,
+        scores,
+        blank,
+        arranger3rd: (row['Arrangör 3:a'] || '').trim(),
+        arrangerSecondLast: (row['Arrangör näst sist'] || '').trim(),
+        participantCount,
+        isCovid
+      });
+    });
+
+    competitions.sort((a, b) => b.year - a.year);
+    return { participants, competitions };
+  }
+
+  const EMBEDDED_CSV = `År,Datum,Tävling,Plats,Arrangör 3:a,Arrangör näst sist,Olov Melander,Mikael Hägglund,Viktor Jones,Per Vikman,Erik Vallgren,Henrik Lundqvist,Rickard Nilsson,Niklas Norberg,Per Olsson,Tobias Lundqvist,Lars Sandin,Ludvig Ulenius,Jonas Eriksson
+2011,,Fantasy Premier League,,,,-,3,2,-,-,-,1,-,-,-,-,-,-
+2012,2012-07-28,Gokart,Varggropen,Mikael Hägglund,Viktor Jones,-,7,3,4,2,7,5,-,-,-,-,7,1
+2013,2013-06-29,Femkamp,Kroksta,Viktor Jones,Mikael Hägglund,-,4,6,2,1,3,5,7,-,-,-,-,-
+2014,2014-07-12,Mångkamp Uppsala,Uppsala,Henrik Lundqvist,Rickard Nilsson,,,,,1,,,,,,,,-
+2015,2015-06-13,Bondespelen ,Billsta,Olov Melander,Mikael Hägglund,,,,1,,,3,,,,,,2
+2016,2016-08-06,Mångkamp Lundqvist,Idbyn,Rickard Nilsson,Tobias Lundqvist,7,5,9,3,10,11,4,1,-,2,-,8,6
+2017,2017-08-05,Triathlon ,Lomsjön,Per Vikman,Erik Vallgren,-,3,1,2,6,8,7,9,-,4,-,5,-
+2018,2018-08-04,Kortspel Ambition,Kungsholmen,Mikael Hägglund,Henrik Lundqvist,5,3,4,8,2,6,-,1,-,7,,-,-
+2019,2019-08-31,Pingis,Bredbyn,Viktor Jones,Tobias Lundqvist,8,9,1,10,6,3,2,7,5,4,-,11,-
+2020,,Covid,,,,,,,,,,,,,,,,-
+2021,2021-08-07,Målning,Ås,Henrik Lundqvist,Per Vikman,1,-,6,5,7,9,10,8,4,2,-,3,-
+2022,2022-08-06,Skytte,Arnäsvall,Ludvig Ulenius,Henrik Lundqvist,5,9,3,10,-,7,4,8,6,2,-,1,-
+2023,2023-08-19,Fäkting,Stockholm,Viktor Jones,Mikael Hägglund,7,3,10,1,,,2,8,9,4,-,-,-
+2024,2024-08-17,Fisketävling,Själevad,Tobias Lundqvist ,Per Olsson ,7,10,4,9,1,2,12,5,3,11,8,6,-
+2025,2025-08-16,Flipper,Eskilstuna/Västerås,Viktor Jones,Mikael Hägglund,2,7,1,11,10,5,9,12,3,6,4,8,-
+2026,2026-08-06,Lerskulptur,Barcelona,Per Olsson,Per Vikman,10,8,1,6,9,12,3,11,7,4,5,2,-`;
+
+  async function loadData() {
+    let text = null;
+    try {
+      const url = new URL('competition-data.csv', document.baseURI).toString();
+      const res = await fetch(url, { cache: 'no-cache' });
+      if (res.ok) {
+        const t = await res.text();
+        if (t && /(^|\n)\s*År\s*,/.test(t)) text = t;
+      }
+    } catch (e) {
+      /* fall through to embedded data */
+    }
+    if (!text) text = EMBEDDED_CSV;
+    const { headers, rows } = parseCSV(text);
+    return processData(headers, rows);
+  }
+
+  /**
+   * Fallback used only when event.json can't be read. The live announcement
+   * lives in public/event.json — see README for how to update it.
+   */
+  const DEFAULT_EVENT = {
+    date: '2026-08-06T18:00:00',
+    location: 'Barcelona, Spanien',
+    coords: [41.3874, 2.1686],
+    hosts: ['Per Olsson', 'Per Vikman']
+  };
+
+  /**
+   * Upcoming event, loaded from event.json so a new competition can be
+   * announced by editing one file — no code change, no rebuild knowledge.
+   * Falls back to DEFAULT_EVENT when the file is missing or malformed.
+   */
+  async function loadEvent() {
+    try {
+      const url = new URL('event.json', document.baseURI).toString();
+      const res = await fetch(url, { cache: 'no-cache' });
+      if (res.ok) {
+        const json = await res.json();
+        if (json && typeof json === 'object') {
+          if (!json.date) return null; // explicitly cleared → use forecast
+          const d = new Date(json.date);
+          if (!isNaN(d.getTime())) return json;
+        }
+      }
+    } catch (e) {
+      /* fall through to the built-in default */
+    }
+    return DEFAULT_EVENT;
+  }
+
+
+  /* ======================================================================
+     Derived statistics
+     ====================================================================== */
+
+  function computeStats(data) {
+    const { participants, competitions } = data;
+    const real = competitions.filter((c) => !c.isCovid && c.participantCount > 0);
+    const byYearAsc = [...real].sort((a, b) => a.year - b.year);
+
+    const per = {};
+    participants.forEach((p) => {
+      per[p.id] = {
+        participant: p,
+        starts: 0,
+        gold: 0,
+        silver: 0,
+        bronze: 0,
+        lasts: 0,
+        positions: [],
+        yearPositions: {},
+        hostCount: 0
+      };
+    });
+
+    byYearAsc.forEach((comp) => {
+      const positions = Object.values(comp.scores);
+      const worst = positions.length ? Math.max(...positions) : null;
+      participants.forEach((p) => {
+        const pos = comp.scores[p.id];
+        if (pos == null) return;
+        const s = per[p.id];
+        s.starts++;
+        s.positions.push(pos);
+        s.yearPositions[comp.year] = pos;
+        if (pos === 1) s.gold++;
+        else if (pos === 2) s.silver++;
+        else if (pos === 3) s.bronze++;
+        if (worst != null && positions.length > 2 && pos === worst) s.lasts++;
+      });
+
+      [comp.arranger3rd, comp.arrangerSecondLast].forEach((host) => {
+        const hostName = (host || '').trim();
+        if (!hostName) return;
+        const p = participants.find((x) => x.name === hostName);
+        if (p) per[p.id].hostCount++;
+      });
+    });
+
+    Object.values(per).forEach((s) => {
+      s.total = s.gold + s.silver + s.bronze;
+      s.avg = s.positions.length
+        ? s.positions.reduce((a, b) => a + b, 0) / s.positions.length
+        : null;
+      s.best = s.positions.length ? Math.min(...s.positions) : null;
+    });
+
+    const medalRank = Object.values(per)
+      .filter((s) => s.starts > 0)
+      .sort(
+        (a, b) =>
+          b.gold - a.gold || b.silver - a.silver || b.bronze - a.bronze || a.avg - b.avg
+      );
+
+    const latest = byYearAsc[byYearAsc.length - 1] || null;
+    const champion = latest && latest.winner ? latest.winner : null;
+
+    return { per, medalRank, real, byYearAsc, latest, champion };
+  }
+
+  /**
+   * Elo ratings across every edition.
+   *
+   * Each competition is scored as a round-robin: every pair of starters is one
+   * matchup, won by whoever placed higher. Each pair is worth K/(n-1) so a
+   * 12-player year can't swing ratings more than a 3-player year.
+   */
+  function computeElo(data, stats) {
+    // High for Elo, deliberately: with only ~14 editions a chess-sized K
+    // leaves everyone bunched within a few points of 1500.
+    const K = 90;
+    const START = 1500;
+    const ratings = {};
+    const history = {};
+    const played = {};
+    data.participants.forEach((p) => {
+      ratings[p.id] = START;
+      history[p.id] = {};
+      played[p.id] = 0;
+    });
+
+    const years = [];
+    stats.byYearAsc.forEach((comp) => {
+      const ids = Object.keys(comp.scores);
+      if (ids.length < 2) return;
+      years.push(comp.year);
+
+      const delta = {};
+      ids.forEach((id) => (delta[id] = 0));
+      const k = K / (ids.length - 1);
+
+      for (let i = 0; i < ids.length; i++) {
+        for (let j = i + 1; j < ids.length; j++) {
+          const a = ids[i];
+          const b = ids[j];
+          const expA = 1 / (1 + 10 ** ((ratings[b] - ratings[a]) / 400));
+          // Lower placement number wins; ties share the point
+          const posA = comp.scores[a];
+          const posB = comp.scores[b];
+          const scoreA = posA === posB ? 0.5 : posA < posB ? 1 : 0;
+          delta[a] += k * (scoreA - expA);
+          delta[b] += k * (1 - scoreA - (1 - expA));
+        }
+      }
+
+      ids.forEach((id) => {
+        ratings[id] += delta[id];
+        played[id]++;
+      });
+      // Snapshot every rated player so the chart draws continuous lines
+      data.participants.forEach((p) => {
+        if (played[p.id] > 0) history[p.id][comp.year] = Math.round(ratings[p.id]);
+      });
+    });
+
+    const current = data.participants
+      .filter((p) => played[p.id] > 0)
+      .map((p) => {
+        const yearsPlayed = Object.keys(history[p.id]).map(Number).sort((a, b) => a - b);
+        const last = yearsPlayed[yearsPlayed.length - 1];
+        const prev = yearsPlayed[yearsPlayed.length - 2];
+        return {
+          participant: p,
+          rating: Math.round(ratings[p.id]),
+          peak: Math.max(...Object.values(history[p.id])),
+          change: prev != null ? history[p.id][last] - history[p.id][prev] : 0,
+          starts: played[p.id]
+        };
+      })
+      .sort((a, b) => b.rating - a.rating);
+
+    return { current, history, years };
+  }
+
+  /**
+   * Head-to-head record between two participants across every year both started.
+   */
+  function headToHead(idA, idB) {
+    const meetings = [];
+    let winsA = 0;
+    let winsB = 0;
+    App.stats.byYearAsc.forEach((comp) => {
+      const posA = comp.scores[idA];
+      const posB = comp.scores[idB];
+      if (posA == null || posB == null) return;
+      if (posA < posB) winsA++;
+      else if (posB < posA) winsB++;
+      meetings.push({ year: comp.year, name: comp.name.trim(), posA, posB });
+    });
+    return { meetings, winsA, winsB };
+  }
+
+  /**
+   * Every opponent record for one participant, best record first.
+   */
+  function rivalRecords(id) {
+    return App.data.participants
+      .filter((p) => p.id !== id)
+      .map((p) => {
+        const r = headToHead(id, p.id);
+        return { opponent: p, ...r, total: r.meetings.length };
+      })
+      .filter((r) => r.total > 0)
+      .sort((a, b) => b.winsA - b.winsB - (a.winsA - a.winsB) || b.total - a.total);
+  }
+
+  function computeFacts(data, stats) {
+    const facts = [];
+    const rows = Object.values(stats.per).filter((s) => s.starts > 0);
+    const by = (key, dir = 1) =>
+      [...rows].sort((a, b) => (b[key] - a[key]) * dir)[0];
+
+    const maxGold = Math.max(...rows.map((s) => s.gold));
+    if (maxGold > 0) {
+      const leaders = rows.filter((s) => s.gold === maxGold).map((s) => s.participant.name);
+      facts.push(
+        leaders.length > 1
+          ? `${leaders.join(' och ')} delar rekordet med ${maxGold} segrar var.`
+          : `${leaders[0]} har flest segrar — ${maxGold} stycken. Dominans.`
+      );
+    }
+
+    const iron = by('starts');
+    if (iron)
+      facts.push(`${iron.participant.name} är järnmannen med ${iron.starts} starter av ${stats.real.length} möjliga.`);
+
+    const eligible = rows.filter((s) => s.starts >= 5);
+    if (eligible.length) {
+      const bestAvg = [...eligible].sort((a, b) => a.avg - b.avg)[0];
+      facts.push(`Bäst snittplacering (minst 5 starter): ${bestAvg.participant.name} med ${formatNumber(bestAvg.avg, 1)}.`);
+    }
+
+    const lasts = by('lasts');
+    if (lasts && lasts.lasts > 1)
+      facts.push(`${lasts.participant.name} har flest sistaplatser — ${lasts.lasts} stycken. Någon måste ta dem.`);
+
+    const host = by('hostCount');
+    if (host && host.hostCount > 0)
+      facts.push(`Värdmästaren ${host.participant.name} har arrangerat ${host.hostCount} gånger.`);
+
+    let bestClimb = null;
+    rows.forEach((s) => {
+      const years = Object.keys(s.yearPositions).map(Number).sort((a, b) => a - b);
+      for (let i = 1; i < years.length; i++) {
+        const diff = s.yearPositions[years[i - 1]] - s.yearPositions[years[i]];
+        if (!bestClimb || diff > bestClimb.diff) {
+          bestClimb = { name: s.participant.name, diff, from: s.yearPositions[years[i - 1]], to: s.yearPositions[years[i]], year: years[i] };
+        }
+      }
+    });
+    if (bestClimb && bestClimb.diff > 3)
+      facts.push(`Största klättringen: ${bestClimb.name} gick från plats ${bestClimb.from} till ${bestClimb.to} år ${bestClimb.year}.`);
+
+    const silverNoGold = rows.filter((s) => s.gold === 0 && s.silver > 0).sort((a, b) => b.silver - a.silver)[0];
+    if (silverNoGold)
+      facts.push(`${silverNoGold.participant.name} har ${silverNoGold.silver} silver — men guldet väntar fortfarande.`);
+
+    const locations = new Set(stats.real.map((c) => c.location).filter(Boolean));
+    facts.push(`Pokalen har avgjorts på ${locations.size} olika platser — från Höga kusten till Mälardalen.`);
+
+    return facts;
+  }
+
+
+  const LOCATION_COORDS = {
+    Varggropen: [63.2968, 18.7424],
+    Kroksta: [63.3179, 18.6751],
+    Billsta: [63.326, 18.5128],
+    Idbyn: [63.2423, 18.675],
+    Lomsjön: [63.3338, 18.6647],
+    Kungsholmen: [59.3359, 18.0123],
+    Bredbyn: [63.4447, 18.1064],
+    Ås: [63.2963, 18.6995],
+    Arnäsvall: [63.322, 18.816],
+    Stockholm: [59.3556, 18.0993],
+    Själevad: [63.2888, 18.5974],
+    'Eskilstuna/Västerås': [59.6008, 16.5992],
+    Uppsala: [59.8586, 17.6389],
+    Barcelona: [41.3874, 2.1686],
+    'Barcelona, Spanien': [41.3874, 2.1686]
+  };
+
+  /* ======================================================================
+     Theme
+     ====================================================================== */
+
+  function currentTheme() {
+    return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  }
+
+  function toggleTheme() {
+    const next = currentTheme() === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try {
+      localStorage.setItem('pp-theme', next);
+    } catch (e) { /* privat läge */ }
+    syncThemeChrome();
+    applyChartTheme();
+    rebuildCharts();
+    updateMapTiles();
+    if (App.trophy) App.trophy.setTheme(next);
+  }
+
+  /** Webbläsarens färg och knappens etikett följer temat. */
+  function syncThemeChrome() {
+    const t = currentTheme();
+    $$('meta[name="theme-color"]').forEach((m) =>
+      m.setAttribute('content', t === 'dark' ? '#0b0c0f' : '#f4efe5')
+    );
+    const btn = $('#theme-toggle');
+    if (btn) btn.setAttribute('aria-label', t === 'dark' ? 'Byt till ljust tema' : 'Byt till mörkt tema');
+  }
+
+  /* ======================================================================
+     Charts
+     ====================================================================== */
+
+  function applyChartTheme() {
+    if (typeof Chart === 'undefined') return;
+    // sv-SE ger decimalkomma och mellanslag som tusentalsavgränsare i axlarna
+    Chart.defaults.locale = 'sv-SE';
+    Chart.defaults.font.family = "'Schibsted Grotesk', system-ui, sans-serif";
+    Chart.defaults.font.size = 12;
+    // Axeltext och förklaringar minst 4,5:1 mot korten i båda teman
+    Chart.defaults.color = cssVar('--chart-tick');
+    Chart.defaults.borderColor = cssVar('--chart-grid');
+    Chart.defaults.scale.grid.color = cssVar('--chart-grid');
+    Chart.defaults.scale.border.color = cssVar('--border-strong');
+    Chart.defaults.plugins.legend.labels.color = cssVar('--text-2');
+    Chart.defaults.plugins.legend.labels.usePointStyle = true;
+    Chart.defaults.plugins.legend.labels.boxWidth = 8;
+    Chart.defaults.plugins.legend.labels.padding = 14;
+    Chart.defaults.plugins.tooltip.backgroundColor = cssVar('--surface-solid');
+    Chart.defaults.plugins.tooltip.titleColor = cssVar('--text-1');
+    Chart.defaults.plugins.tooltip.titleFont = { family: "'Fraunces', Georgia, serif", size: 14, weight: '600' };
+    Chart.defaults.plugins.tooltip.bodyColor = cssVar('--text-2');
+    Chart.defaults.plugins.tooltip.borderColor = cssVar('--border-strong');
+    Chart.defaults.plugins.tooltip.borderWidth = 1;
+    Chart.defaults.plugins.tooltip.cornerRadius = 12;
+    Chart.defaults.plugins.tooltip.padding = 12;
+    Chart.defaults.plugins.tooltip.displayColors = false;
+    Chart.defaults.animation.duration = prefersReducedMotion() ? 0 : 900;
+    Chart.defaults.animation.easing = 'easeOutQuart';
+  }
+
+  function registerChart(id, builder) {
+    App.chartBuilders[id] = builder;
+    buildChart(id);
+  }
+
+  function buildChart(id) {
+    if (typeof Chart === 'undefined') return;
+    const canvas = document.getElementById(id);
+    if (!canvas) return;
+    if (App.charts[id]) {
+      App.charts[id].destroy();
+      delete App.charts[id];
+    }
+    const cfg = App.chartBuilders[id](canvas);
+    if (cfg) App.charts[id] = new Chart(canvas, cfg);
+  }
+
+  function rebuildCharts() {
+    Object.keys(App.chartBuilders).forEach(buildChart);
+  }
+
+  function goldGradient(canvas, horizontal) {
+    const ctx = canvas.getContext('2d');
+    const g = horizontal
+      ? ctx.createLinearGradient(0, 0, canvas.clientWidth || 400, 0)
+      : ctx.createLinearGradient(0, canvas.clientHeight || 300, 0, 0);
+    // I ljust tema blir det ljusaste guldet nästan osynligt mot elfenbenet,
+    // så staplarna får en mörkare skala där (minst 3:1 i stapelns ände)
+    const stops = currentTheme() === 'light'
+      ? ['#8d6214', '#a8761c', '#b4832a']
+      : [cssVar('--gold-deep'), cssVar('--gold'), cssVar('--gold-hi')];
+    g.addColorStop(0, stops[0]);
+    g.addColorStop(0.7, stops[1]);
+    g.addColorStop(1, stops[2]);
+    return g;
+  }
+
+  /* ---------- Diagramhjälp: årsaxel, inställda år, fokuslinjer ---------- */
+
+  /** Årtal från första till sista med inställda år (2020) insatta som luckor. */
+  function yearAxis(years) {
+    if (!years.length) return [];
+    const cancelled = new Set(App.data.competitions.filter((c) => c.isCovid).map((c) => c.year));
+    const out = [];
+    for (let y = years[0]; y <= years[years.length - 1]; y++) {
+      if (years.includes(y) || cancelled.has(y)) out.push(y);
+    }
+    return out;
+  }
+
+  const cancelledYears = () => App.data.competitions.filter((c) => c.isCovid).map((c) => c.year);
+
+  /** Ett tonat band med texten "Inställt" över år som inte blev av. */
+  const cancelledBandPlugin = {
+    id: 'ppCancelled',
+    beforeDatasetsDraw(chart) {
+      const { x } = chart.scales;
+      const area = chart.chartArea;
+      const labels = chart.data.labels || [];
+      if (!x || labels.length < 2) return;
+      const step = Math.abs(x.getPixelForValue(1) - x.getPixelForValue(0));
+      const { ctx } = chart;
+      cancelledYears().forEach((year) => {
+        const i = labels.indexOf(year);
+        if (i < 0) return;
+        const px = x.getPixelForValue(i);
+        const w = Math.max(12, step * 0.7);
+        ctx.save();
+        ctx.fillStyle = cssVar('--chart-grid');
+        ctx.fillRect(px - w / 2, area.top, w, area.bottom - area.top);
+        ctx.fillStyle = cssVar('--chart-tick');
+        ctx.font = "600 12px 'Schibsted Grotesk', system-ui, sans-serif";
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'right';
+        ctx.translate(px, area.top + 6);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillText('Inställt', 0, 0);
+        ctx.restore();
+      });
+    }
+  };
+
+  /** Streckad linje där en serie hoppar över år (inställt eller ej start). */
+  const gapDash = (ctx) => (ctx.p0.skip || ctx.p1.skip ? [3, 4] : undefined);
+
+  /**
+   * Namn vid linjernas slut. Den markerade linjen får alltid sitt namn; på
+   * breda diagram får de andra sina också, så länge de inte krockar.
+   */
+  const endLabelsPlugin = {
+    id: 'ppEndLabels',
+    afterDatasetsDraw(chart) {
+      const { ctx, chartArea } = chart;
+      const wide = chart.width >= 520;
+      const items = [];
+      chart.data.datasets.forEach((ds, di) => {
+        if (!ds.ppId) return;
+        const meta = chart.getDatasetMeta(di);
+        for (let i = ds.data.length - 1; i >= 0; i--) {
+          if (ds.data[i] != null && meta.data[i]) {
+            items.push({ x: meta.data[i].x, y: meta.data[i].y, text: ds.label, focus: !!ds.ppFocus });
+            break;
+          }
+        }
+      });
+      items.sort((a, b) => Number(b.focus) - Number(a.focus));
+      const placed = [];
+      const surface = cssVar('--surface');
+      ctx.save();
+      ctx.textBaseline = 'middle';
+      ctx.lineJoin = 'round';
+      items.forEach((it) => {
+        if (!it.focus && !wide) return;
+        ctx.font = it.focus
+          ? "700 13px 'Schibsted Grotesk', system-ui, sans-serif"
+          : "500 12px 'Schibsted Grotesk', system-ui, sans-serif";
+        const w = ctx.measureText(it.text).width;
+        // Till höger om punkten; får det inte plats där, ovanför eller under till vänster
+        const spots = [
+          { x: it.x + 8, y: it.y, align: 'left' },
+          { x: it.x - 4, y: it.y - 13, align: 'right' },
+          { x: it.x - 4, y: it.y + 13, align: 'right' }
+        ];
+        const boxOf = (s) => ({
+          x1: s.align === 'left' ? s.x : s.x - w,
+          x2: s.align === 'left' ? s.x + w : s.x,
+          y1: s.y - 8,
+          y2: s.y + 8
+        });
+        const free = (b) =>
+          b.x2 <= chartArea.right + 6 &&
+          b.y1 >= chartArea.top - 4 &&
+          b.y2 <= chartArea.bottom + 4 &&
+          !placed.some((p) => b.x1 < p.x2 && b.x2 > p.x1 && b.y1 < p.y2 && b.y2 > p.y1);
+        const spot = spots.find((s) => free(boxOf(s)));
+        if (!spot) return;
+        const box = boxOf(spot);
+        const { x, y, align } = spot;
+        placed.push(box);
+        ctx.textAlign = align;
+        ctx.strokeStyle = surface;
+        ctx.lineWidth = 4;
+        ctx.strokeText(it.text, x, y);
+        ctx.fillStyle = it.focus ? cssVar('--text-1') : cssVar('--chart-tick');
+        ctx.fillText(it.text, x, y);
+      });
+      ctx.restore();
+    }
+  };
+
+  /** Stil för fokusdiagram: en markerad linje i guld, resten tunna och dämpade. */
+  function styleFocusDatasets(datasets, focusId) {
+    const focus = cssVar('--chart-focus');
+    const muted = cssVar('--chart-muted');
+    const surface = cssVar('--surface');
+    datasets.forEach((ds) => {
+      const f = ds.ppId === focusId;
+      ds.ppFocus = f;
+      ds.borderColor = f ? focus : muted;
+      ds.backgroundColor = f ? focus : muted;
+      ds.borderWidth = f ? 3 : 1.25;
+      ds.pointRadius = f ? (ds.ppPointRadius || 3.5) : 0;
+      ds.pointHoverRadius = f ? 6 : 4;
+      ds.pointHitRadius = 10;
+      ds.pointBackgroundColor = f ? (ds.ppPointColors || focus) : muted;
+      ds.pointBorderColor = surface;
+      ds.pointBorderWidth = f ? 1.5 : 0;
+      ds.order = f ? 0 : 1;
+    });
+  }
+
+  /** Tryck eller klick på en linje markerar den. */
+  function pickNearestLine(onPick) {
+    return (evt, _els, chart) => {
+      const hit = chart.getElementsAtEventForMode(evt, 'nearest', { intersect: false, axis: 'xy' }, false)[0];
+      if (hit) onPick(chart.data.datasets[hit.datasetIndex].ppId);
+    };
+  }
+
+  /**
+   * Namnchips under ett fokusdiagram. Skapas en gång per diagramkort och
+   * ritas om när markeringen byts. Chipsen är knappar (aria-pressed).
+   */
+  function renderFocusChips(canvasId, people, focusId, onPick, label) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const wrap = canvas.closest('.chart-wrap');
+    let row = document.getElementById(`${canvasId}-focus`);
+    if (!row) {
+      row = document.createElement('div');
+      row.id = `${canvasId}-focus`;
+      row.className = 'chip-row focus-chips';
+      row.setAttribute('role', 'group');
+      row.setAttribute('aria-label', label);
+      wrap.insertAdjacentElement('afterend', row);
+      row.addEventListener('click', (e) => {
+        const chip = e.target.closest('[data-focus]');
+        if (chip) row.ppOnPick(chip.getAttribute('data-focus'));
+      });
+    }
+    row.ppOnPick = onPick;
+    row.innerHTML = `<span class="focus-chips-label" aria-hidden="true">Följ</span>${people
+      .map(
+        (p) =>
+          `<button type="button" class="chip${p.id === focusId ? ' active' : ''}" data-focus="${esc(p.id)}" aria-pressed="${p.id === focusId}">${esc(shortName(p.name))}</button>`
+      )
+      .join('')}`;
+  }
+
+  /** Byt markering i ett befintligt diagram utan att bygga om det. */
+  function refocusChart(canvasId, focusId, describe) {
+    const chart = App.charts[canvasId];
+    if (chart) {
+      styleFocusDatasets(chart.data.datasets, focusId);
+      chart.update(prefersReducedMotion() ? 'none' : undefined);
+    }
+    const row = document.getElementById(`${canvasId}-focus`);
+    if (row) {
+      $$('[data-focus]', row).forEach((chip) => {
+        const on = chip.getAttribute('data-focus') === focusId;
+        chip.classList.toggle('active', on);
+        chip.setAttribute('aria-pressed', String(on));
+      });
+    }
+    const canvas = document.getElementById(canvasId);
+    if (canvas && describe) canvas.setAttribute('aria-label', describe);
+  }
+
+  const personName = (id) => {
+    const p = App.data.participants.find((x) => x.id === id);
+    return p ? shortName(p.name) : '';
+  };
+
+  /** Markerad deltagare i statistikens linjediagram (placering och Elo). */
+  const chartFocus = { stats: null, medals: null };
+  let lastFilterIds = [];
+  const describeElo = () =>
+    `Linjediagram: Elo-rating per år. Markerad: ${personName(chartFocus.stats)}`;
+
+  /* ======================================================================
+     Rendering — Översikt
+     ====================================================================== */
+
+  const ICONS = {
+    trophy: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4Z"/><path d="M7 6H4a2 2 0 0 0 2 4h1M17 6h3a2 2 0 0 1-2 4h-1"/></svg>',
+    users: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+    crown: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m2 18 2-11 5 5 3-7 3 7 5-5 2 11H2Z"/></svg>',
+    star: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1L12 2Z"/></svg>',
+    home: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h5v-6h4v6h5V9.5"/></svg>',
+    pin: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>'
+  };
+
+  function renderHero() {
+    const { stats } = App;
+    const champ = stats.champion;
+    const { latest } = stats;
+
+    const nameEl = $('#hero-champion');
+    if (champ) {
+      // Förnamnet i förgylld kursiv, efternamnet rakt och ljust under —
+      // ett tidningsuppslag snarare än en etikett.
+      const parts = champ.trim().split(/\s+/);
+      const last = parts.length > 1 ? parts.pop() : '';
+      nameEl.innerHTML = `<span class="first">${esc(parts.join(' '))}</span>${
+        last ? `<span class="last">${esc(last)}</span>` : ''
+      }`;
+      nameEl.setAttribute('aria-label', champ);
+    } else {
+      nameEl.textContent = 'Okänd';
+    }
+    $('#hero-year').textContent = latest ? latest.year : '';
+    if (latest) $('#hero-year').setAttribute('href', yearHash(latest.year));
+
+    const p = champ ? App.data.participants.find((x) => x.name === champ) : null;
+    const s = p ? stats.per[p.id] : null;
+
+    if (latest) {
+      const nth = s && ORDINALS[s.gold] ? ` — ${ORDINALS[s.gold]} segern` : '';
+      $('#hero-champion-meta').innerHTML = `Vann <strong>${esc(latest.name.trim())}</strong>${
+        latest.location ? ` i ${esc(latest.location)}` : ''
+      } ${latest.year}${nth}.`;
+    }
+
+    if (s) {
+      // Etiketten står före talet för skärmläsare ("Guld: 4"), men visas under det
+      const item = (disc, num, label, title) => `
+        <li class="cm-item${disc ? '' : ' cm-avg'}"${title ? ` title="${esc(title)}"` : ''}>
+          <span class="medal-disc ${disc}" aria-hidden="true">${disc ? '' : '⌀'}</span>
+          <span class="cm-text"><span class="cm-num">${num}</span><span class="cm-label">${label}</span></span>
+        </li>`;
+      $('#hero-champion-medals').innerHTML =
+        item('gold', formatNumber(s.gold), 'Guld') +
+        item('silver', formatNumber(s.silver), 'Silver') +
+        item('bronze', formatNumber(s.bronze), 'Brons') +
+        item(
+          '',
+          formatNumber(s.avg, 1),
+          'Snitt&shy;placering<span class="cm-hint"> · lägre är bättre</span>',
+          `Genomsnittlig placering över ${s.starts} starter — lägre är bättre`
+        );
+    }
+
+    // Spela-knappen pekar på årets spel om det finns, annars på arkaden
+    const latestGame = latest && GAMES.find((g) => g.year === latest.year);
+    const play = $('#hero-play');
+    if (play) {
+      play.setAttribute('href', latestGame ? gameRoute(latestGame.year) : '#/spel');
+      play.textContent = latestGame ? `Spela ${latestGame.title.replace(/^Pekkas\s+/, '')}` : 'Till arkaden';
+    }
+  }
+
+  /**
+   * Höjdkurvor bakom pokalen: förvrängda koncentriska ringar runt en topp,
+   * som en karta över ett berg vid Höga kusten — dit koordinaterna i loggan
+   * pekar.
+   */
+  function renderHeroContours() {
+    const svg = $('#hero-contours');
+    if (!svg) return;
+    const cx = 430;
+    const cy = 400;
+    let paths = '';
+    for (let k = 1; k <= 20; k++) {
+      const r = k * 22;
+      let d = '';
+      for (let i = 0; i <= 120; i++) {
+        const a = (i / 120) * Math.PI * 2;
+        const wob =
+          1 +
+          0.1 * Math.sin(3 * a + k * 0.32) +
+          0.05 * Math.sin(5 * a - k * 0.55) +
+          0.025 * Math.sin(11 * a + k * 1.3);
+        const x = cx + Math.cos(a) * r * wob * 1.18;
+        const y = cy + Math.sin(a) * r * wob;
+        d += `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`;
+      }
+      paths += `<path d="${d}Z" opacity="${(1 - k / 24).toFixed(2)}"/>`;
+    }
+    svg.innerHTML = paths;
+  }
+
+  /**
+   * Pokalen i 3D. Den är dekor, inte innehåll: den laddas när sidan är
+   * färdig, hoppas över på sparsamma anslutningar och ersätter en SVG-pokal
+   * som redan står på plats — så inget hoppar och inget saknas utan WebGL.
+   */
+  function initTrophy() {
+    const canvas = $('#trophy-canvas');
+    const stage = $('#hero-stage');
+    if (!canvas || !stage || App.trophy || App.trophyLoading) return;
+    const conn = navigator.connection;
+    if (conn && (conn.saveData || /2g/.test(conn.effectiveType || ''))) return;
+
+    App.trophyLoading = true;
+    const winners = App.stats.byYearAsc
+      .filter((c) => c.winner)
+      .map((c) => ({ year: c.year, name: c.winner }));
+
+    const load = () =>
+      import(/* @vite-ignore */ new URL('src/scripts/trophy.js', document.baseURI).href)
+        .then((mod) => mod.mountTrophy(canvas, { winners, reducedMotion: prefersReducedMotion() }))
+        .then((trophy) => {
+          App.trophy = trophy;
+          trophy.setTheme(currentTheme());
+          stage.classList.add('is-3d');
+          if (App.game) trophy.pause();
+        })
+        .catch((err) => console.warn('Pokalen i 3D kunde inte laddas:', err))
+        .finally(() => {
+          App.trophyLoading = false;
+        });
+
+    if ('requestIdleCallback' in window) window.requestIdleCallback(load, { timeout: 1500 });
+    else setTimeout(load, 400);
+  }
+
+  function nextEventDate(stats) {
+    const now = new Date();
+    const { event } = App;
+    const resultYears = new Set(stats.real.map((c) => c.year));
+
+    // A confirmed event is shown from announcement until 24h after start —
+    // but the moment its result is in the data the competition is decided,
+    // so the card moves on to the next forecast instead of claiming that it
+    // is still running next to the champion card that says who won it.
+    if (event && event.date) {
+      const d = new Date(event.date);
+      if (
+        !isNaN(d.getTime()) &&
+        now - d < 24 * 3600 * 1000 &&
+        !resultYears.has(d.getFullYear())
+      ) {
+        return {
+          date: d,
+          confirmed: true,
+          comp: null,
+          name: event.name || '',
+          note: event.note || '',
+          location: event.location || '',
+          hosts: (event.hosts || []).join(' & ')
+        };
+      }
+    }
+
+    const dated = stats.byYearAsc.filter((c) => c.date);
+    const last = dated[dated.length - 1];
+    const year = now.getFullYear();
+    if (last && last.date >= now) return { date: last.date, confirmed: true, comp: last };
+
+    // Forecast: the tradition is a Saturday near mid-August — in the first
+    // year that has neither happened nor already has a result in the data.
+    const saturdayMidAugust = (y) => {
+      const mid = new Date(y, 7, 15, 10, 0, 0);
+      let diff = (6 - mid.getDay()) % 7;
+      if (diff > 3) diff -= 7;
+      return new Date(y, 7, 15 + diff, 10, 0, 0);
+    };
+    let target = saturdayMidAugust(year);
+    if (target < now || resultYears.has(target.getFullYear())) {
+      target = saturdayMidAugust(year + 1);
+    }
+    return { date: target, confirmed: false, comp: null, traditionHosts: traditionHosts(stats) };
+  }
+
+  /**
+   * Who arranges next year, by the tradition: this year's third place
+   * together with the second-to-last finisher.
+   */
+  function traditionHosts(stats) {
+    const { latest, per } = stats;
+    if (!latest) return '';
+    const entries = Object.entries(latest.scores).sort((a, b) => a[1] - b[1]);
+    if (entries.length < 4) return '';
+    const nameOf = (id) => (per[id] ? per[id].participant.name : '');
+    const third = entries.find(([, pos]) => pos === 3);
+    const secondLast = entries[entries.length - 2];
+    return [third && nameOf(third[0]), secondLast && nameOf(secondLast[0])]
+      .filter(Boolean)
+      .join(' & ');
+  }
+
+  function renderCountdown() {
+    const next = nextEventDate(App.stats);
+    const tag = $('#countdown-tag');
+
+    const hosts = next.hosts || next.traditionHosts || '';
+
+    const dateStr = next.date.toLocaleDateString('sv-SE', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+    const timeStr = next.date.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+    const where = next.location ? ` · ${next.location}` : '';
+    const baseNote = `${dateStr} kl ${timeStr}${where}${
+      hosts ? ` — arrangeras${next.confirmed ? '' : ' enligt traditionen'} av ${hosts}.` : ''
+    }`;
+
+    const nums = [$('#cd-days'), $('#cd-hours'), $('#cd-mins')];
+    const labels = $$('#countdown .count-label');
+    const setSegs = (values, labelTexts) => {
+      values.forEach((v, i) => (nums[i].textContent = v));
+      labelTexts.forEach((t, i) => (labels[i] && (labels[i].textContent = t)));
+    };
+
+    const tick = () => {
+      const now = new Date();
+      const ms = next.date - now;
+
+      if (ms <= 0) {
+        // Event has started
+        tag.textContent = 'pågår';
+        setSegs(['🏆', '🏆', '🏆'], ['', '', '']);
+        $('#countdown-note').textContent = next.location
+          ? `Tävlingen pågår just nu i ${next.location}!`
+          : 'Tävlingen pågår just nu!';
+        return;
+      }
+
+      const isToday = next.date.toDateString() === now.toDateString();
+      tag.textContent = next.confirmed ? (isToday ? 'idag!' : 'bekräftad') : 'prognos';
+      $('#countdown-note').textContent = baseNote;
+
+      if (ms < 86400000) {
+        // Final day: hours / minutes / seconds
+        const hours = Math.floor(ms / 3600000);
+        const mins = Math.floor((ms % 3600000) / 60000);
+        const secs = Math.floor((ms % 60000) / 1000);
+        setSegs(
+          [String(hours), String(mins).padStart(2, '0'), String(secs).padStart(2, '0')],
+          ['tim', 'min', 'sek']
+        );
+      } else {
+        const days = Math.floor(ms / 86400000);
+        const hours = Math.floor((ms % 86400000) / 3600000);
+        const mins = Math.floor((ms % 3600000) / 60000);
+        setSegs(
+          [String(days), String(hours).padStart(2, '0'), String(mins).padStart(2, '0')],
+          ['dagar', 'tim', 'min']
+        );
+      }
+    };
+    tick();
+    if (App.countdownTimer) clearInterval(App.countdownTimer);
+    App.countdownTimer = setInterval(tick, 1000);
+  }
+
+  function renderTicker() {
+    const el = $('#fact-ticker');
+    const dots = $('#ticker-dots');
+    if (!App.facts.length) return;
+
+    const n = App.facts.length;
+    dots.innerHTML = App.facts
+      .map((_, i) => `<button type="button" aria-label="Fakta ${i + 1} av ${n}"></button>`)
+      .join('');
+
+    const show = (i, instant) => {
+      App.tickerIndex = (i + n) % n;
+      const apply = () => {
+        el.textContent = App.facts[App.tickerIndex];
+        el.classList.remove('swap');
+        $$('#ticker-dots button').forEach((d, di) => {
+          d.classList.toggle('on', di === App.tickerIndex);
+          d.setAttribute('aria-pressed', String(di === App.tickerIndex));
+        });
+      };
+      if (instant) apply();
+      else {
+        el.classList.add('swap');
+        setTimeout(apply, 240);
+      }
+    };
+
+    const restart = () => {
+      clearInterval(App.tickerTimer);
+      if (prefersReducedMotion()) return;
+      App.tickerTimer = setInterval(() => {
+        if (App.tickerPaused || document.hidden || App.currentView !== 'overview') return;
+        el.setAttribute('aria-live', 'off');
+        show(App.tickerIndex + 1);
+      }, 7000);
+    };
+    // Automatisk rotation läses inte upp — bara när man själv bläddrar.
+    const manual = (i) => {
+      el.setAttribute('aria-live', 'polite');
+      show(i);
+      restart();
+    };
+
+    dots.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (b) manual(Array.from(dots.children).indexOf(b));
+    });
+    $('#ticker-prev').addEventListener('click', () => manual(App.tickerIndex - 1));
+    $('#ticker-next').addEventListener('click', () => manual(App.tickerIndex + 1));
+
+    // Pausa medan någon läser eller har fokus i kortet
+    const card = el.closest('.ticker-card');
+    card.addEventListener('mouseenter', () => (App.tickerPaused = true));
+    card.addEventListener('mouseleave', () => (App.tickerPaused = false));
+    card.addEventListener('focusin', () => (App.tickerPaused = true));
+    card.addEventListener('focusout', () => (App.tickerPaused = false));
+
+    el.setAttribute('aria-live', 'off');
+    show(0, true);
+    restart();
+  }
+
+  function animateCounter(el, target, suffix) {
+    if (prefersReducedMotion()) {
+      el.textContent = formatNumber(target) + (suffix || '');
+      return;
+    }
+    const dur = 1200;
+    const start = performance.now();
+    const step = (t) => {
+      const p = Math.min(1, (t - start) / dur);
+      const eased = 1 - Math.pow(1 - p, 4);
+      el.textContent = formatNumber(Math.round(target * eased)) + (suffix || '');
+      if (p < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  function renderKPIs() {
+    const { stats, data } = App;
+    const winsLeader = stats.medalRank[0];
+    const hostLeader = [...Object.values(stats.per)].sort((a, b) => b.hostCount - a.hostCount)[0];
+    const locations = new Set(stats.real.map((c) => c.location).filter(Boolean));
+    const years = stats.byYearAsc.length
+      ? `${stats.byYearAsc[0].year}–${stats.byYearAsc[stats.byYearAsc.length - 1].year}`
+      : '';
+
+    const kpis = [
+      { icon: ICONS.trophy, value: stats.real.length, label: 'Tävlingar', sub: years, count: true },
+      { icon: ICONS.users, value: data.participants.length, label: 'Deltagare', sub: 'genom åren', count: true },
+      {
+        icon: ICONS.crown,
+        value: winsLeader ? shortName(winsLeader.participant.name) : '—',
+        label: 'Flest segrar',
+        sub: (() => {
+          if (!winsLeader) return '';
+          const tied = stats.medalRank.filter((s) => s.gold === winsLeader.gold && s !== winsLeader);
+          const wins = `${formatNumber(winsLeader.gold)} ${winsLeader.gold === 1 ? 'seger' : 'segrar'}`;
+          return tied.length
+            ? `${wins} · delas med ${tied.map((s) => shortName(s.participant.name)).join(', ')}`
+            : wins;
+        })()
+      },
+      { icon: ICONS.star, value: stats.champion ? shortName(stats.champion) : '—', label: 'Regerande mästare', sub: stats.latest ? `${stats.latest.name.trim()} ${stats.latest.year}` : '' },
+      { icon: ICONS.home, value: hostLeader && hostLeader.hostCount ? shortName(hostLeader.participant.name) : '—', label: 'Värdmästare', sub: hostLeader ? `${formatNumber(hostLeader.hostCount)} arrangemang` : '' },
+      { icon: ICONS.pin, value: locations.size, label: 'Platser', sub: 'besökta', count: true }
+    ];
+
+    $('#kpi-grid').innerHTML = kpis
+      .map(
+        (k, i) => `
+        <div class="kpi stagger" role="listitem" style="--stagger-i:${i}">
+          <span class="kpi-value${k.count ? '' : ' is-name'}" data-count="${k.count ? k.value : ''}">${k.count ? formatNumber(k.value) : esc(k.value)}</span>
+          <span class="kpi-label">${esc(k.label)}</span>
+          ${k.sub ? `<span class="kpi-sub">${esc(k.sub)}</span>` : ''}
+        </div>`
+      )
+      .join('');
+
+    $$('#kpi-grid .kpi-value[data-count]').forEach((el) => {
+      const v = parseInt(el.getAttribute('data-count'), 10);
+      if (!isNaN(v)) animateCounter(el, v);
+    });
+
+    $('#year-range').textContent = `63.29°N 18.73°E · sedan ${stats.byYearAsc.length ? stats.byYearAsc[0].year : 2011}`;
+    $('#footer-count').textContent = stats.real.length;
+  }
+
+  function renderOverviewCharts() {
+    const { stats } = App;
+
+    registerChart('wins-chart', (canvas) => {
+      const winners = stats.medalRank.filter((s) => s.gold > 0);
+      return {
+        type: 'bar',
+        data: {
+          labels: winners.map((s) => shortName(s.participant.name)),
+          datasets: [
+            {
+              data: winners.map((s) => s.gold),
+              backgroundColor: goldGradient(canvas, true),
+              borderRadius: 7,
+              borderSkipped: false,
+              maxBarThickness: 26
+            }
+          ]
+        },
+        options: {
+          indexAxis: 'y',
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (c) => ` ${formatNumber(c.parsed.x)} ${c.parsed.x === 1 ? 'seger' : 'segrar'}`
+              }
+            }
+          },
+          scales: {
+            x: { grid: { color: cssVar('--chart-grid') }, ticks: { precision: 0 } },
+            y: { grid: { display: false }, ticks: { autoSkip: false, color: cssVar('--text-2') } }
+          }
+        }
+      };
+    });
+
+    registerChart('participation-chart', (canvas) => {
+      // Alla år från start till nu; 2020 blir en lucka med ett "Inställt"-band
+      const years = yearAxis(App.stats.byYearAsc.map((c) => c.year));
+      const counts = years.map((y) => {
+        const comp = App.data.competitions.find((c) => c.year === y);
+        return comp && !comp.isCovid && comp.participantCount > 0 ? comp.participantCount : null;
+      });
+
+      const ctx = canvas.getContext('2d');
+      const fill = ctx.createLinearGradient(0, 0, 0, canvas.clientHeight || 300);
+      const accent2 = cssVar('--accent-2');
+      fill.addColorStop(0, `${accent2}40`);
+      fill.addColorStop(1, `${accent2}00`);
+
+      return {
+        type: 'line',
+        data: {
+          labels: years,
+          datasets: [
+            {
+              data: counts,
+              borderColor: accent2,
+              backgroundColor: fill,
+              fill: true,
+              // Monoton kurva: aldrig under eller över de verkliga värdena
+              cubicInterpolationMode: 'monotone',
+              spanGaps: false,
+              pointBackgroundColor: cssVar('--chart-focus'),
+              pointBorderColor: cssVar('--surface'),
+              pointBorderWidth: 1.5,
+              pointRadius: 4,
+              pointHoverRadius: 6,
+              borderWidth: 2.5
+            }
+          ]
+        },
+        plugins: [cancelledBandPlugin],
+        options: {
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                title: (items) => `År ${items[0].label}`,
+                label: (c) => ` ${formatNumber(c.parsed.y)} deltagare`
+              }
+            }
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkipPadding: 8 } },
+            y: { beginAtZero: true, grid: { color: cssVar('--chart-grid') }, ticks: { precision: 0 } }
+          }
+        }
+      };
+    });
+  }
+
+  /* ======================================================================
+     Map
+     ====================================================================== */
+
+  /**
+   * Kartplattor. CARTO:s rasterkartor (dark_all/light_all) kräver numera en
+   * API-nyckel och gav en tom karta, så sidan använder OpenStreetMaps egna
+   * nyckelfria plattor och tonar dem med CSS efter temat (components.css).
+   * Svarar inte första servern faller kartan över till nästa, och svarar
+   * ingen visas ett meddelande i stället för en tom ruta.
+   */
+  const TILE_PROVIDERS = [
+    { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', options: { maxZoom: 19 } },
+    {
+      url: 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
+      options: { subdomains: 'abc', maxZoom: 19 },
+      credit: ' · plattor <a href="https://www.openstreetmap.fr/">OSM France</a>'
+    }
+  ];
+  const OSM_ATTRIBUTION =
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+  // Så länge ingen platta kommit fram: så många fel, eller så lång tystnad
+  // efter första försöket, innan nästa server prövas.
+  const TILE_MAX_ERRORS = 4;
+  const TILE_SILENCE_MS = 10000;
+
+  function initMap() {
+    if (typeof L === 'undefined' || App.map) return;
+    const mapEl = document.getElementById('map');
+    if (!mapEl) return;
+
+    App.map = L.map('map', {
+      center: [61.8, 17.4],
+      zoom: 5,
+      scrollWheelZoom: false,
+      // På telefon ska ett finger scrolla sidan, inte fastna i kartan —
+      // två fingrar nyper och flyttar den
+      dragging: !L.Browser.mobile,
+      zoomControl: true
+    });
+
+    updateMapTiles();
+
+    const pinIcon = L.divIcon({
+      className: '',
+      html: `<div class="map-pin"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4Z"/></svg></div>`,
+      iconSize: [30, 30],
+      iconAnchor: [15, 28],
+      popupAnchor: [0, -26]
+    });
+
+    const nextIcon = L.divIcon({
+      className: '',
+      html: `<div class="map-pin map-pin-next"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="8"/></svg></div>`,
+      iconSize: [30, 30],
+      iconAnchor: [15, 28],
+      popupAnchor: [0, -26]
+    });
+
+    const locations = {};
+    App.stats.real.forEach((comp) => {
+      const coords = LOCATION_COORDS[comp.location];
+      if (!coords) return;
+      if (!locations[comp.location]) locations[comp.location] = { coords, comps: [] };
+      locations[comp.location].comps.push(comp);
+    });
+
+    Object.entries(locations).forEach(([name, loc]) => {
+      const marker = L.marker(loc.coords, { icon: pinIcon }).addTo(App.map);
+      const rows = loc.comps
+        .sort((a, b) => a.year - b.year)
+        .map(
+          (c) =>
+            `<div><a class="pop-year" href="${yearHash(c.year)}">${c.year}</a> · ${esc(c.name.trim())}${c.winner ? ` — 🏆 ${esc(shortName(c.winner))}` : ''}</div>`
+        )
+        .join('');
+      marker.bindPopup(`<div class="pop-title">${esc(name)}</div>${rows}`);
+      App.mapMarkers.push(marker);
+    });
+
+    // Pin for the confirmed upcoming event, if its location is known
+    const { event } = App;
+    if (event && event.location) {
+      const coords = event.coords || LOCATION_COORDS[event.location];
+      if (coords && !locations[event.location]) {
+        const d = new Date(event.date);
+        const marker = L.marker(coords, { icon: nextIcon }).addTo(App.map);
+        const hosts = (event.hosts || []).join(' & ');
+        marker.bindPopup(
+          `<div class="pop-title">${esc(event.location)}</div>` +
+            `<div><strong>${d.getFullYear()}</strong> · Nästa tävling${hosts ? ` — arrangeras av ${esc(hosts)}` : ''}</div>`
+        );
+        marker.getElement()?.classList.add('map-pin-next');
+        App.mapMarkers.push(marker);
+      }
+    }
+
+    $('#map-tour-btn').addEventListener('click', toggleMapTour);
+  }
+
+  /**
+   * Lägger kartans plattlager. Temat byter bara CSS-tonen, så ett lager som
+   * redan ligger behålls; det byts bara när en server inte svarar.
+   */
+  function updateMapTiles(providerIndex) {
+    if (!App.map) return;
+    const index = providerIndex == null ? App.mapProvider || 0 : providerIndex;
+    if (App.mapTiles && index === App.mapProvider) return;
+    if (App.mapTiles) App.map.removeLayer(App.mapTiles);
+    clearTimeout(App.mapTileTimer);
+    App.mapTiles = null;
+
+    const mapEl = $('#map');
+    const provider = TILE_PROVIDERS[index];
+    if (!provider) {
+      mapEl.classList.add('map-failed');
+      return;
+    }
+    App.mapProvider = index;
+
+    let loaded = 0;
+    let failed = 0;
+    const layer = L.tileLayer(provider.url, {
+      ...provider.options,
+      attribution: OSM_ATTRIBUTION + (provider.credit || '')
+    });
+    const tryNext = () => {
+      if (App.mapTiles === layer && loaded === 0) updateMapTiles(index + 1);
+    };
+    // Tystnadsklockan startar först när en platta faktiskt begärts — en
+    // dold karta (annan vy öppen) begär inga och ska inte räknas som fel.
+    layer.once('tileloadstart', () => {
+      App.mapTileTimer = setTimeout(tryNext, TILE_SILENCE_MS);
+    });
+    layer.on('tileload', () => {
+      loaded++;
+      clearTimeout(App.mapTileTimer);
+      mapEl.classList.remove('map-failed');
+    });
+    layer.on('tileerror', () => {
+      failed++;
+      if (loaded === 0 && failed >= TILE_MAX_ERRORS) tryNext();
+    });
+    App.mapTiles = layer.addTo(App.map);
+  }
+
+  function toggleMapTour() {
+    const btn = $('#map-tour-btn');
+    if (App.tourTimer) {
+      clearInterval(App.tourTimer);
+      App.tourTimer = null;
+      btn.setAttribute('aria-pressed', 'false');
+      btn.querySelector('span').textContent = 'Starta rundtur';
+      App.map.closePopup();
+      App.map.flyTo([61.8, 17.4], 5, { duration: 1.2 });
+      return;
+    }
+    btn.setAttribute('aria-pressed', 'true');
+    btn.querySelector('span').textContent = 'Stoppa';
+    let i = 0;
+    const visit = () => {
+      const m = App.mapMarkers[i % App.mapMarkers.length];
+      App.map.flyTo(m.getLatLng(), 11, { duration: 1.6 });
+      setTimeout(() => m.openPopup(), 1400);
+      i++;
+    };
+    visit();
+    App.tourTimer = setInterval(visit, 4200);
+  }
+
+  /* ======================================================================
+     Rendering — Medaljliga
+     ====================================================================== */
+
+  function renderMedals() {
+    const rank = App.stats.medalRank;
+    const top3 = rank.slice(0, 3);
+
+    // Podium in visual order: 2nd, 1st, 3rd
+    const order = [top3[1], top3[0], top3[2]].filter(Boolean);
+    const places = [2, 1, 3];
+    $('#podium').innerHTML = order
+      .map((s, i) => {
+        const place = places[i] || i + 1;
+        return `
+        <div class="podium-place podium-${place}">
+          ${place === 1 ? `<svg class="podium-crown" viewBox="0 0 24 24" width="30" height="30" fill="currentColor" aria-hidden="true"><path d="m2 18 2-11 5 5 3-7 3 7 5-5 2 11H2Z"/></svg>` : ''}
+          <button class="podium-avatar" type="button" data-person="${s.participant.id}" aria-label="Visa profil för ${esc(s.participant.name)}">${esc(initials(s.participant.name))}</button>
+          <div>
+            <div class="podium-name">${personLink(s.participant.name, s.participant.id)}</div>
+            <div class="podium-medals">
+              <span><span class="medal-dot gold" aria-hidden="true"></span>${s.gold}<span class="visually-hidden"> guld</span></span>
+              <span><span class="medal-dot silver" aria-hidden="true"></span>${s.silver}<span class="visually-hidden"> silver</span></span>
+              <span><span class="medal-dot bronze" aria-hidden="true"></span>${s.bronze}<span class="visually-hidden"> brons</span></span>
+            </div>
+          </div>
+          <div class="podium-block" aria-hidden="true">${place}</div>
+        </div>`;
+      })
+      .join('');
+
+    renderMedalTable();
+    initMedalSort();
+
+    renderMedalRace();
+  }
+
+  /**
+   * Medaljracet: medaljer sammanlagt år för år. Tabellen ovanför visar
+   * slutsumman; det här visar när medaljerna kom. En deltagare i taget är
+   * markerad (guldlinje med medaljfärgade prickar), övriga är tunna linjer.
+   */
+  function renderMedalRace() {
+    const canvas = $('#medal-chart');
+    if (!canvas) return;
+    const withMedals = App.stats.medalRank.filter((s) => s.total > 0);
+    if (!withMedals.length) return;
+    if (!chartFocus.medals) chartFocus.medals = withMedals[0].participant.id;
+
+    const card = canvas.closest('.card');
+    if (card && !card.dataset.race) {
+      card.dataset.race = '1';
+      const h = card.querySelector('h2');
+      const sub = card.querySelector('.card-sub');
+      if (h) h.textContent = 'Medaljracet';
+      if (sub) sub.textContent = 'Medaljer sammanlagt, år för år. Prickarna visar när de kom. Tryck på en linje eller ett namn för att följa någon annan.';
+    }
+
+    const years = yearAxis(App.stats.byYearAsc.map((c) => c.year));
+    const medalAt = (s, y) => {
+      const pos = s.yearPositions[y];
+      return pos >= 1 && pos <= 3 ? pos : 0;
+    };
+    const medalColors = { 1: cssVar('--gold'), 2: cssVar('--silver'), 3: cssVar('--bronze') };
+    const medalWord = { 1: 'guld', 2: 'silver', 3: 'brons' };
+
+    const describe = () =>
+      `Linjediagram: medaljer sammanlagt per år. Markerad: ${personName(chartFocus.medals)}`;
+    const pick = (id) => {
+      chartFocus.medals = id;
+      refocusChart('medal-chart', id, describe());
+    };
+
+    registerChart('medal-chart', () => {
+      const datasets = withMedals.map((s) => {
+        let sum = 0;
+        const data = years.map((y) => {
+          if (cancelledYears().includes(y)) return null;
+          sum += medalAt(s, y) ? 1 : 0;
+          return sum;
+        });
+        return {
+          label: shortName(s.participant.name),
+          ppId: s.participant.id,
+          data,
+          ppMedals: years.map((y) => medalAt(s, y)),
+          ppPointColors: years.map((y) => medalColors[medalAt(s, y)] || 'transparent'),
+          ppPointRadius: years.map((y) => (medalAt(s, y) ? 5 : 0)),
+          spanGaps: true,
+          // A medal arrives at one event: steps read as a race, slopes read
+          // as a gradual climb (and as a lattice of diagonals for the others)
+          stepped: 'before',
+          segment: { borderDash: gapDash }
+        };
+      });
+      styleFocusDatasets(datasets, chartFocus.medals);
+      canvas.setAttribute('aria-label', describe());
+      return {
+        type: 'line',
+        data: { labels: years, datasets },
+        plugins: [cancelledBandPlugin, endLabelsPlugin],
+        options: {
+          maintainAspectRatio: false,
+          layout: { padding: { right: 8, top: 8 } },
+          interaction: { mode: 'nearest', intersect: false, axis: 'xy' },
+          onClick: pickNearestLine(pick),
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                title: (items) => `${items[0].dataset.label} · ${items[0].label}`,
+                label: (c) => {
+                  const m = c.dataset.ppMedals[c.dataIndex];
+                  const total = formatNumber(c.parsed.y);
+                  return m ? ` Tog ${medalWord[m]} — ${total} medaljer totalt` : ` ${total} medaljer totalt`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkipPadding: 8 } },
+            y: {
+              beginAtZero: true,
+              ticks: { precision: 0 },
+              title: { display: true, text: 'Medaljer totalt', color: cssVar('--chart-tick') }
+            }
+          }
+        }
+      };
+    });
+
+    renderFocusChips(
+      'medal-chart',
+      withMedals.map((s) => s.participant),
+      chartFocus.medals,
+      pick,
+      'Välj vem som markeras i medaljracet'
+    );
+  }
+
+  const MEDAL_SORTERS = {
+    rank: null, // Olympic order, as computed
+    name: (a, b) => a.participant.name.localeCompare(b.participant.name, 'sv'),
+    gold: (a, b) => b.gold - a.gold,
+    silver: (a, b) => b.silver - a.silver,
+    bronze: (a, b) => b.bronze - a.bronze,
+    total: (a, b) => b.total - a.total
+  };
+
+  function renderMedalTable() {
+    const base = App.stats.medalRank;
+    const { key, dir } = App.medalSort;
+    const olympicRank = new Map(base.map((s, i) => [s.participant.id, i + 1]));
+
+    const rows = [...base];
+    if (MEDAL_SORTERS[key]) {
+      rows.sort((a, b) => MEDAL_SORTERS[key](a, b) * dir);
+    } else if (dir === -1) {
+      rows.reverse();
+    }
+
+    // På telefon blir varje rad ett rutnät (responsive.css); rollerna håller
+    // kvar tabellsemantiken när display ändras.
+    const maxTotal = Math.max(...base.map((s) => s.total), 1);
+    const medalCell = (n, cls, word) =>
+      `<td class="num-col m-${cls}${n ? '' : ' zero'}" role="cell"><span class="pip ${cls}" aria-hidden="true"></span>${formatNumber(n)}<span class="visually-hidden"> ${word}</span></td>`;
+    $('#medal-table tbody').innerHTML = rows
+      .map((s) => {
+        const r = olympicRank.get(s.participant.id);
+        const g = (s.gold / maxTotal) * 100;
+        const sv = (s.silver / maxTotal) * 100;
+        const b = (s.bronze / maxTotal) * 100;
+        const { name, id } = s.participant;
+        return `
+        <tr role="row">
+          <td class="rank-col" role="cell"><span class="rank-badge ${r <= 3 ? `r${r}` : ''}">${r}</span></td>
+          <td class="name-col" role="cell"><div class="person-cell">${avatarHTML(name)}<span class="pc-full">${personLink(name, id)}</span><span class="pc-short">${personLink(shortName(name), id)}</span></div></td>
+          ${medalCell(s.gold, 'gold', 'guld')}
+          ${medalCell(s.silver, 'silver', 'silver')}
+          ${medalCell(s.bronze, 'bronze', 'brons')}
+          <td class="num-col total${s.total ? '' : ' zero'}" role="cell">${formatNumber(s.total)}</td>
+          <td class="bar-col" role="cell"><div class="medal-bar" role="img" aria-label="${s.gold} guld, ${s.silver} silver, ${s.bronze} brons"><span class="g" style="width:${g}%"></span><span class="s" style="width:${sv}%"></span><span class="b" style="width:${b}%"></span></div></td>
+        </tr>`;
+      })
+      .join('');
+
+    $$('#medal-table thead th[data-sort]').forEach((th) => {
+      const k = th.getAttribute('data-sort');
+      const active = k === key;
+      th.classList.toggle('sorted', active);
+      // Placering och namn läses stigande (1 först, A först), medaljerna fallande
+      const naturalAsc = k === 'rank' || k === 'name';
+      const asc = naturalAsc ? dir === 1 : dir === -1;
+      th.setAttribute('aria-sort', active ? (asc ? 'ascending' : 'descending') : 'none');
+      const arrow = th.querySelector('.sort-arrow');
+      if (arrow) arrow.textContent = active ? (dir === 1 ? '↓' : '↑') : '';
+    });
+  }
+
+  function initMedalSort() {
+    const table = $('#medal-table');
+    if (table && !table.dataset.roles) {
+      table.dataset.roles = '1';
+      table.setAttribute('role', 'table');
+      $$('thead, tbody', table).forEach((g) => g.setAttribute('role', 'rowgroup'));
+      $$('thead tr', table).forEach((tr) => tr.setAttribute('role', 'row'));
+      $$('thead th', table).forEach((th) => {
+        th.setAttribute('role', 'columnheader');
+        // Rubriktexten i ett eget element: telefonen visar bara medaljen,
+        // skärmläsaren hör fortfarande "Guld"
+        const label = Array.from(th.childNodes).find((n) => n.nodeType === 3 && n.textContent.trim());
+        if (label) {
+          const span = document.createElement('span');
+          span.className = 'th-label';
+          span.textContent = label.textContent.trim();
+          th.replaceChild(span, label);
+        }
+      });
+      const rankLabel = $('th[data-sort="rank"] .th-label', table);
+      if (rankLabel) {
+        rankLabel.setAttribute('aria-hidden', 'true');
+        rankLabel.insertAdjacentHTML('afterend', '<span class="visually-hidden">Placering</span>');
+      }
+      const coarse = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+      const card = table.closest('.card');
+      const sub = card && card.querySelector('.card-sub');
+      if (sub) sub.textContent = `${coarse ? 'Tryck' : 'Klicka'} på en kolumnrubrik för att sortera, en gång till för att vända ordningen.`;
+    }
+    $$('#medal-table thead th[data-sort]').forEach((th) => {
+      if (th.dataset.bound) return;
+      th.dataset.bound = '1';
+      const sort = () => {
+        const key = th.getAttribute('data-sort');
+        if (App.medalSort.key === key) App.medalSort.dir *= -1;
+        else App.medalSort = { key, dir: 1 };
+        renderMedalTable();
+      };
+      th.addEventListener('click', sort);
+      th.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          sort();
+        }
+      });
+    });
+  }
+
+  /* ======================================================================
+     Rendering — Historik
+     ====================================================================== */
+
+  function renderTimeline() {
+    const comps = App.data.competitions; // already newest first
+    const latestYear = App.stats.latest ? App.stats.latest.year : null;
+    const gameYears = new Set(GAMES.map((g) => g.year));
+    const first = App.stats.byYearAsc[0];
+    if (first) {
+      $('#history-sub').textContent = `${App.stats.real.length} upplagor sedan ${first.year} — gren, plats, pall och arrangörer.`;
+    }
+    const arrow = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
+
+    $('#timeline').innerHTML = comps
+      .map((comp, idx) => {
+        const delay = Math.min(idx, 10);
+        if (comp.isCovid || comp.participantCount === 0) {
+          return `
+          <article class="tl-item covid stagger" style="--stagger-i:${delay}">
+            <div class="tl-year-col"><span class="tl-year">${comp.year}</span></div>
+            <div class="tl-card">
+              <h3 class="tl-name">Inställd — pandemi</h3>
+              <p class="tl-meta">Pokalen tog en paus, men traditionen överlevde.</p>
+            </div>
+          </article>`;
+        }
+
+        const podium = [1, 2, 3]
+          .map((pos) => {
+            const entry = Object.entries(comp.scores).find(([, v]) => v === pos);
+            if (!entry) return '';
+            const p = App.data.participants.find((x) => x.id === entry[0]);
+            return `<li class="tl-medal"><span class="medal-disc ${medalClassFor(pos)}"><span class="visually-hidden">Plats </span>${pos}</span>${
+              p ? personLink(p.name, p.id) : '?'
+            }</li>`;
+          })
+          .join('');
+
+        const hosts = [comp.arranger3rd, comp.arrangerSecondLast].filter(Boolean).join(' & ');
+
+        return `
+        <article class="tl-item ${comp.year === latestYear ? 'latest' : ''} stagger" style="--stagger-i:${delay}">
+          <div class="tl-year-col">
+            <a class="tl-year" href="${yearHash(comp.year)}" aria-label="${comp.year}: alla resultat">${comp.year}</a>
+          </div>
+          <div class="tl-card">
+            <img class="tl-photo" data-photo-year="${comp.year}" alt="Foto från ${comp.year}" loading="lazy" hidden />
+            <div class="tl-main">
+              <h3 class="tl-name">${esc(comp.name.trim())}</h3>
+              <p class="tl-meta">
+                ${comp.location ? `<span class="tl-loc">${ICONS.pin} ${esc(comp.location)}</span>` : ''}
+                <span>${comp.participantCount} deltagare</span>
+                ${hosts ? `<span>Arrangörer: ${esc(hosts)}</span>` : ''}
+                ${gameYears.has(comp.year) ? `<a class="tl-play" href="${gameRoute(comp.year)}">Spela årets spel</a>` : ''}
+              </p>
+            </div>
+            <ol class="tl-podium" aria-label="Pallen ${comp.year}">${podium}</ol>
+            <a class="tl-more" href="${yearHash(comp.year)}">Alla resultat <span class="visually-hidden">${comp.year}</span>${arrow}</a>
+          </div>
+        </article>`;
+      })
+      .join('');
+
+    loadTimelinePhotos();
+  }
+
+  /**
+   * Photos are convention-based: drop <year>.jpg into public/photos/ and it
+   * appears here — nothing to register. The build writes photos/index.json so
+   * production needs one request; without it we fall back to probing.
+   */
+  async function loadTimelinePhotos() {
+    try {
+      const url = new URL('photos/index.json', document.baseURI).toString();
+      const res = await fetch(url, { cache: 'no-cache' });
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list)) {
+          App.photos = {};
+          list.forEach((p) => {
+            App.photos[p.year] = `photos/${p.year}.${p.ext || 'jpg'}`;
+          });
+          Object.keys(App.photos).forEach((year) => showTimelinePhoto(year, App.photos[year]));
+          return;
+        }
+      }
+    } catch (e) {
+      /* no manifest — probe instead */
+    }
+
+    $$('.tl-photo[data-photo-year]').forEach((img) => {
+      const year = img.getAttribute('data-photo-year');
+      probePhoto(year, (src) => showTimelinePhoto(year, src));
+    });
+  }
+
+  function probePhoto(year, onFound) {
+    const src = new URL(`photos/${year}.jpg`, document.baseURI).toString();
+    const probe = new Image();
+    probe.onload = () => onFound(src);
+    probe.src = src;
+  }
+
+  function showTimelinePhoto(year, src) {
+    const img = $(`.tl-photo[data-photo-year="${year}"]`);
+    if (!img) return;
+    img.src = new URL(src, document.baseURI).toString();
+    img.hidden = false;
+    const card = img.closest('.tl-card');
+    if (card) card.classList.add('has-photo');
+  }
+
+  /** Årets foto, om det finns: manifestet svarar direkt, annars provar vi
+   *  filen. onFound får en absolut adress; saknas bilden händer ingenting. */
+  function photoFor(year, onFound) {
+    if (!App.photos) {
+      probePhoto(year, onFound);
+      return;
+    }
+    if (App.photos[year]) onFound(new URL(App.photos[year], document.baseURI).toString());
+  }
+
+  /* ======================================================================
+     Rendering — Utmärkelser
+     ====================================================================== */
+
+  function computeAchievements() {
+    const defs = (window.ACHIEVEMENT_DEFINITIONS || []).slice();
+    const defById = {};
+    defs.forEach((d) => (defById[d.id] = d));
+
+    let byName = {};
+    let details = {};
+    let closest = {};
+    try {
+      if (window.AchievementEngine) {
+        const engine = new window.AchievementEngine();
+        byName = engine.calculateAllAchievements(App.data.competitions, App.data.participants) || {};
+        details = engine.details || {};
+        closest = engine.closest || {};
+      }
+    } catch (e) {
+      console.error('Utmärkelserna kunde inte räknas fram', e);
+      byName = {};
+    }
+
+    // Normalize: entries may be ids or objects
+    Object.keys(byName).forEach((name) => {
+      byName[name] = (byName[name] || [])
+        .map((a) => (typeof a === 'string' ? a : a && a.id))
+        .filter((id) => id && defById[id]);
+    });
+
+    App.achievements = { defs, defById, byName, details, closest };
+  }
+
+  /** Pekkas own badge for an achievement (src/data/achievement-icons.js) */
+  function achBadge(d, opts) {
+    return window.ppAchBadge ? window.ppAchBadge(d, opts) : '';
+  }
+
+  /** The year a person unlocked an achievement (titles: since when they hold it) */
+  function achYear(name, id) {
+    const d = App.achievements.details[name];
+    return d && d[id] ? d[id].year : null;
+  }
+
+  function renderAchievements() {
+    const { defs, defById, byName } = App.achievements;
+    const names = Object.keys(byName);
+
+    const holdersByAch = {};
+    defs.forEach((d) => (holdersByAch[d.id] = []));
+    names.forEach((name) => {
+      byName[name].forEach((id) => holdersByAch[id] && holdersByAch[id].push(name));
+    });
+
+    const unlockedCount = defs.filter((d) => holdersByAch[d.id].length > 0).length;
+    const pct = defs.length ? Math.round((unlockedCount / defs.length) * 100) : 0;
+
+    const pointsFor = (name) =>
+      byName[name].reduce((sum, id) => sum + (defById[id].points || 0), 0);
+    const leader = [...names].sort((a, b) => pointsFor(b) - pointsFor(a))[0];
+
+    const summaryKpis = [
+      { v: unlockedCount, l: 'Upplåsta' },
+      { v: defs.length, l: 'Totalt' },
+      { v: `${pct}%`, l: 'Genomfört' },
+      { v: leader ? shortName(leader) : '—', l: 'Poängledare', name: true }
+    ]
+      .map(
+        (k, i) => `
+      <div class="kpi stagger" style="--stagger-i:${i}">
+        <span class="kpi-value${k.name ? ' is-name' : ''}">${esc(String(k.v))}</span>
+        <span class="kpi-label">${k.l}</span>
+      </div>`
+      )
+      .join('');
+    $('#ach-summary').innerHTML = `${summaryKpis}<div class="ach-progress" role="progressbar" aria-label="Andel upplåsta utmärkelser" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><span style="width:${pct}%"></span></div>`;
+
+    // Participant cards, sorted by points
+    const sorted = [...names]
+      .filter((n) => App.stats.per[(App.data.participants.find((p) => p.name === n) || {}).id]?.starts > 0)
+      .sort((a, b) => pointsFor(b) - pointsFor(a));
+
+    $('#participant-ach-grid').innerHTML = sorted
+      .map((name, i) => {
+        const RARITY = { mythic: 0, legendary: 1, epic: 2, rare: 3, common: 4 };
+        const ids = [...byName[name]].sort((a, b) => RARITY[defById[a].rarity] - RARITY[defById[b].rarity]);
+        const pts = pointsFor(name);
+        const badges = ids
+          .map((id) => {
+            const d = defById[id];
+            const y = achYear(name, id);
+            const label = `${d.name}${y ? ` (${d.title ? 'sedan ' : ''}${y})` : ''} — ${d.desc}`;
+            return `<span class="badge rarity-${esc(d.rarity)}" title="${esc(label)}" tabindex="0" role="img" aria-label="${esc(label)}">${achBadge(d)}</span>`;
+          })
+          .join('');
+        return `
+        <div class="card pcard stagger" style="--stagger-i:${Math.min(i, 8)}">
+          <div class="pcard-top">
+            ${avatarHTML(name)}
+            <div>
+              <div class="pcard-name">${
+  (App.data.participants.find((p) => p.name === name) || {}).id
+    ? personLink(name, App.data.participants.find((p) => p.name === name).id)
+    : esc(name)
+  }</div>
+              <div class="pcard-sub">${ids.length} utmärkelser</div>
+            </div>
+            <div class="pcard-points"><div class="val">${pts}</div><div class="lbl">poäng</div></div>
+          </div>
+          <div class="pcard-badges">${badges || '<span class="pcard-empty">Inga utmärkelser ännu — men året är ungt.</span>'}</div>
+        </div>`;
+      })
+      .join('');
+
+    // Category chips
+    const catLabels = { all: 'Alla', ...(window.ACHIEVEMENT_CATEGORIES || {}) };
+    const cats = ['all', ...new Set(defs.map((d) => d.category))];
+    const countIn = (c) => defs.filter((d) => c === 'all' || d.category === c).length;
+    $('#ach-category-filters').innerHTML = cats
+      .map(
+        (c) =>
+          `<button type="button" class="chip ${c === App.achCategory ? 'active' : ''}" data-cat="${esc(c)}" aria-pressed="${c === App.achCategory}">${esc(catLabels[c] || c)} <span class="count">${countIn(c)}</span></button>`
+      )
+      .join('');
+
+    $$('#ach-category-filters .chip').forEach((chip) =>
+      chip.addEventListener('click', () => {
+        App.achCategory = chip.getAttribute('data-cat');
+        renderAchievementGrid(holdersByAch);
+        $$('#ach-category-filters .chip').forEach((c) => {
+          c.classList.toggle('active', c === chip);
+          c.setAttribute('aria-pressed', String(c === chip));
+        });
+      })
+    );
+
+    renderAchievementGrid(holdersByAch);
+  }
+
+  function renderAchievementGrid(holdersByAch) {
+    const { defs } = App.achievements;
+    const rarityOrder = { mythic: 0, legendary: 1, epic: 2, rare: 3, common: 4 };
+    const rarityLabels = {
+      mythic: 'Mytisk',
+      legendary: 'Legendarisk',
+      epic: 'Episk',
+      rare: 'Sällsynt',
+      common: 'Vanlig'
+    };
+    const list = defs
+      .filter((d) => App.achCategory === 'all' || d.category === App.achCategory)
+      .sort((a, b) => rarityOrder[a.rarity] - rarityOrder[b.rarity]);
+
+    const { closest } = App.achievements;
+    const card = (d, i) => {
+      const holders = [...holdersByAch[d.id]].sort((a, b) => (achYear(a, d.id) || 0) - (achYear(b, d.id) || 0));
+      const unlocked = holders.length > 0;
+      const who = (n) => {
+        const y = achYear(n, d.id);
+        return `<li><strong>${esc(shortName(n))}</strong>${y ? `<span class="ach-year">${d.title ? 'sedan ' : ''}${y}</span>` : ''}</li>`;
+      };
+      let holderHTML;
+      if (unlocked) {
+        holderHTML = `<ul class="ach-holders" aria-label="${d.title ? 'Innehavare' : 'Upplåst av'}">${d.title ? '<li class="ach-holders-lbl">Innehavare</li>' : ''}${holders.map(who).join('')}</ul>`;
+      } else if (closest[d.id]) {
+        const c = closest[d.id];
+        const pct = Math.round((c.cur / c.goal) * 100);
+        holderHTML = `
+          <div class="ach-closest">
+            <span>Närmast: <strong>${c.names.map(shortName).map(esc).join(', ')}</strong> · ${c.cur} av ${c.goal}</span>
+            <span class="ach-closest-bar" role="progressbar" aria-label="Närmast" aria-valuemin="0" aria-valuemax="${c.goal}" aria-valuenow="${c.cur}"><span style="width:${pct}%"></span></span>
+          </div>`;
+      } else {
+        holderHTML = `<div class="ach-holders-none">${d.title ? 'Ingen uppfyller kravet än' : 'Ingen har låst upp den än'}</div>`;
+      }
+      const tags = [d.title ? '<span class="ach-tag">Titel</span>' : '', d.historic ? '<span class="ach-tag">Historisk</span>' : ''].join('');
+      return `
+        <div class="ach-card rarity-${esc(d.rarity)} ${unlocked ? '' : 'locked'} stagger" style="--stagger-i:${Math.min(i % 12, 11)}">
+          <span class="ach-icon" aria-hidden="true">${achBadge(d, { locked: !unlocked })}</span>
+          <div class="ach-body">
+            <div class="ach-name">${esc(d.name)}</div>
+            <div class="ach-meta"><span class="ach-rarity">${esc(rarityLabels[d.rarity] || d.rarity)}</span><span class="ach-pts">${d.points} p</span>${tags}</div>
+            <div class="ach-desc">${esc(d.desc)}</div>
+            ${holderHTML}
+          </div>
+        </div>`;
+    };
+
+    // Upplåsta först och synliga; de låsta ligger bakom en utfällbar rad så
+    // galleriet inte drunknar i hänglås.
+    const unlocked = list.filter((d) => holdersByAch[d.id].length > 0);
+    const locked = list.filter((d) => holdersByAch[d.id].length === 0);
+
+    $('#ach-grid').innerHTML = unlocked.length
+      ? unlocked.map(card).join('')
+      : '<p class="h2h-empty">Ingen har låst upp någon utmärkelse i den här kategorin än.</p>';
+    $('#ach-locked-grid').innerHTML = locked.map(card).join('');
+    $('#ach-locked').hidden = locked.length === 0;
+    $('#ach-locked-label').textContent = `Ännu inte upplåsta (${locked.length})`;
+    $('#ach-count').textContent = `${unlocked.length} av ${list.length} upplåsta`;
+  }
+
+  /* ======================================================================
+     Rendering — Statistik
+     ====================================================================== */
+
+  function activeParticipants() {
+    return App.data.participants.filter(
+      (p) => App.filters.participants.size === 0 || App.filters.participants.has(p.id)
+    );
+  }
+
+  function activeYears() {
+    const all = App.stats.byYearAsc.map((c) => c.year);
+    return all.filter((y) => App.filters.years.size === 0 || App.filters.years.has(y));
+  }
+
+  function renderFilters() {
+    const parts = App.data.participants.filter((p) => App.stats.per[p.id].starts > 0);
+    $('#filter-participants').innerHTML =
+      `<button class="chip active" data-p="all">Alla</button>${
+        parts
+          .map((p) => `<button class="chip" data-p="${p.id}">${esc(shortName(p.name))}</button>`)
+          .join('')}`;
+
+    const years = App.stats.byYearAsc.map((c) => c.year);
+    $('#filter-years').innerHTML =
+      `<button class="chip active" data-y="all">Alla</button>${
+        years.map((y) => `<button class="chip" data-y="${y}">${y}</button>`).join('')}`;
+
+    $('#filter-participants').addEventListener('click', (e) => {
+      const chip = e.target.closest('.chip');
+      if (!chip) return;
+      const id = chip.getAttribute('data-p');
+      if (id === 'all') App.filters.participants.clear();
+      else {
+        if (App.filters.participants.has(id)) App.filters.participants.delete(id);
+        else App.filters.participants.add(id);
+      }
+      syncFilterChips();
+      renderStatsView();
+    });
+
+    $('#filter-years').addEventListener('click', (e) => {
+      const chip = e.target.closest('.chip');
+      if (!chip) return;
+      const y = chip.getAttribute('data-y');
+      if (y === 'all') App.filters.years.clear();
+      else {
+        const yr = parseInt(y, 10);
+        if (App.filters.years.has(yr)) App.filters.years.delete(yr);
+        else App.filters.years.add(yr);
+      }
+      syncFilterChips();
+      renderStatsView();
+    });
+
+    $('#filter-reset').addEventListener('click', () => {
+      App.filters.participants.clear();
+      App.filters.years.clear();
+      syncFilterChips();
+      renderStatsView();
+    });
+
+    syncFilterChips();
+  }
+
+  function syncFilterChips() {
+    $$('#filter-participants .chip').forEach((chip) => {
+      const id = chip.getAttribute('data-p');
+      chip.classList.toggle(
+        'active',
+        id === 'all' ? App.filters.participants.size === 0 : App.filters.participants.has(id)
+      );
+    });
+    $$('#filter-years .chip').forEach((chip) => {
+      const y = chip.getAttribute('data-y');
+      chip.classList.toggle(
+        'active',
+        y === 'all' ? App.filters.years.size === 0 : App.filters.years.has(parseInt(y, 10))
+      );
+    });
+  }
+
+  function sparklineSVG(points, maxPos, title) {
+    if (points.length < 2) return '<svg class="sparkline" aria-hidden="true"></svg>';
+    const w = 200;
+    const h = 36;
+    const pad = 4;
+    const xs = (i) => pad + (i / (points.length - 1)) * (w - pad * 2);
+    const ys = (v) => pad + ((v - 1) / Math.max(maxPos - 1, 1)) * (h - pad * 2);
+    const line = points.map((p, i) => `${i ? 'L' : 'M'}${xs(i).toFixed(1)},${ys(p).toFixed(1)}`).join('');
+    const area = `${line}L${xs(points.length - 1).toFixed(1)},${h - 1}L${xs(0).toFixed(1)},${h - 1}Z`;
+    const dots = points
+      .map((p, i) => (p === 1 ? `<circle cx="${xs(i).toFixed(1)}" cy="${ys(p).toFixed(1)}" r="3"/>` : ''))
+      .join('');
+    // Siffrorna står i kortet under; titeln ger samma sak som verktygstips
+    const tip = title ? `<title>${esc(title)}</title>` : '';
+    return `<svg class="sparkline" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">${tip}<path class="area" d="${area}"/><path class="line" d="${line}"/>${dots}</svg>`;
+  }
+
+  function renderStatsView() {
+    const years = activeYears();
+    const parts = activeParticipants().filter((p) => {
+      const s = App.stats.per[p.id];
+      return years.some((y) => s.yearPositions[y] != null);
+    });
+
+    // Competitor cards
+    $('#competitor-grid').innerHTML = parts
+      .map((p, i) => {
+        const s = App.stats.per[p.id];
+        const positions = years.map((y) => s.yearPositions[y]).filter((v) => v != null);
+        const avg = positions.length ? positions.reduce((a, b) => a + b, 0) / positions.length : null;
+        const best = positions.length ? Math.min(...positions) : null;
+        const golds = years.filter((y) => s.yearPositions[y] === 1).length;
+        const maxPos = Math.max(...App.stats.real.map((c) => c.participantCount), 4);
+        const seq = years.map((y) => s.yearPositions[y]).filter((v) => v != null);
+        const played = years.filter((y) => s.yearPositions[y] != null);
+        const tip = `${shortName(p.name)}: ${played.map((y) => `${y} ${ordinalShort(s.yearPositions[y])}`).join(', ')} · snitt ${formatNumber(avg, 1)}`;
+        return `
+        <div class="card ccard stagger" style="--stagger-i:${Math.min(i, 8)}">
+          <div class="ccard-top">
+            ${avatarHTML(p.name)}
+            <div>
+              <div class="ccard-name">${personLink(p.name, p.id)}</div>
+              <div class="ccard-medals">${formatNumber(golds)} guld · ${formatNumber(positions.length)} ${positions.length === 1 ? 'start' : 'starter'} i urvalet</div>
+            </div>
+          </div>
+          ${sparklineSVG(seq, maxPos, tip)}
+          <div class="ccard-stats">
+            <div class="ccard-stat"><div class="val">${formatNumber(avg, 1)}</div><div class="lbl">Snitt&shy;placering</div></div>
+            <div class="ccard-stat"><div class="val">${best != null ? ordinalShort(best) : '—'}</div><div class="lbl">Bästa plats</div></div>
+            <div class="ccard-stat"><div class="val">${formatNumber(positions.length)}</div><div class="lbl">Starter</div></div>
+          </div>
+        </div>`;
+      })
+      .join('');
+
+    // Vem är markerad i linjediagrammen? Den som senast lades till i
+    // deltagarfiltret, annars den som valts med chips eller tryck, annars ettan.
+    const filterIds = [...App.filters.participants];
+    const added = filterIds.filter((id) => !lastFilterIds.includes(id));
+    lastFilterIds = filterIds;
+    if (added.length) chartFocus.stats = added[added.length - 1];
+    const inParts = (id) => parts.some((p) => p.id === id);
+    if (!inParts(chartFocus.stats)) {
+      const leader = App.stats.medalRank.find((s) => inParts(s.participant.id));
+      chartFocus.stats = filterIds.find(inParts) || (leader ? leader.participant.id : parts[0] && parts[0].id) || null;
+    }
+    const describeTrend = () =>
+      `Linjediagram: placering per år, lägre är bättre. Markerad: ${personName(chartFocus.stats)}`;
+    const pickStats = (id) => {
+      chartFocus.stats = id;
+      refocusChart('trend-chart', id, describeTrend());
+      refocusChart('elo-chart', id, describeElo());
+      markEloRow(id);
+    };
+
+    // Placering per år: en markerad linje, övriga tunna i bakgrunden
+    const axisYears = yearAxis(years);
+    registerChart('trend-chart', (canvas) => {
+      const fieldSize = {};
+      App.stats.real.forEach((c) => {
+        fieldSize[c.year] = Math.max(...Object.values(c.scores), 0);
+      });
+      const maxPos = Math.max(...years.map((y) => fieldSize[y] || 0), 4);
+      const datasets = parts.map((p) => {
+        const s = App.stats.per[p.id];
+        return {
+          label: shortName(p.name),
+          ppId: p.id,
+          data: axisYears.map((y) => (s.yearPositions[y] != null ? s.yearPositions[y] : null)),
+          // Raka linjer: en placering mellan två år finns inte
+          tension: 0,
+          spanGaps: true,
+          segment: { borderDash: gapDash }
+        };
+      });
+      styleFocusDatasets(datasets, chartFocus.stats);
+      canvas.setAttribute('aria-label', describeTrend());
+      return {
+        type: 'line',
+        data: { labels: axisYears, datasets },
+        plugins: [cancelledBandPlugin, endLabelsPlugin],
+        options: {
+          maintainAspectRatio: false,
+          layout: { padding: { right: 8, top: 4 } },
+          interaction: { mode: 'nearest', intersect: false, axis: 'xy' },
+          onClick: pickNearestLine(pickStats),
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                title: (items) => `${items[0].dataset.label} · ${items[0].label}`,
+                label: (c) => {
+                  const year = c.label;
+                  const comp = App.stats.real.find((x) => String(x.year) === String(year));
+                  return ` ${ordinalShort(c.parsed.y)} av ${formatNumber(fieldSize[year])}${comp ? ` — ${comp.name.trim()}` : ''}`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkipPadding: 8 } },
+            y: {
+              reverse: true,
+              min: 1,
+              suggestedMax: maxPos,
+              ticks: { precision: 0, callback: (v) => (Number.isInteger(v) ? ordinalShort(v) : '') },
+              title: { display: true, text: 'Placering', color: cssVar('--chart-tick') }
+            }
+          }
+        }
+      };
+    });
+    renderFocusChips(
+      'trend-chart',
+      parts,
+      chartFocus.stats,
+      pickStats,
+      'Välj vem som markeras i placeringsdiagrammet'
+    );
+    refocusChart('elo-chart', chartFocus.stats, describeElo());
+    markEloRow(chartFocus.stats);
+
+    // Snittplacering: liggande staplar som växer mot "1:a". Längst stapel är
+    // bäst och står överst; ljusare staplar har färre än tre starter.
+    const avgCard = $('#avg-chart') && $('#avg-chart').closest('.card');
+    if (avgCard && !avgCard.dataset.relabelled) {
+      avgCard.dataset.relabelled = '1';
+      const sub = avgCard.querySelector('.card-sub');
+      if (sub) sub.textContent = 'Genomsnittlig placering över valda år. Längst stapel är bäst — 1:a betyder seger varje gång. Ljusare stapel: färre än tre starter.';
+    }
+    registerChart('avg-chart', (canvas) => {
+      const rowsData = parts
+        .map((p) => {
+          const s = App.stats.per[p.id];
+          const positions = years.map((y) => s.yearPositions[y]).filter((v) => v != null);
+          return {
+            name: shortName(p.name),
+            starts: positions.length,
+            avg: positions.length ? positions.reduce((a, b) => a + b, 0) / positions.length : null
+          };
+        })
+        .filter((r) => r.avg != null)
+        .sort((a, b) => a.avg - b.avg || b.starts - a.starts);
+      if (!rowsData.length) return null;
+
+      // Stapelns fot är sista plats i det största startfältet bland valda år
+      const field = Math.max(
+        ...App.stats.real.filter((c) => years.includes(c.year)).map((c) => Math.max(...Object.values(c.scores), 0)),
+        Math.ceil(Math.max(...rowsData.map((r) => r.avg))) + 1,
+        4
+      );
+      const solid = goldGradient(canvas, true);
+      const faint = `${cssVar('--gold-deep')}66`;
+      canvas.setAttribute(
+        'aria-label',
+        `Stapeldiagram: snittplacering, bäst först. ${rowsData
+          .map((r) => `${r.name} ${formatNumber(r.avg, 1)}`)
+          .join(', ')}.`
+      );
+      const valueLabels = {
+        id: 'ppAvgLabels',
+        afterDatasetsDraw(chart) {
+          const { ctx } = chart;
+          const meta = chart.getDatasetMeta(0);
+          ctx.save();
+          ctx.font = "700 12px 'Schibsted Grotesk', system-ui, sans-serif";
+          ctx.textBaseline = 'middle';
+          // Talet står efter stapelns ände, i textfärg mot kortet
+          ctx.textAlign = 'left';
+          ctx.fillStyle = cssVar('--text-1');
+          meta.data.forEach((bar, i) => {
+            ctx.fillText(formatNumber(rowsData[i].avg, 1), Math.max(bar.x, bar.base) + 6, bar.y);
+          });
+          ctx.restore();
+        }
+      };
+      return {
+        type: 'bar',
+        data: {
+          labels: rowsData.map((r) => r.name),
+          datasets: [
+            {
+              data: rowsData.map((r) => [field, r.avg]),
+              backgroundColor: rowsData.map((r) => (r.starts >= 3 ? solid : faint)),
+              borderRadius: 6,
+              borderSkipped: false,
+              barPercentage: 0.78,
+              categoryPercentage: 0.9,
+              maxBarThickness: 22
+            }
+          ]
+        },
+        plugins: [valueLabels],
+        options: {
+          indexAxis: 'y',
+          maintainAspectRatio: false,
+          layout: { padding: { right: 34 } },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (c) => {
+                  const r = rowsData[c.dataIndex];
+                  return ` Snittplacering ${formatNumber(r.avg, 1)} · ${formatNumber(r.starts)} ${r.starts === 1 ? 'start' : 'starter'}`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              reverse: true,
+              min: 1,
+              max: field,
+              ticks: { stepSize: 1, maxRotation: 0, autoSkipPadding: 6, callback: (v) => (Number.isInteger(v) ? ordinalShort(v) : '') },
+              title: { display: true, text: 'Snittplacering → 1:a', color: cssVar('--chart-tick') }
+            },
+            y: { grid: { display: false }, ticks: { autoSkip: false, color: cssVar('--text-2') } }
+          }
+        }
+      };
+    });
+
+    renderHeatmap(parts, years);
+  }
+
+
+  function renderHeatmap(parts, years) {
+    const worstByYear = {};
+    App.stats.real.forEach((c) => {
+      const v = Object.values(c.scores);
+      worstByYear[c.year] = v.length ? Math.max(...v) : null;
+    });
+
+    const cellColor = (pos, year) => {
+      if (pos <= 3) return '';
+      const worst = worstByYear[year] || pos;
+      const t = worst > 4 ? (pos - 4) / (worst - 4) : 0;
+      const hue = 200 + 150 * Math.min(Math.max(t, 0), 1);
+      return `style="background:hsl(${hue.toFixed(0)} 45% 55% / .2)"`;
+    };
+
+    const head =
+      `<tr><th class="hm-name">Deltagare</th>${
+        years.map((y) => `<th scope="col"><abbr title="${y}" aria-label="${y}">’${String(y).slice(2)}</abbr></th>`).join('')
+      }</tr>`;
+
+    const body = parts
+      .map((p) => {
+        const s = App.stats.per[p.id];
+        const cells = years
+          .map((y) => {
+            const pos = s.yearPositions[y];
+            if (pos == null) return '<td class="hm-cell empty">·</td>';
+            const cls = pos <= 3 ? `pos-${pos}` : '';
+            const comp = App.stats.real.find((c) => c.year === y);
+            const title = `${p.name} — ${comp ? comp.name.trim() : y}: plats ${pos}`;
+            return `<td class="hm-cell ${cls}" ${cellColor(pos, y)} title="${esc(title)}">${pos}</td>`;
+          })
+          .join('');
+        return `<tr><th class="hm-name" title="${esc(p.name)}">${personLink(shortName(p.name), p.id)}</th>${cells}</tr>`;
+      })
+      .join('');
+
+    $('#heatmap').innerHTML = `<table class="heatmap-table"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+
+    $('#heatmap-legend').innerHTML = `
+      <span class="item"><span class="swatch" style="background:linear-gradient(140deg,var(--gold),var(--gold-deep))"></span>Guld</span>
+      <span class="item"><span class="swatch" style="background:linear-gradient(140deg,var(--silver),var(--silver-deep))"></span>Silver</span>
+      <span class="item"><span class="swatch" style="background:linear-gradient(140deg,var(--bronze),var(--bronze-deep))"></span>Brons</span>
+      <span class="item"><span class="swatch" style="background:linear-gradient(90deg,hsl(200 45% 55% / .35),hsl(350 45% 55% / .35))"></span>Mitten → sist</span>
+      <span class="item">· = deltog ej</span>`;
+  }
+
+  /* ======================================================================
+     Rendering — Duellen (head to head)
+     ====================================================================== */
+
+  function renderH2HControls() {
+    const starters = App.data.participants.filter((p) => App.stats.per[p.id].starts > 0);
+    if (starters.length < 2) return;
+
+    // Default to the two most successful competitors
+    const rank = App.stats.medalRank;
+    App.h2h.a = rank[0] ? rank[0].participant.id : starters[0].id;
+    App.h2h.b = rank[1] ? rank[1].participant.id : starters[1].id;
+
+    const options = (selected) =>
+      starters
+        .map(
+          (p) =>
+            `<option value="${p.id}" ${p.id === selected ? 'selected' : ''}>${esc(p.name)}</option>`
+        )
+        .join('');
+
+    $('#h2h-a').innerHTML = options(App.h2h.a);
+    $('#h2h-b').innerHTML = options(App.h2h.b);
+
+    $('#h2h-a').addEventListener('change', (e) => {
+      App.h2h.a = e.target.value;
+      renderH2H();
+    });
+    $('#h2h-b').addEventListener('change', (e) => {
+      App.h2h.b = e.target.value;
+      renderH2H();
+    });
+
+    renderH2H();
+  }
+
+  function renderH2H() {
+    const { a, b } = App.h2h;
+    const pa = App.data.participants.find((p) => p.id === a);
+    const pb = App.data.participants.find((p) => p.id === b);
+    if (!pa || !pb) return;
+
+    if (a === b) {
+      $('#h2h-result').innerHTML =
+        '<p class="h2h-empty">Välj två olika deltagare för att se duellen.</p>';
+      return;
+    }
+
+    const { meetings, winsA, winsB } = headToHead(a, b);
+    if (!meetings.length) {
+      $('#h2h-result').innerHTML = `<p class="h2h-empty">${esc(shortName(pa.name))} och ${esc(
+        shortName(pb.name)
+      )} har aldrig ställt upp samma år.</p>`;
+      return;
+    }
+
+    const total = winsA + winsB;
+    const pctA = total ? (winsA / total) * 100 : 50;
+    const leader = winsA > winsB ? pa : winsB > winsA ? pb : null;
+
+    const rows = meetings
+      .slice()
+      .reverse()
+      .map((m) => {
+        const aWon = m.posA < m.posB;
+        const tie = m.posA === m.posB;
+        return `
+        <li class="h2h-row">
+          <span class="h2h-cell ${!tie && aWon ? 'win' : ''}">${m.posA}</span>
+          <span class="h2h-year"><button class="h2h-year-btn" data-year="${m.year}">${m.year}</button><small>${esc(m.name)}</small></span>
+          <span class="h2h-cell ${!tie && !aWon ? 'win' : ''}">${m.posB}</span>
+        </li>`;
+      })
+      .join('');
+
+    $('#h2h-result').innerHTML = `
+      <div class="h2h-score">
+        <div class="h2h-side">
+          ${avatarHTML(pa.name)}
+          <span class="h2h-num">${winsA}</span>
+        </div>
+        <div class="h2h-bar" role="img" aria-label="${winsA} mot ${winsB}">
+          <span class="h2h-bar-a" style="width:${pctA}%"></span>
+        </div>
+        <div class="h2h-side right">
+          <span class="h2h-num">${winsB}</span>
+          ${avatarHTML(pb.name)}
+        </div>
+      </div>
+      <p class="h2h-verdict">
+        ${
+  leader
+    ? `<strong>${esc(shortName(leader.name))}</strong> leder duellen efter ${total} gemensamma tävlingar.`
+    : `Helt jämnt efter ${total} gemensamma tävlingar.`
+  }
+      </p>
+      <ul class="h2h-list">${rows}</ul>`;
+  }
+
+  /* ======================================================================
+     Rendering — Elo
+     ====================================================================== */
+
+  function renderElo() {
+    const { current, history, years } = App.elo;
+
+    $('#elo-standings').innerHTML = current
+      .map((e, i) => {
+        const dir = e.change > 0 ? 'up' : e.change < 0 ? 'down' : '';
+        const change = e.change
+          ? `${formatNumber(e.change, { sign: true })}<span class="visually-hidden"> sedan förra starten</span>`
+          : '<span aria-hidden="true">–</span><span class="visually-hidden">oförändrad</span>';
+        return `
+        <div class="elo-row" data-elo="${esc(e.participant.id)}" title="${esc(e.participant.name)} · ${formatNumber(e.starts)} starter · högsta ${formatNumber(e.peak)}">
+          <span class="elo-rank">${i + 1}</span>
+          <span class="elo-name">${personLink(shortName(e.participant.name), e.participant.id)}</span>
+          <span class="elo-rating">${formatNumber(e.rating)}</span>
+          <span class="elo-change ${dir}">${change}</span>
+        </div>`;
+      })
+      .join('');
+
+    // Alla rankade som tunna linjer; den markerade (samma som i
+    // placeringsdiagrammet) i guld med namn vid linjens slut.
+    const axisYears = yearAxis(years);
+    const pick = (id) => {
+      chartFocus.stats = id;
+      refocusChart('elo-chart', id, describeElo());
+      refocusChart('trend-chart', id, `Linjediagram: placering per år, lägre är bättre. Markerad: ${personName(id)}`);
+      markEloRow(id);
+    };
+    const startLine = {
+      id: 'ppEloStart',
+      beforeDatasetsDraw(chart) {
+        const { y } = chart.scales;
+        if (!y || y.min > 1500 || y.max < 1500) return;
+        const { ctx, chartArea } = chart;
+        const py = y.getPixelForValue(1500);
+        ctx.save();
+        ctx.strokeStyle = cssVar('--border-strong');
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(chartArea.left, py);
+        ctx.lineTo(chartArea.right, py);
+        ctx.stroke();
+        ctx.restore();
+      },
+      // Etiketten ritas ovanpå linjerna, med en kant i kortets färg
+      afterDatasetsDraw(chart) {
+        const { y } = chart.scales;
+        if (!y || y.min > 1500 || y.max < 1500) return;
+        const { ctx, chartArea } = chart;
+        const py = y.getPixelForValue(1500);
+        ctx.save();
+        ctx.fillStyle = cssVar('--chart-tick');
+        ctx.font = "500 12px 'Schibsted Grotesk', system-ui, sans-serif";
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'bottom';
+        ctx.strokeStyle = cssVar('--surface');
+        ctx.lineWidth = 4;
+        ctx.lineJoin = 'round';
+        ctx.strokeText(`Start ${formatNumber(1500)}`, chartArea.left + 4, py - 3);
+        ctx.fillText(`Start ${formatNumber(1500)}`, chartArea.left + 4, py - 3);
+        ctx.restore();
+      }
+    };
+
+    registerChart('elo-chart', (canvas) => {
+      const datasets = current.map((e) => ({
+        label: shortName(e.participant.name),
+        ppId: e.participant.id,
+        data: axisYears.map((y) => history[e.participant.id][y] ?? null),
+        // Monoton kurva: går aldrig förbi årens faktiska värden
+        cubicInterpolationMode: 'monotone',
+        spanGaps: true,
+        segment: { borderDash: gapDash }
+      }));
+      if (!chartFocus.stats && current[0]) chartFocus.stats = current[0].participant.id;
+      styleFocusDatasets(datasets, chartFocus.stats);
+      canvas.setAttribute('aria-label', describeElo());
+      return {
+        type: 'line',
+        data: { labels: axisYears, datasets },
+        plugins: [cancelledBandPlugin, startLine, endLabelsPlugin],
+        options: {
+          maintainAspectRatio: false,
+          layout: { padding: { right: 8, top: 4 } },
+          interaction: { mode: 'nearest', intersect: false, axis: 'xy' },
+          onClick: pickNearestLine(pick),
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                title: (items) => `${items[0].dataset.label} · ${items[0].label}`,
+                label: (c) => ` Elo ${formatNumber(c.parsed.y)}`
+              }
+            }
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkipPadding: 8 } },
+            y: { title: { display: true, text: 'Elo', color: cssVar('--chart-tick') } }
+          }
+        }
+      };
+    });
+
+    renderFocusChips(
+      'elo-chart',
+      current.map((e) => e.participant),
+      chartFocus.stats,
+      pick,
+      'Välj vem som markeras i Elo-diagrammet'
+    );
+    markEloRow(chartFocus.stats);
+  }
+
+  /** Den markerade i Elo-diagrammet lyfts fram i tabellen under. */
+  function markEloRow(id) {
+    $$('#elo-standings .elo-row').forEach((row) => row.classList.toggle('is-focus', row.getAttribute('data-elo') === id));
+  }
+
+  /* ======================================================================
+     Rendering — Spel
+     ====================================================================== */
+
+
+  /* ======================================================================
+     Sangboken
+     ====================================================================== */
+
+  function renderSongs() {
+    const picker = $('#song-picker');
+    const sheet = $('#song-sheet');
+    if (!picker || !sheet || typeof PEKKAS_SONGS === 'undefined') return;
+
+    const songs = PEKKAS_SONGS;
+
+    picker.innerHTML = songs
+      .map(
+        (song, i) => `
+        <button type="button" class="song-chip ${i === 0 ? 'active' : ''}" data-song="${song.id}">
+          <span class="song-chip-year">${song.year}</span>
+          <span class="song-chip-title">${esc(song.title)}</span>
+        </button>`
+      )
+      .join('');
+
+    const show = (id) => {
+      const song = songs.find((x) => x.id === id) || songs[0];
+      $$('#song-picker .song-chip').forEach((b) => {
+        const on = b.dataset.song === song.id;
+        b.classList.toggle('active', on);
+        if (on) b.setAttribute('aria-current', 'true');
+        else b.removeAttribute('aria-current');
+      });
+      const lines = song.lines
+        .map((line) => {
+          if (line === '') return '<div class="song-break"></div>';
+          if (typeof line === 'object') {
+            return `<div class="song-line"><span>${esc(line.o)}</span><small>${esc(line.t)}</small></div>`;
+          }
+          return `<div class="song-line"><span>${esc(line)}</span></div>`;
+        })
+        .join('');
+      sheet.innerHTML = `
+        <header class="song-head">
+          <span class="song-year-badge">${song.year}</span>
+          <h2>${esc(song.title)}</h2>
+          ${song.subtitle ? `<p class="song-subtitle">${esc(song.subtitle)}</p>` : ''}
+          ${song.author ? `<p class="song-author">Av ${esc(song.author)}</p>` : ''}
+          ${song.melody ? `<p class="song-melody">\u266a Melodi: ${esc(song.melody)}</p>` : ''}
+        </header>
+        <div class="song-lyrics">${lines}</div>
+        <footer class="song-foot">Sk\u00e5l!</footer>`;
+      return song;
+    };
+    App.showSong = show;
+
+    picker.addEventListener('click', (e) => {
+      const btn = e.target.closest('.song-chip');
+      if (!btn) return;
+      const song = show(btn.dataset.song);
+      // Sångvalet byter adress utan att fylla historiken — det är en flik
+      history.replaceState(history.state, '', `#/sangbok/${song.id}`);
+      if (window.matchMedia('(max-width: 1024px)').matches) {
+        sheet.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
+      }
+    });
+    show(songs[0].id);
+  }
+
+  function renderGames() {
+    const byYear = {};
+    GAMES.forEach((g) => (byYear[g.year] = g));
+
+    const comps = App.data.competitions.filter((c) => !c.isCovid && c.participantCount > 0);
+    const playable = comps.filter((c) => byYear[c.year]);
+    const soon = comps.filter((c) => !byYear[c.year]);
+    const arrow = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
+
+    $('#game-grid').innerHTML = playable
+      .map((comp, i) => {
+        const g = byYear[comp.year];
+        const cover = g.cover ? new URL(g.cover, document.baseURI).href : '';
+        // Den suddiga miniatyren och bildens fokuspunkt följer med som CSS-variabler
+        const coverVars = [g.coverBlur && `--blur:url('${g.coverBlur}')`, g.coverFocus && `--focus:${g.coverFocus}`]
+          .filter(Boolean)
+          .join(';');
+        return `
+        <a class="game-card playable${i === 0 ? ' featured' : ''}" href="${gameRoute(comp.year)}" data-game="${comp.year}"
+           style="--g1:${g.colors[0]};--g2:${g.colors[1]}" aria-label="Spela ${esc(g.title)}, ${comp.year}">
+          ${cover ? `<span class="game-cover"${coverVars ? ` style="${esc(coverVars)}"` : ''}><img src="${esc(cover)}" alt="" width="1100" height="773" loading="lazy" decoding="async" /></span>` : ''}
+          <span class="game-emblem" aria-hidden="true">${g.icon}</span>
+          <span class="game-shade" aria-hidden="true"></span>
+          <span class="game-year-big" aria-hidden="true">${comp.year}</span>
+          <span class="game-badge">Spelbar</span>
+          <span class="game-info">
+            <span class="game-comp">${esc(comp.name.trim())}${comp.location ? ` · ${esc(comp.location)}` : ''}</span>
+            <span class="game-title">${esc(g.title)}</span>
+            <span class="game-tagline">${esc(g.tagline)}</span>
+            <span class="game-play">Spela ${arrow}</span>
+          </span>
+        </a>`;
+      })
+      .join('');
+
+    // Stillbilden tonar in över miniatyren när den laddat; en affisch utan
+    // stillbild faller tillbaka på emblemet
+    $$('#game-grid .game-cover img').forEach((img) => {
+      const box = img.closest('.game-cover');
+      const shown = () => box.classList.add('is-loaded');
+      if (img.complete && img.naturalWidth) shown();
+      img.addEventListener('load', shown, { once: true });
+      img.addEventListener('error', () => box.remove(), { once: true });
+    });
+
+    $('#game-soon-grid').innerHTML = soon
+      .map(
+        (comp) => `
+        <div class="game-soon">
+          <span class="soon-year">${comp.year}</span>
+          <span class="soon-title">${esc(comp.name.trim())}</span>
+          <span class="soon-sub">Inte byggt än</span>
+        </div>`
+      )
+      .join('');
+    $('#games-soon-heading').hidden = soon.length === 0;
+  }
+
+  /** Each game may ship its own stylesheet next to its module. Loaded once,
+   *  after the shared HUD base, and never blocks the game on a 404. */
+  function loadGameStyle(href) {
+    const abs = new URL(href, document.baseURI).href;
+    if (document.querySelector(`link[data-game-style="${abs}"]`)) return Promise.resolve();
+    return new Promise((resolve) => {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = abs;
+      link.dataset.gameStyle = abs;
+      link.onload = link.onerror = () => resolve();
+      document.head.appendChild(link);
+    });
+  }
+
+  async function launchGame(year) {
+    const game = GAMES.find((g) => g.year === year);
+    if (!game) return;
+    if (App.gameYear === year || App.gameLoadingYear === year) return;
+    if (App.game || App.gameLoadingYear) closeGameNow();
+
+    // En token per öppning: stängs scenen medan modulen laddar ska det
+    // sena spelet inte monteras i en stängd scen.
+    const token = ++App.gameToken;
+    App.gameLoadingYear = year;
+
+    const stage = $('#game-stage');
+    const loading = $('#game-loading');
+    $('#game-loading-year').textContent = year;
+    $('#game-loading-title').textContent = game.title;
+    $('#game-loading-tagline').textContent = game.tagline;
+    loading.style.setProperty('--g1', game.colors[0]);
+    loading.style.setProperty('--g2', game.colors[1]);
+    $('#game-loading-text').textContent = 'Bygger scenen…';
+    $('.game-spinner').style.display = '';
+    stage.removeAttribute('data-layout');
+    stage.hidden = false;
+    loading.hidden = false;
+    document.body.classList.add('game-open');
+    // Spelscenen har ett eget laddkort; webbplatsens laddskärm får inte
+    // ligga kvar och tona ovanpå spelet (t.ex. när sidan laddas om inne i
+    // ett spel och spelet startar medan sidan fortfarande bygger vyerna).
+    $('#loading-screen').classList.add('hidden');
+    if (!App.lastFocusBeforeGame) App.lastFocusBeforeGame = document.activeElement;
+    $('#game-close').focus({ preventScroll: true });
+    if (App.trophy) App.trophy.pause();
+
+    try {
+      const url = new URL(game.module, document.baseURI).href;
+      const [mod] = await Promise.all([
+        import(/* @vite-ignore */ url),
+        loadGameStyle(game.module.replace(/index\.js$/, 'style.css'))
+      ]);
+      if (token !== App.gameToken) return;
+      stage.dataset.layout = mod.layout === 'full' ? 'full' : 'portrait';
+      const create = mod.default || mod.createPinball;
+      // Varje öppning får en egen behållare: stängs scenen medan create()
+      // fortfarande bygger, skriver det sena spelet i en lösryckt nod i
+      // stället för i nästa spels scen.
+      const host = document.createElement('div');
+      host.className = 'game-instance';
+      $('#game-mount').appendChild(host);
+      const instance = await create(host, {
+        participants: App.data.participants
+          .filter((p) => App.stats.per[p.id].starts > 0)
+          .map((p) => p.name)
+      });
+      if (token !== App.gameToken) {
+        instance.destroy();
+        host.remove();
+        return;
+      }
+      App.game = instance;
+      App.gameYear = year;
+      loading.hidden = true;
+    } catch (err) {
+      if (token !== App.gameToken) return;
+      console.error('Spelet kunde inte laddas:', err);
+      $('#game-loading-text').textContent =
+        'Kunde inte ladda spelet. Kontrollera nätverket och försök igen.';
+      $('.game-spinner').style.display = 'none';
+    } finally {
+      if (token === App.gameToken) App.gameLoadingYear = null;
+    }
+  }
+
+  function closeGameNow() {
+    App.gameToken++;
+    App.gameLoadingYear = null;
+    if (App.game) {
+      try {
+        App.game.destroy();
+      } catch (err) {
+        console.error('Spelet kunde inte stängas rent:', err);
+      }
+      App.game = null;
+    }
+    App.gameYear = null;
+    const stage = $('#game-stage');
+    if (stage.hidden) return;
+    $('#game-mount').innerHTML = '';
+    stage.hidden = true;
+    stage.removeAttribute('data-layout');
+    document.body.classList.remove('game-open');
+    if (App.trophy) App.trophy.resume();
+    const back = App.lastFocusBeforeGame;
+    App.lastFocusBeforeGame = null;
+    if (back && back.focus && document.contains(back)) back.focus({ preventScroll: true });
+  }
+
+  /* ======================================================================
+     Sidor — en sida per år (#/ar/<år>) och per deltagare (#/deltagare/<namn>)
+     ----------------------------------------------------------------------
+     De var modaler förut. Nu är de vyer som alla andra: de ligger i
+     historiken, tillbakaknappen landar där man var och varje sida har en
+     delningsbar adress med förhandsvisning (scripts/share-pages.mjs).
+     ====================================================================== */
+
+  /** Länk till en deltagares profilsida. */
+  function personLink(name, id) {
+    return `<a class="person-link" href="${esc(personHash(id))}">${esc(name)}</a>`;
+  }
+
+  /** Sidorna och menyvalet de hör till (det som lyser i menyn). */
+  const PAGE_PARENTS = { year: 'history', person: 'medals' };
+
+  /** Vad som räknas som "en annan sida" för scrollen: ett nytt år eller en ny
+   *  profil är det, ett spel ovanpå arkaden eller en annan sång är det inte. */
+  const pageKey = (route) =>
+    route.view === 'year' ? `year/${route.year}` : route.view === 'person' ? `person/${route.slug}` : route.view;
+
+  function medalClassFor(pos) {
+    return pos === 1 ? 'gold' : pos === 2 ? 'silver' : pos === 3 ? 'bronze' : '';
+  }
+
+  const participantByName = (name) => App.data.participants.find((p) => p.name === (name || '').trim());
+
+  /** ["A"] → "A", ["A", "B", "C"] → "A, B och C" */
+  function listJoin(items) {
+    if (items.length < 2) return items.join('');
+    return `${items.slice(0, -1).join(', ')} och ${items[items.length - 1]}`;
+  }
+
+  const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+  /** "Viktor" → "Viktors", "Lars" → "Lars" */
+  const genitive = (name) => (/[sxz]$/i.test(name) ? name : `${name}s`);
+
+  const PAGE_ICONS = {
+    back: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>',
+    next: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+    share: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3M7 8l5-5 5 5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>',
+    calendar: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
+    pin: '<div class="map-pin"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4Z"/></svg></div>'
+  };
+
+  /**
+   * Elo före och efter ett år, per deltagare: (id) → { before, after, delta }
+   * eller null om deltagaren inte var med (eller året inte räknades).
+   */
+  function eloForYear(year) {
+    const { years, history } = App.elo;
+    const i = years.indexOf(year);
+    if (i < 0) return () => null;
+    const prevYear = years[i - 1];
+    return (id) => {
+      const h = history[id] || {};
+      if (h[year] == null) return null;
+      // Alla startar på 1500 (se computeElo)
+      const before = prevYear != null && h[prevYear] != null ? h[prevYear] : 1500;
+      return { before, after: h[year], delta: h[year] - before };
+    };
+  }
+
+  function eloDeltaHTML(e) {
+    if (!e) return '<span class="elo-delta">–</span>';
+    const dir = e.delta > 0 ? 'up' : e.delta < 0 ? 'down' : '';
+    return `<span class="elo-delta ${dir}"><span class="visually-hidden">Elo </span>${
+      e.delta ? formatNumber(e.delta, { sign: true }) : '±0'
+    }</span>`;
+  }
+
+  const posDiscHTML = (pos) =>
+    `<span class="page-pos ${medalClassFor(pos)}"><span class="visually-hidden">Plats </span>${pos}</span>`;
+
+  /** Överst på varje sida: tillbaka till listan och en delningsknapp. */
+  function pageBarHTML(share) {
+    return `
+      <div class="page-bar">
+        <a class="page-back" href="#/" data-back>${PAGE_ICONS.back}<span class="page-back-label">Tillbaka</span></a>
+        ${
+  share
+    ? `<div class="page-share">
+          <span class="page-share-status" role="status"></span>
+          <button class="btn ghost small page-share-btn" type="button" data-share-path="${esc(share.path)}"
+            data-share-title="${esc(share.title)}" data-share-text="${esc(share.text)}">${PAGE_ICONS.share}<span>Dela</span></button>
+        </div>`
+    : ''
+  }
+      </div>`;
+  }
+
+  const BACK_LABELS = {
+    overview: 'Översikten',
+    medals: 'Medaljligan',
+    history: 'Krönikan',
+    achievements: 'Utmärkelserna',
+    stats: 'Statistiken',
+    songs: 'Sångboken',
+    games: 'Arkaden'
+  };
+
+  /**
+   * Årssidan leder alltid tillbaka till Krönikan, profilen till listan man
+   * kom ifrån (Medaljligan om man kom via en direktlänk). Är det just den
+   * listan man kom från går länken bakåt i historiken i stället, så att
+   * man hamnar på samma ställe i listan.
+   */
+  function syncBackLink(view) {
+    const link = $(`#view-${view} [data-back]`);
+    if (!link) return;
+    const ret = history.state && history.state.ret;
+    const retRoute = ret ? parseHash(ret) : null;
+    let href = view === 'year' ? '#/historik' : '#/medaljliga';
+    if (view === 'person' && retRoute && BACK_LABELS[retRoute.view]) href = ret;
+    link.setAttribute('href', href);
+    link.querySelector('.page-back-label').textContent = BACK_LABELS[(parseHash(href) || {}).view] || 'Tillbaka';
+  }
+
+  async function copyText(text) {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (e) {
+      /* prova den gamla vägen */
+    }
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try {
+      ok = document.execCommand('copy');
+    } catch (e) {
+      ok = false;
+    }
+    ta.remove();
+    return ok;
+  }
+
+  /**
+   * "Dela": delningsmenyn där den finns (telefoner), annars kopieras
+   * länken. Länken går till den statiska delningssidan, som bär titel och
+   * bild för förhandsvisningen och skickar besökaren vidare hit.
+   */
+  async function sharePage(btn) {
+    const url = new URL(btn.dataset.sharePath, document.baseURI).toString();
+    const status = btn.parentElement.querySelector('.page-share-status');
+    const say = (msg, sticky) => {
+      status.textContent = msg;
+      status.classList.toggle('is-url', !!sticky);
+      clearTimeout(App.shareTimer);
+      if (!sticky) App.shareTimer = setTimeout(() => (status.textContent = ''), 2600);
+    };
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: btn.dataset.shareTitle, text: btn.dataset.shareText, url });
+        return;
+      } catch (err) {
+        if (err && err.name === 'AbortError') return;
+        /* delningen misslyckades — kopiera i stället */
+      }
+    }
+    const copied = await copyText(url);
+    btn.focus({ preventScroll: true });
+    if (copied) say('Länken är kopierad');
+    else say(url, true);
+  }
+
+  /* ---------- Årssidan ---------- */
+
+  /** Det som är värt att veta om ett år — räknat ur resultaten, inget handskrivet. */
+  function yearFacts(comp, results, elo) {
+    const facts = [];
+    const real = App.stats.byYearAsc;
+    const idx = real.indexOf(comp);
+    const earlier = real.slice(0, idx);
+    const link = (p) => personLink(p.name, p.id);
+    const winners = results.filter((r) => r.pos === 1);
+    const winner = winners.length === 1 ? winners[0].participant : null;
+
+    if (winner) {
+      const n = earlier.filter((c) => c.winner === winner.name).length + 1;
+      facts.push([
+        'Segern',
+        n === 1
+          ? `Första segern någonsin för ${link(winner)}.`
+          : `${capitalize(ORDINALS[n] || ordinalShort(n))} segern för ${link(winner)}.`
+      ]);
+    }
+
+    const prevComp = earlier[earlier.length - 1];
+    const champ = prevComp && prevComp.winner ? participantByName(prevComp.winner) : null;
+    if (champ) {
+      const pos = comp.scores[champ.id];
+      facts.push([
+        'Titelförsvaret',
+        pos === 1
+          ? `${link(champ)} försvarade titeln från ${prevComp.year}.`
+          : pos != null
+            ? `Regerande mästaren ${link(champ)} slutade ${ordinalShort(pos)}.`
+            : `Regerande mästaren ${link(champ)} stod över.`
+      ]);
+    }
+
+    // Elo inför tävlingen: vem var favorit, vem skrällde, vem rörde sig mest
+    const rated = results
+      .map((r) => ({ p: r.participant, pos: r.pos, e: elo(r.participant.id) }))
+      .filter((x) => x.e);
+    if (rated.length >= 4 && new Set(rated.map((x) => x.e.before)).size > 1) {
+      const byBefore = [...rated].sort((a, b) => b.e.before - a.e.before);
+      const fav = byBefore[0];
+      const w = winner ? byBefore.findIndex((x) => x.p === winner) : -1;
+      const half = Math.ceil(byBefore.length / 2);
+      if (w >= half) {
+        facts.push(['Skrällen', `${link(winner)} gick in som nummer ${w + 1} av ${byBefore.length} på Elo — och vann.`]);
+      } else if (fav.p !== winner && fav.pos > half) {
+        facts.push(['Favoriten', `${link(fav.p)} hade högst Elo inför tävlingen men slutade ${ordinalShort(fav.pos)}.`]);
+      }
+      const byDelta = [...rated].sort((a, b) => b.e.delta - a.e.delta);
+      const up = byDelta[0];
+      const down = byDelta[byDelta.length - 1];
+      if (up.e.delta > 0) {
+        facts.push(['Elo-lyftet', `${link(up.p)} tog ${formatNumber(up.e.delta, { sign: true })} och landade på ${formatNumber(up.e.after)}.`]);
+      }
+      if (down.e.delta < 0) {
+        facts.push(['Elo-raset', `${link(down.p)} tappade ${formatNumber(-down.e.delta)}, ner till ${formatNumber(down.e.after)}.`]);
+      }
+    }
+
+    let climb = null;
+    results.forEach((r) => {
+      const ys = App.stats.per[r.participant.id].yearPositions;
+      const last = earlier.filter((c) => ys[c.year] != null).pop();
+      if (!last) return;
+      const diff = ys[last.year] - r.pos;
+      if (!climb || diff > climb.diff) climb = { p: r.participant, diff, from: ys[last.year], year: last.year, to: r.pos };
+    });
+    if (climb && climb.diff >= 3) {
+      facts.push(['Klättringen', `${link(climb.p)} gick från ${ordinalShort(climb.from)} (${climb.year}) till ${ordinalShort(climb.to)}.`]);
+    }
+
+    if (idx > 0) {
+      const debut = results.filter((r) => !earlier.some((c) => c.scores[r.participant.id] != null));
+      if (debut.length) facts.push(['Debut', `${listJoin(debut.map((r) => link(r.participant)))} debuterade.`]);
+
+      const maxField = Math.max(...real.map((c) => c.participantCount));
+      if (comp.participantCount === maxField) {
+        const first = real.find((c) => c.participantCount === maxField);
+        facts.push([
+          'Startfältet',
+          first === comp
+            ? `Rekordmånga: ${comp.participantCount} deltagare.`
+            : `${comp.participantCount} deltagare — lika många som rekordåret ${first.year}.`
+        ]);
+      }
+    }
+    return facts;
+  }
+
+  /** Föregående och nästa år. Inställda år hoppas över men nämns. */
+  function yearPagerHTML(year, prev, next) {
+    const skipped = App.data.competitions
+      .filter(
+        (c) =>
+          c.isCovid &&
+          ((prev && c.year > prev.year && c.year < year) || (next && c.year > year && c.year < next.year))
+      )
+      .map((c) => c.year)
+      .sort((a, b) => a - b);
+    const link = (c, dir) =>
+      c
+        ? `<a class="pager-link ${dir}" href="${yearHash(c.year)}" rel="${dir}">
+            <span class="pager-dir">${dir === 'prev' ? `${PAGE_ICONS.back} Föregående` : `Nästa ${PAGE_ICONS.next}`}</span>
+            <span class="pager-year">${c.year}</span>
+            <span class="pager-name">${esc(c.name.trim())}</span>
+          </a>`
+        : `<span class="pager-link ${dir} is-empty" aria-hidden="true"></span>`;
+    return `
+      <nav class="page-pager" aria-label="Andra år">
+        ${link(prev, 'prev')}
+        <p class="pager-gap">${skipped.length ? `${skipped.join(', ')} · Inställt — pandemi` : ''}</p>
+        ${link(next, 'next')}
+      </nav>`;
+  }
+
+  /** En liten, stillastående karta med årets nål. */
+  function mountYearMap(comp) {
+    const el = document.getElementById('year-map');
+    if (App.yearMap && el && App.yearMap.getContainer() === el) {
+      App.yearMap.invalidateSize();
+      return;
+    }
+    if (App.yearMap) {
+      App.yearMap.remove();
+      App.yearMap = null;
+    }
+    const coords = LOCATION_COORDS[comp.location];
+    if (!el || !coords || typeof L === 'undefined') return;
+    const provider = TILE_PROVIDERS[App.mapProvider] || TILE_PROVIDERS[0];
+    const map = L.map(el, {
+      center: coords,
+      zoom: 7,
+      zoomControl: false,
+      attributionControl: false, // står under kartan i stället
+      dragging: false,
+      touchZoom: false,
+      scrollWheelZoom: false,
+      doubleClickZoom: false,
+      boxZoom: false,
+      keyboard: false
+    });
+    L.tileLayer(provider.url, provider.options).addTo(map);
+    L.marker(coords, {
+      icon: L.divIcon({ className: '', html: PAGE_ICONS.pin, iconSize: [30, 30], iconAnchor: [15, 28] }),
+      interactive: false,
+      keyboard: false
+    }).addTo(map);
+    App.yearMap = map;
+  }
+
+  function renderYearPage(year) {
+    const comp = App.data.competitions.find((c) => c.year === year);
+    if (!comp) return null;
+    const view = $('#view-year');
+    const real = App.stats.byYearAsc;
+    const prev = [...real].reverse().find((c) => c.year < year) || null;
+    const next = real.find((c) => c.year > year) || null;
+    const pager = yearPagerHTML(year, prev, next);
+
+    if (comp.isCovid || comp.participantCount === 0) {
+      view.innerHTML = `
+        ${pageBarHTML(null)}
+        <header class="yp-hero is-off">
+          <p class="eyebrow yp-eyebrow">Ingen upplaga</p>
+          <h1 class="yp-title" id="year-title"><span class="yp-year">${year}</span> <span class="yp-name">Inställt — pandemi</span></h1>
+          <p class="yp-lede">Pokalen tog en paus, men traditionen överlevde.</p>
+        </header>
+        ${pager}`;
+      return { title: `${year}: inställt — Pekkas Pokal` };
+    }
+
+    const name = comp.name.trim();
+    const edition = real.indexOf(comp) + 1;
+    const earlier = real.slice(0, edition - 1);
+    const elo = eloForYear(year);
+    const results = Object.entries(comp.scores)
+      .map(([pid, pos]) => ({ participant: App.data.participants.find((x) => x.id === pid), pos }))
+      .filter((r) => r.participant)
+      .sort((a, b) => a.pos - b.pos || a.participant.name.localeCompare(b.participant.name, 'sv'));
+    const winners = results.filter((r) => r.pos === 1).map((r) => r.participant);
+    const hostNames = [comp.arranger3rd, comp.arrangerSecondLast].map((h) => (h || '').trim()).filter(Boolean);
+    const hostLinks = hostNames.map((h) => {
+      const p = participantByName(h);
+      return p ? personLink(p.name, p.id) : esc(h);
+    });
+    const game = GAMES.find((g) => g.year === year);
+    const songs = (typeof PEKKAS_SONGS === 'undefined' ? [] : PEKKAS_SONGS.filter((s) => s.year === year))
+      // Vinnarlåten först
+      .sort((a, b) => /vinnare/i.test(b.subtitle || '') - /vinnare/i.test(a.subtitle || ''));
+    const coords = LOCATION_COORDS[comp.location];
+
+    const meta = [
+      comp.location && `<li><span class="yp-ico" aria-hidden="true">${ICONS.pin}</span>${esc(comp.location)}</li>`,
+      comp.date &&
+        `<li><span class="yp-ico" aria-hidden="true">${PAGE_ICONS.calendar}</span><time datetime="${comp.date.toISOString().slice(0, 10)}">${comp.date.toLocaleDateString('sv-SE', { day: 'numeric', month: 'long', year: 'numeric' })}</time></li>`,
+      `<li><span class="yp-ico" aria-hidden="true">${ICONS.users}</span>${comp.participantCount} deltagare</li>`
+    ]
+      .filter(Boolean)
+      .join('');
+
+    const podium = [1, 2, 3]
+      .map((pos) => ({ pos, people: results.filter((r) => r.pos === pos).map((r) => r.participant) }))
+      .filter((pl) => pl.people.length)
+      .map(
+        (pl) => `
+        <li class="yp-place p${pl.pos}">
+          <a class="yp-podium-avatar" href="${esc(personHash(pl.people[0].id))}" tabindex="-1" aria-hidden="true">${esc(initials(pl.people[0].name))}</a>
+          <span class="yp-podium-names">${pl.people.map((p) => personLink(p.name, p.id)).join('<br />')}</span>
+          <span class="yp-podium-block">${posDiscHTML(pl.pos).replace('page-pos', 'yp-podium-num')}</span>
+        </li>`
+      )
+      .join('');
+
+    const rows = results
+      .map((r) => {
+        const { id } = r.participant;
+        const tags = [
+          hostNames.includes(r.participant.name) ? '<span class="page-tag">arrangör</span>' : '',
+          edition > 1 && !earlier.some((c) => c.scores[id] != null) ? '<span class="page-tag new">debut</span>' : ''
+        ].join('');
+        return `
+        <li class="yp-row${r.pos <= 3 ? ' top' : ''}">
+          ${posDiscHTML(r.pos)}
+          ${avatarHTML(r.participant.name, 'yp-avatar')}
+          <span class="yp-person">${personLink(r.participant.name, id)}${tags}</span>
+          ${eloDeltaHTML(elo(id))}
+        </li>`;
+      })
+      .join('');
+
+    const facts = yearFacts(comp, results, elo);
+    const SONGS_SHOWN = 4;
+    const coordText = coords ? `${coords[0].toFixed(4)}°N · ${coords[1].toFixed(4)}°E` : '';
+    const gameArt = game && game.cover
+      ? `<img src="${esc(new URL(game.cover, document.baseURI).href)}" alt="" width="1100" height="773" loading="lazy" decoding="async" />`
+      : `<span class="yp-game-emblem" aria-hidden="true">${game ? game.icon : ''}</span>`;
+
+    const aside = [
+      `<figure class="card page-card yp-photo" hidden><img alt="Foto från ${year}" decoding="async" /></figure>`,
+      game
+        ? `<a class="card page-card yp-game" href="${gameRoute(year)}" style="--g1:${game.colors[0]};--g2:${game.colors[1]}">
+            <span class="yp-game-cover" data-icon="${esc(game.icon)}">${gameArt}</span>
+            <span class="yp-game-body">
+              <span class="page-kicker">Årets spel</span>
+              <span class="yp-game-title">${esc(game.title)}</span>
+              <span class="yp-game-tagline">${esc(game.tagline)}</span>
+              <span class="btn small yp-game-play">Spela årets spel ${PAGE_ICONS.next}</span>
+            </span>
+          </a>`
+        : '',
+      facts.length
+        ? `<section class="card page-card yp-facts" aria-labelledby="yp-facts-h">
+            <h2 class="page-h2" id="yp-facts-h">Värt att veta</h2>
+            <dl class="yp-fact-list">${facts.map(([k, v]) => `<div class="yp-fact"><dt>${esc(k)}</dt><dd>${v}</dd></div>`).join('')}</dl>
+          </section>`
+        : '',
+      songs.length
+        ? `<section class="card page-card yp-songs" aria-labelledby="yp-songs-h">
+            <h2 class="page-h2" id="yp-songs-h">Ur sångboken <span class="page-count">${songs.length}</span></h2>
+            <ul class="yp-song-list">${songs
+    .slice(0, SONGS_SHOWN)
+    .map(
+      (s) => `<li><a class="yp-song" href="#/sangbok/${esc(s.id)}"><span class="yp-song-title">${esc(s.title)}</span>${
+        s.subtitle ? `<span class="yp-song-sub">${esc(s.subtitle)}</span>` : ''
+      }</a></li>`
+    )
+    .join('')}</ul>
+            ${songs.length > SONGS_SHOWN ? `<a class="page-more" href="#/sangbok/${esc(songs[SONGS_SHOWN].id)}">${songs.length - SONGS_SHOWN} till i sångboken ${PAGE_ICONS.next}</a>` : ''}
+          </section>`
+        : '',
+      coords
+        ? `<section class="card page-card yp-map-card" aria-labelledby="yp-map-h">
+            <h2 class="page-h2" id="yp-map-h">Platsen</h2>
+            <div class="yp-map" id="year-map" aria-hidden="true"></div>
+            <p class="yp-coords"><span class="mono">${esc(comp.location)} · ${coordText}</span>
+              <span class="yp-attrib">Karta © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> ·
+              <a href="https://www.openstreetmap.org/?mlat=${coords[0]}&amp;mlon=${coords[1]}#map=11/${coords[0]}/${coords[1]}" target="_blank" rel="noopener">Öppna kartan<span class="visually-hidden"> (ny flik)</span></a></span></p>
+          </section>`
+        : ''
+    ].join('');
+
+    const share = {
+      path: `ar/${year}/`,
+      title: `Pekkas Pokal ${year} — ${name}`,
+      text: winners.length
+        ? `${listJoin(winners.map((p) => p.name))} vann ${name}${comp.location ? ` i ${comp.location}` : ''} ${year}.`
+        : `${name} ${year}`
+    };
+
+    view.innerHTML = `
+      ${pageBarHTML(share)}
+      <header class="yp-hero">
+        <p class="eyebrow yp-eyebrow">Upplaga ${edition} av ${real.length}</p>
+        <h1 class="yp-title" id="year-title"><span class="yp-year">${year}</span> <span class="yp-name">${esc(name)}</span></h1>
+        <ul class="yp-meta">${meta}</ul>
+        ${hostLinks.length ? `<p class="yp-hosts"><span class="page-kicker">Arrangörer</span> ${listJoin(hostLinks)}</p>` : ''}
+      </header>
+      <div class="page-grid">
+        <div class="page-col page-main">
+          <section class="card page-card yp-podium-card" aria-labelledby="yp-podium-h">
+            <h2 class="page-h2" id="yp-podium-h">Pallen</h2>
+            <ol class="yp-podium">${podium}</ol>
+          </section>
+          <section class="card page-card yp-results-card" aria-labelledby="yp-results-h">
+            <div class="page-card-head">
+              <h2 class="page-h2" id="yp-results-h">Alla resultat</h2>
+              <span class="page-col-label" aria-hidden="true">Elo ±</span>
+            </div>
+            <ol class="yp-results">${rows}</ol>
+          </section>
+        </div>
+        <div class="page-col page-aside">${aside}</div>
+      </div>
+      ${pager}`;
+
+    // En affisch som inte laddar ersätts av spelets emblem
+    const cover = $('.yp-game-cover img', view);
+    if (cover) {
+      const box = cover.parentElement;
+      const toEmblem = () => {
+        box.innerHTML = `<span class="yp-game-emblem" aria-hidden="true">${esc(box.dataset.icon)}</span>`;
+      };
+      cover.addEventListener('error', toEmblem, { once: true });
+    }
+    const figure = $('.yp-photo', view);
+    photoFor(year, (src) => {
+      if (!figure.isConnected) return;
+      figure.querySelector('img').src = src;
+      figure.hidden = false;
+    });
+
+    return { title: `${name} ${year} — Pekkas Pokal`, mount: () => mountYearMap(comp) };
+  }
+
+  /* ---------- Profilsidan ---------- */
+
+  function renderProfile(id) {
+    const p = App.data.participants.find((x) => x.id === id);
+    const s = p && App.stats.per[id];
+    if (!s || s.starts === 0) return null;
+    const view = $('#view-person');
+
+    const eloRank = App.elo.current.findIndex((e) => e.participant.id === id);
+    const elo = App.elo.current[eloRank];
+    const { defById } = App.achievements;
+    const RARITY = { mythic: 0, legendary: 1, epic: 2, rare: 3, common: 4 };
+    const achIds = (App.achievements.byName[p.name] || [])
+      .filter((aid) => defById[aid])
+      .sort((a, b) => RARITY[defById[a].rarity] - RARITY[defById[b].rarity]);
+    const points = achIds.reduce((sum, aid) => sum + (defById[aid].points || 0), 0);
+
+    const years = Object.keys(s.yearPositions).map(Number).sort((a, b) => a - b);
+    const compOf = (y) => App.stats.real.find((c) => c.year === y);
+    const hosted = App.stats.byYearAsc
+      .filter((c) => [c.arranger3rd, c.arrangerSecondLast].some((h) => (h || '').trim() === p.name))
+      .map((c) => c.year);
+    const bestYears = years.filter((y) => s.yearPositions[y] === s.best);
+    const isChampion = App.stats.champion === p.name;
+    const parts = p.name.trim().split(/\s+/);
+    const last = parts.length > 1 ? parts.pop() : '';
+    const first = parts.join(' ');
+    const dot = (cls, n, label) =>
+      `<span class="page-medal"><span class="medal-dot ${cls}" aria-hidden="true"></span>${n}<span class="visually-hidden"> ${label}</span></span>`;
+    const kpi = (label, value, sub) => `
+      <div class="page-kpi" role="listitem">
+        <span class="page-kpi-label">${label}</span>
+        <span class="page-kpi-value">${value}</span>
+        ${sub ? `<span class="page-kpi-sub">${sub}</span>` : ''}
+      </div>`;
+
+    const ledger = [
+      kpi('Elo', elo ? formatNumber(elo.rating) : '—', elo ? `${ordinalShort(eloRank + 1)} av ${App.elo.current.length} · topp ${formatNumber(elo.peak)}` : ''),
+      kpi('Snittplacering', formatNumber(s.avg, 1), `på ${s.starts} ${s.starts === 1 ? 'start' : 'starter'}`),
+      kpi('Bästa placering', ordinalShort(s.best), bestYears.length > 1 ? `${bestYears.length} gånger` : `år ${bestYears[0]}`),
+      kpi('Medaljer', s.total, `${dot('gold', s.gold, 'guld')}${dot('silver', s.silver, 'silver')}${dot('bronze', s.bronze, 'brons')}`),
+      kpi('Poäng', formatNumber(points), `${achIds.length} ${achIds.length === 1 ? 'utmärkelse' : 'utmärkelser'}`),
+      kpi('Värdskap', s.hostCount, hosted.length ? `senast ${hosted[hosted.length - 1]}` : 'inte än')
+    ].join('');
+
+    const yearRows = [...years]
+      .reverse()
+      .map((y) => {
+        const c = compOf(y);
+        const pos = s.yearPositions[y];
+        return `
+        <li>
+          <a class="prof-year" href="${yearHash(y)}">
+            <span class="prof-year-num">${y}</span>
+            <span class="prof-year-body">
+              <span class="prof-year-comp">${esc(c ? c.name.trim() : '')}${hosted.includes(y) ? '<span class="page-tag">värd</span>' : ''}</span>
+              <span class="prof-year-meta">${c && c.location ? `${esc(c.location)} · ` : ''}${ordinalShort(pos)} av ${c ? c.participantCount : '?'}</span>
+            </span>
+            ${eloDeltaHTML(eloForYear(y)(id))}
+            ${posDiscHTML(pos)}
+          </a>
+        </li>`;
+      })
+      .join('');
+
+    const coin = (cls, n, label) =>
+      `<div class="prof-coin"><span class="medal-disc ${cls}" aria-hidden="true"></span><span class="prof-coin-num">${n}</span><span class="prof-coin-label">${label}</span></div>`;
+    const achList = achIds
+      .map((aid) => {
+        const d = defById[aid];
+        return `
+        <li class="prof-ach">
+          <span class="badge rarity-${esc(d.rarity)}" aria-hidden="true">${achBadge(d)}</span>
+          <span class="prof-ach-text"><span class="prof-ach-name">${esc(d.name)}${achYear(p.name, aid) ? `<span class="prof-ach-year">${d.title ? 'sedan ' : ''}${achYear(p.name, aid)}</span>` : ''}</span><span class="prof-ach-desc">${esc(d.desc)}</span></span>
+          <span class="prof-ach-pts">${formatNumber(d.points || 0)}<span class="visually-hidden"> poäng</span></span>
+        </li>`;
+      })
+      .join('');
+
+    // Inbördes möten: vem placerade sig högst de år båda var med
+    const rivals = rivalRecords(id);
+    const h2hRow = (r) => {
+      const total = r.winsA + r.winsB;
+      const dir = r.winsA > r.winsB ? 'up' : r.winsA < r.winsB ? 'down' : '';
+      return `
+        <li class="prof-h2h-row">
+          ${avatarHTML(r.opponent.name, 'prof-h2h-avatar')}
+          <span class="prof-h2h-name">${personLink(r.opponent.name, r.opponent.id)}</span>
+          <span class="prof-h2h-bar" aria-hidden="true"><span style="width:${total ? Math.round((r.winsA / total) * 100) : 50}%"></span></span>
+          <span class="prof-h2h-score ${dir}"><span aria-hidden="true">${r.winsA}–${r.winsB}</span><span class="visually-hidden">${r.winsA} mot ${r.winsB}</span></span>
+        </li>`;
+    };
+    const h2hGroups = [
+      ['Äger', rivals.filter((r) => r.winsA > r.winsB)],
+      ['Jämnt', rivals.filter((r) => r.winsA === r.winsB)],
+      ['Ägd av', rivals.filter((r) => r.winsA < r.winsB).reverse()]
+    ]
+      .filter(([, list]) => list.length)
+      .map(([label, list]) => `<h3 class="prof-h2h-label">${label}</h3><ul class="prof-h2h-list">${list.map(h2hRow).join('')}</ul>`)
+      .join('');
+
+    const gameRows = GAMES.filter((g) => s.yearPositions[g.year] != null)
+      .sort((a, b) => b.year - a.year)
+      .map((g) => {
+        const art = g.cover
+          ? `<img src="${esc(new URL(g.cover, document.baseURI).href)}" alt="" width="1100" height="773" loading="lazy" decoding="async" />`
+          : `<span aria-hidden="true">${g.icon}</span>`;
+        return `
+        <li><a class="prof-game" href="${gameRoute(g.year)}">
+          <span class="prof-game-thumb" style="--g1:${g.colors[0]};--g2:${g.colors[1]}">${art}</span>
+          <span class="prof-game-text"><span class="prof-game-title">${esc(g.title)}</span><span class="prof-game-meta">${g.year} · ${ordinalShort(s.yearPositions[g.year])} i verkligheten</span></span>
+          ${PAGE_ICONS.next}
+        </a></li>`;
+      })
+      .join('');
+
+    const share = {
+      path: `deltagare/${slugify(p.name)}/`,
+      title: `${p.name} — Pekkas Pokal`,
+      text: `${p.name}: ${s.starts} ${s.starts === 1 ? 'start' : 'starter'}, ${s.gold} guld, ${s.silver} silver och ${s.bronze} brons i Pekkas Pokal.`
+    };
+
+    view.innerHTML = `
+      ${pageBarHTML(share)}
+      <header class="prof-hero">
+        ${avatarHTML(p.name, `prof-avatar${isChampion ? ' is-champion' : ''}`)}
+        <div class="prof-hero-text">
+          <p class="eyebrow prof-eyebrow">Deltagare sedan ${years[0]}${isChampion ? ' <span class="tag">regerande mästare</span>' : ''}</p>
+          <h1 class="prof-name" id="person-title"><span class="first">${esc(first)}</span>${last ? ` <span class="last">${esc(last)}</span>` : ''}</h1>
+        </div>
+      </header>
+      <div class="page-ledger" role="list" aria-label="Nyckeltal">${ledger}</div>
+      <div class="page-grid">
+        <div class="page-col page-main">
+          <section class="card page-card prof-chart-card" aria-labelledby="prof-chart-h">
+            <div class="page-card-head">
+              <h2 class="page-h2" id="prof-chart-h">Placering per år</h2>
+              <p class="page-card-sub">1:a överst · varje punkt leder till året</p>
+            </div>
+            <div class="prof-chart"><canvas id="person-chart" role="img" aria-label="Linjediagram: ${esc(genitive(first))} placering per år"></canvas></div>
+          </section>
+          <section class="card page-card prof-years-card" aria-labelledby="prof-years-h">
+            <div class="page-card-head">
+              <h2 class="page-h2" id="prof-years-h">År för år <span class="page-count">${s.starts}</span></h2>
+              <span class="page-col-label" aria-hidden="true">Elo ±</span>
+            </div>
+            <ol class="prof-years">${yearRows}</ol>
+          </section>
+          ${
+  gameRows
+    ? `<section class="card page-card prof-games" aria-labelledby="prof-games-h">
+            <h2 class="page-h2" id="prof-games-h">Spelen från ${esc(genitive(first))} år</h2>
+            <ul class="prof-game-list">${gameRows}</ul>
+          </section>`
+    : ''
+  }
+        </div>
+        <div class="page-col page-aside">
+          <section class="card page-card prof-honours" aria-labelledby="prof-honours-h">
+            <h2 class="page-h2" id="prof-honours-h">Medaljer och utmärkelser</h2>
+            <div class="prof-coins">${coin('gold', s.gold, 'Guld')}${coin('silver', s.silver, 'Silver')}${coin('bronze', s.bronze, 'Brons')}</div>
+            ${achList ? `<ul class="prof-ach-list">${achList}</ul>` : '<p class="page-empty">Inga utmärkelser ännu — men året är ungt.</p>'}
+          </section>
+          ${
+  h2hGroups
+    ? `<section class="card page-card prof-h2h" aria-labelledby="prof-h2h-h">
+            <div class="page-card-head">
+              <h2 class="page-h2" id="prof-h2h-h">Inbördes möten</h2>
+              <p class="page-card-sub">Vem placerade sig högst de år ni båda var med</p>
+            </div>
+            ${h2hGroups}
+          </section>`
+    : ''
+  }
+        </div>
+      </div>`;
+
+    $$('.prof-game-thumb img', view).forEach((img) =>
+      img.addEventListener('error', () => img.remove(), { once: true })
+    );
+
+    return {
+      title: `${p.name} — Pekkas Pokal`,
+      mount: () => {
+        if (App.charts['person-chart'] && App.charts['person-chart'].canvas === $('#person-chart')) return;
+        registerChart('person-chart', (canvas) => personChart(canvas, s, years));
+      }
+    };
+  }
+
+  /**
+   * Placering per år: 1:a överst och en kurva som aldrig skjuter förbi
+   * punkterna (monoton interpolering), så den inte ritar en placering som
+   * inte fanns.
+   */
+  function personChart(canvas, s, years) {
+    const positions = years.map((y) => s.yearPositions[y]);
+    const comps = years.map((y) => App.stats.real.find((c) => c.year === y));
+    const maxField = Math.max(...comps.map((c) => (c ? c.participantCount : 0)), ...positions, 4);
+    const gold = cssVar('--gold');
+    const fill = canvas.getContext('2d').createLinearGradient(0, 0, 0, canvas.clientHeight || 260);
+    fill.addColorStop(0, `${gold}40`);
+    fill.addColorStop(1, `${gold}00`);
+    const metal = { 1: gold, 2: cssVar('--silver'), 3: cssVar('--bronze') };
+    return {
+      type: 'line',
+      data: {
+        labels: years,
+        datasets: [
+          {
+            data: positions,
+            borderColor: gold,
+            backgroundColor: fill,
+            fill: 'end', // y-axeln är omvänd: 'end' fyller ner mot sista plats
+            cubicInterpolationMode: 'monotone',
+            borderWidth: 2,
+            clip: false,
+            pointRadius: positions.map((v) => (v <= 3 ? 5.5 : 3.5)),
+            pointHoverRadius: 7,
+            pointBackgroundColor: positions.map((v) => metal[v] || cssVar('--surface-solid')),
+            pointBorderColor: positions.map((v) => (v <= 3 ? 'transparent' : cssVar('--chart-tick'))),
+            pointBorderWidth: 1.5
+          }
+        ]
+      },
+      options: {
+        maintainAspectRatio: false,
+        layout: { padding: { top: 8, right: 6 } },
+        interaction: { mode: 'nearest', axis: 'x', intersect: false },
+        onClick: (_e, els) => {
+          if (els.length) navigate(yearHash(years[els[0].index]));
+        },
+        onHover: (e, els) => {
+          if (e.native && e.native.target) e.native.target.style.cursor = els.length ? 'pointer' : '';
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: (items) => {
+                const c = comps[items[0].dataIndex];
+                return `${years[items[0].dataIndex]}${c ? ` · ${c.name.trim()}` : ''}`;
+              },
+              label: (c) => {
+                const comp = comps[c.dataIndex];
+                return ` ${ordinalShort(c.parsed.y)}${comp ? ` av ${comp.participantCount}` : ''}`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: {
+              maxRotation: 0,
+              // Smalt diagram: '19 i stället för 2019, så årtalen inte lutar
+              callback(value) {
+                const y = String(this.getLabelForValue(value));
+                return this.chart.width < 560 ? `’${y.slice(2)}` : y;
+              }
+            }
+          },
+          y: {
+            reverse: true,
+            min: 1,
+            max: maxField,
+            grid: { color: cssVar('--chart-grid') },
+            ticks: { precision: 0, stepSize: maxField > 8 ? 2 : 1 }
+          }
+        }
+      }
+    };
+  }
+
+  /** Bygger års- eller profilsidan för en route — eller återanvänder den
+   *  om det är samma sida som senast (bakåt från ett spel, till exempel). */
+  function renderPage(route) {
+    const key = pageKey(route);
+    let page = App.pages[route.view];
+    if (!page || page.key !== key) {
+      page = null;
+      if (route.view === 'year') {
+        page = renderYearPage(route.year);
+      } else {
+        const p = personFromSlug(route.slug);
+        page = p ? renderProfile(p.id) : null;
+        // Äldre länkar med id (#/deltagare/p3) får den läsbara adressen
+        if (page && slugify(p.name) !== route.slug) {
+          history.replaceState(history.state, '', personHash(p.id));
+          App.appliedHash = location.hash;
+        }
+      }
+      if (!page) return null;
+      page.key = key;
+      App.pages[route.view] = page;
+    }
+    syncBackLink(route.view);
+    return page;
+  }
+
+  /** Spelscenen är det enda som fortfarande läggs ovanpå: krysset och Esc stänger den. */
+  function initOverlays() {
+    $('#game-close').addEventListener('click', closeOverlay);
+    document.addEventListener('keydown', (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === 'Escape' && !$('#game-stage').hidden) {
+        // Game handlers on window can dismiss help or a local dialog first.
+        setTimeout(() => {
+          if (!e.defaultPrevented && !$('#game-stage').hidden) closeOverlay();
+        }, 0);
+      }
+    });
+  }
+
+  /* ======================================================================
+     Navigation
+     ====================================================================== */
+
+  const VIEW_ROUTES = {
+    overview: '',
+    medals: 'medaljliga',
+    history: 'historik',
+    achievements: 'utmarkelser',
+    stats: 'statistik',
+    songs: 'sangbok',
+    games: 'spel'
+  };
+  const ROUTE_VIEWS = Object.fromEntries(Object.entries(VIEW_ROUTES).map(([v, r]) => [r, v]));
+  const VIEW_IDS = Object.keys(VIEW_ROUTES);
+  const VIEW_TITLES = {
+    overview: 'Pekkas Pokal — Tävlingen sedan 2011',
+    medals: 'Medaljliga — Pekkas Pokal',
+    history: 'Krönikan — Pekkas Pokal',
+    achievements: 'Utmärkelser — Pekkas Pokal',
+    stats: 'Statistik — Pekkas Pokal',
+    songs: 'Sångbok — Pekkas Pokal',
+    games: 'Arkaden — Pekkas Pokal'
+  };
+
+  const viewHash = (view) => `#/${VIEW_ROUTES[view] || ''}`;
+
+  function showView(id, { focus = false, title = '', scrollY = null } = {}) {
+    if (!VIEW_IDS.includes(id) && !PAGE_PARENTS[id]) id = 'overview';
+    App.currentView = id;
+    const section = PAGE_PARENTS[id] || id;
+    $$('.view').forEach((v) => v.classList.toggle('active', v.id === `view-${id}`));
+    $$('.nav-link[data-view], .tab-item[data-view]').forEach((b) => {
+      const on = b.dataset.view === section;
+      b.classList.toggle('active', on);
+      if (on) b.setAttribute('aria-current', PAGE_PARENTS[id] ? 'true' : 'page');
+      else b.removeAttribute('aria-current');
+    });
+    positionNavIndicator();
+    document.title = title || VIEW_TITLES[id];
+    if (scrollY != null) window.scrollTo({ top: scrollY, behavior: 'instant' });
+
+    // Leaflet needs a size refresh when its container becomes visible
+    if (id === 'overview' && App.map) setTimeout(() => App.map.invalidateSize(), 60);
+    // Pokalen byggs först när översikten faktiskt visas — en djuplänk till
+    // ett spel ska inte betala för den
+    if (id === 'overview' && App.booted) initTrophy();
+
+    // Flytta fokus till vyns rubrik så skärmläsare hör att sidan bytts
+    if (focus) {
+      const h = $(`#view-${id} h1`);
+      if (h) {
+        h.setAttribute('tabindex', '-1');
+        h.focus({ preventScroll: true });
+      }
+    }
+
+    observeReveals();
+  }
+
+  /**
+   * #/                     översikt
+   * #/medaljliga …         vyer
+   * #/sangbok/<id>         en sång
+   * #/spel/<år>            ett spel, ovanpå arkaden
+   * #/deltagare/<namn>     en deltagares profilsida
+   * #/ar/<år>              årets sida: resultat, pall, plats, spel
+   * Äldre länkar (#medals, #stats …) leder fortfarande rätt.
+   */
+  function parseHash(hash) {
+    let raw = '';
+    try {
+      raw = decodeURIComponent((hash || '').replace(/^#/, ''));
+    } catch (e) {
+      return null;
+    }
+    if (!raw || raw === '/') return { view: 'overview' };
+    if (!raw.startsWith('/')) return VIEW_IDS.includes(raw) ? { view: raw, legacy: true } : null;
+    const [head, arg] = raw.slice(1).split('/');
+    if (head === 'deltagare' && arg) return { view: 'person', slug: arg };
+    if (head === 'ar' && arg) return { view: 'year', year: Number(arg) };
+    const view = ROUTE_VIEWS[head];
+    if (!view) return null;
+    const route = { view };
+    if (view === 'games' && arg) route.game = Number(arg);
+    if (view === 'songs' && arg) route.song = arg;
+    return route;
+  }
+
+
+  function personFromSlug(slug) {
+    return App.data.participants.find((p) => slugify(p.name) === slug || p.id === slug);
+  }
+
+  /** Hur många spel vi själva lagt ovanpå vyn (history.state.pp). */
+  const overlayDepth = () => (history.state && history.state.pp) || 0;
+
+  /**
+   * Navigera inom appen. Vyer och sidor ersätter varandra i historiken;
+   * spel läggs ovanpå så att bakåt stänger dem.
+   *
+   * history.state bär också:
+   *   y        var man var på sidan när man lämnade den — bakåt landar där
+   *   ret      listan man kom från till en års- eller profilsida, och
+   *   retDepth hur många steg bakåt den ligger (sida → sida → sida …)
+   */
+  function navigate(hash, { replace = false } = {}) {
+    const route = parseHash(hash);
+    if (!route) return;
+    const overlay = !!route.game;
+    const here = history.state || {};
+    const state = { pp: overlay ? overlayDepth() + 1 : 0 };
+    if (PAGE_PARENTS[route.view]) {
+      if (!PAGE_PARENTS[App.currentView]) Object.assign(state, { ret: location.hash || '#/', retDepth: 1 });
+      else if (here.ret) Object.assign(state, { ret: here.ret, retDepth: (here.retDepth || 0) + 1 });
+    }
+    if (replace) {
+      history.replaceState({ ...state, pp: overlay ? Math.max(overlayDepth(), 1) : 0 }, '', hash);
+    } else {
+      history.replaceState({ ...here, y: window.scrollY }, '');
+      history.pushState(state, '', hash);
+    }
+    applyRoute(route, { user: true });
+  }
+
+  /** Stäng spelet: gå tillbaka förbi allt vi lagt ovanpå — eller, om sidan
+   *  öppnades direkt på en spellänk, ersätt med vyn under. */
+  function closeOverlay() {
+    const d = overlayDepth();
+    if (d > 0) history.go(-d);
+    else navigate(viewHash(App.currentView || 'overview'), { replace: true });
+  }
+
+  function applyRoute(route, { user = false } = {}) {
+    App.appliedHash = location.hash;
+    if (!route) return;
+    if (route.legacy) history.replaceState({ pp: 0 }, '', viewHash(route.view));
+
+    let page = null;
+    if (PAGE_PARENTS[route.view]) {
+      page = renderPage(route);
+      if (!page) {
+        // Okänt år eller namn: visa listan sidan hör till i stället
+        route = { view: PAGE_PARENTS[route.view] };
+        history.replaceState(history.state, '', viewHash(route.view));
+        App.appliedHash = location.hash;
+      }
+    }
+
+    // Ny sida börjar överst; bakåt och framåt landar där man var
+    const key = pageKey(route);
+    const changed = key !== App.pageKey;
+    App.pageKey = key;
+    const saved = !user && history.state && typeof history.state.y === 'number' ? history.state.y : null;
+    const scrollY = saved != null ? saved : changed ? 0 : null;
+
+    showView(route.view, {
+      focus: user && !route.game && !route.song,
+      title: page ? page.title : '',
+      scrollY
+    });
+    if (page && page.mount) page.mount();
+    // Från ett år till nästa byts innehållet i samma vy — låt det tona in igen
+    if (page && changed && user && !prefersReducedMotion()) {
+      const v = $(`#view-${route.view}`);
+      v.style.animation = 'none';
+      v.getBoundingClientRect(); // tvinga fram en layout så animationen startar om
+      v.style.animation = '';
+    }
+
+    if (route.game) launchGame(route.game);
+    else closeGameNow();
+
+    if (route.song && App.showSong) App.showSong(route.song);
+  }
+
+  function initRouter() {
+    // Scrollen sköter vi själva (history.state.y): vyerna byts utan omladdning,
+    // så webbläsarens egen återställning gissar fel
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+
+    // Alla interna länkar går genom routern; profil- och årsknappar likaså
+    document.addEventListener('click', (e) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const share = e.target.closest('.page-share-btn');
+      if (share) {
+        sharePage(share);
+        return;
+      }
+      const link = e.target.closest('a[href^="#/"]');
+      if (link) {
+        e.preventDefault();
+        const href = link.getAttribute('href');
+        const st = history.state || {};
+        if (link.hasAttribute('data-back') && st.ret === href && st.retDepth > 0) {
+          history.go(-st.retDepth);
+          return;
+        }
+        const current = location.hash || '#/';
+        if (href === current) {
+          window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+          return;
+        }
+        navigate(href);
+        return;
+      }
+      const person = e.target.closest('[data-person]');
+      if (person) {
+        e.preventDefault();
+        navigate(personHash(person.getAttribute('data-person')));
+        return;
+      }
+      const year = e.target.closest('[data-year]');
+      if (year) {
+        e.preventDefault();
+        navigate(`#/ar/${year.getAttribute('data-year')}`);
+      }
+    });
+
+    const onHistory = () => {
+      if (location.hash !== App.appliedHash) applyRoute(parseHash(location.hash));
+    };
+    window.addEventListener('popstate', onHistory);
+    window.addEventListener('hashchange', onHistory);
+
+    $('#skip-link').addEventListener('click', (e) => {
+      e.preventDefault();
+      $('#main').focus();
+    });
+
+    const header = $('#site-header');
+    const onScroll = () => header.classList.toggle('scrolled', window.scrollY > 8);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+
+    window.addEventListener('resize', positionNavIndicator);
+  }
+
+  function positionNavIndicator() {
+    const active = $('.top-nav .nav-link.active');
+    const indicator = $('.nav-indicator');
+    if (!active || !indicator) return;
+    const pad = parseFloat(getComputedStyle(active).paddingLeft) || 0;
+    indicator.style.left = `${active.offsetLeft + pad}px`;
+    indicator.style.width = `${Math.max(0, active.offsetWidth - pad * 2)}px`;
+  }
+
+  /* ======================================================================
+     Scroll reveal
+     ====================================================================== */
+
+  /*
+   * Progressiv förbättring: allt syns från början. Först när observatören
+   * finns och besökaren själv börjat skrolla sätts .reveal-armed på <html>,
+   * och då döljs bara det som ännu ligger under skärmkanten. Det som redan
+   * syns göms aldrig, så en helsidesbild, en utskrift eller en observatör
+   * som aldrig svarar lämnar inget osynligt kvar.
+   */
+  let revealObserver = null;
+  let revealArmed = false;
+
+  const inViewport = (el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.bottom > 0 && r.top < (window.innerHeight || 0);
+  };
+
+  function observeReveals() {
+    const pending = $$('.reveal:not(.in)');
+    if (!('IntersectionObserver' in window) || prefersReducedMotion()) {
+      pending.forEach((el) => el.classList.add('in'));
+      return;
+    }
+    if (!revealObserver) {
+      try {
+        revealObserver = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (entry.isIntersecting) {
+                entry.target.classList.add('in');
+                revealObserver.unobserve(entry.target);
+              }
+            });
+          },
+          { threshold: 0.08 }
+        );
+      } catch (e) {
+        pending.forEach((el) => el.classList.add('in'));
+        return;
+      }
+      const arm = () => {
+        if (revealArmed) return;
+        // Det som syns nu får stå kvar — bara det under kanten tonar in
+        $$('.reveal:not(.in)').forEach((el) => {
+          if (inViewport(el)) el.classList.add('in');
+        });
+        revealArmed = true;
+        document.documentElement.classList.add('reveal-armed');
+      };
+      window.addEventListener('scroll', arm, { once: true, passive: true });
+      window.addEventListener('beforeprint', () => $$('.reveal').forEach((el) => el.classList.add('in')));
+    }
+    pending.forEach((el) => {
+      // Vid vybyte: det som hamnar i bild direkt visas direkt
+      if (revealArmed && inViewport(el)) el.classList.add('in');
+      else revealObserver.observe(el);
+    });
+  }
+
+  /* ======================================================================
+     Boot
+     ====================================================================== */
+
+  function setLoadingStatus(msg) {
+    const el = $('#loading-status');
+    if (el) el.textContent = msg;
+  }
+
+  async function init() {
+    try {
+      setLoadingStatus('Hämtar resultat…');
+      const [data, event] = await Promise.all([loadData(), loadEvent()]);
+      App.data = data;
+      App.event = event;
+
+      setLoadingStatus('Beräknar statistik…');
+      App.stats = computeStats(App.data);
+      App.elo = computeElo(App.data, App.stats);
+      App.facts = computeFacts(App.data, App.stats);
+      computeAchievements();
+
+      setLoadingStatus('Bygger vyer…');
+      applyChartTheme();
+      syncThemeChrome();
+      initRouter();
+      initOverlays();
+
+      renderHero();
+      renderHeroContours();
+      renderCountdown();
+      renderTicker();
+      renderKPIs();
+      renderOverviewCharts();
+      renderMedals();
+      renderTimeline();
+      renderAchievements();
+      renderFilters();
+      renderStatsView();
+      renderH2HControls();
+      renderElo();
+      renderSongs();
+      renderGames();
+      initMap();
+
+      $('#theme-toggle').addEventListener('click', toggleTheme);
+
+      // Startadressen kan vara en djuplänk: en vy, en profil eller ett spel.
+      // Ett spel öppnas ovanpå arkaden, en profil ovanpå översikten.
+      history.replaceState({ pp: 0 }, '', location.href);
+      applyRoute(parseHash(location.hash) || { view: 'overview' });
+      observeReveals();
+
+      // Diagram och menylinjen mäter text — gör om när typsnitten är på plats
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(() => {
+          positionNavIndicator();
+          rebuildCharts();
+        });
+      }
+
+      const loader = $('#loading-screen');
+      setTimeout(() => {
+        loader.classList.add('hidden');
+        positionNavIndicator();
+        App.booted = true;
+        if (App.currentView === 'overview') initTrophy();
+      }, 350);
+    } catch (err) {
+      console.error('Init failed:', err);
+      setLoadingStatus(`Något gick fel: ${err.message}`);
+      const loader = $('#loading-screen');
+      const retry = document.createElement('button');
+      retry.className = 'btn';
+      retry.textContent = 'Ladda om';
+      retry.style.marginTop = '1rem';
+      retry.addEventListener('click', () => location.reload());
+      loader.appendChild(retry);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();

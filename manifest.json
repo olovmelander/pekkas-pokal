@@ -1,0 +1,27 @@
+{
+  "name": "Pekkas Pokal",
+  "short_name": "Pekkas Pokal",
+  "description": "Pekkas Pokal — den årliga tävlingen mellan vänner sedan 2011. Medaljliga, krönika, utmärkelser, statistik och ett spel för varje år.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#0b0c0f",
+  "background_color": "#0b0c0f",
+  "categories": ["sports", "games"],
+  "lang": "sv-SE",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Medaljliga", "short_name": "Medaljer", "description": "Visa medaljligan", "url": "./#/medaljliga" },
+    { "name": "Krönikan", "short_name": "Historik", "description": "Varje upplaga sedan 2011", "url": "./#/historik" },
+    { "name": "Arkaden", "short_name": "Spel", "description": "Ett spel per år", "url": "./#/spel" }
+  ],
+  "prefer_related_applications": false,
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  }
+}

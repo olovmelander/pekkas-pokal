@@ -1,0 +1,625 @@
+/* ==========================================================================
+   Pekkas Pokal — Responsivt
+   ========================================================================== */
+
+/* ---------- Smal dator: menyn tätare ---------- */
+@media (max-width: 1180px) {
+  .nav-link {
+    padding: 0.5rem 0.55rem;
+  }
+
+  .brand-sub {
+    display: none;
+  }
+}
+
+/* ---------- Smal skärm med toppmeny (surfplatta, telefon på tvären) ----------
+   Menyn och varumärket får inte plats bredvid varandra: bara älgmärket står
+   kvar (länken behåller sitt namn via aria-label) och menyn tätas. */
+@media (min-width: 761px) and (max-width: 980px) {
+  .header-inner {
+    gap: var(--sp-3);
+  }
+
+  .brand-text {
+    display: none;
+  }
+
+  .brand-mark {
+    width: 46px;
+  }
+
+  .nav-link {
+    padding: 0.5rem 0.5rem;
+  }
+}
+
+/* Toppmenyns länkar blir 44 px höga på pekskärm */
+@media (min-width: 761px) and (pointer: coarse) {
+  .nav-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}
+
+/* ---------- Surfplatta ---------- */
+@media (max-width: 1024px) {
+  .hero {
+    grid-template-columns: 1fr;
+    min-height: 0;
+    margin-top: 0;
+  }
+
+  .hero-stage {
+    order: -1;
+    min-height: 360px;
+    height: 46vh;
+    max-height: 440px;
+  }
+
+  .hero-copy {
+    padding-top: 0;
+  }
+
+  .ledger {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .ledger .kpi:nth-child(4)::before {
+    display: none;
+  }
+
+  .ledger .kpi:nth-child(n + 4) {
+    border-top: 1px solid var(--border);
+  }
+
+  .hero-band {
+    grid-template-columns: 1fr;
+  }
+
+  .tl-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'photo photo'
+      'main more'
+      'podium podium';
+  }
+
+  .tl-podium {
+    grid-auto-flow: column;
+    justify-content: start;
+    gap: var(--sp-4);
+    padding-top: var(--sp-3);
+    border-top: 1px solid var(--border);
+  }
+
+  .songbook {
+    grid-template-columns: 1fr;
+  }
+
+  .song-picker {
+    position: static;
+    display: flex;
+    gap: var(--sp-2);
+    max-height: none;
+    overflow-x: auto;
+    padding: 0 0 var(--sp-2);
+    scroll-snap-type: x mandatory;
+  }
+
+  .song-chip {
+    flex: 0 0 auto;
+    grid-template-columns: auto;
+    gap: 2px;
+    padding: var(--sp-2) var(--sp-4);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    scroll-snap-align: start;
+  }
+
+  .song-chip.active {
+    border-color: color-mix(in srgb, var(--gold) 50%, transparent);
+  }
+}
+
+/* ---------- Mobil ---------- */
+@media (max-width: 760px) {
+  :root {
+    --header-h: 60px;
+  }
+
+  .page {
+    padding: var(--sp-3) var(--gutter) calc(var(--sp-8) + 72px);
+  }
+
+  .top-nav {
+    display: none;
+  }
+
+  .tab-bar {
+    display: flex;
+  }
+
+  .site-footer {
+    padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  }
+
+  .brand-mark {
+    width: 44px;
+  }
+
+  .brand-sub {
+    display: block;
+  }
+
+  .view-head {
+    margin: var(--sp-4) 0 var(--sp-6);
+  }
+
+  .hero-stage {
+    height: 40vh;
+    min-height: 300px;
+  }
+
+  .champion-medals {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--sp-3) var(--sp-2);
+  }
+
+  /* Snittplaceringen får en egen rad under medaljerna, med etiketten i
+     klartext bredvid talet i stället för en avhuggen förkortning */
+  .cm-item.cm-avg {
+    grid-column: 1 / -1;
+    padding-top: var(--sp-3);
+    border-top: 1px solid var(--border);
+  }
+
+  .cm-avg .cm-text {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0 var(--sp-3);
+  }
+
+  .cm-avg .cm-label {
+    margin-top: 0;
+  }
+
+  .cm-avg .cm-hint {
+    display: inline;
+  }
+
+  .cm-item {
+    gap: var(--sp-2);
+  }
+
+  .cm-item .medal-disc {
+    width: 22px;
+    height: 22px;
+    font-size: 0.75rem;
+  }
+
+  .cm-num {
+    font-size: var(--text-lg);
+  }
+
+  .cm-label {
+    letter-spacing: 0.08em;
+  }
+
+  .hero-coords {
+    display: none;
+  }
+
+  .hero-actions .btn {
+    flex: 1;
+  }
+
+  .ledger {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ledger .kpi:nth-child(4)::before {
+    display: block;
+  }
+
+  .ledger .kpi:nth-child(odd)::before {
+    display: none;
+  }
+
+  .ledger .kpi:nth-child(n + 3) {
+    border-top: 1px solid var(--border);
+  }
+
+  .kpi {
+    padding: var(--sp-4) var(--sp-3);
+  }
+
+  .card {
+    border-radius: var(--r-md);
+  }
+
+  .chart-wrap,
+  .chart-wrap.tall {
+    height: 260px;
+  }
+
+  #map {
+    height: 340px;
+  }
+
+  .grid-2 {
+    gap: var(--sp-4);
+  }
+
+  /* Pallen */
+  .podium {
+    gap: var(--sp-2);
+  }
+
+  .podium-1 .podium-block {
+    height: 120px;
+  }
+
+  .podium-2 .podium-block {
+    height: 90px;
+  }
+
+  .podium-3 .podium-block {
+    height: 66px;
+  }
+
+  .podium-name {
+    font-size: var(--text-md);
+  }
+
+  .podium-1 .podium-name {
+    font-size: var(--text-lg);
+  }
+
+  .podium-medals {
+    flex-direction: column;
+    gap: 2px;
+    align-items: center;
+  }
+
+  /* Medaljtabellen: fördelningsstapeln får ge plats åt siffrorna */
+  .medal-table .bar-col {
+    display: none;
+  }
+
+  .medal-table th,
+  .medal-table td {
+    padding: var(--sp-3) 6px;
+  }
+
+  /* Deltagarkorten blir en karusell i stället för en lång stapel */
+  .competitor-grid {
+    grid-auto-flow: column;
+    grid-auto-columns: min(78%, 300px);
+    grid-template-columns: none;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    margin: 0 calc(var(--gutter) * -1);
+    padding: 2px var(--gutter) var(--sp-3);
+    scroll-padding: 0 var(--gutter);
+  }
+
+  .competitor-grid > .ccard {
+    scroll-snap-align: start;
+  }
+
+  /* Krönikan: årtalet ovanför kortet */
+  .tl-item {
+    grid-template-columns: 1fr;
+    gap: var(--sp-2);
+  }
+
+  .tl-item::before,
+  .tl-item::after {
+    display: none;
+  }
+
+  .tl-year-col {
+    justify-content: flex-start;
+    padding-top: var(--sp-4);
+  }
+
+  .tl-card {
+    margin-left: 0;
+    padding: var(--sp-4);
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      'photo'
+      'main'
+      'podium'
+      'more';
+  }
+
+  .tl-podium {
+    grid-auto-flow: row;
+  }
+
+  .tl-more {
+    justify-self: start;
+  }
+
+  .tl-item:hover .tl-card {
+    transform: none;
+  }
+
+  .tl-photo {
+    height: 160px;
+  }
+
+  /* Statistik */
+  .filter-group {
+    grid-template-columns: 1fr;
+    gap: var(--sp-2);
+  }
+
+  .filter-label {
+    padding: 0;
+  }
+
+  .filter-card .chip-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin: 0 calc(var(--sp-4) * -1);
+    padding: 2px var(--sp-4) 6px;
+  }
+
+  .filter-card .chip {
+    flex-shrink: 0;
+  }
+
+  /* Namnchipsen under linjediagrammen: en rad att svepa i, som filtren */
+  .focus-chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin: var(--sp-4) calc(var(--sp-4) * -1) 0;
+    padding: 2px var(--sp-4) 6px;
+    scroll-padding: 0 var(--sp-4);
+  }
+
+  .focus-chips .chip,
+  .focus-chips-label {
+    flex-shrink: 0;
+  }
+
+  .filter-actions .btn {
+    width: 100%;
+  }
+
+  .ach-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ach-summary .kpi:nth-child(3)::before {
+    display: none;
+  }
+
+  .ach-summary .kpi:nth-child(n + 3) {
+    border-top: 1px solid var(--border);
+  }
+
+  .h2h-pickers {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--sp-2);
+  }
+
+  .h2h-vs {
+    padding: 0;
+    text-align: center;
+  }
+
+  .h2h-list {
+    max-height: none;
+  }
+
+  .song-sheet {
+    transform: none;
+  }
+
+  .song-sheet:hover {
+    transform: none;
+  }
+}
+
+/* ---------- Medaljtabellen på telefon ----------
+   En rad per deltagare utan sidledsskroll: placering, namn, tre
+   medaljprickar med antal och totalen. Rubrikraden är kvar som
+   sorteringsknappar, 44 px höga; den valda kolumnen får en guldton. */
+@media (max-width: 640px) {
+  .medal-table,
+  .medal-table thead,
+  .medal-table tbody {
+    display: block;
+  }
+
+  .medal-table tr {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr) repeat(3, 44px) 48px;
+    align-items: center;
+    column-gap: 2px;
+  }
+
+  .medal-table thead tr {
+    border-bottom: 1px solid var(--border-strong);
+  }
+
+  .medal-table tbody tr {
+    min-height: 52px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .medal-table tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  .medal-table th,
+  .medal-table td {
+    width: auto;
+    min-width: 0;
+    padding: 0;
+    border: none;
+  }
+
+  .medal-table th {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    height: 44px;
+    margin: 4px 0;
+    border-radius: var(--r-xs);
+    letter-spacing: 0.04em;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .medal-table th.name-col {
+    align-items: flex-start;
+    padding-left: 4px;
+  }
+
+  .medal-table th.bar-col {
+    display: none;
+  }
+
+  .medal-table th.sorted {
+    background: color-mix(in srgb, var(--gold) 12%, transparent);
+  }
+
+  .medal-table th.num-col:not(.sortable[data-sort='total']) .th-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .medal-table th .medal-dot {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+  }
+
+  .medal-table .sort-arrow {
+    width: auto;
+    height: 1em;
+    margin: 0;
+    line-height: 1;
+  }
+
+  .medal-table th.rank-col {
+    align-items: center;
+  }
+
+  .medal-table td.num-col {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    font-size: 1.02rem;
+  }
+
+  .medal-table .pip {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset;
+  }
+
+  .medal-table .pip.gold {
+    background: var(--metal-gold);
+  }
+
+  .medal-table .pip.silver {
+    background: var(--metal-silver);
+  }
+
+  .medal-table .pip.bronze {
+    background: var(--metal-bronze);
+  }
+
+  .medal-table td.zero .pip {
+    opacity: 0.35;
+  }
+
+  .medal-table td.total {
+    font-weight: 600;
+  }
+
+  .medal-table .rank-badge {
+    width: 26px;
+    height: 26px;
+    font-size: 0.8rem;
+  }
+
+  .medal-table .person-cell {
+    gap: var(--sp-2);
+    min-width: 0;
+  }
+
+  .medal-table .person-cell .avatar {
+    width: 28px;
+    height: 28px;
+    font-size: 0.75rem;
+  }
+
+  .medal-table .pc-full {
+    display: none;
+  }
+
+  .medal-table .pc-short {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+/* ---------- Små telefoner ---------- */
+@media (max-width: 380px) {
+  .medal-table .person-cell .avatar {
+    display: none;
+  }
+
+  .brand-sub {
+    display: none;
+  }
+
+  .count-num {
+    font-size: 2.2rem;
+  }
+
+  .ccard-stats {
+    gap: var(--sp-1);
+  }
+}
+
+/* ---------- Bara enheter med hovring: kort lyfter ---------- */
+@media (hover: hover) and (pointer: fine) {
+  .card:hover {
+    box-shadow: var(--shadow-2);
+  }
+
+  .chart-card:hover,
+  .map-card:hover {
+    border-color: var(--border-strong);
+  }
+}
+
+/* ---------- Stora skärmar ---------- */
+@media (min-width: 1600px) {
+  :root {
+    --page-max: 1360px;
+  }
+}

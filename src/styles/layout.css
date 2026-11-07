@@ -1,0 +1,320 @@
+/* ==========================================================================
+   Pekkas Pokal — Layout: sidhuvud, navigation, sidskal, rutnät, sidfot
+   ========================================================================== */
+
+/* ---------- Sidhuvud ----------
+   Genomskinligt överst på sidan och glasat när man scrollat — då behövs
+   kontrasten, innan dess stjäl en list bara höjd från hjälten. */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  border-bottom: 1px solid transparent;
+  transition: background var(--t-med), border-color var(--t-med), backdrop-filter var(--t-med);
+}
+
+.site-header.scrolled {
+  background: var(--header-bg);
+  backdrop-filter: var(--card-blur);
+  -webkit-backdrop-filter: var(--card-blur);
+  border-bottom-color: var(--border);
+}
+
+.header-inner {
+  max-width: var(--page-max);
+  margin: 0 auto;
+  height: var(--header-h);
+  padding: 0 var(--gutter);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-5);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  text-decoration: none;
+  color: var(--text-1);
+  min-width: 0;
+  border-radius: var(--r-sm);
+}
+
+.brand-mark {
+  display: block;
+  width: 52px;
+  height: auto;
+  flex-shrink: 0;
+  filter: drop-shadow(0 4px 12px rgba(233, 191, 92, 0.25));
+  transition: transform var(--t-med) var(--ease-spring);
+}
+
+.brand:hover .brand-mark {
+  transform: translateY(-1px) scale(1.04);
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.brand-name {
+  font-family: var(--ff-serif);
+  font-weight: 600;
+  font-size: 1.18rem;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  font-variation-settings: 'opsz' 36;
+}
+
+.brand-sub {
+  margin-top: 3px;
+  font-family: var(--ff-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+/* ---------- Toppmeny ----------
+   Textlänkar med en guldlinje som glider till den aktiva — ett lugnare
+   uttryck än en pillerknapp, och det läses som ett register i en almanacka. */
+.top-nav {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: clamp(2px, 0.6vw, 8px);
+}
+
+.nav-link {
+  position: relative;
+  z-index: 1;
+  padding: 0.55rem 0.8rem;
+  border-radius: var(--r-sm);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-2);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color var(--t-fast), background var(--t-fast);
+}
+
+.nav-link:hover {
+  color: var(--text-1);
+  background: color-mix(in srgb, var(--text-1) 5%, transparent);
+}
+
+.nav-link.active,
+.nav-link[aria-current='page'] {
+  color: var(--text-1);
+}
+
+.nav-indicator {
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--metal-gold);
+  box-shadow: 0 0 12px rgba(233, 191, 92, 0.6);
+  transition: left var(--t-med) var(--ease-out), width var(--t-med) var(--ease-out);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+/* ---------- Sidskal ---------- */
+.page {
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: var(--sp-5) var(--gutter) var(--sp-9);
+}
+
+.view {
+  display: none;
+}
+
+.view.active {
+  display: block;
+  animation: view-in var(--t-slow) var(--ease-out) both;
+}
+
+.view-head {
+  position: relative;
+  display: grid;
+  gap: var(--sp-3);
+  margin: var(--sp-6) 0 var(--sp-7);
+  max-width: 54rem;
+}
+
+.view-head .eyebrow {
+  color: var(--text-gold);
+}
+
+.view-head h1 {
+  font-size: var(--text-2xl);
+  font-weight: 400;
+  letter-spacing: -0.025em;
+  font-variation-settings: 'opsz' 144;
+}
+
+.view-head h1 em {
+  font-style: italic;
+  font-weight: 300;
+  color: var(--text-gold);
+}
+
+.view-sub {
+  color: var(--text-2);
+  font-size: var(--text-lg);
+  line-height: 1.5;
+  max-width: 40rem;
+}
+
+.section-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  font-size: var(--text-xl);
+  font-weight: 400;
+  margin: var(--sp-8) 0 var(--sp-5);
+  padding-top: var(--sp-5);
+  border-top: 1px solid var(--border);
+}
+
+.section-heading small {
+  font-family: var(--ff-sans);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-3);
+  letter-spacing: 0;
+}
+
+/* ---------- Rutnät ---------- */
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(440px, 100%), 1fr));
+  gap: var(--sp-5);
+  margin-top: var(--sp-5);
+}
+
+.stack {
+  display: grid;
+  gap: var(--sp-5);
+}
+
+/* ---------- Sidfot ---------- */
+.site-footer {
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: var(--sp-7) var(--gutter);
+  padding-bottom: calc(var(--sp-7) + env(safe-area-inset-bottom));
+  color: var(--text-3);
+  font-size: var(--text-sm);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+}
+
+.footer-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.footer-brand img {
+  width: 40px;
+  height: auto;
+  opacity: 0.85;
+}
+
+.footer-brand strong {
+  display: block;
+  font-family: var(--ff-serif);
+  font-weight: 500;
+  font-size: 1rem;
+  color: var(--text-1);
+}
+
+.footer-coords {
+  font-family: var(--ff-mono);
+  font-size: var(--text-2xs);
+  letter-spacing: 0.08em;
+}
+
+/* ---------- Mobil flikrad (dold på dator) ---------- */
+.tab-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: none;
+  justify-content: space-around;
+  align-items: stretch;
+  padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+  background: var(--header-bg);
+  backdrop-filter: var(--card-blur);
+  -webkit-backdrop-filter: var(--card-blur);
+  border-top: 1px solid var(--border);
+}
+
+.tab-item {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-height: 52px;
+  padding: 6px 2px 4px;
+  border-radius: var(--r-sm);
+  color: var(--text-3);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  transition: color var(--t-fast), transform var(--t-fast);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tab-item svg {
+  transition: transform var(--t-med) var(--ease-spring);
+}
+
+.tab-item.active,
+.tab-item[aria-current='page'] {
+  color: var(--text-gold);
+}
+
+.tab-item.active::before,
+.tab-item[aria-current='page']::before {
+  content: '';
+  position: absolute;
+  top: -7px;
+  left: 30%;
+  right: 30%;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--metal-gold);
+  box-shadow: 0 0 10px rgba(233, 191, 92, 0.7);
+}
+
+.tab-item.active svg,
+.tab-item[aria-current='page'] svg {
+  transform: translateY(-1px) scale(1.06);
+}
+
+.tab-item:active {
+  transform: scale(0.94);
+}
