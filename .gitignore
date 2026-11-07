@@ -188,3 +188,8 @@ private/
 .prettierignore
 # Agent/test scratch folders
 tests/.tmp-*/
+
+# Blender tool scratch (tools/blender)
+tools/blender/ref/
+tools/blender/*.png
+.venv-blender/
